@@ -3473,6 +3473,1058 @@ fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
     assert!(!engine.state.players[0].has_lost && !engine.state.players[2].has_lost);
 }
 
+fn cast_cost_choose_registry(
+    include_twincast: bool,
+) -> &'static tricerules_card_model::CardRegistry {
+    let receipt_program = r#"(
+        id: "choose_cast_receipt_fixture",
+        name: "Choose Cast Receipt Fixture",
+        face_id: "choose_cast_receipt_fixture",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        cast_cost_groups: [(
+            group_id: "kicker_group", presentation: Fallback, min: 0, max: 1,
+            options: [Mana(option_id: "kicker_option", presentation: Fallback,
+                kind: Kicker, cost: "{1}")]
+        )],
+        spell_program: Some((body: (steps: [
+            (id: "cast_receipt_choice", kind: Choose(
+                choice: "cast_receipt_choice", chooser: Controller, optional: false,
+                branches: [
+                    (branch_id: "kicker_selected", presentation: Fallback, cost: None,
+                        requirement: CastCostReceipt((group_id: "kicker_group",
+                            option_id: "kicker_option", expected_selected: true)),
+                        body: (steps: [(id: "draw_one", kind: Perform(Draw(
+                            who: Controller, count: 1)))], yields: [])),
+                    (branch_id: "kicker_not_selected", presentation: Fallback, cost: None,
+                        requirement: CastCostReceipt((group_id: "kicker_group",
+                            option_id: "kicker_option", expected_selected: false)),
+                        body: (steps: [(id: "draw_two", kind: Perform(Draw(
+                            who: Controller, count: 2)))], yields: [])),
+                ],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: []), target_bindings: []))
+    )"#;
+    let mut definitions = vec![
+        receipt_program,
+        include_str!("../../../tricerules-cards/data/island.ron"),
+        include_str!("../../../tricerules-cards/data/forest.ron"),
+    ];
+    if include_twincast {
+        definitions.push(include_str!("../../../tricerules-cards/data/twincast.ron"));
+    }
+    Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(&definitions, &[])
+            .expect("cast-receipt program binds its exact owner group and option"),
+    ))
+}
+
+fn cast_cost_mode_choose_registry() -> &'static tricerules_card_model::CardRegistry {
+    let definition = r#"(
+        id: "choose_mode_cast_receipt_fixture",
+        name: "Choose Mode Cast Receipt Fixture",
+        face_id: "choose_mode_cast_receipt_fixture",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        cast_cost_groups: [(
+            group_id: "kicker_group", presentation: Fallback, min: 0, max: 1,
+            options: [Mana(option_id: "kicker_option", presentation: Fallback,
+                kind: Kicker, cost: "{1}")]
+        )],
+        modal_spell: (
+            min_modes: 1, max_modes: 1,
+            modes: [(mode_id: "receipt_mode", presentation: Fallback, effects: [],
+                program: Some((body: (steps: [
+                    (id: "mode_receipt_choice", kind: Choose(
+                        choice: "mode_receipt_choice", chooser: Controller, optional: false,
+                        branches: [
+                            (branch_id: "kicker_selected", presentation: Fallback, cost: None,
+                                requirement: CastCostReceipt((group_id: "kicker_group",
+                                    option_id: "kicker_option", expected_selected: true)),
+                                body: (steps: [(id: "draw_one", kind: Perform(Draw(
+                                    who: Controller, count: 1)))], yields: [])),
+                            (branch_id: "kicker_not_selected", presentation: Fallback, cost: None,
+                                requirement: CastCostReceipt((group_id: "kicker_group",
+                                    option_id: "kicker_option", expected_selected: false)),
+                                body: (steps: [(id: "draw_two", kind: Perform(Draw(
+                                    who: Controller, count: 2)))], yields: [])),
+                        ],
+                        otherwise: (steps: [], yields: []),
+                    ))
+                ], yields: []), target_bindings: []))) ]
+        )
+    )"#;
+    let definitions = [
+        definition,
+        include_str!("../../../tricerules-cards/data/island.ron"),
+        include_str!("../../../tricerules-cards/data/forest.ron"),
+    ];
+    Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(&definitions, &[])
+            .expect("selected modal mode binds the exact face-owned cast-cost group"),
+    ))
+}
+
+#[test]
+fn program_choose_modal_mode_reads_its_exact_cast_cost_receipt() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
+        SubmitResolutionChoice,
+    };
+
+    let mut engine = GameEngine::new(
+        cast_cost_mode_choose_registry(),
+        9_388,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("island", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .expect("modal cast-receipt program engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    inject_card_into_hand(&mut engine, 0, "choose_mode_cast_receipt_fixture");
+    let unselected_slot = hand_index_for_card(&engine, 0, "choose_mode_cast_receipt_fixture");
+    let before_unselected = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &cast_modal_spell(unselected_slot, vec![(0, vec![])]))
+        .expect("cast the selected face mode without the optional kicker");
+    let unselected_menu = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
+        .expect("the selected mode reads the captured unselected receipt");
+    assert_eq!(
+        unselected_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(1, true)]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: unselected_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 1,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the exact unselected receipt branch");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        before_unselected + 2
+    );
+
+    inject_card_into_hand(&mut engine, 0, "choose_mode_cast_receipt_fixture");
+    let selected_slot = hand_index_for_card(&engine, 0, "choose_mode_cast_receipt_fixture");
+    engine.state.players[0].mana_pool.colorless = 1;
+    let before_selected = engine.state.turn_history.current.player(0).cards_drawn;
+    let mut selected_cast = cast_modal_spell(selected_slot, vec![(0, vec![])]);
+    let Some(Cmd::CastSpell(cast)) = selected_cast.cmd.as_mut() else {
+        panic!("modal cast helper returns CastSpell")
+    };
+    cast.cast_cost_group_selections = vec![CastCostGroupSelection {
+        group_index: 0,
+        option_index: 0,
+        ..Default::default()
+    }];
+    engine
+        .apply_scenario_command(0, &selected_cast)
+        .expect("cast the selected face mode with its exact kicker option");
+    assert_eq!(
+        engine.state.stack.last().unwrap().cast_cost_receipts[0]
+            .group_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("kicker_group")
+    );
+    let selected_menu = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
+        .expect("the selected mode reads the captured selected receipt");
+    assert_eq!(
+        selected_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true)]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: selected_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the exact selected receipt branch");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        before_selected + 1
+    );
+}
+
+fn draw_limit_choose_registry() -> &'static tricerules_card_model::CardRegistry {
+    let free_draw = r#"(
+        id: "choose_free_draw_fixture", name: "Choose Free Draw Fixture",
+        face_id: "choose_free_draw_fixture", mana_cost: "{0}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "free_draw_choice", kind: Choose(
+                choice: "free_draw_choice", chooser: Controller, optional: false,
+                branches: [(branch_id: "draw", presentation: Fallback, cost: None,
+                    body: (steps: [(id: "draw_one", kind: Perform(Draw(
+                        who: Controller, count: 1)))], yields: []))],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: []), target_bindings: []))
+    )"#;
+    let paid_draw = r#"(
+        id: "choose_paid_draw_fixture", name: "Choose Paid Draw Fixture",
+        face_id: "choose_paid_draw_fixture", mana_cost: "{0}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "paid_draw_choice", kind: Choose(
+                choice: "paid_draw_choice", chooser: Controller, optional: false,
+                branches: [(branch_id: "pay_draw", presentation: Fallback,
+                    cost: Mana("{1}"), body: (steps: [
+                        (id: "draw_one", kind: Perform(Draw(
+                            who: Controller, count: 1)))
+                    ], yields: []))],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: []), target_bindings: []))
+    )"#;
+    let definitions = [
+        free_draw,
+        paid_draw,
+        include_str!("../../../tricerules-cards/data/narset,_parter_of_veils.ron"),
+        include_str!("../../../tricerules-cards/data/island.ron"),
+        include_str!("../../../tricerules-cards/data/forest.ron"),
+    ];
+    Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(&definitions, &[])
+            .expect("draw Choose fixtures and Narset use the supported registry paths"),
+    ))
+}
+
+#[test]
+fn program_choose_suppresses_impossible_free_draw_but_keeps_paid_draw_offer() {
+    let mut engine = GameEngine::new(
+        draw_limit_choose_registry(),
+        9_387,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("island", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .expect("draw-limit Choose fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 1, "narset,_parter_of_veils");
+    move_ready_to_battlefield(&mut engine, 1, "narset,_parter_of_veils");
+    engine.state.turn_history.current.player_mut(0).cards_drawn = 1;
+
+    inject_card_into_hand(&mut engine, 0, "choose_free_draw_fixture");
+    let free_slot = hand_index_for_card(&engine, 0, "choose_free_draw_fixture");
+    engine
+        .apply_scenario_command(0, &cast_spell(free_slot, vec![]))
+        .expect("cast free draw fixture");
+    let free_resolution = pass_both_players_with_batch(&mut engine);
+    assert!(
+        find_resolution_choice(&free_resolution).is_none(),
+        "Narset makes the sole free Draw branch unavailable, so Choose takes Otherwise without prompting"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        1,
+        "the suppressed free branch does not attempt a draw"
+    );
+
+    inject_card_into_hand(&mut engine, 0, "choose_paid_draw_fixture");
+    let paid_slot = hand_index_for_card(&engine, 0, "choose_paid_draw_fixture");
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .apply_scenario_command(0, &cast_spell(paid_slot, vec![]))
+        .expect("cast paid draw fixture");
+    let paid_resolution = pass_both_players_with_batch(&mut engine);
+    let menu = find_resolution_choice(&paid_resolution)
+        .expect("the fixed-cost Draw branch remains available under Narset");
+    assert_eq!(
+        menu.resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![(0, "Pay {1}", true)]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the paid draw branch");
+    assert_eq!(
+        find_resolution_choice(
+            &submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana,)
+                .expect("pay the exact fixed cost")
+        )
+        .map(|choice| choice.choice_kind),
+        None,
+        "paying resolves the draw leaf directly rather than reopening Choose"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 1);
+}
+
+#[test]
+fn program_choose_cast_cost_receipt_routes_selected_and_unselected_casts() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
+        SubmitResolutionChoice,
+    };
+
+    let mut engine = GameEngine::new(
+        cast_cost_choose_registry(false),
+        9_386,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("island", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .expect("cast-receipt program engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    inject_card_into_hand(&mut engine, 0, "choose_cast_receipt_fixture");
+    let unselected_slot = hand_index_for_card(&engine, 0, "choose_cast_receipt_fixture");
+    let draws_before_unselected = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &cast_spell(unselected_slot, vec![]))
+        .expect("cast without the optional kicker");
+    assert!(engine
+        .state
+        .stack
+        .last()
+        .unwrap()
+        .cast_cost_receipts
+        .is_empty());
+    let unselected_resolved = pass_both_players_with_batch(&mut engine);
+    let unselected_menu = find_resolution_choice(&unselected_resolved)
+        .expect("the not-selected receipt branch is the only applicable option");
+    assert_eq!(
+        unselected_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(1, true)]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: unselected_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 1,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the captured un-kicked branch");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_unselected + 2
+    );
+
+    inject_card_into_hand(&mut engine, 0, "choose_cast_receipt_fixture");
+    let selected_slot = hand_index_for_card(&engine, 0, "choose_cast_receipt_fixture");
+    engine.state.players[0].mana_pool.colorless = 1;
+    let draws_before_selected = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell_with_cast_cost_groups(
+                selected_slot,
+                vec![],
+                vec![CastCostGroupSelection {
+                    group_index: 0,
+                    option_index: 0,
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("cast with the exact selected kicker option");
+    assert_eq!(
+        engine.state.stack.last().unwrap().cast_cost_receipts[0]
+            .group_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("kicker_group")
+    );
+    assert_eq!(
+        engine.state.stack.last().unwrap().cast_cost_receipts[0]
+            .option_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("kicker_option")
+    );
+    let selected_resolved = pass_both_players_with_batch(&mut engine);
+    let selected_menu = find_resolution_choice(&selected_resolved)
+        .expect("the selected receipt branch is the only applicable option");
+    assert_eq!(
+        selected_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true)]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: selected_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the captured kicked branch");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_selected + 1
+    );
+}
+
+#[test]
+fn program_choose_cast_cost_receipt_survives_spell_copy() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
+        SubmitResolutionChoice,
+    };
+
+    let mut engine = GameEngine::new(
+        cast_cost_choose_registry(true),
+        9_387,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["twincast"]),
+            deck_with("island", &["twincast"]),
+        ]),
+        true,
+    )
+    .expect("copy cast-receipt program engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "choose_cast_receipt_fixture");
+    let program_slot = hand_index_for_card(&engine, 0, "choose_cast_receipt_fixture");
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell_with_cast_cost_groups(
+                program_slot,
+                vec![],
+                vec![CastCostGroupSelection {
+                    group_index: 0,
+                    option_index: 0,
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("P0 casts with the kicker receipt");
+    let original = engine
+        .state
+        .stack
+        .last()
+        .expect("original on stack")
+        .clone();
+    assert_eq!(original.cast_cost_receipts.len(), 1);
+
+    engine.state.players[1].mana_pool.blue = 2;
+    inject_card_into_hand(&mut engine, 1, "twincast");
+    let twincast_slot = hand_index_for_card(&engine, 1, "twincast");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("P0 passes to Twincast");
+    engine
+        .apply_scenario_command(1, &cast_spell(twincast_slot, target_object(original.id)))
+        .expect("P1 copies the kicked spell");
+    pass_both_players_with_batch(&mut engine);
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy)
+        .expect("Twincast puts a copy on the stack");
+    assert_eq!(copy.cast_cost_receipts, original.cast_cost_receipts);
+    let copy_resolution = pass_both_players_with_batch(&mut engine);
+    let copy_menu = find_resolution_choice(&copy_resolution)
+        .expect("the copy retains and evaluates its exact captured kicker receipt");
+    assert_eq!(copy_menu.deciding_player_id, 1);
+    assert_eq!(
+        copy_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true)]
+    );
+    let p1_draws = engine.state.turn_history.current.player(1).cards_drawn;
+    engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: copy_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P1 selects the kicked branch on the copy");
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        p1_draws + 1
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the original remains on the stack"
+    );
+
+    let original_resolution = pass_both_players_with_batch(&mut engine);
+    let original_menu = find_resolution_choice(&original_resolution)
+        .expect("the original retains its own exact receipt and parked program");
+    assert_eq!(original_menu.deciding_player_id, 0);
+    let p0_draws = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: original_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P0 selects the kicked branch on the original spell");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        p0_draws + 1
+    );
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn program_damage_replacement_preserves_cursor_and_runs_following_tail_once() {
+    use tricerules_core::state::{
+        ActiveDamagePrevention, DamagePreventionAmount, DamagePreventionScope,
+        ReplacementSourcePresentation,
+    };
+
+    let program = r#"(
+        id: "program_damage_replacement_fixture",
+        name: "Program Damage Replacement Fixture",
+        face_id: "program_damage_replacement_fixture",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "before", bind: ["before"], kind: Perform(Draw(
+                    who: Controller, count: 1
+                ))),
+                (id: "damage", kind: Perform(DamageTarget(
+                    amount: 1, target: (kind: OpponentPlayer)
+                ))),
+                (id: "after", bind: ["after"], kind: Perform(Draw(
+                    who: Controller, count: 1
+                )))
+            ], yields: []
+        ), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0)
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose an opposing player", effect_indices: [])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("DamageTarget program fixture compiles"),
+    ));
+    let decks = Some(vec![
+        vec!["program_damage_replacement_fixture".into(); 30],
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 9_481, &[0, 1], 20, decks, true)
+        .expect("damage replacement fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let first_effect_id = engine.state.next_damage_prevention_effect_id;
+    engine.state.damage_prevention_effects = [first_effect_id, first_effect_id + 1]
+        .into_iter()
+        .map(|id| ActiveDamagePrevention {
+            id,
+            static_origin: None,
+            source_id: None,
+            source_label: format!("test prevention {id}"),
+            source_presentation: ReplacementSourcePresentation::default(),
+            scope: DamagePreventionScope::Recipient(1),
+            amount: DamagePreventionAmount::All,
+            duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+            additional_effect: None,
+        })
+        .collect();
+    engine.state.next_damage_prevention_effect_id = first_effect_id + 2;
+    inject_card_into_hand(&mut engine, 0, "program_damage_replacement_fixture");
+    let spell_slot = hand_index_for_card(&engine, 0, "program_damage_replacement_fixture");
+    let before_draws = engine.state.turn_history.current.player(0).cards_drawn;
+    let before_life = engine.state.players[1].life;
+    engine
+        .apply_scenario_command(0, &cast_spell(spell_slot, target_player(1)))
+        .expect("cast the targeted program");
+    let batch = pass_both_players_with_batch(&mut engine);
+    let replacement =
+        find_resolution_choice(&batch).expect("two applicable prevention effects require a choice");
+    assert_eq!(
+        replacement.choice_kind(),
+        tricerules_proto::ruled::v1::ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(replacement.deciding_player_id, 1);
+    assert_eq!(replacement.replacement_options.len(), 2);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("damage replacement owns the suspended program");
+    assert!(matches!(
+        &pending.continuation,
+        tricerules_core::state::ResolutionContinuation::DamageReplacement { .. }
+    ));
+
+    let application_id = replacement.replacement_options[0].application_id;
+    let replacement_batch = engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![application_id]))
+        .expect("resolve one damage replacement and resume the program");
+    assert!(find_resolution_choice(&replacement_batch).is_none());
+    assert_eq!(engine.state.players[1].life, before_life);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        before_draws + 2,
+        "the prefix and following tail each execute once"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn program_choose_departed_controller_selects_delegate_then_runs_survivor_tail_once() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, ResolutionChoiceDecision, SubmitResolutionChoice,
+    };
+
+    let program = r#"(
+        id: "departed_program_choose",
+        name: "Departed Program Choose",
+        face_id: "departed_program_choose",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "choose_route", kind: Choose(
+                    choice: "choose_route", chooser: Controller, optional: false,
+                    branches: [
+                        (branch_id: "route_a", presentation: Fallback, cost: None,
+                            body: (steps: [], yields: [])),
+                        (branch_id: "route_b", presentation: OracleLines([2]), cost: None,
+                            body: (steps: [], yields: [])),
+                    ],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "damage_survivor", kind: Perform(DamageTarget(
+                    amount: 3, target: (kind: OpponentPlayer))))
+            ], yields: []
+        ), target_bindings: [
+            (instruction_id: "damage_survivor", role: Target, target_group_index: 0)
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose a surviving opponent", effect_indices: [])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("the synthetic all-free Choose program validates"),
+    ));
+    let decks = Some((0..4).map(|_| vec!["forest".into(); 30]).collect());
+    let mut engine = GameEngine::new(registry, 9_384, &[0, 1, 2, 3], 20, decks, true)
+        .expect("four-player program Choose engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "departed_program_choose");
+    let slot = hand_index_for_card(&engine, 0, "departed_program_choose");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, target_player(3)))
+        .expect("P0 casts the targeted synthetic program");
+    let mut initial_menu_batch = None;
+    for _ in 0..4 {
+        let actor = engine.state.priority_player_id();
+        initial_menu_batch = Some(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .expect("every live player passes before the spell resolves"),
+        );
+    }
+    let initial_menu_batch = initial_menu_batch.expect("the final pass produces the menu");
+    let initial_menu = find_resolution_choice(&initial_menu_batch)
+        .expect("the live controller receives the original all-free menu");
+    assert_eq!(initial_menu.deciding_player_id, 0);
+    assert_eq!(
+        initial_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| branch.branch_index)
+            .collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+
+    let departed = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 can concede while their spell is parked at Choose");
+    assert!(engine.state.players[0].has_lost);
+    let selector = find_resolution_choice(&departed)
+        .expect("the next live player must choose a delegate for P0's choice");
+    assert_eq!(selector.deciding_player_id, 1);
+    assert_ne!(selector.resolution_prompt_id, 0);
+    assert_eq!(
+        selector
+            .resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "P1 makes the choice", true),
+            (1, "P2 makes the choice", true),
+            (2, "P3 makes the choice", true),
+        ]
+    );
+
+    let mut choose_delegate = SubmitResolutionChoice {
+        resolution_prompt_id: selector.resolution_prompt_id,
+        decision: ResolutionChoiceDecision::SelectBranch as i32,
+        selected_branch_index: 1,
+        ..Default::default()
+    };
+    let delegated = engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(choose_delegate.clone())),
+            },
+        )
+        .expect("P1 assigns P2 to make the original choice");
+    let original_menu = find_resolution_choice(&delegated)
+        .expect("P2 receives P0's original branch menu exactly once");
+    assert_eq!(original_menu.deciding_player_id, 2);
+    assert_ne!(original_menu.resolution_prompt_id, 0);
+    assert_eq!(
+        original_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true), (1, true)]
+    );
+    let oracle_presented = original_menu
+        .resolution_branches
+        .iter()
+        .find(|branch| branch.branch_index == 1)
+        .expect("the delegated original menu retains the second branch at its authored index");
+    assert_eq!(oracle_presented.label, "Continue");
+    let presentation = oracle_presented
+        .presentation
+        .as_ref()
+        .expect("delegated original menu carries its owner-bound presentation path");
+    assert_eq!(presentation.card_id, "departed_program_choose");
+    assert_eq!(presentation.face_id, "departed_program_choose");
+    assert_eq!(presentation.oracle_line_indices, vec![2]);
+    assert_eq!(
+        presentation.path.last().map(|part| part.id.as_str()),
+        Some("route_b")
+    );
+    assert_eq!(presentation.fallback_text, "Continue");
+
+    let stale_selector_state = engine
+        .diagnostic_snapshot()
+        .expect("snapshot before stale answer");
+    let stale_selector_seed = engine.state.seed;
+    let stale_selector_command_index = engine.state.command_index;
+    assert!(engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(choose_delegate.clone())),
+            },
+        )
+        .is_err());
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("snapshot after stale answer"),
+        stale_selector_state
+    );
+    assert_eq!(engine.state.seed, stale_selector_seed);
+    assert_eq!(engine.state.command_index, stale_selector_command_index);
+
+    let delegate_departure = engine
+        .apply_scenario_command(2, &concede())
+        .expect("P2 departs before making the delegated choice");
+    assert!(engine.state.players[2].has_lost);
+    let refreshed_selector = find_resolution_choice(&delegate_departure)
+        .expect("P1 must choose another live delegate after P2 leaves");
+    assert_eq!(refreshed_selector.deciding_player_id, 1);
+    assert!(refreshed_selector.resolution_prompt_id > selector.resolution_prompt_id);
+    assert_eq!(
+        refreshed_selector
+            .resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "P1 makes the choice", true),
+            (1, "P3 makes the choice", true),
+        ]
+    );
+
+    let self_delegate = engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: refreshed_selector.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P1 may take over the choice as a live delegate");
+    let original_menu = find_resolution_choice(&self_delegate)
+        .expect("the self-delegate receives the original menu once");
+    assert_eq!(original_menu.deciding_player_id, 1);
+    assert!(original_menu.resolution_prompt_id > refreshed_selector.resolution_prompt_id);
+
+    choose_delegate.resolution_prompt_id = original_menu.resolution_prompt_id;
+    choose_delegate.selected_branch_index = 1;
+    let before_life = engine.state.players[3].life;
+    let completed = engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(choose_delegate)),
+            },
+        )
+        .expect("P1 makes one selection after becoming the delegate");
+    assert!(find_resolution_choice(&completed).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[3].life, before_life - 3);
+    assert!(engine.state.players[1].life == 20 && engine.state.players[2].life == 20);
+}
+
+#[test]
+fn program_choose_departed_selector_keeps_delegate_indices_stable() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, ResolutionChoiceDecision, SubmitResolutionChoice,
+    };
+
+    let program = r#"(
+        id: "departed_selector_program_choose",
+        name: "Departed Selector Program Choose",
+        face_id: "departed_selector_program_choose",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "choose_route", kind: Choose(
+                    choice: "choose_route", chooser: Controller, optional: false,
+                    branches: [
+                        (branch_id: "route_a", presentation: Fallback, cost: None,
+                            body: (steps: [], yields: [])),
+                        (branch_id: "route_b", presentation: Fallback, cost: None,
+                            body: (steps: [], yields: [])),
+                    ],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "damage_survivor", kind: Perform(DamageTarget(
+                    amount: 3, target: (kind: OpponentPlayer))))
+            ], yields: []
+        ), target_bindings: [
+            (instruction_id: "damage_survivor", role: Target, target_group_index: 0)
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose a surviving opponent", effect_indices: [])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("the synthetic all-free Choose program validates"),
+    ));
+    let decks = Some((0..4).map(|_| vec!["forest".into(); 30]).collect());
+    let mut engine = GameEngine::new(registry, 9_385, &[0, 1, 2, 3], 20, decks, true)
+        .expect("four-player program Choose engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "departed_selector_program_choose");
+    let slot = hand_index_for_card(&engine, 0, "departed_selector_program_choose");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, target_player(3)))
+        .expect("P0 casts the targeted synthetic program");
+    let mut initial_menu_batch = None;
+    for _ in 0..4 {
+        let actor = engine.state.priority_player_id();
+        initial_menu_batch = Some(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .expect("every live player passes before the spell resolves"),
+        );
+    }
+    assert!(find_resolution_choice(&initial_menu_batch.unwrap()).is_some());
+
+    let first_departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 leaves during the original menu");
+    let selector = find_resolution_choice(&first_departure).expect("P1 selects a delegate");
+    assert_eq!(selector.deciding_player_id, 1);
+    assert_eq!(selector.resolution_branches.len(), 3);
+    assert!(selector
+        .resolution_branches
+        .iter()
+        .all(|branch| branch.selectable));
+
+    let second_departure = engine
+        .apply_scenario_command(1, &concede())
+        .expect("P1 leaves while the delegate selector offer is pending");
+    assert!(engine.state.players[1].has_lost);
+    let refreshed =
+        find_resolution_choice(&second_departure).expect("P2 takes over the delegate selection");
+    assert_eq!(refreshed.deciding_player_id, 2);
+    assert_ne!(refreshed.resolution_prompt_id, 0);
+    assert_eq!(
+        refreshed
+            .resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "Unavailable player", false),
+            (1, "P2 makes the choice", true),
+            (2, "P3 makes the choice", true),
+        ],
+        "departed candidates stay as unselectable tombstones at their original indices"
+    );
+
+    let stale = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: selector.resolution_prompt_id,
+            decision: ResolutionChoiceDecision::SelectBranch as i32,
+            selected_branch_index: 2,
+            ..Default::default()
+        })),
+    };
+    let stale_state = engine
+        .diagnostic_snapshot()
+        .expect("before stale selector answer");
+    assert!(engine.apply_scenario_command(1, &stale).is_err());
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("after stale selector answer"),
+        stale_state
+    );
+
+    let delegated = engine
+        .apply_scenario_command(
+            2,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: refreshed.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 2,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P2 chooses P3 using the preserved candidate index two");
+    let original_menu = find_resolution_choice(&delegated).expect("P3 receives the original menu");
+    assert_eq!(original_menu.deciding_player_id, 3);
+    assert_eq!(original_menu.resolution_branches.len(), 2);
+
+    let before_life = engine.state.players[3].life;
+    engine
+        .apply_scenario_command(
+            3,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: original_menu.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P3 selects one original branch");
+    assert_eq!(engine.state.players[3].life, before_life - 3);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
 /// Putting cards back on top of the library must emit **no** `PermanentMoved`. That event is
 /// `FIELD_VISIBILITY_PUBLIC` down to its `card_id`, so announcing a hand → library move would
 /// tell the opponent exactly which two cards Brainstorm hid on top — hand and library are hidden

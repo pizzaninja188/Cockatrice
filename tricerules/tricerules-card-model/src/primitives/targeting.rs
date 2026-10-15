@@ -836,6 +836,16 @@ fn collect_program_effects<'a>(
                 collect_program_effects(yes, effects);
                 collect_program_effects(no, effects);
             }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    collect_program_effects(&branch.body, effects);
+                }
+                collect_program_effects(otherwise, effects);
+            }
         }
     }
 }

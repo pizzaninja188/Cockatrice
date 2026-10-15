@@ -267,7 +267,7 @@ impl GameEngine {
                 shuffle,
                 reveal,
                 result_id: None,
-                program: stack.program.clone(),
+                stack: stack.clone(),
             },
         )?;
         let next = self
@@ -363,7 +363,7 @@ impl GameEngine {
                 shuffle,
                 reveal,
                 result_id: None,
-                program: stack.program.clone(),
+                stack: stack.clone(),
             },
         )?;
         let Some(next) = self
@@ -2757,7 +2757,7 @@ mod tests {
                     shuffle: true,
                     reveal: false,
                     result_id: None,
-                    program: None,
+                    stack: ParkedStackResolution::new(item.clone()),
                 },
             )
             .unwrap();
@@ -3000,7 +3000,7 @@ mod tests {
                     shuffle: true,
                     reveal: false,
                     result_id: None,
-                    program: None,
+                    stack: ParkedStackResolution::new(item.clone()),
                 },
             )
             .unwrap();

@@ -1,5 +1,6 @@
 use super::super::payment::PaidCardCost;
 use super::*;
+use crate::state::{PendingProgramChoose, PendingProgramChooseStage};
 
 impl GameEngine {
     pub(in crate::engine) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
@@ -126,6 +127,16 @@ impl GameEngine {
             ));
         }
         let mut events = Vec::new();
+        let program_choose_payment = matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: PendingProgramChoose {
+                    stage: PendingProgramChooseStage::PayingMana { .. },
+                    ..
+                },
+                ..
+            }
+        );
         let soft_counter_paid = matches!(
             pending.continuation,
             ResolutionContinuation::ManaPayment { .. }
@@ -220,6 +231,11 @@ impl GameEngine {
                         stack.previous_result.clone(),
                         events,
                     );
+                } else if program_choose_payment {
+                    events.push(ev_log(format!(
+                        "P{player} declines the program Choose payment."
+                    )));
+                    return self.resume_program_choose_payment(pending, false, events);
                 } else if let ResolutionContinuation::WardPayment { stack, ward } =
                     &pending.continuation
                 {
@@ -274,7 +290,40 @@ impl GameEngine {
                 tricerules_card_model::primitives::CounterPaymentOutcome::Declined
             }
         });
+        if program_choose_payment {
+            return self.resume_program_choose_payment(pending, true, events);
+        }
         self.resume_mana_payment_continuation(pending, counter_payment_outcome, events)
+    }
+
+    fn resume_program_choose_payment(
+        &mut self,
+        pending: PendingResolution,
+        paid: bool,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (mut stack, choose) = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { stack, choose } => {
+                (stack.clone(), choose.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "program Choose payment continuation missing",
+                ));
+            }
+        };
+        let branch_id = match choose.stage {
+            PendingProgramChooseStage::PayingMana { branch_id, .. } if paid => Some(branch_id),
+            PendingProgramChooseStage::PayingMana { .. } if !paid => None,
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose payment stage changed"));
+            }
+        };
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, branch_id.as_ref())?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
     /// A departed payer cannot answer or delegate a standalone pay-or-decline choice. Once the
@@ -383,6 +432,262 @@ impl GameEngine {
             cost,
         )
         .map_or_else(Vec::new, |component| component.candidates(self, player))
+    }
+
+    pub(super) fn select_program_choose(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let invalid_shape = !answer.chosen_object_ids.is_empty()
+            || !answer.chosen_player_ids.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some();
+        if invalid_shape {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "program Choose selection contains unrelated fields",
+            ));
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingDelegate { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.select_program_choose_delegate(pending, answer, decision);
+        }
+        let (stack, choose_state) = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { stack, choose }
+                if matches!(choose.stage, PendingProgramChooseStage::Selecting) =>
+            {
+                (stack.clone(), choose.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose continuation missing"));
+            }
+        };
+        if decision == rv1::ResolutionChoiceDecision::Decline {
+            if !choose_state.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose is not optional"));
+            }
+            let mut stack = stack;
+            self.enter_program_choose_body(&mut stack, &choose_state.occurrence, None)?;
+            return self.complete_parked_stack_with_previous(
+                stack.clone(),
+                stack.previous_result.clone(),
+                vec![ev_log(format!(
+                    "P{} declines the optional resolution choice.",
+                    pending.deciding_player
+                ))],
+            );
+        }
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "program Choose requires a branch selection or decline",
+            ));
+        }
+        let branch_index = answer.selected_branch_index as usize;
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose_state.occurrence,
+            choose_state.original_chooser,
+            branch_index,
+        ) {
+            Ok(branch) => branch,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let label = branch.fallback_label();
+        let mut events = vec![ev_log(format!(
+            "P{} chooses: {label}.",
+            pending.deciding_player
+        ))];
+        let waterbend = matches!(&branch.cost, ResolutionCost::Waterbend(_));
+        match branch.cost {
+            ResolutionCost::None => {
+                let mut stack = stack;
+                self.enter_program_choose_body(
+                    &mut stack,
+                    &choose_state.occurrence,
+                    Some(&branch.branch_id),
+                )?;
+                self.complete_parked_stack_with_previous(
+                    stack.clone(),
+                    stack.previous_result.clone(),
+                    events,
+                )
+            }
+            ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
+                pending.presentation.choice_kind = rv1::ChoiceKind::ManaPayment;
+                pending.presentation.min = 0;
+                pending.presentation.max = 1;
+                pending.presentation.prompt = format!("Pay {cost}?");
+                let mut payment = PendingManaPayment::from_cost(
+                    0,
+                    cost,
+                    self.state.undoable_mana_abilities.len(),
+                );
+                payment.waterbend = waterbend;
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated program Choose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::PayingMana {
+                    selected_branch: branch_index,
+                    branch_id: branch.branch_id,
+                    payment,
+                };
+                self.state.pending_resolution = Some(pending);
+                events.push(
+                    self.resolution_payment_choice_event()
+                        .expect("program Choose payment remains parked"),
+                );
+                Ok(finish_with_events(self, events))
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                Err(EngineError::ProgramInvariant(
+                    "compiled program Choose has an unsupported resolution cost",
+                ))
+            }
+        }
+    }
+
+    fn select_program_choose_delegate(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "a departed chooser's replacement must be selected",
+            ));
+        }
+        let (controller, original_chooser, candidates) = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose {
+                stack,
+                choose:
+                    PendingProgramChoose {
+                        original_chooser,
+                        stage: PendingProgramChooseStage::ChoosingDelegate { candidates },
+                        ..
+                    },
+            } => (stack.item.controller, *original_chooser, candidates.clone()),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "program Choose delegate continuation missing",
+                ));
+            }
+        };
+        let delegate = candidates
+            .get(answer.selected_branch_index as usize)
+            .copied()
+            .flatten();
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            original_chooser,
+        );
+        let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        if self
+            .state
+            .player_idx(delegate)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        }
+        let ResolutionContinuation::ProgramChoose { choose, .. } = &mut pending.continuation else {
+            unreachable!("validated program Choose delegate continuation")
+        };
+        choose.stage = PendingProgramChooseStage::Selecting;
+        choose.delegate_selected = true;
+        pending.deciding_player = delegate;
+        pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+        pending.presentation.min = u32::from(!choose.optional);
+        pending.presentation.max = 1;
+        pending.presentation.prompt = if choose.optional {
+            "Choose a resolution option, or decline.".into()
+        } else {
+            "Choose a resolution option.".into()
+        };
+        let mut events = vec![ev_log(format!(
+            "P{controller} chooses P{delegate} to make P{original_chooser}'s resolution choice."
+        ))];
+        if !self.program_choose_choice_has_selectable_option(&pending) {
+            let stack = pending
+                .continuation
+                .stack()
+                .cloned()
+                .ok_or(EngineError::Illegal(
+                    "program Choose stack continuation missing",
+                ))?;
+            let choose = match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { choose, .. } => choose.clone(),
+                _ => unreachable!(),
+            };
+            let mut stack = stack;
+            self.enter_program_choose_body(&mut stack, &choose.occurrence, None)?;
+            return self.complete_parked_stack_with_previous(
+                stack.clone(),
+                stack.previous_result.clone(),
+                {
+                    events.push(ev_log(
+                        "No cost-free resolution option remains for the departed chooser.".into(),
+                    ));
+                    events
+                },
+            );
+        }
+        self.state.pending_resolution = Some(pending);
+        events.push(
+            self.program_choose_choice_event()
+                .expect("delegated program Choose remains parked"),
+        );
+        Ok(finish_with_events(self, events))
+    }
+
+    fn program_choose_choice_has_selectable_option(&mut self, pending: &PendingResolution) -> bool {
+        self.state.pending_resolution = Some(pending.clone());
+        let has_selectable = self
+            .program_choose_choice_event()
+            .and_then(|event| match event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(
+                    choice
+                        .resolution_branches
+                        .iter()
+                        .any(|branch| branch.selectable),
+                ),
+                _ => None,
+            })
+            .unwrap_or(false);
+        self.state.pending_resolution = None;
+        has_selectable
     }
 
     pub(super) fn select_resolution_branch(
@@ -799,6 +1104,202 @@ impl GameEngine {
             stack.previous_result,
             vec![ev_log(log)],
         )
+    }
+
+    fn complete_program_choose_otherwise(
+        &mut self,
+        pending: PendingResolution,
+        log: String,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (mut stack, choose) = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { stack, choose } => {
+                (stack.clone(), choose.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "program Choose stack continuation missing",
+                ));
+            }
+        };
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, None)?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, vec![ev_log(log)])
+    }
+
+    /// Reconcile a program Choose occurrence when its chooser, selected delegate, or source
+    /// controller leaves. The parked program frame remains authoritative: costed branches cannot
+    /// be transferred, optional departed payers take Otherwise, and a noncost choice receives a
+    /// fresh selector prompt before a live delegate sees the original menu.
+    pub(in crate::engine) fn refresh_program_choose_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (stack, choose) = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { stack, choose } => {
+                (stack.clone(), choose.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let controller = stack.item.controller;
+        let controller_live = self
+            .state
+            .player_idx(controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let original_chooser_live = self
+            .state
+            .player_idx(choose.original_chooser)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let current_chooser_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let delegate_prompt = matches!(
+            choose.stage,
+            PendingProgramChooseStage::ChoosingDelegate { .. }
+        );
+        let payment_prompt = matches!(choose.stage, PendingProgramChooseStage::PayingMana { .. });
+
+        if payment_prompt && original_chooser_live && current_chooser_live {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        if payment_prompt {
+            let log = if payment_prompt {
+                "The departed payer cannot complete the program Choose payment; Otherwise resolves."
+            } else {
+                "The departed chooser cannot complete the program Choose payment; Otherwise resolves."
+            };
+            let completed = self.complete_program_choose_otherwise(pending, log.into())?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        if !delegate_prompt && original_chooser_live && current_chooser_live {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        if !delegate_prompt && choose.delegate_selected && current_chooser_live {
+            // The chosen live delegate is still entitled to answer the original menu once.
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        let selector = if controller_live {
+            Some(controller)
+        } else {
+            self.state
+                .player_idx(controller)
+                .and_then(|controller_index| self.state.next_in_game_player_idx(controller_index))
+                .map(|index| self.state.players[index].id)
+                .or_else(|| {
+                    self.state
+                        .players
+                        .iter()
+                        .find(|player| !player.has_lost)
+                        .map(|player| player.id)
+                })
+        };
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            choose.original_chooser,
+        );
+        if eligible.is_empty() {
+            let completed = self.complete_program_choose_otherwise(
+                pending,
+                "No live player can make the departed chooser's resolution choice.".into(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        // Regenerate the Selecting view without losing candidate indices. If no cost-free branch
+        // remains after the chooser departed, the selected alternative is the only legal route.
+        // Probe the original menu on a temporary pending value. The live continuation may be
+        // an unchanged delegate prompt; mutating it to Selecting before the no-op check would
+        // silently lose that stage and make the next answer validate as a branch selection.
+        let mut probe = pending.clone();
+        let ResolutionContinuation::ProgramChoose {
+            choose: probe_choose,
+            ..
+        } = &mut probe.continuation
+        else {
+            unreachable!("validated program Choose continuation")
+        };
+        probe_choose.stage = PendingProgramChooseStage::Selecting;
+        probe_choose.delegate_selected = false;
+        if !self.program_choose_choice_has_selectable_option(&probe) {
+            let completed = self.complete_program_choose_otherwise(
+                pending,
+                "No cost-free resolution option remains for the departed chooser.".into(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        let Some(selector) = selector else {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        };
+        let mut candidate_slots = match &choose.stage {
+            PendingProgramChooseStage::ChoosingDelegate { candidates } => candidates.clone(),
+            _ => Vec::new(),
+        };
+        for slot in &mut candidate_slots {
+            if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
+                *slot = None;
+            }
+        }
+        for candidate in eligible.iter().copied() {
+            if !candidate_slots.contains(&Some(candidate)) {
+                candidate_slots.push(Some(candidate));
+            }
+        }
+
+        let same_prompt = delegate_prompt
+            && current_chooser_live
+            && pending.deciding_player == selector
+            && matches!(
+                &choose.stage,
+                PendingProgramChooseStage::ChoosingDelegate { candidates }
+                    if *candidates == candidate_slots
+            );
+        if same_prompt {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        pending.deciding_player = selector;
+        pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+        pending.presentation.min = 1;
+        pending.presentation.max = 1;
+        pending.presentation.prompt = format!(
+            "P{selector}: choose a player to make P{}'s resolution choice.",
+            choose.original_chooser
+        );
+        pending.resolution_prompt_semantics = None;
+        let ResolutionContinuation::ProgramChoose { choose, .. } = &mut pending.continuation else {
+            unreachable!("validated program Choose continuation")
+        };
+        choose.stage = PendingProgramChooseStage::ChoosingDelegate {
+            candidates: candidate_slots,
+        };
+        self.state.pending_resolution = Some(pending);
+        events.push(ev_log(format!(
+            "P{selector} must choose a replacement for the departed resolution chooser."
+        )));
+        events.push(
+            self.program_choose_choice_event()
+                .expect("program Choose delegate prompt remains parked"),
+        );
+        Ok(())
     }
 
     /// Reassign an authored branch choice when its current decider leaves. CR 800.4g directs the

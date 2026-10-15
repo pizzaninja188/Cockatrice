@@ -21,7 +21,7 @@ fn choose_branch(index: u32) -> RuledCommand {
 }
 
 #[test]
-fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
+fn issue_153_chaos_spewer_declining_without_a_creature_completes_blight() {
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
         153_103,
@@ -43,6 +43,25 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
         .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .unwrap();
     pass_both_players(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "chaos_spewer" && object.zone == Zone::Battlefield)
+        .expect("Chaos Spewer enters before its trigger resolves")
+        .id;
+    // Remove the source after its trigger is on the stack. Blight then has no creature to
+    // affect, while the captured triggered program still resolves under CR 608.2m.
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != spewer);
+    engine.state.players[0].graveyard.push(spewer);
+    engine.state.objects.get_mut(&spewer).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(spewer)
+        .or_default() += 1;
     pass_both_players(&mut engine);
     // Already-floating mana must remain available for explicit pip selection in the client.
     engine.state.players[0].mana_pool.colorless = 2;
@@ -64,7 +83,7 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
     );
     assert!(payment.payment_currently_legal);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
-    engine
+    let declined = engine
         .apply_scenario_command(
             0,
             &RuledCommand {
@@ -77,36 +96,478 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
         )
         .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    assert!(find_resolution_choice(&declined).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine
+        .state
+        .objects
+        .values()
+        .all(|object| { object.counter_count(CounterKind::MinusOneMinusOne) == 0 }));
+}
+
+#[test]
+fn issue_153_departed_optional_program_payer_takes_otherwise_without_delegation() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_106,
+        &[0, 1, 2],
+        20,
+        Some(vec![
+            deck_with("mountain", &["chaos_spewer"]),
+            deck_with("forest", &[]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "chaos_spewer");
+    engine.state.players[0].mana_pool.red = 1;
+    engine.state.players[0].mana_pool.colorless = 2;
+    let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .expect("P0 casts Chaos Spewer");
+    pass_priority_round(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "chaos_spewer" && object.zone == Zone::Battlefield)
+        .expect("Chaos Spewer resolves before its trigger")
+        .id;
+    let trigger = engine
+        .state
+        .stack
+        .last_mut()
+        .expect("Spewer trigger on stack");
+    // Keep the source owned and controlled by P0 while P1 controls its captured trigger.
+    // This isolates the optional payer departure from physical-source removal.
+    trigger.controller = 1;
+    engine.state.players[1].mana_pool.colorless = 2;
+    pass_priority_round(&mut engine);
+    let menu = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("trigger offers its compiled optional Choose")
+        .deciding_player;
+    assert_eq!(menu, 1);
+
+    let payment = engine
+        .apply_scenario_command(1, &choose_branch(0))
+        .expect("P1 selects the paid branch to open its optional payment");
+    let payment_prompt = find_resolution_choice(&payment).expect("staged payment prompt");
+    assert_eq!(payment_prompt.deciding_player_id, 1);
+    assert_eq!(payment_prompt.choice_kind, ChoiceKind::ManaPayment as i32);
+    assert_eq!(engine.state.players[1].mana_pool.colorless, 2);
+
+    let departure = engine
+        .apply_scenario_command(1, &concede())
+        .expect("P1 leaves while the optional Choose payment is pending");
+    assert!(engine.state.players[1].has_lost);
+    assert!(engine.state.objects.contains_key(&spewer));
+    assert_eq!(engine.state.objects[&spewer].zone, Zone::Battlefield);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(find_resolution_choice(&departure).is_none());
+    assert!(departure.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.choice_kind == ChoiceKind::ResolutionBranch as i32
+    )));
+    assert_eq!(
+        engine.state.objects[&spewer].counter_count(CounterKind::MinusOneMinusOne),
+        0
+    );
+}
+
+#[test]
+fn issue_153_parked_choose_survives_source_leave_and_same_oid_return() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_110,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("mountain", &["chaos_spewer"]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "chaos_spewer");
+    engine.state.players[0].mana_pool.red = 1;
+    engine.state.players[0].mana_pool.colorless = 2;
+    let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .expect("cast Chaos Spewer");
+    pass_both_players(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "chaos_spewer" && object.zone == Zone::Battlefield)
+        .expect("Spewer is the source of the pending trigger")
+        .id;
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&spewer)
+        .copied()
+        .unwrap_or(0);
+    pass_both_players(&mut engine);
     assert_eq!(
         engine
             .state
             .pending_resolution
             .as_ref()
-            .expect("cancelled mana cannot skip the required choice")
+            .unwrap()
             .presentation
             .choice_kind,
-        ChoiceKind::ResolutionBranch
+        ChoiceKind::ResolutionBranch,
+        "the triggered program is already parked at Choose before the source changes zones"
     );
-    engine.apply_scenario_command(0, &choose_branch(1)).unwrap();
+
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != spewer);
+    engine.state.players[0].graveyard.push(spewer);
+    engine.state.objects.get_mut(&spewer).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(spewer)
+        .or_default() += 1;
+    engine.state.players[0]
+        .graveyard
+        .retain(|object_id| *object_id != spewer);
+    engine.state.players[0].battlefield.push(spewer);
+    engine.state.objects.get_mut(&spewer).unwrap().zone = Zone::Battlefield;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(spewer)
+        .or_default() += 1;
+    let returned_generation = engine.state.zone_change_generation[&spewer];
+    assert!(returned_generation >= source_generation + 2);
+
+    engine.state.players[0].mana_pool.colorless = 2;
+    let payment = engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("the parked menu and controller survive source leave-return");
+    assert_eq!(
+        find_resolution_choice(&payment).unwrap().choice_kind,
+        ChoiceKind::ManaPayment as i32
+    );
+    let blight = submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::Decline)
+        .expect("declining the payment enters the captured Otherwise block");
+    let blight =
+        find_resolution_choice(&blight).expect("returned Spewer is a current Blight candidate");
+    assert_eq!(blight.choice_kind, ChoiceKind::CostObjects as i32);
+    assert!(blight.candidate_object_ids.contains(&spewer));
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![spewer]))
+        .expect("choose the current incarnation of the returned Spewer");
+    assert_eq!(
+        engine.state.zone_change_generation[&spewer],
+        returned_generation
+    );
+    assert_eq!(engine.state.objects[&spewer].zone, Zone::Battlefield);
+    assert_eq!(
+        engine.state.objects[&spewer].counter_count(CounterKind::MinusOneMinusOne),
+        2
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn program_blight_completion_resumes_following_tail_once() {
+    const PROGRAM: &str = r#"(
+        id: "blight_program_tail_fixture",
+        name: "Blight Program Tail Fixture",
+        face_id: "blight_program_tail_fixture",
+        mana_cost: "{0}",
+        types: ["Sorcery"],
+        spell_program: Some((body: (steps: [
+            (id: "pay_or_blight", kind: Choose(
+                choice: "pay_or_blight", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "pay_2", presentation: Fallback, cost: Mana("{2}"),
+                    body: (steps: [], yields: []),
+                )],
+                otherwise: (steps: [
+                    (id: "blight_2", kind: Perform(Blight(count: 2))),
+                ], yields: []),
+            )),
+            (id: "tail_draw", bind: ["tail_draw"], kind: Perform(Draw(
+                who: Controller, count: 1,
+            ))),
+        ], yields: []), target_bindings: [])),
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                PROGRAM,
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/doubling_season.ron"),
+            ],
+            &[],
+        )
+        .expect("the Blight-tail fixture registry compiles"),
+    ));
+    let decks = Some(vec![
+        vec!["blight_program_tail_fixture".into(); 30],
+        vec!["mountain".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 153_111, &[0, 1], 20, decks, true)
+        .expect("Blight-tail fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 12, 12);
+    ensure_card_in_hand(&mut engine, 0, "blight_program_tail_fixture");
+    let source_slot = hand_index_for_card(&engine, 0, "blight_program_tail_fixture");
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &cast_spell(source_slot, vec![]))
+        .expect("cast the synthetic Blight-tail program");
+    let offered = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
+        .expect("Choose offers the optional Mana branch before Blight");
+    assert_eq!(offered.choice_kind, ChoiceKind::ResolutionBranch as i32);
+    let blight_prompt = engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
+                    decision: ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("decline Mana and enter the Otherwise block");
+    let blight = find_resolution_choice(&blight_prompt).expect("Blight parks before its tail");
+    assert_eq!(blight.choice_kind, ChoiceKind::CostObjects as i32);
+    assert_eq!((blight.min, blight.max), (1, 1));
+    assert_eq!(blight.candidate_object_ids.len(), 1);
+    assert_eq!(blight.candidate_object_ids, vec![target]);
+    let counter_replacement = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+        .expect("choose a creature for Blight");
+    let replacement = find_resolution_choice(&counter_replacement)
+        .expect("two Doubling Seasons require a real replacement-order pause");
+    assert_eq!(
+        replacement.choice_kind,
+        ChoiceKind::ReplacementEffect as i32
+    );
+    assert_eq!(replacement.candidate_object_ids.len(), 2);
+    let completed = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice(vec![replacement.candidate_object_ids[0]]),
+        )
+        .expect("order the counter replacement effects and resume the program tail");
+    assert!(find_resolution_choice(&completed).is_none());
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        8,
+        "both effect-counter doublers apply before the program continues"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "the Draw after the resultless Blight runs exactly once"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_104,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("mountain", &["chaos_spewer"]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "chaos_spewer");
+    engine.state.players[0].mana_pool.red = 1;
+    engine.state.players[0].mana_pool.colorless = 2;
+    let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    let choose_batch = pass_both_players_with_batch(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "chaos_spewer" && object.zone == Zone::Battlefield)
+        .expect("Chaos Spewer remains a Blight candidate")
+        .id;
+    let offered = find_resolution_choice(&choose_batch)
+        .expect("Chaos Spewer trigger offers Pay or Otherwise");
+    assert_eq!(offered.resolution_branches.len(), 1);
+    let pay = &offered.resolution_branches[0];
+    assert_eq!(pay.branch_index, 0);
+    assert_eq!(pay.label, "Pay {2}");
+    assert_eq!(pay.cost_text, "{2}");
+    let presentation = pay
+        .presentation
+        .as_ref()
+        .expect("pay branch carries its owner-bound presentation");
+    assert_eq!(presentation.card_id, "chaos_spewer");
+    assert_eq!(
+        presentation.path.last().map(|part| part.id.as_str()),
+        Some("pay_2")
+    );
+    assert_eq!(presentation.fallback_text, "Pay {2}");
+    let first_mountain = inject_permanent_on_battlefield(&mut engine, 0, "mountain");
+    let second_mountain = inject_permanent_on_battlefield(&mut engine, 0, "mountain");
+
+    let payment_batch = engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choosing Pay opens staged mana payment");
+    let payment = payment_batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
+                choice,
+            )) if choice.choice_kind == ChoiceKind::ManaPayment as i32 => Some(choice),
+            _ => None,
+        })
+        .expect("choosing Pay must open a staged mana payment");
+    assert_eq!(payment.generic_mana_cost, 2);
+    assert!(payment.mana_cost.is_empty());
+    assert!(!payment.payment_currently_legal);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    let prompt_id = payment.resolution_prompt_id;
+    let pending_presentation = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("staged Choose payment remains parked")
+        .presentation
+        .clone();
+    apply_ability(&mut engine, 0, first_mountain, 0, vec![])
+        .expect("float the first mana while the Choose payment is open");
+    apply_ability(&mut engine, 0, second_mountain, 0, vec![])
+        .expect("float the second mana while the Choose payment is open");
+    assert_eq!(engine.state.players[0].mana_pool.red, 2);
+    let rewound = engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .expect("Undo rewinds the last float without closing the payment offer");
+    assert_eq!(engine.state.players[0].mana_pool.red, 1);
+    assert!(engine.state.objects[&first_mountain].tapped);
+    assert!(!engine.state.objects[&second_mountain].tapped);
     let pending = engine
         .state
         .pending_resolution
         .as_ref()
-        .expect("declining mana must perform mandatory Blight");
-    assert_eq!(pending.presentation.choice_kind, ChoiceKind::CostObjects);
-    assert_eq!((pending.presentation.min, pending.presentation.max), (1, 1));
-    let creature = pending.presentation.candidates[0];
+        .expect("Undo preserves the unresolved Choose payment");
+    let refreshed_prompt_id = pending.resolution_prompt_id.get();
+    assert_ne!(
+        refreshed_prompt_id, prompt_id,
+        "changing the available mana refreshes the prompt identity"
+    );
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::ManaPayment);
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(
+        format!("{:?}", pending.presentation),
+        format!("{:?}", pending_presentation)
+    );
+    assert_eq!(
+        find_resolution_choice(&rewound).map(|choice| choice.resolution_prompt_id),
+        Some(refreshed_prompt_id),
+        "the payment offer is republished with its refreshed prompt ID after Undo"
+    );
+    let declined =
+        submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::Decline).unwrap();
+    let blight =
+        find_resolution_choice(&declined).expect("declining payment enters Blight directly");
+    assert_eq!(blight.choice_kind, ChoiceKind::CostObjects as i32);
+    assert_eq!((blight.min, blight.max), (1, 1));
+    assert!(blight.candidate_object_ids.contains(&spewer));
     assert!(engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .is_err());
     engine
-        .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
-        .unwrap();
+        .apply_scenario_command(0, &submit_resolution_choice(vec![spewer]))
+        .expect("Blight completes the parked Choose program");
+    assert_eq!(engine.state.players[0].mana_pool.red, 0);
+    assert!(!engine.state.objects[&first_mountain].tapped);
+    assert!(!engine.state.objects[&second_mountain].tapped);
+
     assert_eq!(
-        engine.state.objects[&creature].counter_count(CounterKind::MinusOneMinusOne),
+        engine.state.objects[&spewer].counter_count(CounterKind::MinusOneMinusOne),
         2
     );
     assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_153_chaos_spewer_paying_choose_cost_skips_blight() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_105,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("mountain", &["chaos_spewer"]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "chaos_spewer");
+    engine.state.players[0].mana_pool.red = 1;
+    engine.state.players[0].mana_pool.colorless = 2;
+    let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    pass_both_players(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "chaos_spewer" && object.zone == Zone::Battlefield)
+        .expect("Chaos Spewer is the battlefield source")
+        .id;
+    engine.state.players[0].mana_pool.colorless = 2;
+
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choosing Pay opens the explicit mana-payment offer");
+    let paid = submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay the exact generic {2} cost");
+    assert!(find_resolution_choice(&paid).is_none());
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&spewer].counter_count(CounterKind::MinusOneMinusOne),
+        0,
+        "the paid empty branch does not execute Otherwise Blight"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]

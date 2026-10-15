@@ -5,13 +5,17 @@
 //! has not completed yet.
 
 use super::*;
+use crate::engine::presentation::{
+    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
+};
 use crate::state::{
     DiscardCardTypeKnowledge, ProgramArm, ProgramDiscardResult, ProgramFrame, ProgramPathStep,
     ProgramRunState, ProgramValue,
 };
 use tricerules_card_model::primitives::{
-    CompiledBlock, CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
-    CompiledProgramResultCondition, ProgramRequiredInput, ResultSlotId, ResultType,
+    CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstructionKind,
+    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition,
+    ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType,
 };
 
 #[cfg(test)]
@@ -299,7 +303,7 @@ impl GameEngine {
         previous_result: EffectResult,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
-        self.run_program_with_previous_inner(top, program_state, previous_result, events)
+        self.run_program_with_previous_inner(top, program_state, previous_result, None, events)
             .map_err(|error| match error {
                 // Once a compiled, bounded program starts, an Illegal result can only mean its
                 // authored contract or committed internal transaction became inconsistent.
@@ -307,6 +311,27 @@ impl GameEngine {
                 EngineError::Illegal(reason) => EngineError::ProgramInvariant(reason),
                 other => other,
             })
+    }
+
+    pub(in crate::engine) fn resume_program_with_completion(
+        &mut self,
+        top: &StackItem,
+        program_state: ProgramRunState,
+        previous_result: EffectResult,
+        operation_result: Option<EffectResult>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<ResolutionProgress, EngineError> {
+        self.run_program_with_previous_inner(
+            top,
+            program_state,
+            previous_result,
+            operation_result,
+            events,
+        )
+        .map_err(|error| match error {
+            EngineError::Illegal(reason) => EngineError::ProgramInvariant(reason),
+            other => other,
+        })
     }
 
     pub(in crate::engine) fn begin_program_run(
@@ -343,6 +368,7 @@ impl GameEngine {
         top: &StackItem,
         mut program_state: ProgramRunState,
         previous_result: EffectResult,
+        operation_result: Option<EffectResult>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         if self.state.is_terminal() {
@@ -399,13 +425,19 @@ impl GameEngine {
         }
 
         if let Some(outputs) = program_state.in_flight.take() {
+            let operation_result =
+                operation_result
+                    .as_ref()
+                    .ok_or(EngineError::ProgramInvariant(
+                        "parked program operation completed without its result",
+                    ))?;
             #[cfg(test)]
             trip_program_failpoint(ProgramFailpoint::DomainCommitted)?;
             capture_program_outputs(
                 active_compiled,
                 &mut program_state,
                 &outputs,
-                &previous_result,
+                operation_result,
             )?;
             #[cfg(test)]
             if !outputs.is_empty() {
@@ -419,6 +451,10 @@ impl GameEngine {
             )? {
                 return Ok(ResolutionProgress::Parked);
             }
+        } else if operation_result.is_some() {
+            return Err(EngineError::ProgramInvariant(
+                "program operation result has no in-flight output",
+            ));
         }
 
         loop {
@@ -545,6 +581,94 @@ impl GameEngine {
                         yield_to: outputs,
                     });
                 }
+                CompiledInstructionKind::Choose {
+                    choice,
+                    optional,
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    let occurrence = crate::state::ProgramChooseOccurrence {
+                        parent_path: path.clone(),
+                        instruction_index: instruction_index as u32,
+                        choice_id: choice.clone(),
+                    };
+                    let choose_controller_live = self
+                        .state
+                        .player_idx(top.controller)
+                        .is_some_and(|idx| !self.state.players[idx].has_lost);
+                    let live_branches = branches
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, branch)| {
+                            (choose_controller_live || branch.cost == ResolutionCost::None)
+                                && self.program_choose_requirement_holds(top, &branch.requirement)
+                                && self.program_choose_draw_is_selectable(
+                                    top,
+                                    &previous_result,
+                                    branch,
+                                )
+                        })
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>();
+                    program_state.frames[frame_index].next_instruction += 1;
+                    if live_branches.is_empty() {
+                        let mut child_path = path;
+                        child_path.push(ProgramPathStep {
+                            instruction_index: instruction_index as u32,
+                            arm: ProgramArm::ChooseOtherwise,
+                        });
+                        program_state.frames.push(ProgramFrame {
+                            path: child_path,
+                            next_instruction: 0,
+                            yield_to: instruction.outputs.clone(),
+                        });
+                        let _ = otherwise;
+                        continue;
+                    }
+                    let prompt = if *optional {
+                        "Choose a resolution option, or decline.".to_string()
+                    } else {
+                        "Choose a resolution option.".to_string()
+                    };
+                    self.state.pending_resolution = Some(crate::state::PendingResolution {
+                        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                        resolution_prompt_semantics: None,
+                        deciding_player: top.controller,
+                        presentation: crate::state::PendingResolutionPresentation {
+                            source_object_id: top.id,
+                            candidates: Vec::new(),
+                            min: u32::from(!*optional),
+                            max: 1,
+                            ordered: false,
+                            prompt: prompt.clone(),
+                            choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                            unique_names: false,
+                        },
+                        continuation: crate::state::ResolutionContinuation::ProgramChoose {
+                            stack: ParkedStackResolution {
+                                item: top.clone(),
+                                resume_effect_index: None,
+                                previous_result: previous_result.clone(),
+                                program: Some(program_state),
+                            },
+                            choose: crate::state::PendingProgramChoose {
+                                occurrence,
+                                original_chooser: top.controller,
+                                optional: *optional,
+                                delegate_selected: false,
+                                stage: crate::state::PendingProgramChooseStage::Selecting,
+                            },
+                        },
+                    });
+                    #[cfg(test)]
+                    trip_program_failpoint(ProgramFailpoint::OfferPublished)?;
+                    events.push(self.program_choose_choice_event().ok_or(
+                        EngineError::ProgramInvariant("program Choose offer could not be rendered"),
+                    )?);
+                    events.push(ev_log(prompt));
+                    return Ok(ResolutionProgress::Parked);
+                }
                 CompiledInstructionKind::Perform(effect) => {
                     let effect = effect.as_ref().clone();
                     let outputs = instruction.outputs.clone();
@@ -644,6 +768,7 @@ impl GameEngine {
                             affected_player,
                             spell_label: &label,
                             previous_effect_result: &previous,
+                            resume_previous_result: Some(&previous_result),
                             effect_result: &mut result,
                             effect_index: instruction_index as u32,
                             program_state: Some(program_state.clone()),
@@ -670,7 +795,9 @@ impl GameEngine {
                         trip_program_failpoint(ProgramFailpoint::OfferPublished)?;
                         return Ok(ResolutionProgress::Parked);
                     }
-                    if outcome != EffectOutcome::Continue {
+                    let resultless_blight =
+                        matches!(&outcome, EffectOutcome::Blighted(_)) && outputs.is_empty();
+                    if outcome != EffectOutcome::Continue && !resultless_blight {
                         return Err(EngineError::ProgramInvariant(
                             "unsupported resolution-program leaf outcome",
                         ));
@@ -686,7 +813,7 @@ impl GameEngine {
                     if self.finish_program_instruction_boundary(
                         top,
                         &program_state,
-                        &result,
+                        &previous_result,
                         events,
                     )? {
                         return Ok(ResolutionProgress::Parked);
@@ -694,6 +821,297 @@ impl GameEngine {
                 }
             }
         }
+    }
+
+    fn program_choose_requirement_holds(
+        &self,
+        top: &StackItem,
+        requirement: &CompiledChooseRequirement,
+    ) -> bool {
+        match requirement {
+            CompiledChooseRequirement::Always => true,
+            CompiledChooseRequirement::GameCondition(condition) => {
+                self.condition_holds(condition, ConditionContext::for_stack_item(top))
+            }
+            CompiledChooseRequirement::CastCostReceipt(condition) => {
+                top.cast_cost_condition_matches(condition)
+            }
+        }
+    }
+
+    fn program_choose_draw_is_selectable(
+        &self,
+        top: &StackItem,
+        previous_result: &EffectResult,
+        branch: &CompiledChooseBranch,
+    ) -> bool {
+        if branch.cost != ResolutionCost::None || branch.body.steps.len() != 1 {
+            return true;
+        }
+        let CompiledInstructionKind::Perform(effect) = &branch.body.steps[0].kind else {
+            return true;
+        };
+        super::direct_draw_effect_is_selectable(
+            self,
+            top,
+            previous_result,
+            std::slice::from_ref(effect.as_ref()),
+        )
+        .unwrap_or(true)
+    }
+
+    /// Enter one selected branch (or the explicit otherwise block) of a parked Choose node.
+    /// The occurrence is verified against the exact immutable compiled owner before a child
+    /// frame is pushed, and the parent cursor must be exactly one past that instruction.
+    pub(in crate::engine) fn enter_program_choose_body(
+        &mut self,
+        stack: &mut ParkedStackResolution,
+        occurrence: &crate::state::ProgramChooseOccurrence,
+        branch_id: Option<&tricerules_card_model::ChoiceId>,
+    ) -> Result<(), EngineError> {
+        let run = stack.program.as_mut().ok_or(EngineError::ProgramInvariant(
+            "program Choose lost its parked execution state",
+        ))?;
+        let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
+            EngineError::ProgramInvariant("parked Choose program owner disappeared"),
+        )?;
+        let parent = block_at_path(compiled, &occurrence.parent_path)?;
+        let instruction = parent
+            .steps
+            .get(occurrence.instruction_index as usize)
+            .ok_or(EngineError::ProgramInvariant(
+                "parked Choose instruction disappeared",
+            ))?;
+        let CompiledInstructionKind::Choose {
+            choice, branches, ..
+        } = &instruction.kind
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "parked Choose occurrence changed instruction kind",
+            ));
+        };
+        if choice != &occurrence.choice_id {
+            return Err(EngineError::ProgramInvariant(
+                "parked Choose occurrence changed choice identity",
+            ));
+        }
+        let frame = run.frames.last().ok_or(EngineError::ProgramInvariant(
+            "parked Choose lost its parent frame",
+        ))?;
+        if frame.path != occurrence.parent_path
+            || frame.next_instruction != occurrence.instruction_index + 1
+            || run.in_flight.is_some()
+        {
+            return Err(EngineError::ProgramInvariant(
+                "parked Choose parent cursor is inconsistent",
+            ));
+        }
+        let arm = if let Some(branch_id) = branch_id {
+            if !branches.iter().any(|branch| &branch.branch_id == branch_id) {
+                return Err(EngineError::ProgramInvariant(
+                    "selected Choose branch id disappeared",
+                ));
+            }
+            ProgramArm::ChooseBranch(branch_id.clone())
+        } else {
+            ProgramArm::ChooseOtherwise
+        };
+        let mut child_path = occurrence.parent_path.clone();
+        child_path.push(ProgramPathStep {
+            instruction_index: occurrence.instruction_index,
+            arm,
+        });
+        run.frames.push(ProgramFrame {
+            path: child_path,
+            next_instruction: 0,
+            yield_to: instruction.outputs.clone(),
+        });
+        Ok(())
+    }
+
+    pub(in crate::engine) fn program_choose_selected_branch(
+        &self,
+        stack: &ParkedStackResolution,
+        occurrence: &crate::state::ProgramChooseOccurrence,
+        original_chooser: PlayerId,
+        branch_index: usize,
+    ) -> Result<CompiledChooseBranch, EngineError> {
+        let run = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
+            "program Choose lost its parked execution state",
+        ))?;
+        let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
+            EngineError::ProgramInvariant("parked Choose program owner disappeared"),
+        )?;
+        let parent = block_at_path(compiled, &occurrence.parent_path)?;
+        let instruction = parent
+            .steps
+            .get(occurrence.instruction_index as usize)
+            .ok_or(EngineError::ProgramInvariant(
+                "parked Choose instruction disappeared",
+            ))?;
+        let CompiledInstructionKind::Choose {
+            choice, branches, ..
+        } = &instruction.kind
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "parked Choose occurrence changed instruction kind",
+            ));
+        };
+        if choice != &occurrence.choice_id {
+            return Err(EngineError::ProgramInvariant(
+                "parked Choose occurrence changed choice identity",
+            ));
+        }
+        let branch = branches
+            .get(branch_index)
+            .cloned()
+            .ok_or(EngineError::Illegal("bad program Choose branch index"))?;
+        let original_chooser_live = self
+            .state
+            .player_idx(original_chooser)
+            .is_some_and(|idx| !self.state.players[idx].has_lost);
+        if (!original_chooser_live && branch.cost != ResolutionCost::None)
+            || !self.program_choose_requirement_holds(&stack.item, &branch.requirement)
+            || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
+        {
+            return Err(EngineError::Illegal(
+                "that program Choose branch is no longer legal",
+            ));
+        }
+        Ok(branch)
+    }
+
+    pub(in crate::engine) fn program_choose_choice_event(&self) -> Option<rv1::RuledEvent> {
+        let pending = self.state.pending_resolution.as_ref()?;
+        let ResolutionContinuation::ProgramChoose { stack, choose } = &pending.continuation else {
+            return None;
+        };
+        let run = stack.program.as_ref()?;
+        let compiled = self.registry.compiled_program_for_owner(&run.owner)?;
+        let parent = block_at_path(compiled, &choose.occurrence.parent_path).ok()?;
+        let instruction = parent
+            .steps
+            .get(choose.occurrence.instruction_index as usize)?;
+        let CompiledInstructionKind::Choose {
+            choice, branches, ..
+        } = &instruction.kind
+        else {
+            return None;
+        };
+        if choice != &choose.occurrence.choice_id {
+            return None;
+        }
+        let options = match &choose.stage {
+            crate::state::PendingProgramChooseStage::ChoosingDelegate { candidates } => {
+                let eligible = super::resolution_choice_delegate_candidates(
+                    &self.state,
+                    stack.item.controller,
+                    choose.original_chooser,
+                );
+                candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(index, candidate)| {
+                        let selectable = candidate.is_some_and(|candidate| {
+                            eligible.contains(&candidate)
+                                && self
+                                    .state
+                                    .player_idx(candidate)
+                                    .is_some_and(|idx| !self.state.players[idx].has_lost)
+                        });
+                        let label = candidate.map_or_else(
+                            || "Unavailable player".to_string(),
+                            |candidate| format!("P{candidate} makes the choice"),
+                        );
+                        rv1::ResolutionBranchOption {
+                            branch_index: index as u32,
+                            label: label.clone(),
+                            selectable,
+                            presentation: Some(rv1::PresentationRef {
+                                fallback_text: label,
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }
+                    })
+                    .collect()
+            }
+            crate::state::PendingProgramChooseStage::Selecting => {
+                let original_chooser_live = self
+                    .state
+                    .player_idx(choose.original_chooser)
+                    .is_some_and(|idx| !self.state.players[idx].has_lost);
+                branches
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, branch)| {
+                        (original_chooser_live || branch.cost == ResolutionCost::None)
+                            && self
+                                .program_choose_requirement_holds(&stack.item, &branch.requirement)
+                            && self.program_choose_draw_is_selectable(
+                                &stack.item,
+                                &stack.previous_result,
+                                branch,
+                            )
+                    })
+                    .map(|(index, branch)| {
+                        let (cost_kind, cost_text) = match &branch.cost {
+                            ResolutionCost::None => {
+                                (rv1::ResolutionBranchCostKind::Unspecified, String::new())
+                            }
+                            ResolutionCost::Mana(cost) => {
+                                (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
+                            }
+                            ResolutionCost::Waterbend(cost) => (
+                                rv1::ResolutionBranchCostKind::Waterbend,
+                                format!("Waterbend {cost}"),
+                            ),
+                            _ => return None,
+                        };
+                        let label = branch.fallback_label();
+                        Some(rv1::ResolutionBranchOption {
+                            branch_index: index as u32,
+                            label: label.clone(),
+                            cost_kind: cost_kind as i32,
+                            cost_text,
+                            selectable: true,
+                            presentation: stack_child_presentation_ref(
+                                self.registry,
+                                &stack.item.card_id,
+                                stack.item.face_index,
+                                StackPresentationSource::for_stack(
+                                    self.state
+                                        .stack_presentations
+                                        .get(&stack.item.id)
+                                        .and_then(|presentation| presentation.primary.as_ref()),
+                                    stack.item.ability_text.is_none(),
+                                ),
+                                PresentationPath::ResolutionBranch(&branch.branch_id),
+                                &branch.presentation,
+                                label,
+                            ),
+                            ..Default::default()
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?
+            }
+            crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
+        };
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: pending.presentation.min,
+                    max: pending.presentation.max,
+                    resolution_branches: options,
+                    ..Default::default()
+                },
+            )),
+        })
     }
 
     fn finish_program_instruction_boundary(
@@ -814,14 +1232,27 @@ fn block_at_path<'a>(
         let instruction = block.steps.get(step.instruction_index as usize).ok_or(
             EngineError::ProgramInvariant("resolution program frame path is invalid"),
         )?;
-        let CompiledInstructionKind::If { yes, no, .. } = &instruction.kind else {
-            return Err(EngineError::ProgramInvariant(
-                "resolution program frame is not a branch",
-            ));
-        };
-        block = match step.arm {
-            ProgramArm::Yes => yes,
-            ProgramArm::No => no,
+        block = match (&instruction.kind, &step.arm) {
+            (CompiledInstructionKind::If { yes, .. }, ProgramArm::Yes) => yes,
+            (CompiledInstructionKind::If { no, .. }, ProgramArm::No) => no,
+            (
+                CompiledInstructionKind::Choose { branches, .. },
+                ProgramArm::ChooseBranch(branch_id),
+            ) => branches
+                .iter()
+                .find(|branch| &branch.branch_id == branch_id)
+                .map(|branch| &branch.body)
+                .ok_or(EngineError::ProgramInvariant(
+                    "resolution program Choose branch path is invalid",
+                ))?,
+            (CompiledInstructionKind::Choose { otherwise, .. }, ProgramArm::ChooseOtherwise) => {
+                otherwise
+            }
+            _ => {
+                return Err(EngineError::ProgramInvariant(
+                    "resolution program frame is not a branch",
+                ))
+            }
         };
     }
     Ok(block)
@@ -1668,6 +2099,772 @@ mod invariant_rollback_tests {
                 .compiled_resolution_program_owners(&legacy)
                 .expect("unowned legacy trigger retains fallback"),
             None
+        );
+    }
+
+    #[test]
+    fn unchanged_program_choose_delegate_refresh_preserves_prompt_and_menu() {
+        use crate::state::PendingProgramChooseStage;
+
+        let card = r#"(id: "program_choose_delegate_fixture", name: "Program Choose Delegate Fixture",
+            face_id: "program_choose_delegate_fixture", mana_cost: "{0}", types: ["Instant"],
+            spell_program: Some((body: (steps: [
+                (id: "choose", bind: [], input: None, kind: Choose(
+                    choice: "choose", chooser: Controller, optional: false,
+                    branches: [
+                        (branch_id: "first", presentation: Fallback, cost: None,
+                            requirement: Always, body: (steps: [], yields: [])),
+                        (branch_id: "second", presentation: OracleLines([2]), cost: None,
+                            requirement: Always, body: (steps: [], yields: [])),
+                    ],
+                    otherwise: (steps: [], yields: []),
+                ))
+            ], yields: []))))"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("all-free Choose fixture compiles"),
+        ));
+        let decks = Some(
+            (0..4)
+                .map(|_| vec!["program_choose_delegate_fixture".to_string(); 30])
+                .collect(),
+        );
+        let mut engine = GameEngine::new(registry, 91_205, &[0, 1, 2, 3], 20, decks, true)
+            .expect("four-player program Choose fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let spell = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture deck dealt a card");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&spell)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(spell, 0);
+        top.id = spell;
+        top.controller = 0;
+        top.card_id = "program_choose_delegate_fixture".into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.cast_by = Some(0);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(generation),
+        });
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("fixture owner lookup")
+            .expect("fixture program owner");
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("fixture program starts");
+        let mut initial = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut initial,
+                )
+                .expect("program reaches Choose"),
+            ResolutionProgress::Parked
+        ));
+
+        // Model the source/controller leaving after its stack ability began. The next live
+        // player selects a delegate, and a repeated lifecycle refresh must remain a no-op.
+        engine.state.players[0].has_lost = true;
+        let mut departed = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut departed)
+            .expect("first refresh offers delegate selection");
+        engine
+            .publish_resolution_prompt_ids(&mut departed)
+            .expect("delegate prompt gets its stable ID");
+        assert!(matches!(
+            &engine.state.pending_resolution.as_ref().unwrap().continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingDelegate { candidates },
+                    ..
+                },
+                ..
+            } if candidates == &[Some(1), Some(2), Some(3)]
+        ));
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        let prompt_id = pending.resolution_prompt_id;
+        let deciding_player = pending.deciding_player;
+        let prompt_text = pending.presentation.prompt.clone();
+        let published = engine
+            .program_choose_choice_event()
+            .expect("delegate offer renders");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(original_menu)) =
+            published.ev.as_ref()
+        else {
+            panic!("delegate offer contains its stable branch menu")
+        };
+        let second = original_menu
+            .resolution_branches
+            .iter()
+            .find(|branch| branch.branch_index == 1)
+            .expect("second branch remains at its authored index");
+        assert_eq!(second.label, "P2 makes the choice");
+        let second_presentation = second
+            .presentation
+            .as_ref()
+            .expect("delegate candidate has a presentation reference");
+        assert_eq!(second_presentation.fallback_text, "P2 makes the choice");
+
+        let mut repeated = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut repeated)
+            .expect("unchanged lifecycle refresh succeeds");
+        assert!(
+            repeated.is_empty(),
+            "no-op refresh emits no replacement offer"
+        );
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.resolution_prompt_id, prompt_id);
+        assert_eq!(pending.deciding_player, deciding_player);
+        assert_eq!(pending.presentation.prompt, prompt_text);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingDelegate { candidates },
+                    ..
+                },
+                ..
+            } if candidates == &[Some(1), Some(2), Some(3)]
+        ));
+        assert_eq!(engine.program_choose_choice_event(), Some(published));
+    }
+
+    fn nested_choose_fixture(
+        card: &str,
+        card_id: &str,
+        seed: u64,
+        tapped_islands: usize,
+        chosen_modes: &[&str],
+    ) -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        Vec<ObjectId>,
+    ) {
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    card,
+                    include_str!("../../../../tricerules-cards/data/island.ron"),
+                    include_str!("../../../../tricerules-cards/data/forest.ron"),
+                ],
+                &[],
+            )
+            .expect("nested Choose fixture registry"),
+        ));
+        let decks = Some(vec![
+            vec![card_id.to_string(); 30],
+            vec!["island".to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+            .expect("nested Choose fixture engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let island_ids = engine.state.players[1]
+            .library
+            .iter()
+            .take(tapped_islands)
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(island_ids.len(), tapped_islands);
+        for island in &island_ids {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *island,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .expect("fixture Island enters under player zero's control");
+            engine.state.objects.get_mut(island).unwrap().tapped = true;
+        }
+
+        let spell = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture spell in hand");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&spell)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(spell, 0);
+        top.id = spell;
+        top.controller = 0;
+        top.card_id = card_id.into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.face_index = 0;
+        top.source_owner = Some(0);
+        top.cast_by = Some(0);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(generation),
+        });
+        top.chosen_modes = chosen_modes
+            .iter()
+            .map(|mode| crate::state::ChosenMode {
+                mode_id: tricerules_card_model::ModeId::new(*mode).expect("mode ID"),
+                targets: Vec::new(),
+            })
+            .collect();
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("program owner lookup")
+            .expect("program owner exists");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners, island_ids)
+    }
+
+    fn nested_start(
+        engine: &mut GameEngine,
+        top: &StackItem,
+        owners: Vec<tricerules_card_model::ProgramOwnerId>,
+        previous: crate::state::EffectResult,
+    ) {
+        let run = engine
+            .begin_program_run(top, owners)
+            .expect("program starts");
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(top, run, previous, &mut events)
+                .expect("program runs to first offer"),
+            ResolutionProgress::Parked
+        ));
+        engine
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("first offer gets prompt ID");
+        assert!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .resolution_prompt_id
+                .get()
+                != 0
+        );
+    }
+
+    fn nested_answer(
+        engine: &mut GameEngine,
+        decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision,
+        branch: u32,
+        chosen: Vec<ObjectId>,
+    ) {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("resolution choice pending");
+        let actor = pending.deciding_player;
+        let prompt_id = pending.resolution_prompt_id.get();
+        let answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice({
+                let mut answer = rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    decision: decision as i32,
+                    selected_branch_index: branch,
+                    chosen_object_ids: chosen,
+                    ..Default::default()
+                };
+                if decision == tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana {
+                    let pending_payment = pending
+                        .continuation
+                        .mana_payment()
+                        .expect("the paid Choose branch owns a pending mana payment");
+                    assert!(pending_payment.mana_cost.pips.is_empty());
+                    assert_eq!(pending_payment.generic_mana_cost, 1);
+                    let source_object_id = pending.presentation.source_object_id;
+                    answer.payment = Some(rv1::PaymentSelection {
+                        expected_state_revision: engine.state.command_index,
+                        source: Some(rv1::CostObjectRef {
+                            object_id: source_object_id,
+                            zone_change_generation: engine
+                                .state
+                                .zone_change_generation
+                                .get(&source_object_id)
+                                .copied()
+                                .unwrap_or(0),
+                        }),
+                        mana: Some(rv1::PaymentMana {
+                            c: pending_payment.generic_mana_cost,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    });
+                }
+                answer
+            })),
+        };
+        engine
+            .apply_scenario_command(actor, &answer)
+            .expect("resolution choice accepted");
+    }
+
+    fn nested_select_objects(engine: &mut GameEngine, chosen: Vec<ObjectId>) {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("object choice pending");
+        let actor = pending.deciding_player;
+        let prompt_id = pending.resolution_prompt_id.get();
+        let answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids: chosen,
+                    ..Default::default()
+                },
+            )),
+        };
+        engine
+            .apply_scenario_command(actor, &answer)
+            .expect("object choice accepted");
+    }
+
+    fn parked_program(
+        engine: &GameEngine,
+    ) -> (
+        &crate::state::PendingResolution,
+        &crate::state::ParkedStackResolution,
+        &ProgramRunState,
+    ) {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("resolution pending");
+        let stack = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { stack, .. }
+            | ResolutionContinuation::PermanentChoice { stack, .. }
+            | ResolutionContinuation::HandChoice { stack, .. }
+            | ResolutionContinuation::SearchLibrary { stack, .. } => stack,
+            other => panic!("unexpected continuation: {other:?}"),
+        };
+        let program = stack.program.as_ref().expect("parked program state");
+        (pending, stack, program)
+    }
+
+    fn nested_slot_id(
+        engine: &GameEngine,
+        owner: &tricerules_card_model::ProgramOwnerId,
+        name: &str,
+    ) -> ResultSlotId {
+        engine
+            .registry
+            .compiled_program_for_owner(owner)
+            .expect("compiled program exists")
+            .slots
+            .iter()
+            .find(|slot| slot.name == name)
+            .expect("named result slot")
+            .id
+    }
+
+    fn nested_slot(run: &ProgramRunState, slot: ResultSlotId) -> Option<&ProgramValue> {
+        run.slots.get(slot.0 as usize).and_then(Option::as_ref)
+    }
+
+    const NESTED_IF: &str = r#"(id: "nested_choose_if_fixture", name: "Nested Choose If Fixture",
+ face_id: "nested_choose_if_fixture", mana_cost: "{0}", types: ["Instant"],
+ spell_program: Some((body: (steps: [
+  (id: "route", bind: [], input: None, kind: Choose(choice: "route", chooser: Controller,
+   optional: true, branches: [(branch_id: "branch", presentation: Fallback, cost: None,
+    requirement: Always, body: (steps: [(id: "inside_branch", bind: [], input: None,
+     kind: If(condition: CardsInHand(players: Relative(Controller), min: Some(1), max: None),
+      yes: (steps: [(id: "branch_yes", bind: [], input: None,
+       kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+      no: (steps: [(id: "branch_no", bind: [], input: None,
+       kind: Perform(Draw(who: Controller, count: 2)))], yields: [])))], yields: []))],
+   otherwise: (steps: [(id: "inside_otherwise", bind: [], input: None,
+    kind: If(condition: CardsInHand(players: Relative(Controller), min: Some(99), max: None),
+     yes: (steps: [(id: "otherwise_yes", bind: [], input: None,
+      kind: Perform(Draw(who: Controller, count: 2)))], yields: []),
+     no: (steps: [(id: "otherwise_no", bind: [], input: None,
+      kind: Perform(Draw(who: Controller, count: 3)))], yields: [])))], yields: []))),
+  (id: "tail", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))
+ ], yields: []), target_bindings: [])))"#;
+
+    #[test]
+    fn nested_choose_executes_if_in_selected_and_otherwise_then_runs_one_parent_tail() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        for (decision, branch, expected_draws) in
+            [(Decision::SelectBranch, 0, 2), (Decision::Decline, 0, 4)]
+        {
+            let (mut engine, top, owners, _) = nested_choose_fixture(
+                NESTED_IF,
+                "nested_choose_if_fixture",
+                91_221 + u64::from(expected_draws),
+                0,
+                &[],
+            );
+            let before = engine.state.turn_history.current.player(0).cards_drawn;
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            nested_answer(&mut engine, decision, branch, Vec::new());
+            assert_eq!(
+                engine.state.turn_history.current.player(0).cards_drawn,
+                before + expected_draws
+            );
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+            assert_eq!(engine.state.players[0].graveyard.last(), Some(&top.id));
+        }
+    }
+
+    const NESTED_YIELD: &str = r#"(id: "nested_choose_yield_fixture", name: "Nested Choose Yield Fixture",
+ face_id: "nested_choose_yield_fixture", mana_cost: "{0}", types: ["Instant"],
+ spell_program: Some((body: (steps: [
+  (id: "draw_before", bind: ["drawn"], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+  (id: "pick", bind: ["picked"], input: None, kind: Choose(choice: "pick", chooser: Controller,
+   optional: true, branches: [(branch_id: "branch", presentation: Fallback, cost: None,
+    requirement: Always, body: (steps: [(id: "branch_pick", bind: ["branch_pick"], input: None,
+     kind: Perform(ChoosePermanents(chooser: Controller, filter: (kind: AnyPermanent,
+      permanent_types: [Land]), min: 1, max: 1)))], yields: ["branch_pick"]))],
+   otherwise: (steps: [(id: "otherwise_pick", bind: ["otherwise_pick"], input: None,
+    kind: Perform(ChoosePermanents(chooser: Controller, filter: (kind: AnyPermanent,
+     permanent_types: [Land]), min: 1, max: 1)))], yields: ["otherwise_pick"]))),
+  (id: "untap", bind: [], input: Some("picked"), kind: Perform(UntapChosenPermanents)),
+  (id: "pause_after_yield", bind: [], input: None, kind: Choose(choice: "after", chooser: Controller,
+   optional: false, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+    requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
+ ], yields: []), target_bindings: [])))"#;
+
+    #[test]
+    fn nested_choose_yields_nonempty_permanent_selection_to_parent_and_retains_sibling_slot() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        for (decision, branch, child_name, arm) in [
+            (
+                Decision::SelectBranch,
+                0,
+                "branch_pick",
+                ProgramArm::ChooseBranch(tricerules_card_model::ChoiceId::new("branch").unwrap()),
+            ),
+            (
+                Decision::Decline,
+                0,
+                "otherwise_pick",
+                ProgramArm::ChooseOtherwise,
+            ),
+        ] {
+            let (mut engine, top, owners, islands) = nested_choose_fixture(
+                NESTED_YIELD,
+                "nested_choose_yield_fixture",
+                91_230 + branch as u64,
+                2,
+                &[],
+            );
+            let before = engine.state.turn_history.current.player(0).cards_drawn;
+            let child_slot = nested_slot_id(&engine, &owners[0], child_name);
+            let parent_slot = nested_slot_id(&engine, &owners[0], "picked");
+            let draw_slot = nested_slot_id(&engine, &owners[0], "drawn");
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            nested_answer(&mut engine, decision, branch, Vec::new());
+            let (pending, _, run) = parked_program(&engine);
+            assert!(matches!(
+                &pending.continuation,
+                ResolutionContinuation::PermanentChoice { .. }
+            ));
+            assert_eq!(run.in_flight, Some(vec![child_slot]));
+            assert!(
+                nested_slot(run, parent_slot).is_none(),
+                "parent output is not published before child commit"
+            );
+            assert!(run
+                .frames
+                .iter()
+                .flat_map(|frame| &frame.path)
+                .any(|path| path.arm == arm));
+            assert!(
+                matches!(nested_slot(run, draw_slot), Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1)
+            );
+            assert_eq!(pending.presentation.candidates.len(), 2);
+            let chosen = islands[0];
+            nested_select_objects(&mut engine, vec![chosen]);
+            let (_, _, run) = parked_program(&engine);
+            assert!(
+                matches!(nested_slot(run, parent_slot), Some(ProgramValue::PermanentSelection(cards)) if cards.len() == 1 && cards[0].object_id == chosen)
+            );
+            nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+            assert_eq!(
+                engine.state.turn_history.current.player(0).cards_drawn,
+                before + 1
+            );
+            assert!(!engine.state.objects[&chosen].tapped);
+            assert!(engine.state.objects[&islands[1]].tapped);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+        }
+    }
+
+    const MODAL_PARKING: &str = r#"(id: "nested_modal_parking_fixture", name: "Nested Modal Parking Fixture",
+ face_id: "nested_modal_parking_fixture", mana_cost: "{0}", types: ["Instant"],
+ modal_spell: (min_modes: 2, max_modes: 2, modes: [
+  (mode_id: "first", presentation: Fallback, effects: [], program: Some((body: (steps: [
+   (id: "before", bind: ["before"], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+   (id: "pay_and_select", bind: [], input: None, kind: Choose(choice: "pay", chooser: Controller,
+    optional: false, branches: [(branch_id: "pay", presentation: Fallback, cost: Mana("{1}"),
+     requirement: Always, body: (steps: [
+      (id: "select", bind: ["selected"], input: None,
+       kind: Perform(SelectHandCards(count: 1, ordered: true, prompt: "Choose the card to put back."))),
+      (id: "put_back", bind: [], input: Some("selected"), kind: Perform(PutSelectedHandCardsOnLibraryTop)),
+      (id: "pause", bind: [], input: None, kind: Choose(choice: "after_put_back", chooser: Controller,
+       optional: false, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+        requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
+     ], yields: []))], otherwise: (steps: [], yields: [])))
+  ], yields: []), target_bindings: []))),
+  (mode_id: "second", presentation: Fallback, effects: [], program: Some((body: (steps: [
+   (id: "after", bind: ["after"], input: None, kind: Perform(Draw(who: Controller, count: 1)))
+  ], yields: []), target_bindings: [])))
+ ]))"#;
+
+    const RETAINED_SEARCH_HAND_PARKING: &str = r#"(id: "nested_retained_search_fixture",
+ name: "Nested Retained Search Fixture", face_id: "nested_retained_search_fixture",
+ mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
+  (id: "before", bind: ["drawn"], input: None,
+   kind: Perform(Draw(who: Controller, count: 1))),
+  (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
+   who: Controller, optional: false, count: 1, count_by_cast_cost: None, filter: None,
+   selection_constraint: None, slots: [], zones: Fixed([Library]), destination: KeepInLibrary,
+   conditional_destination: None, shuffle: false, reveal: false, result_id: None,
+   selection_bounds: Some((min: 1, max: 1)),
+  ))),
+  (id: "select", bind: ["selected"], input: None,
+   kind: Perform(SelectHandCards(count: 1, ordered: true,
+    prompt: "Choose a card to retain in hand.")))
+ ], yields: []), target_bindings: [])))"#;
+
+    #[test]
+    fn modal_owner_receipt_slots_survive_choose_payment_and_hand_parking_before_next_mode() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        let (mut engine, top, owners, islands) = nested_choose_fixture(
+            MODAL_PARKING,
+            "nested_modal_parking_fixture",
+            91_241,
+            1,
+            &["first", "second"],
+        );
+        assert_eq!(owners.len(), 2);
+        let before_slot = nested_slot_id(&engine, &owners[0], "before");
+        let selected_slot = nested_slot_id(&engine, &owners[0], "selected");
+        let seed_object = islands[0];
+        let seeded = crate::state::TriggerObjectRef {
+            object_id: seed_object,
+            zone_change_generation: engine.state.zone_change_generation[&seed_object],
+            controller_at_event: 0,
+        };
+        let mut previous = crate::state::EffectResult::default();
+        previous.produced_objects.push(seeded);
+        engine.state.players[0].mana_pool.colorless = 1;
+        let before_draws = engine.state.turn_history.current.player(0).cards_drawn;
+        nested_start(&mut engine, &top, owners.clone(), previous);
+        let (pending, stack, run) = parked_program(&engine);
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        let draw_ref = match nested_slot(run, before_slot) {
+            Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1 => cards[0],
+            other => panic!("first modal owner must retain its draw receipt: {other:?}"),
+        };
+        let drawn_id = draw_ref.object_id;
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            before_draws + 1
+        );
+        let _ = pending;
+
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert!(matches!(
+            &engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::PayingMana {
+                        selected_branch: 0,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            }
+        ));
+        let (_, stack, run) = parked_program(&engine);
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert!(
+            matches!(nested_slot(run, before_slot), Some(ProgramValue::DrawReceipt(cards)) if cards[0].object_id == drawn_id)
+        );
+
+        nested_answer(&mut engine, Decision::PayMana, 0, Vec::new());
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::HandChoice { .. }
+        ));
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(run.in_flight, Some(vec![selected_slot]));
+        assert!(
+            nested_slot(run, selected_slot).is_none(),
+            "the pending hand input is distinct from the saved run-level result"
+        );
+        assert!(
+            matches!(nested_slot(run, before_slot), Some(ProgramValue::DrawReceipt(cards)) if cards[0].object_id == drawn_id)
+        );
+        assert!(pending.presentation.candidates.contains(&drawn_id));
+
+        nested_select_objects(&mut engine, vec![drawn_id]);
+        let (pending, stack, run) = parked_program(&engine);
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::Selecting,
+                    ..
+                },
+                ..
+            }
+        ));
+        assert!(
+            matches!(nested_slot(run, before_slot), Some(ProgramValue::DrawReceipt(cards)) if cards[0].object_id == drawn_id)
+        );
+        assert!(
+            matches!(nested_slot(run, selected_slot), Some(ProgramValue::HandSelection(cards)) if cards.len() == 1 && cards[0].object_id == drawn_id)
+        );
+        assert_eq!(engine.state.players[0].library.front(), Some(&drawn_id));
+        let at_library_generation = engine.state.zone_change_generation[&drawn_id];
+
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            before_draws + 2
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&drawn_id],
+            at_library_generation + 1
+        );
+        assert!(engine.state.players[0].hand.contains(&drawn_id));
+        assert_eq!(engine.state.players[0].graveyard.last(), Some(&top.id));
+    }
+
+    #[test]
+    fn retained_search_park_and_resume_preserves_run_context_and_typed_output() {
+        let (mut engine, top, owners, _) = nested_choose_fixture(
+            RETAINED_SEARCH_HAND_PARKING,
+            "nested_retained_search_fixture",
+            91_242,
+            0,
+            &[],
+        );
+        let seeded_object = *engine.state.players[0]
+            .library
+            .front()
+            .expect("fixture has a retained-search candidate");
+        let seeded_generation = engine
+            .state
+            .zone_change_generation
+            .get(&seeded_object)
+            .copied()
+            .unwrap_or(0);
+        let seeded = crate::state::TriggerObjectRef {
+            object_id: seeded_object,
+            zone_change_generation: seeded_generation,
+            controller_at_event: 0,
+        };
+        let mut previous = crate::state::EffectResult::default();
+        previous.produced_objects.push(seeded);
+        let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+        let drawn_slot = nested_slot_id(&engine, &owners[0], "drawn");
+        let found_slot = nested_slot_id(&engine, &owners[0], "found");
+        let selected_slot = nested_slot_id(&engine, &owners[0], "selected");
+
+        nested_start(&mut engine, &top, owners, previous);
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::SearchLibrary { .. }
+        ));
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(run.in_flight, Some(vec![found_slot]));
+        assert!(nested_slot(run, found_slot).is_none());
+        assert!(
+            matches!(nested_slot(run, drawn_slot), Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1)
+        );
+        let found_object = pending.presentation.candidates[0];
+
+        nested_select_objects(&mut engine, vec![found_object]);
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::HandChoice { .. }
+        ));
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(run.in_flight, Some(vec![selected_slot]));
+        assert!(matches!(
+            nested_slot(run, found_slot),
+            Some(ProgramValue::FoundLibraryCohort(cards))
+                if cards.len() == 1
+                    && cards[0].object_id == found_object
+                    && cards[0].zone == Zone::Library
+        ));
+        assert!(
+            matches!(nested_slot(run, drawn_slot), Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1)
+        );
+        let selected_object = pending.presentation.candidates[0];
+
+        nested_select_objects(&mut engine, vec![selected_object]);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before + 1
         );
     }
 }

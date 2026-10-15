@@ -423,7 +423,7 @@ Start two dev clients with seed 153 and arrange the named cards/mana.
 - Cast Cinder Strike, first skipping Blight, then paying it. Confirm 2 versus 4 damage. The Blight creature picker must not become a target-selection prompt or offer hand cards. Wild Unraveling must require exactly one of Blight 2 or the additional {1}.
 - Resolve Dream Seizer with the 1/1 Bears available. Choose Blight, select Bears, and leave the opponent's discard prompt open. Both clients must still show the same Bears on the battlefield. Only the opponent sees discard candidates. Complete discard: that exact Bears moves to its owner's graveyard on both clients.
 - Resolve both Blighted Blackthorn's entry and attack triggers. Paying Blight 2 draws one card and loses one life; declining does neither. A tapped attacker can be chosen to receive the counters.
-- Resolve Chaos Spewer. Choosing Blight must require one eligible creature when available. Cancelling the {2} payment returns to the required choice. If the source has left before resolution and no eligible creature remains, choosing Blight completes without demanding mana or leaving a stuck prompt.
+- Resolve Chaos Spewer. Choosing Pay opens the staged {2} picker; Undo keeps that payment offer available, and final Decline enters Blight directly. Blight requires exactly one eligible creature when available. If the source has left and no eligible creature remains, final Decline completes without a creature prompt or counters.
 - Check a fresh freeform game: ordinary card movement and activation menus retain their existing behavior.
 
 ### Draw replacement and simultaneous discard — not established by architecture fixtures

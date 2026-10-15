@@ -5,9 +5,22 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [ChooseResolutionBranch(optional: false, branches: [
-      (branch_id: "pay_2", presentation: Fallback, cost: Mana("{2}"), effects: []),
-      (branch_id: "blight_2", presentation: Fallback, cost: None, effects: [Blight(count: 2)]),
-    ])],
+    program: Some((body: (steps: [
+      (id: "pay_or_blight", kind: Choose(
+        choice: "pay_or_blight",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_2",
+          presentation: Fallback,
+          cost: Mana("{2}"),
+          requirement: Always,
+          body: (steps: [], yields: []),
+        )],
+        otherwise: (steps: [
+          (id: "blight_2", kind: Perform(Blight(count: 2))),
+        ], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

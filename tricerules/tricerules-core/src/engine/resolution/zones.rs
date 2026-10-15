@@ -2078,6 +2078,8 @@ pub(super) fn select_hand_cards_for_program(
         .ok_or(EngineError::ProgramInvariant(
             "hand selection has no owning program frame",
         ))?;
+    let mut stack = cx.parked_stack();
+    stack.program = Some(program);
     let engine = &mut *cx.engine;
     let top = cx.top;
     let result = &mut *cx.effect_result;
@@ -2100,12 +2102,6 @@ pub(super) fn select_hand_cards_for_program(
         ));
     }
     let choice_kind = rv1::ChoiceKind::HandCards;
-    let stack = ParkedStackResolution {
-        item: top.clone(),
-        resume_effect_index: None,
-        previous_result: EffectResult::default(),
-        program: Some(program),
-    };
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -6562,7 +6558,7 @@ pub(in crate::engine) struct ZoneSearchRequest {
     pub shuffle: bool,
     pub reveal: bool,
     pub result_id: Option<tricerules_card_model::SearchResultId>,
-    pub program: Option<ProgramRunState>,
+    pub stack: ParkedStackResolution,
 }
 
 pub(in crate::engine) struct SearchRequest {
@@ -6577,7 +6573,7 @@ pub(in crate::engine) struct SearchRequest {
     pub shuffle: bool,
     pub reveal: bool,
     pub result_id: Option<tricerules_card_model::SearchResultId>,
-    pub program: Option<ProgramRunState>,
+    pub stack: ParkedStackResolution,
 }
 
 pub(in crate::engine) fn park_zone_search_choice(
@@ -6599,7 +6595,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         shuffle,
         reveal,
         result_id,
-        program,
+        mut stack,
     } = request;
     let idx = engine
         .state
@@ -6782,8 +6778,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    let mut stack = ParkedStackResolution::new(top.clone());
-    stack.program = program;
+    stack.item = top.clone();
     engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
@@ -6839,7 +6834,7 @@ pub(in crate::engine) fn begin_search_request(
         shuffle,
         reveal,
         result_id,
-        program,
+        stack,
     } = request;
     match zones {
         SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
@@ -6859,7 +6854,7 @@ pub(in crate::engine) fn begin_search_request(
                 shuffle,
                 reveal,
                 result_id,
-                program,
+                stack,
             },
         ),
         SearchZoneSelection::PlayerChoice(available_zones) => {
@@ -6939,7 +6934,7 @@ pub(in crate::engine) fn begin_search_request(
                     unique_names: false,
                 },
                 continuation: ResolutionContinuation::SearchZoneScope {
-                    stack: ParkedStackResolution::new(top.clone()),
+                    stack,
                     searcher,
                     count,
                     available_zones,
@@ -7006,6 +7001,7 @@ pub(super) fn search_library(
     let Some(searcher) = super::player_recipients(cx, who).into_iter().next() else {
         return Ok(EffectOutcome::Continue);
     };
+    let parked_stack = cx.parked_stack();
     if selection_bounds.is_some()
         && cx
             .engine
@@ -7087,7 +7083,7 @@ pub(super) fn search_library(
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
             },
             continuation: ResolutionContinuation::OptionalSearch {
-                stack: ParkedStackResolution::new(cx.top.clone()),
+                stack: parked_stack,
                 searcher,
                 count,
                 filter,
@@ -7101,6 +7097,7 @@ pub(super) fn search_library(
         });
         return Ok(EffectOutcome::Suspended);
     }
+    let parked_stack = cx.parked_stack();
     begin_search_request(
         cx.engine,
         cx.events,
@@ -7118,7 +7115,7 @@ pub(super) fn search_library(
             shuffle,
             reveal,
             result_id,
-            program: cx.program_state.clone(),
+            stack: parked_stack,
         },
     )?;
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
@@ -7658,6 +7655,7 @@ mod tests {
                 affected_player: 0,
                 spell_label: "departed optional discard",
                 previous_effect_result: &previous_result,
+                resume_previous_result: Some(&previous_result),
                 effect_result: &mut effect_result,
                 effect_index: 0,
                 program_state: Some(program_state),

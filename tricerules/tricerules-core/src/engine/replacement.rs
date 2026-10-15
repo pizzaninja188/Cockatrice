@@ -2369,12 +2369,17 @@ impl GameEngine {
                 self.replacement_object_display_name(creature.object_id, None),
             )));
             self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                stack.previous_result,
-                events,
-            );
+            let previous_result = stack.previous_result.clone();
+            return if stack.program.is_some() {
+                self.complete_parked_stack_with_previous(stack, previous_result, events)
+            } else {
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            };
         }
         if let crate::state::CounterPlacementCompletion::Explore {
             controller,

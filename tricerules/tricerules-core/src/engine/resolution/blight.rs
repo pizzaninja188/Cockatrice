@@ -53,6 +53,7 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
             },
         )),
     });
+    let stack = cx.parked_stack();
     cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
@@ -69,7 +70,7 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
             unique_names: false,
         },
         continuation: ResolutionContinuation::Blight {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack,
             count,
             candidate_generations,
         },
@@ -78,6 +79,122 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
 }
 
 impl GameEngine {
+    /// Rebuild a parked Blight creature offer after a player departure changes battlefield
+    /// control or removes a candidate's owned object. The continuation retains the full parent
+    /// program; only its generation-bound candidate projection and prompt are refreshed.
+    pub(in crate::engine) fn refresh_blight_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (stack, count, previous_candidates) = match &pending.continuation {
+            ResolutionContinuation::Blight {
+                stack,
+                count,
+                candidate_generations,
+            } => (stack.clone(), *count, candidate_generations.clone()),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+
+        let candidates = self.blight_candidates(pending.deciding_player);
+        if candidates.is_empty() {
+            let mut stack = stack;
+            let receipt = crate::state::BlightReceipt {
+                player: pending.deciding_player,
+                count,
+                creature: None,
+            };
+            stack.item.blight_receipts.push(receipt);
+            self.fire_triggers(&[GameEvent::Blighted(receipt)], events);
+            events.push(ev_log(format!(
+                "P{} blights {count}; no creature can receive counters.",
+                pending.deciding_player
+            )));
+            let previous_result = stack.previous_result.clone();
+            let completed = if stack.program.is_some() {
+                self.complete_parked_stack_with_previous(
+                    stack,
+                    previous_result,
+                    std::mem::take(events),
+                )?
+            } else {
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    std::mem::take(events),
+                )?
+            };
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        let candidate_generations = candidates
+            .iter()
+            .map(|oid| {
+                (
+                    *oid,
+                    self.state
+                        .zone_change_generation
+                        .get(oid)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect::<Vec<_>>();
+        let candidates_changed = candidate_generations != previous_candidates;
+        let prompt_was_reset = pending.resolution_prompt_id.get() == 0;
+        if candidates_changed {
+            pending.presentation.candidates = candidates.clone();
+            pending.resolution_prompt_semantics = None;
+            let ResolutionContinuation::Blight {
+                candidate_generations: saved,
+                ..
+            } = &mut pending.continuation
+            else {
+                unreachable!("validated Blight continuation")
+            };
+            *saved = candidate_generations;
+        }
+
+        self.state.pending_resolution = Some(pending);
+        if candidates_changed || prompt_was_reset {
+            let pending = self
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("refreshed Blight choice remains parked");
+            let candidate_names = pending
+                .presentation
+                .candidates
+                .iter()
+                .map(|oid| object_display_name(&self.state, self.registry, *oid))
+                .collect();
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
+                        deciding_player_id: pending.deciding_player,
+                        source_object_id: pending.presentation.source_object_id,
+                        prompt_text: pending.presentation.prompt.clone(),
+                        choice_kind: rv1::ChoiceKind::CostObjects as i32,
+                        candidate_object_ids: pending.presentation.candidates.clone(),
+                        candidate_names,
+                        min: pending.presentation.min,
+                        max: pending.presentation.max,
+                        ..Default::default()
+                    },
+                )),
+            });
+        }
+        Ok(())
+    }
+
     pub(in crate::engine) fn finish_blight_choice(
         &mut self,
         pending: PendingResolution,
@@ -148,11 +265,16 @@ impl GameEngine {
             pending.deciding_player
         )));
         self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        let previous_result = stack.previous_result.clone();
+        if stack.program.is_some() {
+            self.complete_parked_stack_with_previous(stack, previous_result, events)
+        } else {
+            self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                previous_result,
+                events,
+            )
+        }
     }
 }

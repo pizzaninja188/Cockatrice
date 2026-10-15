@@ -1002,6 +1002,19 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::Selecting
+                        | crate::state::PendingProgramChooseStage::ChoosingDelegate { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.select_program_choose(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::OwnerLibraryPlacement { .. }
         ) {
             return self.finish_owner_library_placement(pending, answer, decision);
@@ -1289,6 +1302,7 @@ impl GameEngine {
             }
             ResolutionContinuation::ManaPayment { .. }
             | ResolutionContinuation::JoinForces { .. }
+            | ResolutionContinuation::ProgramChoose { .. }
             | ResolutionContinuation::CounterMove { .. }
             | ResolutionContinuation::PublicZoneSearchFixture { .. } => {
                 unreachable!("handled above")
@@ -2706,8 +2720,14 @@ impl GameEngine {
                 ev,
             );
         };
-        let progress =
-            self.run_program_with_previous(&stack.item, program, previous_result, &mut ev)?;
+        let operation_result = program.in_flight.as_ref().map(|_| previous_result);
+        let progress = self.resume_program_with_completion(
+            &stack.item,
+            program,
+            stack.previous_result,
+            operation_result,
+            &mut ev,
+        )?;
         if progress == super::resolution::ResolutionProgress::GameEnded {
             return Ok(finish_with_events(self, ev));
         }

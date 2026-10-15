@@ -389,4 +389,33 @@ mod tests {
             .1
         );
     }
+
+    #[test]
+    fn typed_audit_walks_nested_program_choose_branches() {
+        let program = json!({
+            "spell_program": {"body": {"steps": [{
+                "id": "waterbend_or_discard",
+                "kind": {"Choose": {"branches": [{
+                    "branch_id": "waterbend_2",
+                    "presentation": "Fallback"
+                }]}}
+            }]}}
+        });
+        let mut found = Vec::new();
+        nodes(&program, "", &mut found);
+        assert_eq!(
+            found
+                .iter()
+                .map(|entry| entry.0.trim_start_matches('/'))
+                .collect::<Vec<_>>(),
+            ["spell_program/body/steps/0/kind/Choose/branches/waterbend_2"]
+        );
+        let parsed = exceptions(
+            "waterbending_lesson\twaterbending_lesson\tspell_program/body/steps/0/kind/Choose/branches/waterbend_2\tpaid program branch\n",
+        )
+        .expect("nested program branch fallback exception parses");
+        assert!(parsed.contains_key(
+            "waterbending_lesson\twaterbending_lesson\tspell_program/body/steps/0/kind/Choose/branches/waterbend_2"
+        ));
+    }
 }

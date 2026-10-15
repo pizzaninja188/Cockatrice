@@ -140,6 +140,16 @@ fn validate_compiled_program_admission(
                     visit_block(yes, program, tokens, consumed_bindings)?;
                     visit_block(no, program, tokens, consumed_bindings)?;
                 }
+                crate::primitives::CompiledInstructionKind::Choose {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    for branch in branches {
+                        visit_block(&branch.body, program, tokens, consumed_bindings)?;
+                    }
+                    visit_block(otherwise, program, tokens, consumed_bindings)?;
+                }
             }
         }
         Ok(())
@@ -153,12 +163,17 @@ fn validate_compiled_program_admission(
     Ok(())
 }
 
+struct ProgramOwnerInputs<'a> {
+    targeting: Option<&'a TargetingDef>,
+    cast_cost_groups: &'a [CastCostGroupDef],
+}
+
 fn compile_authored_program_owner(
     registry: &mut CardRegistry,
     card_id: &str,
     owner: ProgramOwnerId,
     program: &crate::CardProgram,
-    targeting: Option<&TargetingDef>,
+    inputs: ProgramOwnerInputs<'_>,
     source_path: &str,
     trigger: Option<&TriggerCondition>,
 ) -> Result<(), RegistryError> {
@@ -168,24 +183,25 @@ fn compile_authored_program_owner(
             ProgramOwnerId::Face(_) | ProgramOwnerId::FaceMode { .. }
         )
     {
-        TargetingDef::validate_nonactivated_program(targeting).map_err(|reason| {
+        TargetingDef::validate_nonactivated_program(inputs.targeting).map_err(|reason| {
             RegistryError::InvalidCard {
                 id: card_id.to_owned(),
                 reason: format!("resolution program owner {owner:?} at {source_path}: {reason}"),
             }
         })?;
     }
-    let compiled = CompiledProgram::compile_with_targeting(
+    let compiled = CompiledProgram::compile_with_targeting_and_cast_cost_groups(
         owner.clone(),
         owner.effect_context(),
         program,
-        targeting,
+        inputs.targeting,
+        inputs.cast_cost_groups,
     )
     .map_err(|reason| RegistryError::InvalidCard {
         id: card_id.to_owned(),
         reason: format!("resolution program owner {owner:?} at {source_path}: {reason}"),
     })?;
-    TargetSchema::compile_program(&compiled, targeting).map_err(|reason| {
+    TargetSchema::compile_program(&compiled, inputs.targeting).map_err(|reason| {
         RegistryError::InvalidCard {
             id: card_id.to_owned(),
             reason: format!(
@@ -254,7 +270,10 @@ fn compile_authored_face_programs(
                     mode.program
                         .as_ref()
                         .expect("all modal siblings were checked"),
-                    mode.targeting.as_ref(),
+                    ProgramOwnerInputs {
+                        targeting: mode.targeting.as_ref(),
+                        cast_cost_groups: &face.cast_cost_groups,
+                    },
                     &format!("modal_spell.mode_id={}", mode.mode_id),
                     None,
                 )?;
@@ -377,7 +396,10 @@ fn compile_authored_ability_program(
             .program
             .as_ref()
             .expect("authored ability program owner"),
-        ability.targeting.as_ref(),
+        ProgramOwnerInputs {
+            targeting: ability.targeting.as_ref(),
+            cast_cost_groups: &face.cast_cost_groups,
+        },
         source_path,
         None,
     )?;
@@ -428,7 +450,10 @@ fn compile_authored_triggered_program(
                     mode.program
                         .as_ref()
                         .expect("all modal siblings were checked"),
-                    mode.targeting.as_ref(),
+                    ProgramOwnerInputs {
+                        targeting: mode.targeting.as_ref(),
+                        cast_cost_groups: &face.cast_cost_groups,
+                    },
                     &format!("{source_path}.modal.mode_id={}", mode.mode_id),
                     Some(&ability.trigger),
                 )?;
@@ -445,7 +470,10 @@ fn compile_authored_triggered_program(
             &card.id,
             owner,
             program,
-            ability.targeting.as_ref(),
+            ProgramOwnerInputs {
+                targeting: ability.targeting.as_ref(),
+                cast_cost_groups: &face.cast_cost_groups,
+            },
             source_path,
             Some(&ability.trigger),
         )?;
@@ -3678,11 +3706,12 @@ impl CardRegistry {
                         });
                     }
                     let owner = ProgramOwnerId::face(card.id.clone(), face.face_id.clone());
-                    let compiled = CompiledProgram::compile_with_targeting(
+                    let compiled = CompiledProgram::compile_with_targeting_and_cast_cost_groups(
                         owner.clone(),
                         EffectContext::Spell,
                         program,
                         face.targeting.as_ref(),
+                        &face.cast_cost_groups,
                     )
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),

@@ -834,6 +834,7 @@ mod tests {
             previous_effect_result: &previous,
             effect_result: &mut result,
             effect_index: 3,
+            resume_previous_result: None,
             program_state: None,
         })
         .expect("reveal the exact live projection of the earlier search result");
@@ -896,6 +897,8 @@ mod tests {
             slots: vec![Some(ProgramValue::FoundLibraryCohort(Vec::new()))],
             in_flight: Some(vec![ResultSlotId(0)]),
         };
+        let mut stack = ParkedStackResolution::new(item.clone());
+        stack.program = Some(program);
         let mut events = Vec::new();
         zones::park_zone_search_choice(
             &mut engine,
@@ -919,7 +922,7 @@ mod tests {
                 shuffle: false,
                 reveal: false,
                 result_id: None,
-                program: Some(program),
+                stack,
             },
         )
         .expect("the retained library search parks");

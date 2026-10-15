@@ -4406,6 +4406,21 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+fn choose_cast_cost_program(group_id: &str, option_id: &str) -> String {
+    format!(
+        r#"Some((body: (steps: [
+            (id: "cast_cost_choice", kind: Choose(
+                choice: "cast_cost_choice", chooser: Controller, optional: false,
+                branches: [(branch_id: "selected", presentation: Fallback, cost: None,
+                    requirement: CastCostReceipt((group_id: "{group_id}",
+                        option_id: "{option_id}", expected_selected: true)),
+                    body: (steps: [], yields: []))],
+                otherwise: (steps: [], yields: [])
+            ))
+        ], yields: [])))"#
+    )
+}
+
 #[test]
 fn legacy_custom_effect_is_rejected_before_registry_admission() {
     let legacy = r#"(id: "legacy_custom_fixture", name: "Legacy Custom Fixture",
@@ -4464,6 +4479,165 @@ fn program_conditions_roundtrip_legacy_game_and_typed_discard_result_ron() {
         ron::from_str(&ron::ser::to_string(&result).expect("typed result program serializes"))
             .expect("serialized typed result program parses back");
     assert_eq!(result_roundtrip, result);
+}
+
+#[test]
+fn program_choose_raw_ron_compiles_nested_paid_and_otherwise_blocks() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "waterbend_or_discard", bind: [], input: None,
+             kind: Choose(
+                choice: "waterbend_or_discard", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "waterbend_2", presentation: Fallback,
+                    cost: Waterbend("{2}"), requirement: Always,
+                    body: (steps: [], yields: []),
+                )],
+                otherwise: (steps: [
+                    (id: "discard_one", bind: [], input: None,
+                     kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+                ], yields: []),
+             )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("bounded optional Choose with nested paid and otherwise blocks compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner retains its compiled program");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("Choose remains one typed control-flow instruction")
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &instruction.kind
+    else {
+        panic!("authored Choose compiles to the typed Choose instruction")
+    };
+    assert_eq!(instruction.id.as_str(), "waterbend_or_discard");
+    assert_eq!(choice.as_str(), "waterbend_or_discard");
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert_eq!(branches.len(), 1);
+    assert_eq!(branches[0].branch_id.as_str(), "waterbend_2");
+    assert_eq!(
+        branches[0].cost,
+        crate::primitives::ResolutionCost::Waterbend(
+            ron::from_str("\"{2}\"").expect("fixed waterbend mana parses")
+        )
+    );
+    assert!(branches[0].body.steps.is_empty());
+    assert!(otherwise.steps.iter().any(|step| step.id == "discard_one"));
+}
+
+#[test]
+fn choose_cast_cost_receipts_compile_for_exact_face_and_selected_mode_owners() {
+    let face_program = choose_cast_cost_program("kicker_group", "kicker_option");
+    let face_definition = format!(
+        r#"(id: "face_choose_cost_receipt", name: "Face Choose Cost Receipt",
+            face_id: "face_choose_cost_receipt", mana_cost: "{{0}}", types: ["Instant"],
+            cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
+                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+            spell_program: {face_program})"#
+    );
+    let mode_program = choose_cast_cost_program("kicker_group", "kicker_option");
+    let mode_definition = format!(
+        r#"(id: "mode_choose_cost_receipt", name: "Mode Choose Cost Receipt",
+            face_id: "mode_choose_cost_receipt", mana_cost: "{{0}}", types: ["Instant"],
+            cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
+                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+            modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "receipt_mode", presentation: Fallback, linked_cast_cost: None,
+                    effects: [], program: {mode_program}, targeting: None)
+            ])))"#
+    );
+    let registry =
+        crate::CardRegistry::from_chunks_and_tokens(&[&face_definition, &mode_definition], &[])
+            .expect("each exact spell owner can bind its face-local cast-cost receipt");
+    for owner in [
+        crate::ProgramOwnerId::face(
+            "face_choose_cost_receipt",
+            crate::CardFaceId::new("face_choose_cost_receipt").unwrap(),
+        ),
+        crate::ProgramOwnerId::face_mode(
+            "mode_choose_cost_receipt",
+            crate::CardFaceId::new("mode_choose_cost_receipt").unwrap(),
+            crate::ModeId::new("receipt_mode").unwrap(),
+        ),
+    ] {
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .unwrap_or_else(|| panic!("missing exact owner {owner:?}"));
+        let crate::primitives::CompiledInstructionKind::Choose { branches, .. } =
+            &compiled.body.steps[0].kind
+        else {
+            panic!("receipt-bearing branch remains a Choose instruction")
+        };
+        assert!(matches!(
+            &branches[0].requirement,
+            crate::primitives::CompiledChooseRequirement::CastCostReceipt(condition)
+                if condition.group_id.as_str() == "kicker_group"
+                    && condition.option_id.as_str() == "kicker_option"
+                    && condition.expected_selected
+        ));
+    }
+}
+
+#[test]
+fn choose_cast_cost_receipts_reject_unknown_group_option_and_sibling_face() {
+    let definition = |card_id: &str, program_group: &str, program_option: &str| {
+        let program = choose_cast_cost_program(program_group, program_option);
+        format!(
+            r#"(id: "{card_id}", name: "Receipt Negative",
+                face_id: "{card_id}", mana_cost: "{{0}}", types: ["Instant"],
+                cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
+                    min: 0, max: 1, options: [Mana(option_id: "kicker_option",
+                        presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+                spell_program: {program})"#
+        )
+    };
+    let unknown_group = definition("choose_unknown_group", "sibling_group", "kicker_option");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unknown_group], &[])
+        .expect_err("a group name is bound only in the exact spell face owner")
+        .to_string();
+    assert!(error.contains("unknown owning cast-cost group"), "{error}");
+
+    let unknown_option = definition("choose_unknown_option", "kicker_group", "sibling_option");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unknown_option], &[])
+        .expect_err("an option name is bound only in the exact owning group")
+        .to_string();
+    assert!(
+        error.contains("unknown option in its owning cast-cost group"),
+        "{error}"
+    );
+
+    let program = choose_cast_cost_program("kicker_group", "kicker_option");
+    let sibling_face = format!(
+        r#"(id: "choose_sibling_face", name: "Choose Sibling Face", layout: Split,
+            faces: [
+                (name: "Cost Face", face_id: "cost_face", mana_cost: "{{0}}",
+                    types: ["Instant"], cast_cost_groups: [(group_id: "kicker_group",
+                        presentation: Fallback, min: 0, max: 1,
+                        options: [Mana(option_id: "kicker_option", presentation: Fallback,
+                            kind: Kicker, cost: "{{1}}")])]),
+                (name: "Program Face", face_id: "program_face", mana_cost: "{{0}}",
+                    types: ["Instant"], spell_program: {program})
+            ])"#
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&sibling_face], &[])
+        .expect_err("a sibling face cannot lend its cast-cost group to another owner")
+        .to_string();
+    assert!(error.contains("unknown owning cast-cost group"), "{error}");
 }
 
 #[test]
@@ -6085,4 +6259,515 @@ fn program_only_hand_operations_are_rejected_from_ordinary_effect_lists() {
         Ok(_) => panic!("program-only selection was accepted in spell_effect"),
     };
     assert!(reason.contains("only inside a spell_program"), "{reason}");
+}
+
+#[test]
+fn program_choose_rejects_unsupported_admission_shapes() {
+    let definition = |chooser: &str, cost: &str, requirement: &str, input: &str| {
+        let body = format!(
+            r#"(steps: [
+                (id: "before", bind: ["prior"], kind: Perform(Draw(count: 1))),
+                (id: "choose", bind: [], input: {input}, kind: Choose(
+                    choice: "choice_01", chooser: {chooser}, optional: false,
+                    branches: [(
+                        branch_id: "branch_01", presentation: Fallback,
+                        cost: {cost}, requirement: {requirement},
+                        body: (steps: [], yields: []),
+                    )],
+                    otherwise: (steps: [], yields: []),
+                )),
+            ], yields: [])"#
+        );
+        program_fixture(&body)
+    };
+
+    for (label, chooser, cost, requirement, input, expected) in [
+        (
+            "event-bound chooser",
+            "AffectedPlayer",
+            "None",
+            "Always",
+            "None",
+            "supports only the controller as chooser",
+        ),
+        (
+            "object-payment cost",
+            "Controller",
+            "DiscardCard(filter: None)",
+            "Always",
+            "None",
+            "does not support resolution cost",
+        ),
+        (
+            "flat-list applicability requirement",
+            "Controller",
+            "None",
+            "EffectsApplicable",
+            "None",
+            "does not support EffectsApplicable requirements",
+        ),
+        (
+            "implicit card-result requirement",
+            "Controller",
+            "None",
+            "CardResultCount(filter: (source: PreviousEffect, action: Discard, players: Controller, card_type: None), min: Some(1), max: None)",
+            "None",
+            "does not support CardResultCount requirements",
+        ),
+        (
+            "unsupported game-condition requirement",
+            "Controller",
+            "None",
+            "GameCondition(Void)",
+            "None",
+            "If condition uses context outside controller hand and library state",
+        ),
+        (
+            "implicit prior-result input",
+            "Controller",
+            "None",
+            "Always",
+            r#"Some("prior")"#,
+            "cannot consume an input result",
+        ),
+    ] {
+        let error = invalid_program_reason(&definition(chooser, cost, requirement, input));
+        assert!(error.contains(expected), "{label}: {error}");
+    }
+}
+
+#[test]
+fn program_choose_rejects_mixed_free_paid_and_x_cost_siblings() {
+    let fixed_mana = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [(branch_id: "paid", presentation: Fallback,
+                cost: Mana("{2}"), body: (steps: [], yields: []))],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&fixed_mana], &[])
+        .expect("a fixed non-X Mana branch is admitted");
+
+    let homogeneous_paid = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [
+                (branch_id: "mana", presentation: Fallback, cost: Mana("{2}"),
+                    body: (steps: [], yields: [])),
+                (branch_id: "waterbend", presentation: Fallback,
+                    cost: Waterbend("{2}"), body: (steps: [], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&homogeneous_paid], &[])
+        .expect("Mana and Waterbend siblings are both admitted in an all-paid Choose");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("homogeneous paid Choose compiles");
+    let crate::primitives::CompiledInstructionKind::Choose { branches, .. } =
+        &compiled.body.steps[0].kind
+    else {
+        panic!("program fixture retains its Choose instruction")
+    };
+    assert_eq!(branches.len(), 2);
+    assert!(matches!(
+        branches[0].cost,
+        crate::primitives::ResolutionCost::Mana(_)
+    ));
+    assert!(matches!(
+        branches[1].cost,
+        crate::primitives::ResolutionCost::Waterbend(_)
+    ));
+
+    let mixed = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [
+                (branch_id: "free", presentation: Fallback, cost: None,
+                    body: (steps: [], yields: [])),
+                (branch_id: "paid", presentation: Fallback, cost: Mana("{1}"),
+                    body: (steps: [], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let mixed_error = invalid_program_reason(&mixed);
+    assert!(
+        mixed_error.contains("cannot mix free and paid sibling branches"),
+        "{mixed_error}"
+    );
+
+    for cost in [r#"Mana("{X}")"#, r#"Waterbend("{X}")"#] {
+        let definition = program_fixture(&format!(
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "choice_01", chooser: Controller, optional: false,
+                branches: [(branch_id: "paid", presentation: Fallback, cost: {cost},
+                    body: (steps: [], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        ));
+        let error = invalid_program_reason(&definition);
+        assert!(
+            error.contains("requires a nonempty fixed mana cost without X"),
+            "{cost}: {error}"
+        );
+    }
+}
+
+#[test]
+fn program_choose_enforces_program_and_choice_id_boundaries() {
+    let one_choose = |instruction_id: &str, choice_id: &str, branch_id: &str| {
+        format!(
+            r#"(id: "{instruction_id}", bind: [], kind: Choose(
+                choice: "{choice_id}", chooser: Controller, optional: false,
+                branches: [(branch_id: "{branch_id}", presentation: Fallback,
+                    cost: None, body: (steps: [], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))"#
+        )
+    };
+
+    let duplicate_instruction = program_fixture(&format!(
+        "(steps: [{}, {}], yields: [])",
+        one_choose("same_instruction", "choice_one", "continue"),
+        one_choose("same_instruction", "choice_two", "continue"),
+    ));
+    let error = invalid_program_reason(&duplicate_instruction);
+    assert!(
+        error.contains("duplicate or empty instruction id"),
+        "{error}"
+    );
+
+    let duplicate_choice = program_fixture(&format!(
+        "(steps: [{}, {}], yields: [])",
+        one_choose("first", "same_choice", "continue"),
+        one_choose("second", "same_choice", "continue"),
+    ));
+    let error = invalid_program_reason(&duplicate_choice);
+    assert!(error.contains("duplicate Choose choice id"), "{error}");
+
+    let duplicate_branch = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [
+                (branch_id: "same_branch", presentation: Fallback, cost: None,
+                    body: (steps: [], yields: [])),
+                (branch_id: "same_branch", presentation: Fallback, cost: None,
+                    body: (steps: [], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let error = invalid_program_reason(&duplicate_branch);
+    assert!(error.contains("has duplicate branch id"), "{error}");
+
+    let malformed_choice = program_fixture(&format!(
+        "(steps: [{}], yields: [])",
+        one_choose("choose", "Bad-ID", "valid_branch"),
+    ));
+    let error = invalid_program_reason(&malformed_choice);
+    assert!(error.contains("canonical snake_case"), "{error}");
+
+    let malformed_branch = program_fixture(&format!(
+        "(steps: [{}], yields: [])",
+        one_choose("choose", "valid_choice", "Bad-ID"),
+    ));
+    let error = invalid_program_reason(&malformed_branch);
+    assert!(error.contains("canonical snake_case"), "{error}");
+
+    let empty_instruction = program_fixture(&format!(
+        "(steps: [{}], yields: [])",
+        one_choose("", "valid_choice", "valid_branch"),
+    ));
+    let error = invalid_program_reason(&empty_instruction);
+    assert!(
+        error.contains("duplicate or empty instruction id"),
+        "{error}"
+    );
+
+    let repeated_branch_id_in_distinct_choices = program_fixture(&format!(
+        "(steps: [{}, {}], yields: [])",
+        one_choose("first", "choice_one", "continue"),
+        one_choose("second", "choice_two", "continue"),
+    ));
+    crate::CardRegistry::from_chunks_and_tokens(&[&repeated_branch_id_in_distinct_choices], &[])
+        .expect("branch IDs are local to each Choose; instruction and choice IDs are program-wide");
+}
+
+#[test]
+fn program_choose_blocks_do_not_leak_sibling_or_branch_locals() {
+    let sibling_leak = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [
+                (branch_id: "produce", presentation: Fallback, cost: None,
+                    body: (steps: [
+                        (id: "pick_lands", bind: ["branch_lands"],
+                            kind: Perform(ChoosePermanents(
+                                chooser: Controller,
+                                filter: (kind: AnyPermanent, permanent_types: [Land]),
+                                min: 0, max: 3,
+                            ))),
+                    ], yields: [])),
+                (branch_id: "consume", presentation: Fallback, cost: None,
+                    body: (steps: [
+                        (id: "reuse", input: Some("branch_lands"),
+                            kind: Perform(UntapChosenPermanents)),
+                    ], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let error = invalid_program_reason(&sibling_leak);
+    assert!(
+        error.contains("input result 'branch_lands' is not in scope"),
+        "{error}"
+    );
+
+    let otherwise_leak = program_fixture(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "choice_01", chooser: Controller, optional: false,
+            branches: [(branch_id: "produce", presentation: Fallback, cost: None,
+                body: (steps: [
+                    (id: "pick_lands", bind: ["branch_lands"],
+                        kind: Perform(ChoosePermanents(
+                            chooser: Controller,
+                            filter: (kind: AnyPermanent, permanent_types: [Land]),
+                            min: 0, max: 3,
+                        ))),
+                ], yields: []))],
+            otherwise: (steps: [], yields: ["branch_lands"]),
+        ))], yields: [])"#,
+    );
+    let error = invalid_program_reason(&otherwise_leak);
+    assert!(
+        error.contains("block yields result 'branch_lands' outside its scope"),
+        "{error}"
+    );
+}
+
+#[test]
+fn program_choose_joins_matching_typed_yields_from_every_exit() {
+    let valid = program_fixture(
+        r#"(steps: [
+            (id: "choose", bind: ["lands"], kind: Choose(
+                choice: "choose_lands", chooser: Controller, optional: true,
+                branches: [
+                    (branch_id: "first", presentation: Fallback, cost: None,
+                        requirement: GameCondition(ControllerLibraryEmpty),
+                        body: (steps: [
+                            (id: "pick_first", bind: ["first_lands"],
+                                kind: Perform(ChoosePermanents(
+                                    chooser: Controller,
+                                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                                    min: 0, max: 3,
+                                ))),
+                        ], yields: ["first_lands"])),
+                    (branch_id: "second", presentation: Fallback, cost: None,
+                        body: (steps: [
+                            (id: "pick_second", bind: ["second_lands"],
+                                kind: Perform(ChoosePermanents(
+                                    chooser: Controller,
+                                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                                    min: 0, max: 3,
+                                ))),
+                        ], yields: ["second_lands"])),
+                ],
+                otherwise: (steps: [
+                    (id: "pick_otherwise", bind: ["otherwise_lands"],
+                        kind: Perform(ChoosePermanents(
+                            chooser: Controller,
+                            filter: (kind: AnyPermanent, permanent_types: [Land]),
+                            min: 0, max: 3,
+                        ))),
+                ], yields: ["otherwise_lands"]),
+            )),
+            (id: "untap", input: Some("lands"),
+                kind: Perform(UntapChosenPermanents)),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("every Choose exit explicitly yields one compatible permanent selection");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the joined Choose program is registered");
+    assert_eq!(
+        compiled.body.steps[0].outputs.as_slice(),
+        &[compiled.body.steps[1]
+            .input
+            .expect("joined result feeds the parent")]
+    );
+
+    let missing_yield = program_fixture(
+        r#"(steps: [(id: "choose", bind: ["joined"], kind: Choose(
+            choice: "choose_lands", chooser: Controller, optional: true,
+            branches: [(branch_id: "pick", presentation: Fallback, cost: None,
+                body: (steps: [
+                    (id: "pick_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
+                        chooser: Controller,
+                        filter: (kind: AnyPermanent, permanent_types: [Land]),
+                        min: 0, max: 3,
+                    ))),
+                ], yields: ["lands"]))],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let error = invalid_program_reason(&missing_yield);
+    assert!(error.contains("mismatched explicit yield arity"), "{error}");
+
+    let mismatched_type = program_fixture(
+        r#"(steps: [(id: "choose", bind: ["joined"], kind: Choose(
+            choice: "choose_lands", chooser: Controller, optional: true,
+            branches: [(branch_id: "pick", presentation: Fallback, cost: None,
+                body: (steps: [
+                    (id: "pick_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
+                        chooser: Controller,
+                        filter: (kind: AnyPermanent, permanent_types: [Land]),
+                        min: 0, max: 3,
+                    ))),
+                ], yields: ["lands"]))],
+            otherwise: (steps: [
+                (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1))),
+            ], yields: ["drawn"]),
+        ))], yields: [])"#,
+    );
+    let error = invalid_program_reason(&mismatched_type);
+    assert!(error.contains("mismatched explicit yield types"), "{error}");
+}
+
+#[test]
+fn program_choose_target_bindings_cover_nested_branch_and_otherwise_leaves() {
+    let definition = |card_id: &str, choice: &str, target_instruction: &str| {
+        format!(
+            r#"(id: "{card_id}", name: "Nested Choose Target Fixture",
+                face_id: "{card_id}", types: ["Instant"],
+                spell_program: Some((body: (steps: [{choice}], yields: []),
+                    target_bindings: [(
+                        instruction_id: "{target_instruction}",
+                        role: Target,
+                        target_group_index: 0,
+                    )])),
+                targeting: Some((groups: [(
+                    min: 1, max: 1, prompt: "Choose target creature",
+                    effect_indices: [],
+                )])))"#
+        )
+    };
+    let choices = [
+        (
+            "choose_branch_target_fixture",
+            r#"(id: "choose", kind: Choose(
+                choice: "choose_damage", chooser: Controller, optional: false,
+                branches: [(branch_id: "damage", presentation: Fallback, cost: None,
+                    body: (steps: [(id: "branch_damage", kind: Perform(DamageTarget(
+                        amount: 3, target: (kind: Creature),
+                    )))], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))"#,
+            "branch_damage",
+        ),
+        (
+            "choose_otherwise_target_fixture",
+            r#"(id: "choose", kind: Choose(
+                choice: "choose_noop", chooser: Controller, optional: false,
+                branches: [(branch_id: "noop", presentation: Fallback, cost: None,
+                    body: (steps: [], yields: []))],
+                otherwise: (steps: [(id: "otherwise_damage", kind: Perform(DamageTarget(
+                    amount: 3, target: (kind: Creature),
+                )))], yields: []),
+            ))"#,
+            "otherwise_damage",
+        ),
+    ];
+
+    for (card_id, choice, target_instruction) in choices {
+        let definition = definition(card_id, choice, target_instruction);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect("nested target role resolves through the exact Choose arm");
+        let owner = crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap());
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("nested target program is registered");
+        assert_eq!(compiled.target_bindings.len(), 1);
+        assert_eq!(compiled.target_bindings[0].instruction_address, 1);
+        assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+
+        let wrong_role = definition.replace("role: Target", "role: Source");
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_role], &[])
+            .expect_err("nested target references retain their leaf's exact target role")
+            .to_string();
+        assert!(error.contains("does not expose target role"), "{error}");
+    }
+}
+
+#[test]
+fn choose_cast_cost_receipt_accepts_expected_unselected_and_rejects_ability_owner() {
+    let program = choose_cast_cost_program("kicker_group", "kicker_option")
+        .replace("expected_selected: true", "expected_selected: false");
+    let definition = format!(
+        r#"(id: "choose_unselected_receipt", name: "Choose Unselected Receipt",
+            face_id: "choose_unselected_receipt", mana_cost: "{{0}}", types: ["Instant"],
+            cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
+                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+            spell_program: {program})"#
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the exact spell owner may test the captured unselected value");
+    let owner = crate::ProgramOwnerId::face(
+        "choose_unselected_receipt",
+        crate::CardFaceId::new("choose_unselected_receipt").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the receipt-bound spell program is registered");
+    let crate::primitives::CompiledInstructionKind::Choose { branches, .. } =
+        &compiled.body.steps[0].kind
+    else {
+        panic!("receipt requirement remains on its Choose branch")
+    };
+    assert!(matches!(
+        &branches[0].requirement,
+        crate::primitives::CompiledChooseRequirement::CastCostReceipt(condition)
+            if condition.group_id.as_str() == "kicker_group"
+                && condition.option_id.as_str() == "kicker_option"
+                && !condition.expected_selected
+    ));
+
+    let body: super::AuthoredBlock = ron::from_str(
+        r#"(steps: [(id: "choose", kind: Choose(
+            choice: "ability_receipt", chooser: Controller, optional: false,
+            branches: [(branch_id: "selected", presentation: Fallback, cost: None,
+                requirement: CastCostReceipt((group_id: "kicker_group",
+                    option_id: "kicker_option", expected_selected: false)),
+                body: (steps: [], yields: []))],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#,
+    )
+    .expect("ability-owner receipt fixture parses");
+    let program = super::CardProgram {
+        body,
+        target_bindings: Vec::new(),
+    };
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "ability_receipt_fixture".into(),
+        face_id: crate::CardFaceId::new("ability_receipt_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let error = super::CompiledProgram::compile(owner, super::EffectContext::Ability, &program)
+        .expect_err("a triggered ability cannot read a spell cast-cost receipt");
+    assert!(
+        error.contains("cast-cost requirements require a spell program owner"),
+        "{error}"
+    );
 }

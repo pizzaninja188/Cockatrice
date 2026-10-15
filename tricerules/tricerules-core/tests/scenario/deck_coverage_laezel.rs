@@ -559,8 +559,17 @@ fn laezel_and_doubling_season_order_blight_effect_counters_before_commit() {
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     engine
-        .apply_scenario_command(0, &choose_resolution_branch(1))
-        .expect("choose the Blight branch");
+        .apply_scenario_command(0, &choose_resolution_branch(0))
+        .expect("select Chaos Spewer's optional payment");
+    let blight =
+        submit_mana_resolution_decision(&mut engine, 0, rv1::ResolutionChoiceDecision::Decline)
+            .expect("declining the payment enters the Otherwise Blight block");
+    assert_eq!(
+        find_resolution_choice(&blight)
+            .expect("Otherwise parks Blight")
+            .choice_kind(),
+        rv1::ChoiceKind::CostObjects
+    );
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .expect("choose a creature to blight");

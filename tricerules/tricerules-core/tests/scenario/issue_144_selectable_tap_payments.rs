@@ -201,8 +201,27 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
             .unwrap();
         let before_draw = engine.state.players[0].hand.len();
         engine.apply_scenario_command(0, &pass()).unwrap();
-        engine.apply_scenario_command(1, &pass()).unwrap();
+        let choice_batch = engine.apply_scenario_command(1, &pass()).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+        let choose_offer = find_resolution_choice(&choice_batch)
+            .expect("draw is followed by the Waterbend resolution menu");
+        let branch = choose_offer
+            .resolution_branches
+            .first()
+            .expect("one Waterbend branch is offered");
+        assert_eq!(branch.branch_index, 0);
+        assert_eq!(branch.label, "Waterbend {2}");
+        assert_eq!(branch.cost_text, "Waterbend {2}");
+        let presentation = branch
+            .presentation
+            .as_ref()
+            .expect("Waterbend branch carries its owner-bound presentation");
+        assert_eq!(presentation.card_id, "waterbending_lesson");
+        assert_eq!(
+            presentation.path.last().map(|part| part.id.as_str()),
+            Some("waterbend_2")
+        );
+        assert_eq!(presentation.fallback_text, "Waterbend {2}");
         engine.apply_scenario_command(0, &select_branch(0)).unwrap();
         assert!(
             engine
@@ -270,7 +289,7 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
 }
 
 #[test]
-fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
+fn waterbend_lesson_decline_takes_otherwise_without_drawing_again() {
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
         146011,
@@ -294,43 +313,76 @@ fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
     let before_draw = engine.state.players[0].hand.len();
     engine.apply_scenario_command(0, &pass()).unwrap();
     engine.apply_scenario_command(1, &pass()).unwrap();
-    engine.apply_scenario_command(0, &select_branch(0)).unwrap();
+    let payment_offer = engine.apply_scenario_command(0, &select_branch(0)).unwrap();
+    let payment = find_resolution_choice(&payment_offer)
+        .expect("selecting Waterbend opens the staged mana payment");
+    assert_eq!(payment.choice_kind, rv1::ChoiceKind::ManaPayment as i32);
+    let original_payment_prompt_id = payment.resolution_prompt_id;
+    assert!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .continuation
+            .mana_payment()
+            .unwrap()
+            .waterbend
+    );
     engine
         .apply_scenario_command(0, &activate_ability_with_costs(island, 0, vec![], vec![]))
         .unwrap();
     assert!(engine.state.objects[&island].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
-    let decline = RuledCommand {
-        cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
-            resolution_prompt_id: 0,
-            decision: rv1::ResolutionChoiceDecision::Decline as i32,
-            ..Default::default()
-        })),
-    };
-    let branch = engine.apply_scenario_command(0, &decline).unwrap();
-    let branch = find_resolution_choice(&branch).unwrap();
-    assert_eq!(branch.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
-    assert_eq!(branch.resolution_branches.len(), 2);
-    for (option, expected_id) in branch
-        .resolution_branches
-        .iter()
-        .zip(["waterbend_2", "discard_a_card"])
-    {
-        let presentation = option
-            .presentation
-            .as_ref()
-            .expect("stable resolution branch identity");
-        assert_eq!(presentation.card_id, "waterbending_lesson");
-        assert_eq!(presentation.face_id, "waterbending_lesson");
-        assert!(presentation.oracle_line_indices.is_empty());
-        assert_eq!(presentation.path.last().unwrap().id, expected_id);
-    }
+    let undo = engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .expect("Undo reverses the last mana ability without closing Waterbend");
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the original Waterbend payment remains parked after Undo");
+    let refreshed_payment_prompt_id = pending.resolution_prompt_id.get();
+    assert_eq!(
+        refreshed_payment_prompt_id, original_payment_prompt_id,
+        "undo returns to the identical undecided Waterbend payment offer"
+    );
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        rv1::ChoiceKind::ManaPayment
+    );
+    assert!(pending.continuation.mana_payment().unwrap().waterbend);
+    assert!(
+        !engine.state.objects[&island].tapped,
+        "Undo restores the source permanent"
+    );
+    assert_eq!(engine.state.players[0].mana_pool.blue, 0);
+    assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+    let republished =
+        find_resolution_choice(&undo).expect("Undo republishes the same Waterbend payment stage");
+    assert_eq!(
+        republished.resolution_prompt_id,
+        refreshed_payment_prompt_id
+    );
+    let discard = engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: refreshed_payment_prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("final Decline enters Waterbending's Otherwise block directly");
+    let choice = find_resolution_choice(&discard).unwrap();
+    assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (1, 1));
     assert!(!engine.state.objects[&island].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
-    let discard = engine.apply_scenario_command(0, &select_branch(1)).unwrap();
-    let choice = find_resolution_choice(&discard).unwrap();
-    assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
     let chosen = choice.candidate_object_ids[0];
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))

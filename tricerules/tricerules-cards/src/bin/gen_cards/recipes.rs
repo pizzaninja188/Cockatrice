@@ -29659,6 +29659,7 @@ mod tests {
             shuffle,
             reveal,
             result_id,
+            ..
         }] = branch.effects.as_slice()
         else {
             panic!("issue #284 branch must search the library");
@@ -35835,6 +35836,7 @@ mod tests {
                     optional: false,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::BasicLand),
                         ..ZoneCardFilter::default()
@@ -42218,6 +42220,7 @@ mod tests {
                 optional: false,
                 count: 2,
                 count_by_cast_cost: None,
+                selection_bounds: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
                     ..ZoneCardFilter::default()
@@ -51367,6 +51370,7 @@ mod tests {
                         optional: true,
                         count: 1,
                         count_by_cast_cost: None,
+                        selection_bounds: None,
                         filter: Some(ZoneCardFilter {
                             card_type: Some(CardTypeFilter::BasicLand),
                             ..ZoneCardFilter::default()
@@ -51500,6 +51504,7 @@ mod tests {
                     optional: false,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::Artifact),
                         ..ZoneCardFilter::default()
@@ -52207,6 +52212,7 @@ mod tests {
                 optional: false,
                 count: 1,
                 count_by_cast_cost: None,
+                selection_bounds: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
                     ..ZoneCardFilter::default()

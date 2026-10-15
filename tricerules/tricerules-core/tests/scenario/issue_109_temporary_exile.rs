@@ -2216,7 +2216,7 @@ fn observer_restore_completes_amass_when_departure_leaves_one_army() {
 }
 
 #[test]
-fn observer_restore_reenters_the_chosen_blight_branch_leaf() {
+fn observer_restore_reenters_chaos_spewer_otherwise_blight_leaf() {
     let (mut engine, _) = setup_three_player_observer_return(
         10_912,
         &["chaos_spewer", "mind_control", "hill_giant"],
@@ -2243,7 +2243,8 @@ fn observer_restore_reenters_the_chosen_blight_branch_leaf() {
         .expect("P0 casts Chaos Spewer");
     let branch_offer = pass_until_resolution_choice(&mut engine);
     assert_eq!(branch_offer.choice_kind(), ChoiceKind::ResolutionBranch);
-    let blight_batch = engine
+    assert_eq!(branch_offer.resolution_branches.len(), 1);
+    let payment_batch = engine
         .apply_scenario_command(
             0,
             &RuledCommand {
@@ -2251,14 +2252,26 @@ fn observer_restore_reenters_the_chosen_blight_branch_leaf() {
                     resolution_prompt_id: 0,
                     decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch
                         as i32,
-                    selected_branch_index: 1,
+                    selected_branch_index: 0,
                     ..Default::default()
                 })),
             },
         )
-        .expect("P0 chooses Chaos Spewer's mandatory Blight branch");
+        .expect("P0 selects Chaos Spewer's optional payment");
+    assert_eq!(
+        find_resolution_choice(&payment_batch)
+            .expect("the selected payment branch opens mana payment")
+            .choice_kind(),
+        ChoiceKind::ManaPayment
+    );
+    let blight_batch = submit_mana_resolution_decision(
+        &mut engine,
+        0,
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
+    )
+    .expect("declining the payment enters the Otherwise Blight block");
     let original = find_resolution_choice(&blight_batch)
-        .expect("chosen branch parks Blight")
+        .expect("Otherwise parks Blight")
         .clone();
     assert_eq!(original.choice_kind(), ChoiceKind::CostObjects);
     assert!(original.candidate_object_ids.contains(&stolen));
@@ -2291,6 +2304,117 @@ fn observer_restore_reenters_the_chosen_blight_branch_leaf() {
         engine.state.objects[&survivor].counters
     );
     assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn observer_restore_finishes_blight_when_departure_removes_last_borrowed_candidate() {
+    let (mut engine, _) = setup_three_player_observer_return(
+        10_914,
+        &["chaos_spewer", "mind_control", "hill_giant"],
+        &[],
+        &["banishing_light"],
+    );
+    let borrowed = inject_creature_on_battlefield(&mut engine, 2, "hill_giant");
+    mind_control_p2_creature(&mut engine, borrowed);
+    ensure_card_in_hand(&mut engine, 0, "chaos_spewer");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .expect("P0 casts Chaos Spewer");
+    pass_priority_round(&mut engine);
+    let spewer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| {
+            object.card_id == "chaos_spewer" && object.zone == tricerules_core::Zone::Battlefield
+        })
+        .expect("Chaos Spewer enters and puts its trigger on the stack")
+        .id;
+    // The source's trigger remains independent after its source leaves; removing the Spewer
+    // leaves only P2's borrowed creature as a possible Blight recipient.
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != spewer);
+    engine.state.players[0].graveyard.push(spewer);
+    engine.state.objects.get_mut(&spewer).unwrap().zone = tricerules_core::Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(spewer)
+        .or_default() += 1;
+
+    let branch_offer = pass_until_resolution_choice(&mut engine);
+    assert_eq!(branch_offer.choice_kind(), ChoiceKind::ResolutionBranch);
+    let payment = engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: branch_offer.resolution_prompt_id,
+                    decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch
+                        as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("P0 selects the optional payment branch");
+    assert_eq!(
+        find_resolution_choice(&payment)
+            .expect("the branch starts the fixed payment")
+            .choice_kind(),
+        ChoiceKind::ManaPayment
+    );
+    let blight_batch = submit_mana_resolution_decision(
+        &mut engine,
+        0,
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
+    )
+    .expect("declining payment enters Otherwise Blight");
+    let blight = find_resolution_choice(&blight_batch)
+        .expect("Blight parks on P2's borrowed creature")
+        .clone();
+    assert_eq!(blight.choice_kind(), ChoiceKind::CostObjects);
+    assert_eq!(blight.candidate_object_ids, vec![borrowed]);
+    let mana_before_departure = engine.state.players[0].mana_pool;
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let completion = engine
+        .apply_command(2, &concede())
+        .expect("P2 departure removes the last borrowed Blight candidate");
+    assert!(!engine.state.objects.contains_key(&borrowed));
+    assert!(find_resolution_choice(&completion).is_none());
+    assert!(completion
+        .resolution_prompt_state
+        .as_ref()
+        .is_some_and(|state| !state.active));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].mana_pool, mana_before_departure);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before,
+        "concession must not replay the declined payment or unrelated Draw work"
+    );
+    assert_eq!(
+        completion
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log)) if log.text == "P0 blights 2; no creature can receive counters."))
+            .count(),
+        1,
+        "the resumed Blight occurrence completes once"
+    );
 }
 
 #[test]

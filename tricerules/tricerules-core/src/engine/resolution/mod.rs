@@ -82,6 +82,9 @@ struct EffectCx<'a> {
     affected_player: PlayerId,
     spell_label: &'a str,
     previous_effect_result: &'a EffectResult,
+    /// The result context to restore if this operation suspends. For authored programs this is
+    /// the run-level context, which stays separate from the operation's explicit typed input.
+    resume_previous_result: Option<&'a EffectResult>,
     effect_result: &'a mut EffectResult,
     effect_index: u32,
     program_state: Option<ProgramRunState>,
@@ -90,6 +93,9 @@ struct EffectCx<'a> {
 impl EffectCx<'_> {
     fn parked_stack(&self) -> ParkedStackResolution {
         let mut stack = ParkedStackResolution::new(self.top.clone());
+        if let Some(previous_result) = self.resume_previous_result {
+            stack.previous_result = previous_result.clone();
+        }
         stack.program = self.program_state.clone();
         stack
     }
@@ -2018,6 +2024,7 @@ impl GameEngine {
                     affected_player: top.trigger_context.affected_player.unwrap_or(controller),
                     spell_label,
                     previous_effect_result: &previous_effect_result,
+                    resume_previous_result: Some(&previous_effect_result),
                     effect_result: &mut effect_result,
                     effect_index: index as u32,
                     program_state: None,
@@ -8982,6 +8989,7 @@ mod attached_subject_tests {
             previous_effect_result: &previous,
             effect_result: &mut result,
             effect_index: 1,
+            resume_previous_result: None,
             program_state: None,
         };
         life::lose_life(
@@ -11653,6 +11661,7 @@ mod attached_subject_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            resume_previous_result: None,
             program_state: None,
         };
 
@@ -12068,6 +12077,7 @@ mod source_keyword_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            resume_previous_result: None,
             program_state: None,
         };
 
@@ -12116,6 +12126,7 @@ mod source_keyword_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            resume_previous_result: None,
             program_state: None,
         };
 

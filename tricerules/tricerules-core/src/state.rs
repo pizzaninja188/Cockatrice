@@ -1258,16 +1258,49 @@ impl ParkedStackResolution {
     }
 }
 
-#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProgramArm {
     Yes,
     No,
+    ChooseBranch(ChoiceId),
+    ChooseOtherwise,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProgramPathStep {
     pub instruction_index: u32,
     pub arm: ProgramArm,
+}
+
+/// Exact authored Choose node paused in the active compiled program. The parent frame has already
+/// advanced beyond this instruction; the selected body is entered once after selection/payment.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProgramChooseOccurrence {
+    pub parent_path: Vec<ProgramPathStep>,
+    pub instruction_index: u32,
+    pub choice_id: ChoiceId,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum PendingProgramChooseStage {
+    Selecting,
+    ChoosingDelegate {
+        candidates: Vec<Option<PlayerId>>,
+    },
+    PayingMana {
+        selected_branch: usize,
+        branch_id: ChoiceId,
+        payment: PendingManaPayment,
+    },
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingProgramChoose {
+    pub occurrence: ProgramChooseOccurrence,
+    pub original_chooser: PlayerId,
+    pub optional: bool,
+    pub delegate_selected: bool,
+    pub stage: PendingProgramChooseStage,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1516,6 +1549,10 @@ pub enum ResolutionContinuation {
     AuthoredBranch {
         stack: ParkedStackResolution,
         branch: PendingResolutionBranch,
+    },
+    ProgramChoose {
+        stack: ParkedStackResolution,
+        choose: PendingProgramChoose,
     },
     CounterMove {
         stack: ParkedStackResolution,
@@ -1968,6 +2005,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::ProgramChoose { stack, .. }
             | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
@@ -2034,6 +2072,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::ProgramChoose { stack, .. }
             | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
@@ -2111,6 +2150,14 @@ impl ResolutionContinuation {
                 branch:
                     PendingResolutionBranch {
                         stage: PendingResolutionBranchStage::PayingMana { payment, .. },
+                        ..
+                    },
+                ..
+            } => Some(payment),
+            Self::ProgramChoose {
+                choose:
+                    PendingProgramChoose {
+                        stage: PendingProgramChooseStage::PayingMana { payment, .. },
                         ..
                     },
                 ..

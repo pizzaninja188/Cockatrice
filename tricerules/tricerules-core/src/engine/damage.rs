@@ -136,8 +136,7 @@ pub(crate) struct DamageSpec {
 pub(crate) enum DamageBatchContinuation {
     Combat,
     Stack {
-        item: Box<StackItem>,
-        resume_effect_index: Option<u32>,
+        stack: Box<ParkedStackResolution>,
     },
     ManaAbility {
         actor: PlayerId,
@@ -155,7 +154,7 @@ impl DamageBatchContinuation {
                 .first()
                 .map(|damage| damage.spec.event.source.object_id)
                 .unwrap_or(0),
-            Self::Stack { item, .. } => item.source_permanent_id.unwrap_or(item.id),
+            Self::Stack { stack } => stack.item.source_permanent_id.unwrap_or(stack.item.id),
             Self::ManaAbility {
                 source_object_id, ..
             } => *source_object_id,
@@ -165,7 +164,7 @@ impl DamageBatchContinuation {
     fn fallback_controller(&self) -> PlayerId {
         match self {
             Self::Combat => unreachable!("combat choices require a surviving affected recipient"),
-            Self::Stack { item, .. } => item.controller,
+            Self::Stack { stack } => stack.item.controller,
             Self::ManaAbility { actor, .. } => *actor,
         }
     }
@@ -432,9 +431,23 @@ impl GameEngine {
     pub(crate) fn process_or_park_damage_batch(
         &mut self,
         item: &StackItem,
+        damage: Vec<DamageSpec>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
+        self.process_or_park_damage_batch_with_stack(
+            ParkedStackResolution::new(item.clone()),
+            damage,
+            events,
+        )
+    }
+
+    pub(crate) fn process_or_park_damage_batch_with_stack(
+        &mut self,
+        stack: ParkedStackResolution,
         mut damage: Vec<DamageSpec>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
+        let item = &stack.item;
         for spec in &mut damage {
             let item_source = item.source_permanent_id.unwrap_or(item.id);
             spec.event.source.zone_change_generation = if spec.event.source.object_id == item_source
@@ -490,8 +503,7 @@ impl GameEngine {
         self.advance_or_park_damage_batch(
             pending,
             DamageBatchContinuation::Stack {
-                item: Box::new(item.clone()),
-                resume_effect_index: None,
+                stack: Box::new(stack),
             },
             events,
         )
@@ -1355,18 +1367,12 @@ impl GameEngine {
                         effect_ids: candidate_effect_ids,
                     }
                 }
-                DamageBatchContinuation::Stack {
-                    item,
-                    resume_effect_index,
-                } => ResolutionContinuation::DamageReplacement {
-                    stack: ParkedStackResolution {
-                        item: *item,
-                        resume_effect_index,
-                        previous_result: EffectResult::default(),
-                        program: None,
-                    },
-                    effect_ids: candidate_effect_ids,
-                },
+                DamageBatchContinuation::Stack { stack } => {
+                    ResolutionContinuation::DamageReplacement {
+                        stack: *stack,
+                        effect_ids: candidate_effect_ids,
+                    }
+                }
                 DamageBatchContinuation::ManaAbility {
                     actor,
                     source_object_id,
@@ -1735,8 +1741,7 @@ impl GameEngine {
             }
             ResolutionContinuation::DamageReplacement { stack, .. } => {
                 DamageBatchContinuation::Stack {
-                    item: Box::new(stack.item.clone()),
-                    resume_effect_index: stack.resume_effect_index,
+                    stack: Box::new(stack.clone()),
                 }
             }
             _ => return Ok(()),
@@ -1825,13 +1830,10 @@ impl GameEngine {
                     DamageBatchContinuation::Combat => {
                         self.state.combat_damage_priority_pending = true
                     }
-                    DamageBatchContinuation::Stack {
-                        item,
-                        resume_effect_index,
-                    } => {
-                        let completed = self.complete_parked_resolution(
-                            *item,
-                            resume_effect_index,
+                    DamageBatchContinuation::Stack { stack } => {
+                        let completed = self.complete_parked_stack_with_previous(
+                            *stack,
+                            EffectResult::default(),
                             Vec::new(),
                         )?;
                         events.extend(completed.events);
@@ -1856,8 +1858,7 @@ impl GameEngine {
             }
             ResolutionContinuation::DamageReplacement { stack, .. } => {
                 DamageBatchContinuation::Stack {
-                    item: Box::new(stack.item.clone()),
-                    resume_effect_index: stack.resume_effect_index,
+                    stack: Box::new(stack.clone()),
                 }
             }
             ResolutionContinuation::ManaAbilityDamageReplacement {
@@ -2029,10 +2030,9 @@ impl GameEngine {
                 self.state.combat_damage_priority_pending = true;
                 Ok(finish_with_events(self, events))
             }
-            DamageBatchContinuation::Stack {
-                item,
-                resume_effect_index,
-            } => self.complete_parked_resolution(*item, resume_effect_index, events),
+            DamageBatchContinuation::Stack { stack } => {
+                self.complete_parked_stack_with_previous(*stack, EffectResult::default(), events)
+            }
             DamageBatchContinuation::ManaAbility {
                 resume_resolution, ..
             } => {

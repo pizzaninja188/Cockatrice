@@ -173,6 +173,7 @@ fn resolve(
         previous_effect_result: &EffectResult::default(),
         effect_result: &mut result,
         effect_index: 0,
+        resume_previous_result: None,
         program_state: None,
     };
     let outcome = match caller {

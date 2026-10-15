@@ -31,6 +31,15 @@ publish no result. Divert's Lander effect consumes only `Paid`, so a departed pa
 one. The `CounterUnlessPaid` branch
 receipt condition and now-unused `PreviousResultReceipt` wrapper are retired; the shared counter-
 placement/sacrifice receipt matcher and other resolution receipts remain.
+The bounded 2026-10-15 Choose increment compiles nested controller choices with homogeneous
+all-free or fixed Mana/Waterbend costs, the accepted bounded requirements, typed branch yields,
+and nested body/Otherwise blocks. Waterbending Lesson pays Waterbend `{2}` or discards one card;
+Chaos Spewer may pay `{2}` or blights 2. Payment, Blight creature selection and counter
+replacement choices suspend the same program cursor, which resumes its following instruction
+once. The exact admitted syntax and fail-closed limits are in the
+[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs).
+This ports only those two definitions: legacy flat branch resolution remains live for other
+callers and has not been retired.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

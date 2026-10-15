@@ -262,6 +262,12 @@ impl GameEngine {
                     // and run its remaining cleanup and parent tail.
                     preserve = true;
                 }
+                ResolutionContinuation::ProgramChoose { .. } => {
+                    // The compiled parent program began resolving before the chooser or its
+                    // physical source left. Retain the exact cursor so departure reconciliation
+                    // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
                 ResolutionContinuation::SearchLibrary { stack, .. }
                 | ResolutionContinuation::ProgramCohortPartition { stack, .. }
                 | ResolutionContinuation::ProgramPartitionMove { stack, .. }
@@ -833,6 +839,8 @@ impl GameEngine {
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
+        self.refresh_program_choose_departure(events)?;
+        self.refresh_blight_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;
         self.refresh_program_library_cohort_departure(events)?;

@@ -283,6 +283,7 @@ mod tests {
                 previous_effect_result: &prior,
                 effect_result: &mut result,
                 effect_index: 0,
+                resume_previous_result: None,
                 program_state: None,
             };
             counter_target_spell(
@@ -993,6 +994,7 @@ mod cast_color_tests {
             previous_effect_result: &prior,
             effect_result: &mut result,
             effect_index: 0,
+            resume_previous_result: None,
             program_state: None,
         };
         copy_target_spell(

@@ -90,6 +90,7 @@ fn consume(engine: &mut GameEngine, chosen: Vec<TriggerObjectRef>) {
         previous_effect_result: &previous,
         effect_result: &mut result,
         effect_index: 2,
+        resume_previous_result: None,
         program_state: None,
     };
     assert_eq!(

@@ -5,11 +5,22 @@
   face_id: "waterbending_lesson",
   mana_cost: "{3}{U}",
   types: ["Sorcery", "Lesson"],
-  spell_effect: [
-    Draw(count: 3),
-    ChooseResolutionBranch(optional: false, branches: [
-      (branch_id: "waterbend_2", presentation: Fallback, cost: Waterbend("{2}"), effects: []),
-      (branch_id: "discard_a_card", presentation: Fallback, cost: None, effects: [Discard(quantity: Exact(1))]),
-    ]),
-  ],
+  spell_program: Some((body: (steps: [
+    (id: "draw_three", kind: Perform(Draw(count: 3))),
+    (id: "waterbend_or_discard", kind: Choose(
+      choice: "waterbend_or_discard",
+      chooser: Controller,
+      optional: true,
+      branches: [(
+        branch_id: "waterbend_2",
+        presentation: Fallback,
+        cost: Waterbend("{2}"),
+        requirement: Always,
+        body: (steps: [], yields: []),
+      )],
+      otherwise: (steps: [
+        (id: "discard_a_card", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+      ], yields: []),
+    )),
+  ], yields: []))),
 )

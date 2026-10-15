@@ -12420,6 +12420,7 @@ mod tests {
                 optional: false,
                 count: 1,
                 count_by_cast_cost: None,
+                selection_bounds: None,
                 selection_constraint: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
@@ -14006,6 +14007,7 @@ mod tests {
                 optional: false,
                 count: 1,
                 count_by_cast_cost: None,
+                selection_bounds: None,
                 selection_constraint: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),

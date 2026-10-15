@@ -176,8 +176,18 @@ owners are all-authored or all-legacy: when any sibling declares a program, ever
 declare one; otherwise their effects stay on ordinary effect-list dispatch. Each authored mode keeps
 its own targeting groups and group indices. Do not add a face-level `spell_program` to a modal spell.
 
-The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored
-functions. Targetless leaves accepted are `Draw`, `Discard`, `ChoosePermanents`,
+The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
+authored functions. `Choose` is controller-only, consumes no prior result, and requires at least
+one branch. Its branches must be either all free or all paid; supported costs are `None`, fixed
+nonempty `Mana` without X, and fixed nonempty `Waterbend` without X. `Always`, supported
+controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
+are admitted; flat-list applicability and card-result requirements are rejected. Branch and
+Otherwise bodies use the same recursive finite-program subset, and a binding may join only
+compatible explicit yields from every branch and Otherwise exit. Declining an optional choice or a
+paid branch follows Otherwise. A cost-free branch whose sole instruction is a `Draw` is omitted
+when the current draw limit prevents that draw in full; paid branches remain selectable and the
+draw operation still applies normal draw limits when it resolves. Targetless leaves accepted are
+`Draw`, `Discard`, `Blight`, `ChoosePermanents`,
 `UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop`, `Mill`, `ChooseCard`
 and ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
@@ -189,6 +199,19 @@ Discard retains the existing validated `DiscardQuantity` choices. Permanent filt
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and constraints must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, and valid `AllOf`/`AnyOf`
 combinations of those conditions. Other contexts and leaf operations fail registration.
+
+Use `Choose` for a resolution-time branch whose cost and body belong together. Give the node a
+program-unique `choice` ID, give each branch a stable ID local to that choice, and put the branch
+instructions in its nested `body`. The `otherwise` block runs after an optional decline or a
+declined paid branch. All sibling branches must use costs of the same free/paid class. This covers
+two distinct Oracle patterns: Waterbending Lesson offers Waterbend `{2}` before its discard
+consequence, while Chaos Spewer offers `{2}` before Blight 2. Keep each real card's ordered actions
+and fallback in its source-backed program; do not flatten the payment into a legacy branch effect.
+
+`Blight` is resultless in a program. It may suspend for its normal controller creature choice and
+for applicable counter-replacement choices, but it cannot bind or yield an output. Once those
+choices finish, execution continues at the next instruction in the same program block. If the
+controller has no creature, it records Blight without a creature prompt and continues immediately.
 
 Targetful leaves currently accepted are `DamageTarget` with role `Target`, `CounterTargetSpell` with
 role `Spell`, `CreateTokenCopies(Chosen(...))` with role `Source`, and

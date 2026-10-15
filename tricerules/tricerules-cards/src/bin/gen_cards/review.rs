@@ -1006,6 +1006,26 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn card_data_presentation_walker_includes_nested_program_choose_branches() {
+        let definition = json!({
+            "spell_program": {"body": {"steps": [{
+                "id": "choose",
+                "kind": {"Choose": {"branches": [{
+                    "branch_id": "waterbend_2",
+                    "presentation": "Fallback"
+                }]}}
+            }]}}
+        });
+        let mut entries = Vec::new();
+        collect_presentations(&definition, "", &mut entries);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].typed_path,
+            "/spell_program/body/steps/0/kind/Choose/branches/0/presentation"
+        );
+    }
+
+    #[test]
     fn prototype_source_layout_uses_the_single_face_definition_model() {
         let mut prototype = source("oracle-prototype", "Prototype", "");
         prototype["layout"] = json!("prototype");

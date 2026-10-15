@@ -10,13 +10,14 @@
 //! separately typed context/result contract.
 
 use super::{
-    Amount, CardResultAction, CardSearchZone, CardTypeFilter, ChooseCardSource,
-    CohortPartitionSelection, EffectContext, EffectSubject, GameCondition, PlayerRecipient,
-    RelativePlayerSet, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
+    Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
+    CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
+    EffectSubject, GameCondition, PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
+    ResolutionCost, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
     SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
     TokenCopySource,
 };
-use crate::{ModeId, ProgramOwnerId};
+use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -122,6 +123,26 @@ pub enum InstructionKind {
         yes: AuthoredBlock,
         no: AuthoredBlock,
     },
+    Choose {
+        choice: ChoiceId,
+        chooser: PlayerRecipient,
+        optional: bool,
+        branches: Vec<AuthoredChooseBranch>,
+        otherwise: AuthoredBlock,
+    },
+}
+
+/// One player-selected branch in an authored `Choose` control-flow node. Its body is a scoped
+/// program block, not an adapter around the legacy flat effect list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoredChooseBranch {
+    pub branch_id: ChoiceId,
+    pub presentation: AbilityPresentation,
+    pub cost: ResolutionCost,
+    #[serde(default)]
+    pub requirement: ResolutionBranchRequirement,
+    pub body: AuthoredBlock,
 }
 
 /// Internal finite condition form shared by authored and compiled instructions.
@@ -284,6 +305,57 @@ pub enum CompiledInstructionKind {
         yes: CompiledBlock,
         no: CompiledBlock,
     },
+    Choose {
+        choice: ChoiceId,
+        chooser: PlayerRecipient,
+        optional: bool,
+        branches: Vec<CompiledChooseBranch>,
+        otherwise: CompiledBlock,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompiledChooseBranch {
+    pub branch_id: ChoiceId,
+    pub presentation: AbilityPresentation,
+    pub cost: ResolutionCost,
+    pub requirement: CompiledChooseRequirement,
+    pub body: CompiledBlock,
+}
+
+impl CompiledChooseBranch {
+    /// Render the same public fallback wording used by the existing resolution-branch contract.
+    /// Branch and instruction IDs remain internal selectors for program control flow.
+    pub fn fallback_label(&self) -> String {
+        match &self.cost {
+            ResolutionCost::Waterbend(cost) => format!("Waterbend {cost}"),
+            ResolutionCost::Mana(cost) => format!("Pay {cost}"),
+            ResolutionCost::None if self.body.steps.is_empty() => "Continue".into(),
+            ResolutionCost::None => {
+                let effects = self
+                    .body
+                    .steps
+                    .iter()
+                    .map(|instruction| match &instruction.kind {
+                        CompiledInstructionKind::Perform(effect) => Some((**effect).clone()),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+                effects
+                    .as_deref()
+                    .and_then(super::presentation::simple_effects)
+                    .unwrap_or_else(|| choice_fallback("Choice", &self.branch_id))
+            }
+            _ => choice_fallback("Choice", &self.branch_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompiledChooseRequirement {
+    Always,
+    GameCondition(GameCondition),
+    CastCostReceipt(CastCostReceiptCondition),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,8 +373,10 @@ pub struct CompiledProgram {
 
 struct Compiler {
     context: EffectContext,
+    cast_cost_options: HashMap<ChoiceId, HashSet<ChoiceId>>,
     slots: Vec<CompiledSlot>,
     instruction_ids: HashSet<String>,
+    choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     next_instruction_address: u32,
 }
@@ -323,7 +397,21 @@ impl CompiledProgram {
         program: &CardProgram,
         targeting: Option<&TargetingDef>,
     ) -> Result<Self, String> {
-        let mut compiled = Self::compile_internal(owner, context, program)?;
+        Self::compile_with_targeting_and_cast_cost_groups(owner, context, program, targeting, &[])
+    }
+
+    /// Compile one exact program owner with the cast-cost identities available to that owner.
+    /// Face modes share their parent face's cast-cost groups, but never borrow a sibling face's
+    /// receipt namespace. Ability programs pass their source face's groups and reject spell-only
+    /// receipt predicates below.
+    pub(crate) fn compile_with_targeting_and_cast_cost_groups(
+        owner: ProgramOwnerId,
+        context: EffectContext,
+        program: &CardProgram,
+        targeting: Option<&TargetingDef>,
+        cast_cost_groups: &[CastCostGroupDef],
+    ) -> Result<Self, String> {
+        let mut compiled = Self::compile_internal(owner, context, program, cast_cost_groups)?;
         if context == EffectContext::Spell
             && targeting.is_some_and(TargetingDef::requires_opponent_choice)
         {
@@ -368,6 +456,7 @@ impl CompiledProgram {
         owner: ProgramOwnerId,
         context: EffectContext,
         program: &CardProgram,
+        cast_cost_groups: &[CastCostGroupDef],
     ) -> Result<Self, String> {
         if owner.effect_context() != context {
             return Err("program owner does not match the supplied effect context".into());
@@ -378,8 +467,22 @@ impl CompiledProgram {
         let target_projection = owner.target_projection();
         let mut compiler = Compiler {
             context,
+            cast_cost_options: cast_cost_groups
+                .iter()
+                .map(|group| {
+                    (
+                        group.group_id.clone(),
+                        group
+                            .options
+                            .iter()
+                            .map(|option| option.option_id().clone())
+                            .collect(),
+                    )
+                })
+                .collect(),
             slots: Vec::new(),
             instruction_ids: HashSet::new(),
+            choice_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
             next_instruction_address: 0,
         };
@@ -439,13 +542,30 @@ fn find_instruction_by_id<'a>(
             }
             return None;
         }
-        if let CompiledInstructionKind::If { yes, no, .. } = &instruction.kind {
-            if let Some(found) = find_instruction_by_id(yes, id) {
-                return Some(found);
+        match &instruction.kind {
+            CompiledInstructionKind::If { yes, no, .. } => {
+                if let Some(found) = find_instruction_by_id(yes, id) {
+                    return Some(found);
+                }
+                if let Some(found) = find_instruction_by_id(no, id) {
+                    return Some(found);
+                }
             }
-            if let Some(found) = find_instruction_by_id(no, id) {
-                return Some(found);
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    if let Some(found) = find_instruction_by_id(&branch.body, id) {
+                        return Some(found);
+                    }
+                }
+                if let Some(found) = find_instruction_by_id(otherwise, id) {
+                    return Some(found);
+                }
             }
+            CompiledInstructionKind::Perform(_) => {}
         }
     }
     None
@@ -581,6 +701,185 @@ impl Compiler {
                             condition: Box::new(condition),
                             yes,
                             no,
+                        },
+                    )
+                }
+                InstructionKind::Choose {
+                    choice,
+                    chooser,
+                    optional,
+                    branches,
+                    otherwise,
+                } => {
+                    if instruction.input.is_some() {
+                        return Err(format!(
+                            "Choose instruction '{}' cannot consume an input result",
+                            instruction.id
+                        ));
+                    }
+                    choice.validate().map_err(|reason| {
+                        format!("Choose instruction '{}': {reason}", instruction.id)
+                    })?;
+                    if !self.choice_ids.insert(choice.clone()) {
+                        return Err(format!(
+                            "duplicate Choose choice id '{}' in program",
+                            choice
+                        ));
+                    }
+                    if *chooser != PlayerRecipient::Controller {
+                        return Err(format!(
+                            "Choose instruction '{}' supports only the controller as chooser",
+                            instruction.id
+                        ));
+                    }
+                    if branches.is_empty() {
+                        return Err(format!(
+                            "Choose instruction '{}' requires at least one branch",
+                            instruction.id
+                        ));
+                    }
+
+                    let mut branch_ids = HashSet::new();
+                    let mut has_free_branch = false;
+                    let mut has_paid_branch = false;
+                    let mut compiled_branches = Vec::with_capacity(branches.len());
+                    let mut joined_types: Option<Vec<ResultType>> = None;
+                    for branch in branches {
+                        branch.branch_id.validate().map_err(|reason| {
+                            format!("Choose instruction '{}' branch: {reason}", instruction.id)
+                        })?;
+                        if !branch_ids.insert(branch.branch_id.clone()) {
+                            return Err(format!(
+                                "Choose instruction '{}' has duplicate branch id '{}'",
+                                instruction.id, branch.branch_id
+                            ));
+                        }
+                        branch.presentation.validate().map_err(|reason| {
+                            format!(
+                                "Choose instruction '{}' branch '{}': {reason}",
+                                instruction.id, branch.branch_id
+                            )
+                        })?;
+                        match &branch.cost {
+                            ResolutionCost::None => has_free_branch = true,
+                            ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
+                                has_paid_branch = true;
+                                if cost.pips.is_empty()
+                                    || cost
+                                        .pips
+                                        .iter()
+                                        .any(|pip| matches!(pip, crate::ManaSymbol::X))
+                                {
+                                    return Err(format!(
+                                        "Choose instruction '{}' branch '{}' requires a nonempty fixed mana cost without X",
+                                        instruction.id, branch.branch_id
+                                    ));
+                                }
+                            }
+                            unsupported => {
+                                return Err(format!(
+                                    "Choose instruction '{}' does not support resolution cost {unsupported:?}",
+                                    instruction.id
+                                ));
+                            }
+                        }
+
+                        let requirement = match &branch.requirement {
+                            ResolutionBranchRequirement::Always => {
+                                CompiledChooseRequirement::Always
+                            }
+                            ResolutionBranchRequirement::GameCondition(condition) => {
+                                let compiled = compile_program_condition(
+                                    &ProgramCondition::Game(condition.clone()),
+                                    &names,
+                                    &self.slots,
+                                )
+                                .map_err(|reason| {
+                                    format!(
+                                        "Choose instruction '{}' branch '{}': {reason}",
+                                        instruction.id, branch.branch_id
+                                    )
+                                })?;
+                                let CompiledProgramCondition::Game(condition) = compiled else {
+                                    unreachable!(
+                                        "game branch requirement compiles as a game condition"
+                                    )
+                                };
+                                CompiledChooseRequirement::GameCondition(condition)
+                            }
+                            ResolutionBranchRequirement::CastCostReceipt(condition) => {
+                                if self.context != EffectContext::Spell {
+                                    return Err(format!(
+                                        "Choose instruction '{}' cast-cost requirements require a spell program owner",
+                                        instruction.id
+                                    ));
+                                }
+                                let Some(options) = self.cast_cost_options.get(&condition.group_id)
+                                else {
+                                    return Err(format!(
+                                        "Choose instruction '{}' references an unknown owning cast-cost group",
+                                        instruction.id
+                                    ));
+                                };
+                                if !options.contains(&condition.option_id) {
+                                    return Err(format!(
+                                        "Choose instruction '{}' references an unknown option in its owning cast-cost group",
+                                        instruction.id
+                                    ));
+                                }
+                                CompiledChooseRequirement::CastCostReceipt(condition.clone())
+                            }
+                            ResolutionBranchRequirement::EffectsApplicable => {
+                                return Err(format!(
+                                    "Choose instruction '{}' does not support EffectsApplicable requirements",
+                                    instruction.id
+                                ));
+                            }
+                            ResolutionBranchRequirement::CardResultCount { .. } => {
+                                return Err(format!(
+                                    "Choose instruction '{}' does not support CardResultCount requirements",
+                                    instruction.id
+                                ));
+                            }
+                        };
+
+                        let (body, body_types) = self.compile_block(&branch.body, &names)?;
+                        joined_types = Some(match joined_types {
+                            None => body_types,
+                            Some(current) => {
+                                join_choose_yield_types(&instruction.id, current, body_types)?
+                            }
+                        });
+                        compiled_branches.push(CompiledChooseBranch {
+                            branch_id: branch.branch_id.clone(),
+                            presentation: branch.presentation.clone(),
+                            cost: branch.cost.clone(),
+                            requirement,
+                            body,
+                        });
+                    }
+                    if has_free_branch && has_paid_branch {
+                        return Err(format!(
+                            "Choose instruction '{}' cannot mix free and paid sibling branches",
+                            instruction.id
+                        ));
+                    }
+
+                    let (otherwise, otherwise_types) = self.compile_block(otherwise, &names)?;
+                    let result_types = join_choose_yield_types(
+                        &instruction.id,
+                        joined_types.unwrap_or_default(),
+                        otherwise_types,
+                    )?;
+                    (
+                        None,
+                        result_types,
+                        CompiledInstructionKind::Choose {
+                            choice: choice.clone(),
+                            chooser: *chooser,
+                            optional: *optional,
+                            branches: compiled_branches,
+                            otherwise,
                         },
                     )
                 }
@@ -956,6 +1255,26 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
     })
 }
 
+fn join_choose_yield_types(
+    instruction_id: &str,
+    left: Vec<ResultType>,
+    right: Vec<ResultType>,
+) -> Result<Vec<ResultType>, String> {
+    if left.len() != right.len() {
+        return Err(format!(
+            "Choose instruction '{instruction_id}' has mismatched explicit yield arity"
+        ));
+    }
+    left.into_iter()
+        .zip(right)
+        .map(|(left, right)| {
+            join_result_types(&left, &right).ok_or_else(|| {
+                format!("Choose instruction '{instruction_id}' has mismatched explicit yield types")
+            })
+        })
+        .collect()
+}
+
 fn validate_and_result_types(
     effect: &SpellEffectKind,
     context: EffectContext,
@@ -972,6 +1291,10 @@ fn validate_and_result_types(
                 who: *who,
                 cardinality: Cardinality { min: 0, max: None },
             }])
+        }
+        SpellEffectKind::Blight { .. } => {
+            effect.validate(context)?;
+            Ok(Vec::new())
         }
         SpellEffectKind::Discard { who, quantity } => {
             effect.validate(context)?;

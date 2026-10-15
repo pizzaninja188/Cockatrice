@@ -14,6 +14,7 @@ pub(super) fn damage_target(
     let source_has_lifelink = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
+    let parked_stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -45,7 +46,9 @@ pub(super) fn damage_target(
         source_has_deathtouch,
         source_has_lifelink,
     }];
-    let Some(completed) = engine.process_or_park_damage_batch(top, damage, events)? else {
+    let Some(completed) =
+        engine.process_or_park_damage_batch_with_stack(parked_stack, damage, events)?
+    else {
         return Ok(EffectOutcome::Suspended);
     };
     engine.commit_completed_damage_batch(&completed, events)?;
@@ -625,6 +628,7 @@ mod damage_source_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            resume_previous_result: None,
             program_state: None,
         };
         fight(
