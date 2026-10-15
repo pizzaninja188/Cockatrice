@@ -120,12 +120,18 @@ which rejects previews, routes concede first, gates on a parked resolution, and 
 `EngineError::Illegal` — the engine never panics on a bad command.
 
 **6 — Mirror onto physical cards (Servatrice).** Only after the engine accepts does the driver
-touch Cockatrice objects: a hand cast keeps its physical `Server_Card` in HAND while payment is
-pending, then moves it to the **canonical stack zone** on commit (the lowest player-id STACK zone,
-so every client sees one merged stack). Other cast sources move on begin. A
-`PendingRuledCastVisual` binds the same card to the next `StackPushed`. Then
-`RuledBatchSynchronizer::applyBatch(resp)` runs its load-bearing ordered pipeline (§4), and the
-accepted command's bytes are appended to the replay log.
+touch Cockatrice objects. HAND and DECK cast reservations keep the exact physical `Server_Card` in
+their source zone while payment is pending, then move to the **canonical Stack zone** on commit.
+Graveyard and exile casts move to Stack on accepted begin. The canonical zone is the lowest player-id
+Stack zone that currently exists. `PendingRuledCastVisual` binds the current physical card ID to the
+next `StackPushed`; HAND/DECK reservations are not Stack-resident pending cards. If that canonical
+Stack owner departs, Servatrice rehomes the exact committed and public-pending card pointers, in
+source order, to the next lowest existing Stack after `RuledBatchSynchronizer::applyBatch(resp)` and
+before zone cleanup, any departure snapshot, or object-map publication. It refreshes physical
+server-card IDs from those same pointers while preserving committed ObjectId, pending
+transaction/caster, and visual identity; canceled public-source casts therefore still return the
+original card to their source zone. The batch then proceeds to its optional snapshot and
+participant-redacted broadcast (§5).
 
 **7 — Broadcast (Servatrice).** `RuledBroadcastRouter::broadcast` copies the batch, calls
 `appendServerObjectMaps` to inject the server-built identity maps, then for **each participant**

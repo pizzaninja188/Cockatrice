@@ -81,6 +81,7 @@ private:
         QString promptFeed;
         bool combatStateDirty = false;
         bool battlefieldMapDirty = false;
+        /// Stack order or a committed stack card's physical owner/id binding changed this batch.
         bool stackTrackingDirty = false;
         bool preparationSnapshotSeen = false;
         QVector<RuledClientHost::PreparationCopy> preparationCopies;

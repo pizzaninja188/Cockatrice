@@ -131,23 +131,6 @@ QString withoutRuledEnchantingAnnotation(const QString &annotation)
     return kept.join(QLatin1Char('\n')).trimmed();
 }
 
-Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
-{
-    if (!game) {
-        return nullptr;
-    }
-    Server_AbstractPlayer *canonicalStackOwner = nullptr;
-    for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
-        if (!ab) {
-            continue;
-        }
-        if (!canonicalStackOwner || ab->getPlayerId() < canonicalStackOwner->getPlayerId()) {
-            canonicalStackOwner = ab;
-        }
-    }
-    return canonicalStackOwner ? canonicalStackOwner->getZones().value(ZoneNames::STACK) : nullptr;
-}
-
 /// Mirror a rules-engine decision onto the physical Cockatrice zones, reporting a refusal.
 ///
 /// The engine has already advanced its own state by the time the relay mirrors it, so a refused
@@ -243,6 +226,180 @@ RuledBatchSynchronizer::RuledBatchSynchronizer(Server_Game *_game, RuledGameSess
 {
 }
 
+Server_CardZone *RuledBatchSynchronizer::canonicalStackZone(int excludedPlayerId) const
+{
+    if (!game) {
+        return nullptr;
+    }
+
+    QList<Server_AbstractPlayer *> players = game->getPlayers().values();
+    std::sort(players.begin(), players.end(), [](const Server_AbstractPlayer *left, const Server_AbstractPlayer *right) {
+        if (!left) {
+            return false;
+        }
+        if (!right) {
+            return true;
+        }
+        return left->getPlayerId() < right->getPlayerId();
+    });
+
+    for (Server_AbstractPlayer *player : players) {
+        if (!player || player->getPlayerId() == excludedPlayerId) {
+            continue;
+        }
+        if (Server_CardZone *stack = player->getZones().value(ZoneNames::STACK)) {
+            return stack;
+        }
+    }
+    return nullptr;
+}
+
+void RuledBatchSynchronizer::rehomeCanonicalStackForDeparture(int departingPlayerId)
+{
+    if (!game) {
+        return;
+    }
+
+    // Match the server's own all-zone cleanup predicate. This is only a no-op optimization
+    // before stopGameIfFinished clears every zone; it does not represent engine terminal state.
+    int serverPlayersRemaining = 0;
+    const auto players = game->getPlayers().values();
+    for (Server_AbstractPlayer *player : players) {
+        if (player && !player->getConceded()) {
+            ++serverPlayersRemaining;
+        }
+    }
+    if (serverPlayersRemaining <= 1) {
+        return;
+    }
+
+    Server_AbstractPlayer *departingPlayer = game->getPlayer(departingPlayerId);
+    Server_CardZone *sourceStack = canonicalStackZone();
+    Server_CardZone *departingStack = departingPlayer ? departingPlayer->getZones().value(ZoneNames::STACK) : nullptr;
+    if (!departingPlayer || !sourceStack || sourceStack != departingStack) {
+        return;
+    }
+
+    Server_CardZone *destinationStack = canonicalStackZone(departingPlayerId);
+    if (!destinationStack || destinationStack == sourceStack) {
+        return;
+    }
+
+    struct StackCardBinding
+    {
+        bool hasCommittedObjectId = false;
+        quint32 engineOid = 0;
+        int pendingCastIndex = -1;
+        quint64 transactionId = 0;
+        int casterPlayerId = -1;
+        Server_Card *card = nullptr;
+    };
+
+    QVector<StackCardBinding> cardsInSourceOrder;
+    const QList<Server_Card *> sourceCards = sourceStack->getCards();
+    cardsInSourceOrder.reserve(sourceCards.size());
+    for (Server_Card *card : sourceCards) {
+        if (!card) {
+            continue;
+        }
+
+        QVector<quint32> committedObjectIds;
+        for (auto binding = ruledStackObjectIdToServerCardId.constBegin();
+             binding != ruledStackObjectIdToServerCardId.constEnd(); ++binding) {
+            if (binding.value() == card->getId()) {
+                committedObjectIds.append(binding.key());
+            }
+        }
+
+        QVector<int> pendingCastIndexes;
+        for (int i = 0; i < ruledPendingCastVisualQueue.size(); ++i) {
+            const PendingRuledCastVisual &pending = ruledPendingCastVisualQueue.at(i);
+            if (pending.sourceZoneName == ZoneNames::HAND || pending.sourceZoneName == ZoneNames::DECK) {
+                continue;
+            }
+            if (pending.serverCardId == card->getId()) {
+                pendingCastIndexes.append(i);
+            }
+        }
+
+        if (committedObjectIds.size() > 1 || pendingCastIndexes.size() > 1 ||
+            (!committedObjectIds.isEmpty() && !pendingCastIndexes.isEmpty())) {
+            qWarning() << "Ruled: refusing canonical Stack rehome with ambiguous physical binding for server card"
+                       << card->getId() << "on player" << departingPlayerId;
+            return;
+        }
+
+        StackCardBinding binding;
+        binding.card = card;
+        if (!committedObjectIds.isEmpty()) {
+            binding.hasCommittedObjectId = true;
+            binding.engineOid = committedObjectIds.front();
+        } else if (!pendingCastIndexes.isEmpty()) {
+            binding.pendingCastIndex = pendingCastIndexes.front();
+            const PendingRuledCastVisual &pending = ruledPendingCastVisualQueue.at(binding.pendingCastIndex);
+            binding.transactionId = pending.transactionId;
+            binding.casterPlayerId = pending.casterPlayerId;
+        }
+        // An unmapped physical stack card is still transferred by its captured pointer. Never
+        // invent an OID by card name or let the departing player's zone cleanup destroy it.
+        cardsInSourceOrder.append(binding);
+    }
+
+    GameEventStorage moveEvents;
+    bool movedAny = false;
+    for (const StackCardBinding &binding : cardsInSourceOrder) {
+        Server_Card *card = binding.card;
+        if (!card || card->getZone() != sourceStack || !sourceStack->getCards().contains(card)) {
+            qWarning() << "Ruled: canonical Stack rehome lost a captured card pointer for departing player"
+                       << departingPlayerId;
+            if (movedAny) {
+                moveEvents.sendToGame(game);
+            }
+            return;
+        }
+
+        CardToMove cardToMove;
+        cardToMove.set_card_id(card->getId());
+        if (!ruledApplyMove(departingPlayer, moveEvents, sourceStack, destinationStack, cardToMove, -1, 0,
+                            "rehomeCanonicalStack")) {
+            if (movedAny) {
+                moveEvents.sendToGame(game);
+            }
+            return;
+        }
+        if (card->getZone() != destinationStack || !destinationStack->getCards().contains(card)) {
+            qWarning() << "Ruled: canonical Stack rehome move did not retain captured card pointer on destination"
+                       << "for departing player" << departingPlayerId;
+            moveEvents.sendToGame(game);
+            return;
+        }
+
+        if (binding.hasCommittedObjectId) {
+            ruledStackObjectIdToServerCardId.insert(binding.engineOid, card->getId());
+        } else if (binding.pendingCastIndex >= 0) {
+            if (binding.pendingCastIndex >= ruledPendingCastVisualQueue.size()) {
+                qWarning() << "Ruled: canonical Stack pending cast association disappeared during rehome"
+                           << binding.transactionId << binding.casterPlayerId;
+                moveEvents.sendToGame(game);
+                return;
+            }
+            PendingRuledCastVisual &pending = ruledPendingCastVisualQueue[binding.pendingCastIndex];
+            if (pending.transactionId != binding.transactionId || pending.casterPlayerId != binding.casterPlayerId) {
+                qWarning() << "Ruled: canonical Stack pending cast identity changed during rehome"
+                           << binding.transactionId << binding.casterPlayerId;
+                moveEvents.sendToGame(game);
+                return;
+            }
+            pending.serverCardId = card->getId();
+        }
+        movedAny = true;
+    }
+
+    if (movedAny) {
+        moveEvents.sendToGame(game);
+    }
+}
+
 RuledPlayerBinding &RuledBatchSynchronizer::playerBinding(int playerId)
 {
     return playerBindings[playerId];
@@ -314,7 +471,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
         Server_CardZone *sourceZone =
             sourcePlayer ? sourcePlayer->getZones().value(pendingIt->sourceZoneName) : nullptr;
-        Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+        Server_CardZone *stackZone = canonicalStackZone();
         Server_Card *card = nullptr;
         if (stackZone) {
             const auto cardIt = std::find_if(stackZone->getCards().begin(), stackZone->getCards().end(),
@@ -352,7 +509,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
             Server_CardZone *sourceZone =
                 sourcePlayer ? sourcePlayer->getZones().value(pendingIt->sourceZoneName) : nullptr;
-            Server_CardZone *stack = ruledCanonicalStackZone(game);
+            Server_CardZone *stack = canonicalStackZone();
             if (sourceZone && stack) {
                 for (Server_Card *card : sourceZone->getCards()) {
                     if (card && card->getId() == pendingIt->serverCardId) {
@@ -371,8 +528,10 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                         }
                         move.set_card_id(sourcePosition >= 0 ? sourcePosition : card->getId());
                         GameEventStorage events;
-                        if (ruledApplyMove(cmdPlayer, events, sourceZone, stack, move, -1, 0, "commitCast"))
+                        if (ruledApplyMove(cmdPlayer, events, sourceZone, stack, move, -1, 0, "commitCast")) {
+                            pendingIt->serverCardId = card->getId();
                             events.sendToGame(game);
+                        }
                         break;
                     }
                 }
@@ -403,7 +562,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
     const auto applyBegin = [&](const auto &acceptedCast) {
         // Route committed spells to the canonical (lowest player-id) stack zone so every client's
         // stack window shows one stack. Hand sources remain in hand until commit.
-        Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+        Server_CardZone *stackZone = canonicalStackZone();
         Server_CardZone *sourceZone = nullptr;
         Server_Card *card = nullptr;
         QString sourceLabel = QStringLiteral("missing");
@@ -515,6 +674,9 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         cardToMove.set_card_id(libraryPosition >= 0 ? libraryPosition : card->getId());
         GameEventStorage moveGes;
         if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "beginCast")) {
+            // Cross-player moves assign a new destination-scoped Server_Card ID. Capture it only
+            // after success so a later cancel, StackPushed, or host rehome resolves this pointer.
+            pending.serverCardId = card->getId();
             ruledPendingCastVisualQueue.append(pending);
             moveGes.sendToGame(game);
         } else {
@@ -703,7 +865,7 @@ void RuledBatchSynchronizer::applyStackObjectCounteredEvent(const ruled::v1::Sta
 
 void RuledBatchSynchronizer::applyStackObjectsRemovedEvent(const ruled::v1::RuledEventBatch &batch)
 {
-    Server_CardZone *canonicalStack = ruledCanonicalStackZone(game);
+    Server_CardZone *canonicalStack = canonicalStackZone();
     GameEventStorage destroyEvents;
     bool queuedDestroy = false;
     for (const auto &event : batch.events()) {
@@ -824,7 +986,7 @@ void RuledBatchSynchronizer::applyStackPushBindings(const ruled::v1::RuledEventB
         }
         // Authoritative: map engine stack oid to the physical card. All spells now go into
         // the canonical zone so always look there. This runs before same-batch moves/removals.
-        Server_CardZone *spellZone = ruledCanonicalStackZone(game);
+        Server_CardZone *spellZone = canonicalStackZone();
         Server_Card *phys = spellZone ? ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName) : nullptr;
         if (phys) {
             ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());

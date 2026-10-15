@@ -311,11 +311,114 @@ protected:
         return game->ruled()->synchronizer->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
     }
 
-    void bindStackObject(quint32 engineOid, Server_Card *card, int casterPlayerId, const QString &description)
+    void bindStackObject(quint32 engineOid,
+                         Server_Card *card,
+                         int casterPlayerId,
+                         const QString &description,
+                         const QVector<quint32> &targets = {})
     {
         game->ruled()->synchronizer->ruledStackObjectIdToServerCardId.insert(engineOid, card->getId());
         game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.insert(engineOid, casterPlayerId);
         game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
+        if (!targets.isEmpty()) {
+            game->ruled()->synchronizer->ruledStackTargetsByObjectId.insert(engineOid, targets);
+        }
+    }
+
+    Server_CardZone *canonicalStackZoneForTest(int excludedPlayerId = -1) const
+    {
+        return game->ruled()->synchronizer->canonicalStackZone(excludedPlayerId);
+    }
+
+    void rehomeCanonicalStackForTest(int departingPlayerId)
+    {
+        game->ruled()->synchronizer->rehomeCanonicalStackForDeparture(departingPlayerId);
+    }
+
+    void seedPendingCastVisualForTest(int transactionId,
+                                      quint32 reservedObjectId,
+                                      Server_Card *card,
+                                      int casterPlayerId,
+                                      int sourcePlayerId,
+                                      const QString &sourceZoneName,
+                                      int sourcePosition,
+                                      int faceIndex,
+                                      const QVector<quint32> &targets)
+    {
+        RuledBatchSynchronizer::PendingRuledCastVisual pending;
+        pending.transactionId = static_cast<quint64>(transactionId);
+        pending.reservedObjectId = reservedObjectId;
+        pending.cardName = card->getName();
+        pending.serverCardId = card->getId();
+        pending.casterPlayerId = casterPlayerId;
+        pending.sourcePlayerId = sourcePlayerId;
+        pending.sourceZoneName = sourceZoneName;
+        pending.sourcePosition = sourcePosition;
+        pending.sourceCardRef = card->getCardRef();
+        pending.faceIndex = faceIndex;
+        pending.targetOids = targets;
+        game->ruled()->synchronizer->ruledPendingCastVisualQueue.append(pending);
+    }
+
+    int pendingCastServerCardId(int transactionId, int casterPlayerId) const
+    {
+        const auto &queue = game->ruled()->synchronizer->ruledPendingCastVisualQueue;
+        const auto it = std::find_if(queue.cbegin(), queue.cend(), [transactionId, casterPlayerId](const auto &pending) {
+            return pending.transactionId == static_cast<quint64>(transactionId) &&
+                   pending.casterPlayerId == casterPlayerId;
+        });
+        return it == queue.cend() ? -1 : it->serverCardId;
+    }
+
+    QString pendingCastSourceZone(int transactionId, int casterPlayerId) const
+    {
+        const auto &queue = game->ruled()->synchronizer->ruledPendingCastVisualQueue;
+        const auto it = std::find_if(queue.cbegin(), queue.cend(), [transactionId, casterPlayerId](const auto &pending) {
+            return pending.transactionId == static_cast<quint64>(transactionId) &&
+                   pending.casterPlayerId == casterPlayerId;
+        });
+        return it == queue.cend() ? QString{} : it->sourceZoneName;
+    }
+
+    int pendingCastSourcePlayer(int transactionId, int casterPlayerId) const
+    {
+        const auto &queue = game->ruled()->synchronizer->ruledPendingCastVisualQueue;
+        const auto it = std::find_if(queue.cbegin(), queue.cend(), [transactionId, casterPlayerId](const auto &pending) {
+            return pending.transactionId == static_cast<quint64>(transactionId) &&
+                   pending.casterPlayerId == casterPlayerId;
+        });
+        return it == queue.cend() ? -1 : it->sourcePlayerId;
+    }
+
+    int pendingCastSourcePosition(int transactionId, int casterPlayerId) const
+    {
+        const auto &queue = game->ruled()->synchronizer->ruledPendingCastVisualQueue;
+        const auto it = std::find_if(queue.cbegin(), queue.cend(), [transactionId, casterPlayerId](const auto &pending) {
+            return pending.transactionId == static_cast<quint64>(transactionId) &&
+                   pending.casterPlayerId == casterPlayerId;
+        });
+        return it == queue.cend() ? -1 : it->sourcePosition;
+    }
+
+    int pendingCastFaceIndex(int transactionId, int casterPlayerId) const
+    {
+        const auto &queue = game->ruled()->synchronizer->ruledPendingCastVisualQueue;
+        const auto it = std::find_if(queue.cbegin(), queue.cend(), [transactionId, casterPlayerId](const auto &pending) {
+            return pending.transactionId == static_cast<quint64>(transactionId) &&
+                   pending.casterPlayerId == casterPlayerId;
+        });
+        return it == queue.cend() ? -1 : it->faceIndex;
+    }
+
+    void removeEmptyZoneForTest(Server_Player *player, const QString &zoneName)
+    {
+        auto &zones = const_cast<QMap<QString, Server_CardZone *> &>(player->getZones());
+        delete zones.take(zoneName);
+    }
+
+    int boundStackCaster(quint32 engineOid) const
+    {
+        return game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.value(engineOid, -1);
     }
 
     void seedSyntheticStackBookkeeping(quint32 engineOid,
@@ -385,6 +488,18 @@ protected:
     void bindPublicObject(Server_Player *p, quint32 engineOid, Server_Card *card)
     {
         game->ruled()->synchronizer->playerBinding(p->getPlayerId()).registerEngineOid(engineOid, card->getId());
+    }
+
+    void bindGraveyardObject(Server_Player *p, quint32 engineOid, Server_Card *card)
+    {
+        game->ruled()->synchronizer->playerBinding(p->getPlayerId())
+            .graveyardEngineOidToServerCardId.insert(engineOid, card->getId());
+    }
+
+    void bindExileObject(Server_Player *p, quint32 engineOid, Server_Card *card)
+    {
+        game->ruled()->synchronizer->playerBinding(p->getPlayerId())
+            .exileEngineOidToServerCardId.insert(engineOid, card->getId());
     }
 
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
@@ -542,6 +657,15 @@ protected:
         const QString id = name.toLower().replace(' ', '_');
         auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
         hand->insertCard(card, -1, 0);
+        return card;
+    }
+
+    static Server_Card *addCardToStack(Server_Player *p, const QString &name)
+    {
+        Server_CardZone *stack = p->getZones().value(ZoneNames::STACK);
+        const QString id = name.toLower().replace(' ', '_');
+        auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
+        stack->insertCard(card, -1, 0);
         return card;
     }
 
@@ -5227,6 +5351,297 @@ TEST_F(RuledBatchTest, ForeignOwnedResolvingSpellUsesOwnerForEveryNonbattlefield
         EXPECT_EQ(source->getFaceDown(), testCase.destination == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY);
         ++oid;
     }
+}
+
+TEST_F(RuledBatchTest, CanonicalStackLookupUsesLowestExistingPhysicalZone)
+{
+    Server_CardZone *p1Stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(p1Stack, nullptr);
+    ASSERT_NE(p2Stack, nullptr);
+    EXPECT_EQ(canonicalStackZoneForTest(), p1Stack);
+
+    // Conceded is a server cleanup flag, not engine liveness. An extant physical Stack stays eligible.
+    p1->setConceded(true);
+    EXPECT_EQ(canonicalStackZoneForTest(), p1Stack);
+    EXPECT_EQ(canonicalStackZoneForTest(p1->getPlayerId()), p2Stack);
+    p1->setConceded(false);
+
+    removeEmptyZoneForTest(p1, ZoneNames::STACK);
+    EXPECT_EQ(canonicalStackZoneForTest(), p2Stack)
+        << "lookup must skip a lower-ID participant whose Stack zone no longer exists";
+    EXPECT_EQ(canonicalStackZoneForTest(p2->getPlayerId()), nullptr);
+}
+
+TEST_F(RuledBatchTest, CanonicalStackRehomeKeepsSameNamePointerOrderAcrossScopedIdCollision)
+{
+    Server_CardZone *p1Stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(p1Stack, nullptr);
+    ASSERT_NE(p2Stack, nullptr);
+    Server_Card *first = addCardToStack(p1, QStringLiteral("Lightning Bolt"));
+    Server_Card *second = addCardToStack(p1, QStringLiteral("Lightning Bolt"));
+    ASSERT_EQ(first->getId(), 0);
+    ASSERT_EQ(second->getId(), 1);
+    ASSERT_EQ(p1Stack->getCards(), (QList<Server_Card *>{first, second}));
+
+    // B's first rehosted card gets ID 1, aliasing the still-unmoved second source card's old ID.
+    addCardToHand(p2, QStringLiteral("Unrelated card"));
+    bindStackObject(710u, first, p2->getPlayerId(), QStringLiteral("Lightning Bolt"), {31u, 32u});
+    bindStackObject(711u, second, p2->getPlayerId(), QStringLiteral("Lightning Bolt"), {33u});
+
+    rehomeCanonicalStackForTest(p1->getPlayerId());
+
+    EXPECT_TRUE(p1Stack->getCards().isEmpty());
+    EXPECT_EQ(p2Stack->getCards(), (QList<Server_Card *>{first, second}));
+    EXPECT_EQ(first->getZone(), p2Stack);
+    EXPECT_EQ(second->getZone(), p2Stack);
+    EXPECT_EQ(first->getId(), 1);
+    EXPECT_EQ(second->getId(), 2);
+    EXPECT_EQ(boundStackServerCardId(710u), first->getId());
+    EXPECT_EQ(boundStackServerCardId(711u), second->getId());
+    EXPECT_EQ(boundStackCaster(710u), p2->getPlayerId());
+    EXPECT_EQ(boundStackCaster(711u), p2->getPlayerId());
+    EXPECT_EQ(boundStackTargets(710u), (QVector<quint32>{31u, 32u}));
+    EXPECT_EQ(boundStackTargets(711u), (QVector<quint32>{33u}));
+
+    const auto maps = appendedServerMaps();
+    const auto mapEvent = std::find_if(maps.events().begin(), maps.events().end(),
+                                       [](const auto &event) { return event.has_battlefield_object_map(); });
+    ASSERT_NE(mapEvent, maps.events().end());
+    for (const auto &[oid, card] : std::array<std::pair<quint32, Server_Card *>, 2>{{{710u, first}, {711u, second}}}) {
+        const auto entry = std::find_if(mapEvent->battlefield_object_map().entries().begin(),
+                                       mapEvent->battlefield_object_map().entries().end(),
+                                       [oid](const auto &candidate) { return candidate.engine_object_id() == oid; });
+        ASSERT_NE(entry, mapEvent->battlefield_object_map().entries().end());
+        EXPECT_EQ(entry->player_id(), p2->getPlayerId());
+        EXPECT_EQ(entry->server_card_id(), card->getId());
+    }
+}
+
+struct PublicPendingCastScenario
+{
+    bool exileSource;
+    bool commit;
+};
+
+class PublicPendingStackRehomeTest : public RuledBatchTest,
+                                    public ::testing::WithParamInterface<PublicPendingCastScenario>
+{
+};
+
+TEST_P(PublicPendingStackRehomeTest, AcceptedPublicBeginSurvivesHostDepartureForCommitOrCancel)
+{
+    const PublicPendingCastScenario scenario = GetParam();
+    const QString cardName = scenario.exileSource ? QStringLiteral("Airbent Bears")
+                                                  : QStringLiteral("Unending Whisper");
+    const QString cardId = cardName.toLower().replace(QLatin1Char(' '), QLatin1Char('_'));
+    const QString sourceZoneName = scenario.exileSource ? ZoneNames::EXILE : ZoneNames::GRAVE;
+    seedCardCatalog({cardName});
+
+    Server_CardZone *sourceZone = p2->getZones().value(sourceZoneName);
+    Server_CardZone *p1Stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(sourceZone, nullptr);
+    ASSERT_NE(p1Stack, nullptr);
+    ASSERT_NE(p2Stack, nullptr);
+    if (scenario.exileSource) {
+        addCardToExile(p2, QStringLiteral("Unrelated card"));
+    } else {
+        addCardToGraveyard(p2, QStringLiteral("Unrelated card"));
+    }
+    Server_Card *sourceCard = scenario.exileSource ? addCardToExile(p2, cardName) : addCardToGraveyard(p2, cardName);
+    const CardRef originalCardRef = sourceCard->getCardRef();
+    const int originalSourceId = sourceCard->getId();
+    const int originalPosition = sourceZone->getCards().indexOf(sourceCard);
+    ASSERT_EQ(originalPosition, 0);
+    constexpr quint32 sourceOid = 712u;
+    constexpr quint32 reservedOid = 713u;
+    constexpr int transactionId = 714;
+    constexpr quint32 targetOid = 715u;
+    if (scenario.exileSource) {
+        bindExileObject(p2, sourceOid, sourceCard);
+    } else {
+        bindGraveyardObject(p2, sourceOid, sourceCard);
+    }
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    if (scenario.exileSource) {
+        announcement->mutable_source()->set_exile_object_id(sourceOid);
+    } else {
+        announcement->mutable_source()->set_graveyard_object_id(sourceOid);
+    }
+    auto *target = announcement->add_targets();
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    target->set_object_id(targetOid);
+
+    ruled::v1::IpcResponse acceptedBegin;
+    acceptedBegin.set_ok(true);
+    auto *pending = (*acceptedBegin.mutable_batch()->mutable_legal_by_player())[p2->getPlayerId()]
+                        .mutable_pending_spell_cast();
+    pending->set_transaction_id(transactionId);
+    pending->set_reserved_object_id(reservedOid);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p2->getPlayerId(), begin, acceptedBegin);
+
+    ASSERT_TRUE(p1Stack->getCards().contains(sourceCard));
+    ASSERT_TRUE(p2Stack->getCards().isEmpty());
+    ASSERT_NE(sourceCard->getId(), originalSourceId)
+        << "BEGIN crosses to A's scoped ID namespace before host departure";
+    EXPECT_EQ(pendingCastServerCardId(transactionId, p2->getPlayerId()), sourceCard->getId());
+    EXPECT_EQ(pendingCastSourceZone(transactionId, p2->getPlayerId()), sourceZoneName);
+    EXPECT_EQ(pendingCastSourcePlayer(transactionId, p2->getPlayerId()), p2->getPlayerId());
+    EXPECT_EQ(pendingCastSourcePosition(transactionId, p2->getPlayerId()), originalPosition);
+    EXPECT_EQ(pendingCastFaceIndex(transactionId, p2->getPlayerId()), 0);
+    EXPECT_EQ(boundStackServerCardId(reservedOid), -1)
+        << "a reservation is not yet a committed StackPushed binding";
+
+    rehomeCanonicalStackForTest(p1->getPlayerId());
+    ASSERT_TRUE(p1Stack->getCards().isEmpty());
+    ASSERT_EQ(p2Stack->getCards(), (QList<Server_Card *>{sourceCard}));
+    EXPECT_EQ(sourceCard->getZone(), p2Stack);
+    EXPECT_EQ(pendingCastServerCardId(transactionId, p2->getPlayerId()), sourceCard->getId());
+    EXPECT_EQ(pendingCastSourceZone(transactionId, p2->getPlayerId()), sourceZoneName);
+    EXPECT_EQ(pendingCastSourcePlayer(transactionId, p2->getPlayerId()), p2->getPlayerId());
+    EXPECT_EQ(pendingCastSourcePosition(transactionId, p2->getPlayerId()), originalPosition);
+    EXPECT_EQ(sourceCard->getCardRef(), originalCardRef);
+    EXPECT_EQ(boundStackServerCardId(reservedOid), -1);
+
+    removeEmptyZoneForTest(p1, ZoneNames::STACK);
+    if (scenario.commit) {
+        ruled::v1::RuledCommand commit;
+        commit.mutable_commit_spell_cast()->set_transaction_id(transactionId);
+        applyAcceptedCommandVisuals(p2->getPlayerId(), commit);
+
+        ruled::v1::IpcResponse pushed;
+        pushed.set_ok(true);
+        auto *stackPush = pushed.mutable_batch()->add_events()->mutable_stack_pushed();
+        stackPush->set_object_id(reservedOid);
+        stackPush->set_card_id(cardId.toStdString());
+        stackPush->set_description(cardName.toStdString());
+        auto *pushedTarget = stackPush->add_targets();
+        pushedTarget->set_object_id(targetOid);
+        callBatchApply(pushed);
+
+        EXPECT_EQ(pendingCastVisualCount(), 0);
+        EXPECT_EQ(boundStackServerCardId(reservedOid), sourceCard->getId());
+        EXPECT_EQ(boundStackCaster(reservedOid), p2->getPlayerId());
+        EXPECT_EQ(boundStackTargets(reservedOid), (QVector<quint32>{targetOid}));
+        EXPECT_EQ(sourceCard->getZone(), p2Stack);
+    } else {
+        ruled::v1::RuledCommand cancel;
+        cancel.mutable_cancel_spell_cast()->set_transaction_id(transactionId);
+        applyAcceptedCommandVisuals(p2->getPlayerId(), cancel);
+
+        EXPECT_EQ(pendingCastVisualCount(), 0);
+        EXPECT_TRUE(p2Stack->getCards().isEmpty());
+        EXPECT_EQ(sourceZone->getCards().at(originalPosition), sourceCard);
+        EXPECT_EQ(sourceCard->getZone(), sourceZone);
+        EXPECT_EQ(sourceCard->getCardRef(), originalCardRef)
+            << "cancel restores the exact original CardRef after both cross-player moves";
+        EXPECT_EQ(boundStackServerCardId(reservedOid), -1);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(GraveyardAndExile,
+                         PublicPendingStackRehomeTest,
+                         ::testing::Values(PublicPendingCastScenario{false, true},
+                                           PublicPendingCastScenario{false, false},
+                                           PublicPendingCastScenario{true, true},
+                                           PublicPendingCastScenario{true, false}),
+                         [](const ::testing::TestParamInfo<PublicPendingCastScenario> &info) {
+                             const QString zone = info.param.exileSource ? QStringLiteral("Exile")
+                                                                        : QStringLiteral("Graveyard");
+                             return (zone + (info.param.commit ? QStringLiteral("Commit")
+                                                              : QStringLiteral("Cancel")))
+                                 .toStdString();
+                         });
+
+struct DeferredPrivateCastScenario
+{
+    bool librarySource;
+};
+
+class DeferredPrivateStackRehomeTest : public RuledBatchTest,
+                                       public ::testing::WithParamInterface<DeferredPrivateCastScenario>
+{
+};
+
+TEST_P(DeferredPrivateStackRehomeTest, PrivateReservationCollisionDoesNotCaptureCommittedStackCard)
+{
+    const QString sourceZoneName = GetParam().librarySource ? ZoneNames::DECK : ZoneNames::HAND;
+    Server_CardZone *privateZone = p2->getZones().value(sourceZoneName);
+    Server_CardZone *p1Stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(privateZone, nullptr);
+    ASSERT_NE(p1Stack, nullptr);
+    ASSERT_NE(p2Stack, nullptr);
+
+    Server_Card *privateCard = GetParam().librarySource ? addCardToDeck(p2, QStringLiteral("Lightning Bolt"))
+                                                       : addCardToHand(p2, QStringLiteral("Lightning Bolt"));
+    const int privateCardId = privateCard->getId();
+    Server_Card *first = addCardToStack(p1, QStringLiteral("Lightning Bolt"));
+    Server_Card *second = addCardToStack(p1, QStringLiteral("Lightning Bolt"));
+    ASSERT_EQ(privateCardId, first->getId());
+    bindStackObject(716u, first, p1->getPlayerId(), QStringLiteral("Lightning Bolt"), {41u});
+    bindStackObject(717u, second, p2->getPlayerId(), QStringLiteral("Lightning Bolt"), {42u});
+    constexpr int transactionId = 718;
+    constexpr quint32 reservedOid = 719u;
+    seedPendingCastVisualForTest(transactionId,
+                                 reservedOid,
+                                 privateCard,
+                                 p2->getPlayerId(),
+                                 p2->getPlayerId(),
+                                 sourceZoneName,
+                                 privateZone->getCards().indexOf(privateCard),
+                                 1,
+                                 {43u});
+
+    rehomeCanonicalStackForTest(p1->getPlayerId());
+
+    EXPECT_EQ(p1Stack->getCards().size(), 0);
+    EXPECT_EQ(p2Stack->getCards(), (QList<Server_Card *>{first, second}));
+    EXPECT_EQ(boundStackServerCardId(716u), first->getId());
+    EXPECT_EQ(boundStackServerCardId(717u), second->getId());
+    EXPECT_EQ(boundStackTargets(716u), (QVector<quint32>{41u}));
+    EXPECT_EQ(boundStackTargets(717u), (QVector<quint32>{42u}));
+    EXPECT_EQ(privateCard->getZone(), privateZone);
+    EXPECT_TRUE(privateZone->getCards().contains(privateCard));
+    EXPECT_EQ(privateCard->getId(), privateCardId);
+    EXPECT_EQ(pendingCastServerCardId(transactionId, p2->getPlayerId()), privateCardId);
+    EXPECT_EQ(pendingCastSourceZone(transactionId, p2->getPlayerId()), sourceZoneName);
+    EXPECT_EQ(pendingCastSourcePlayer(transactionId, p2->getPlayerId()), p2->getPlayerId());
+    EXPECT_EQ(pendingCastSourcePosition(transactionId, p2->getPlayerId()), 0);
+    EXPECT_EQ(pendingCastFaceIndex(transactionId, p2->getPlayerId()), 1);
+    EXPECT_EQ(boundStackServerCardId(reservedOid), -1);
+}
+
+INSTANTIATE_TEST_SUITE_P(HandAndLibrary,
+                         DeferredPrivateStackRehomeTest,
+                         ::testing::Values(DeferredPrivateCastScenario{false}, DeferredPrivateCastScenario{true}),
+                         [](const ::testing::TestParamInfo<DeferredPrivateCastScenario> &info) {
+                             return info.param.librarySource ? "Library" : "Hand";
+                         });
+
+TEST_F(RuledBatchTest, ServerAllZoneCleanupStillClearsTheBoardWithoutRehosting)
+{
+    Server_CardZone *p1Stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    Server_Card *spell = addCardToStack(p1, QStringLiteral("Lightning Bolt"));
+    bindStackObject(720u, spell, p2->getPlayerId(), QStringLiteral("Lightning Bolt"));
+    p1->setConceded(true);
+
+    rehomeCanonicalStackForTest(p1->getPlayerId());
+    ASSERT_EQ(p1Stack->getCards(), (QList<Server_Card *>{spell}))
+        << "the exact server cleanup predicate skips an unnecessary host transfer";
+    EXPECT_TRUE(p2Stack->getCards().isEmpty());
+
+    // This is the legacy Servatrice cleanup predicate, not evidence about engine terminal status.
+    game->stopGameIfFinished();
+    EXPECT_TRUE(p1Stack->getCards().isEmpty());
+    EXPECT_TRUE(p2Stack->getCards().isEmpty());
 }
 
 TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBinding)

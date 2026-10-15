@@ -222,6 +222,9 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
         synchronizer->revealFaceDownPermanentsOnConcede(playerId, ges);
     synchronizer->applyAcceptedCommandVisuals(playerId, ruledCmd, resp);
     const RuledBatchSynchronizer::BatchApplyResult batchResult = synchronizer->applyBatch(resp);
+    if (internalDeparture) {
+        synchronizer->rehomeCanonicalStackForDeparture(playerId);
+    }
     if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();

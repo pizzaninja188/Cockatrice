@@ -2003,6 +2003,12 @@ void RuledEventDispatcher::applyResolutionChoiceProgress(const ruled::v1::Resolu
 
 void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx)
 {
+    QHash<quint32, QPair<int, int>> previousStackBindings;
+    for (const quint32 oid : state->stackOidOrder) {
+        previousStackBindings.insert(
+            oid, qMakePair(state->engineOidOwner.value(oid, -1), state->engineOidToCardId.value(oid, -1)));
+    }
+
     state->ownerCardIdToEngineOid.clear();
     state->engineOidToCardId.clear();
     state->engineOidOwner.clear();
@@ -2070,6 +2076,17 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
             const int ctrlPid = state->syntheticAbilityControllerPid.value(sit.key(), localPid);
             state->ownerCardIdToEngineOid.insert(RuledClientState::makeOwnedCardKey(ctrlPid, sit.value()), sit.key());
             state->engineOidToCardId.insert(sit.key(), sit.value());
+        }
+    }
+    for (auto it = previousStackBindings.constBegin(); it != previousStackBindings.constEnd(); ++it) {
+        const int owner = state->engineOidOwner.value(it.key(), -1);
+        const int serverCardId = state->engineOidToCardId.value(it.key(), -1);
+        if (owner != it.value().first || serverCardId != it.value().second) {
+            // Card movement reaches the Stack before this identity map in the batch. Invalidate
+            // both StackZone layout and the open window's owner binding only after the new map is
+            // installed; pending reservations outside stackOidOrder remain unpublished.
+            ctx.stackTrackingDirty = true;
+            break;
         }
     }
     ctx.battlefieldMapDirty = true;

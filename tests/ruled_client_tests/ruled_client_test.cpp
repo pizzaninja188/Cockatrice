@@ -4101,6 +4101,102 @@ TEST_F(RuledClientTest, PhysicalStackCardIsPublishedOnlyAfterStackPushed)
     EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, physicalCardId));
 }
 
+TEST_F(RuledClientTest, StackBindingRehomeRefreshesPresentationWithoutPublishingPendingCards)
+{
+    constexpr quint32 firstStackOid = 10;
+    constexpr quint32 secondStackOid = 11;
+    constexpr quint32 pendingStackOid = 12;
+    QSignalSpy hasItemsSpy(state, &RuledClientState::stackHasItemsChanged);
+    QSignalSpy orderSpy(state, &RuledClientState::stackOrderChanged);
+
+    const auto addStackBinding = [](ruled::v1::RuledEvent *event, int playerId, quint32 oid, int serverCardId) {
+        auto *entry = event->mutable_battlefield_object_map()->add_entries();
+        entry->set_player_id(playerId);
+        entry->set_engine_object_id(oid);
+        entry->set_server_card_id(serverCardId);
+    };
+
+    ruled::v1::RuledEventBatch pendingOnly;
+    addStackBinding(pendingOnly.add_events(), kLocalPlayer, pendingStackOid, 42);
+    apply(pendingOnly);
+    EXPECT_FALSE(state->hasStackItems());
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, 42))
+        << "a reserved physical card is not public until its oid is in StackPushed order";
+    EXPECT_EQ(hasItemsSpy.count(), 0)
+        << "a pending reservation alone must not open the ruled Stack window";
+    EXPECT_EQ(orderSpy.count(), 0);
+
+    ruled::v1::RuledEventBatch initialStack;
+    auto *initialMap = initialStack.add_events();
+    addStackBinding(initialMap, kLocalPlayer, firstStackOid, 40);
+    addStackBinding(initialMap, kLocalPlayer, secondStackOid, 41);
+    addStackBinding(initialMap, kLocalPlayer, pendingStackOid, 42);
+    initialStack.add_events()->mutable_stack_pushed()->set_object_id(firstStackOid);
+    initialStack.add_events()->mutable_stack_pushed()->set_object_id(secondStackOid);
+    apply(initialStack);
+
+    ASSERT_EQ(state->getStackOidOrder(), QList<quint32>({secondStackOid, firstStackOid}));
+    ASSERT_TRUE(state->isPublishedStackCard(kLocalPlayer, 40));
+    ASSERT_TRUE(state->isPublishedStackCard(kLocalPlayer, 41));
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, 42));
+    ASSERT_EQ(hasItemsSpy.count(), 1);
+    ASSERT_EQ(orderSpy.count(), 1);
+
+    ruled::v1::RuledEventBatch rehomedMap;
+    auto *rehomed = rehomedMap.add_events();
+    // Stack OIDs are unchanged; only their physical owner and player-scoped card ids moved.
+    addStackBinding(rehomed, kOpponent, firstStackOid, 41);
+    addStackBinding(rehomed, kOpponent, secondStackOid, 42);
+    // The pending reservation also follows its exact physical card but remains unpublished.
+    addStackBinding(rehomed, kOpponent, pendingStackOid, 43);
+
+    const auto rehomeIsSettled = [this, firstStackOid, secondStackOid] {
+        return state->engineOidOwner.value(firstStackOid, -1) == kOpponent &&
+               state->engineOidToCardId.value(firstStackOid, -1) == 41 &&
+               state->engineOidOwner.value(secondStackOid, -1) == kOpponent &&
+               state->engineOidToCardId.value(secondStackOid, -1) == 42 &&
+               state->engineOidOwner.value(pendingStackOid, -1) == kOpponent &&
+               state->engineOidToCardId.value(pendingStackOid, -1) == 43 &&
+               state->getStackOidOrder() == QList<quint32>({secondStackOid, firstStackOid}) &&
+               state->isPublishedStackCard(kOpponent, 41) && state->isPublishedStackCard(kOpponent, 42) &&
+               !state->isPublishedStackCard(kOpponent, 43);
+    };
+    QVector<bool> hasItemsSawSettledRehome;
+    QVector<bool> orderSawSettledRehome;
+    QObject::connect(state, &RuledClientState::stackHasItemsChanged, state, [&, rehomeIsSettled](bool hasItems) {
+        hasItemsSawSettledRehome.append(hasItems && rehomeIsSettled());
+    });
+    QObject::connect(state, &RuledClientState::stackOrderChanged, state, [&, rehomeIsSettled](const QList<quint32> &) {
+        orderSawSettledRehome.append(rehomeIsSettled());
+    });
+    apply(rehomedMap);
+
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({secondStackOid, firstStackOid}));
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, 40));
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, 41));
+    EXPECT_TRUE(state->isPublishedStackCard(kOpponent, 41));
+    EXPECT_TRUE(state->isPublishedStackCard(kOpponent, 42));
+    EXPECT_FALSE(state->isPublishedStackCard(kOpponent, 43))
+        << "refreshing the physical binding must not publish an uncommitted cast reservation";
+    EXPECT_EQ(hasItemsSpy.count(), 2)
+        << "the open Stack window must reselect the survivor's zone after its map is current";
+    EXPECT_EQ(orderSpy.count(), 2)
+        << "StackZone and its view re-sort only after this signal, so a physical owner/id rebind must invalidate layout even when oid order is unchanged";
+    EXPECT_EQ(hasItemsSawSettledRehome, QVector<bool>({true}))
+        << "the open Stack window must receive its refresh only after survivor card bindings are current";
+    EXPECT_EQ(orderSawSettledRehome, QVector<bool>({true}))
+        << "StackZone layout must refresh only after survivor card bindings are current";
+
+    ruled::v1::RuledEventBatch unchangedMap;
+    auto *unchanged = unchangedMap.add_events();
+    addStackBinding(unchanged, kOpponent, firstStackOid, 41);
+    addStackBinding(unchanged, kOpponent, secondStackOid, 42);
+    addStackBinding(unchanged, kOpponent, pendingStackOid, 43);
+    apply(unchangedMap);
+    EXPECT_EQ(hasItemsSpy.count(), 2) << "an unchanged full map must not reopen or rebind the Stack window";
+    EXPECT_EQ(orderSpy.count(), 2) << "an unchanged full map must not force another Stack layout pass";
+}
+
 TEST_F(RuledClientTest, StackPushPreservesEveryTypedTargetWithoutPlayerIdCollisions)
 {
     ruled::v1::RuledEventBatch batch;

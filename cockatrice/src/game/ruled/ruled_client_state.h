@@ -2216,9 +2216,9 @@ signals:
     void undoableManaAbilitiesChanged(int count);
     /// One player's public restricted pool snapshot changed.
     void restrictedManaChanged(int playerId);
-    /// Emitted at the end of each ruled event batch when the stack OID order changes.
-    /// Front of list = most recently pushed = resolves first. Triggers a visual re-sort
-    /// of the stack window, which may have received Event_MoveCard before stack_pushed.
+    /// Emitted at the end of each ruled event batch when stack order or a committed card's
+    /// physical binding changes. Front of list = most recently pushed = resolves first. Also
+    /// refreshes StackZone after Event_MoveCard may precede the settled object map.
     void stackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void triggerNeedsTarget(QString abilityText);

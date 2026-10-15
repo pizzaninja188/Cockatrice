@@ -3,6 +3,8 @@
 #include <libcockatrice/protocol/pb/command_concede.pb.h>
 #include <libcockatrice/protocol/pb/command_leave_game.pb.h>
 #include <libcockatrice/protocol/pb/event_destroy_card.pb.h>
+#include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
+#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 
 namespace ruled_e2e
 {
@@ -14,10 +16,14 @@ public:
     using SmokeClient::SmokeClient;
     int expectedConceder = -1;
     bool sawEngineConcession = false;
+    int completedRuledBatches = 0;
     int expectedWinner = -1;
     bool sawEngineWinner = false;
     std::vector<std::pair<int, int>> destroyedStackCards;
+    std::map<quint32, int> serverCardOwnerByEngineOid;
     std::vector<quint32> lightningBoltStackOids;
+    std::vector<ruled::v1::StackPushed> stackPushedEvents;
+    std::vector<QString> departureEventOrder;
     std::vector<quint32> removedStackObjectOids;
     std::vector<quint32> pushedAndRemovedInSameBatch;
     std::vector<quint32> pushedInCurrentBatch;
@@ -29,6 +35,15 @@ public:
     }
     void onPhysicalEvent(const GameEvent &event) override
     {
+        if (event.HasExtension(Event_GameStateChanged::ext))
+            departureEventOrder.push_back(QStringLiteral("snapshot"));
+        if (event.HasExtension(Event_MoveCard::ext)) {
+            const auto &move = event.GetExtension(Event_MoveCard::ext);
+            if (move.start_zone() == ZoneNames::STACK && move.target_zone() == ZoneNames::STACK &&
+                move.start_player_id() == expectedConceder) {
+                departureEventOrder.push_back(QStringLiteral("stack-move"));
+            }
+        }
         if (event.HasExtension(Event_DestroyCard::ext)) {
             const auto &destroyed = event.GetExtension(Event_DestroyCard::ext);
             if (destroyed.zone_name() == ZoneNames::STACK) {
@@ -38,8 +53,16 @@ public:
     }
     void onRuledEvent(const ruled::v1::RuledEvent &event) override
     {
-        if (event.has_stack_pushed() && event.stack_pushed().card_id() == "lightning_bolt") {
-            lightningBoltStackOids.push_back(event.stack_pushed().object_id());
+        if (event.has_battlefield_object_map()) {
+            departureEventOrder.push_back(QStringLiteral("object-map"));
+            serverCardOwnerByEngineOid.clear();
+            for (const auto &entry : event.battlefield_object_map().entries())
+                serverCardOwnerByEngineOid[entry.engine_object_id()] = entry.player_id();
+        }
+        if (event.has_stack_pushed()) {
+            stackPushedEvents.push_back(event.stack_pushed());
+            if (event.stack_pushed().card_id() == "lightning_bolt")
+                lightningBoltStackOids.push_back(event.stack_pushed().object_id());
         }
         if (event.has_stack_pushed() && event.stack_pushed().card_id() == "bitter_triumph") {
             pushedInCurrentBatch.push_back(event.stack_pushed().object_id());
@@ -57,6 +80,7 @@ public:
     }
     void onBatchEventsComplete(const ruled::v1::RuledEventBatch &) override
     {
+        ++completedRuledBatches;
         for (const quint32 pushed : pushedInCurrentBatch) {
             if (std::find(removedInCurrentBatch.begin(), removedInCurrentBatch.end(), pushed) !=
                 removedInCurrentBatch.end()) {
@@ -64,6 +88,10 @@ public:
             }
         }
     }
+};
+
+class CanonicalStackHostDepartureTest : public RuledE2ESmokeTest, public ::testing::WithParamInterface<bool>
+{
 };
 
 TEST_F(RuledE2ESmokeTest, ThreeClientsRotateTurnsThenConcedeAndLeave)
@@ -581,6 +609,729 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
     EXPECT_EQ(p1.counteredStackObjectIds.count(payerBoltOid), 0u)
         << "departure removes B's spell without claiming a counter";
 }
+
+TEST_P(CanonicalStackHostDepartureTest, RehomesSurvivorSpellsBeforeTheCanonicalHostLeaves)
+{
+    const bool useLeaveGame = GetParam();
+    const auto started = startServers();
+    if (!started)
+        FAIL() << started.message();
+    if (const std::string message = started.message(); message.rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << message.substr(5);
+
+    DepartureObserver p1(QStringLiteral("stack-host-a"), &transcript);
+    DepartureObserver p2(QStringLiteral("stack-host-b"), &transcript);
+    DepartureObserver p3(QStringLiteral("stack-host-c"), &transcript);
+    std::array<SmokeClient *, 3> clients{&p1, &p2, &p3};
+    for (auto *client : clients)
+        ASSERT_TRUE(client->loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame(3));
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p3.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p3.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    for (auto *client : clients)
+        client->sendReady();
+    for (auto *client : clients) {
+        ASSERT_TRUE(client->pumpUntil([&] { return client->gameStarted && client->stateVersion > 0; }, 20000,
+                                      "canonical-stack-host game start"));
+        ASSERT_TRUE(client->publishMain1Stops());
+    }
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    std::map<int, quint64> actedAtVersion;
+    int keeps = 0;
+    bool choseFirst = false;
+    const auto allAtMain = [&] {
+        return std::all_of(clients.begin(), clients.end(), [](const auto *client) {
+            return client->gameStarted && client->stateVersion > 0 &&
+                   client->phase == ruled::v1::PHASE_ID_MAIN1;
+        });
+    };
+    while (!allAtMain() && openingDeadline.elapsed() < 30000) {
+        for (auto *client : clients)
+            client->pump(20);
+        for (auto *client : clients) {
+            if (!client->gameStarted || client->stateVersion == 0 ||
+                actedAtVersion[client->myId] == client->stateVersion)
+                continue;
+            const auto &opening = client->latestLegal.opening();
+            ruled::v1::RuledCommand command;
+            if (!choseFirst && opening.stage() == ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                opening.eligible_starting_player_ids_size() > 0) {
+                command.mutable_choose_starting_player()->set_starting_player_id(p1.myId);
+                choseFirst = true;
+                client->sendRuled(command, QStringLiteral("choose stack host A to start"));
+            } else if (opening.stage() == ruled::v1::OPENING_STAGE_MULLIGAN && opening.can_keep()) {
+                command.mutable_mulligan()->set_keep(true);
+                ++keeps;
+                client->sendRuled(command, QStringLiteral("keep canonical-stack-host hand"));
+            } else if (client->priorityPlayer == client->myId && client->phase != ruled::v1::PHASE_ID_MAIN1 &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_MULLIGAN) {
+                command.mutable_pass_priority();
+                client->sendRuled(command, QStringLiteral("advance to canonical-stack-host main phase"));
+            } else {
+                continue;
+            }
+            actedAtVersion[client->myId] = client->stateVersion;
+        }
+    }
+    ASSERT_TRUE(allAtMain());
+    ASSERT_TRUE(choseFirst);
+    ASSERT_EQ(keeps, 3);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_EQ(p1.myId, std::min({p1.myId, p2.myId, p3.myId}))
+        << "A must be the lowest-ID physical host in this scenario";
+
+    auto sendAndSettle = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 commandId = sender.nextCmdId;
+        const std::array<quint64, 3> before{p1.stateVersion, p2.stateVersion, p3.stateVersion};
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (sender.responses.count(commandId) == 0 && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        if (sender.responses.count(commandId) == 0 || sender.responses.at(commandId).response_code() != Response::RespOk)
+            return false;
+        wait.restart();
+        const auto allUpdated = [&] {
+            return p1.stateVersion > before[0] && p2.stateVersion > before[1] && p3.stateVersion > before[2];
+        };
+        while (!allUpdated() && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        return allUpdated();
+    };
+    auto devPut = [&](int targetPlayer, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+        return sendAndSettle(p1, command, QStringLiteral("dev: put %1 into hand").arg(QString::fromLatin1(name)));
+    };
+    auto devMana = [&](int targetPlayer) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        dev->mutable_add_mana()->set_r(1);
+        return sendAndSettle(p1, command, QStringLiteral("dev: add red mana"));
+    };
+    auto passPriority = [&](SmokeClient &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndSettle(sender, command, QStringLiteral("pass priority in host-departure scenario"));
+    };
+
+    ASSERT_TRUE(devPut(p2.myId, "Lightning Bolt"));
+    ASSERT_TRUE(devMana(p2.myId));
+    ASSERT_TRUE(devPut(p3.myId, "Lightning Bolt"));
+    ASSERT_TRUE(devMana(p3.myId));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_EQ(p2.priorityPlayer, p2.myId);
+
+    const auto *boltForB = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"));
+    ASSERT_NE(boltForB, nullptr);
+    ruled::v1::RuledCommand castB;
+    castB.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    castB.mutable_cast_spell()->mutable_source()->set_hand_index(boltForB->hand_index());
+    castB.mutable_cast_spell()->add_targets()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    castB.mutable_cast_spell()->mutable_targets(0)->set_object_id(p3.myId);
+    ASSERT_TRUE(sendAndSettle(p2, castB, QStringLiteral("B casts Lightning Bolt at C")));
+    ASSERT_EQ(p3.lightningBoltStackOids.size(), 1u);
+    const quint32 bBoltOid = p3.lightningBoltStackOids.back();
+    ASSERT_TRUE(p3.serverCardByEngineOid.count(bBoltOid));
+    const int bBoltOldServerId = p3.serverCardByEngineOid.at(bBoltOid);
+    ASSERT_TRUE(p3.serverCardOwnerByEngineOid.count(bBoltOid));
+    ASSERT_EQ(p3.serverCardOwnerByEngineOid.at(bBoltOid), p1.myId);
+
+    ASSERT_TRUE(passPriority(p2));
+    ASSERT_EQ(p3.priorityPlayer, p3.myId);
+    const auto *boltForC = p3.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"));
+    ASSERT_NE(boltForC, nullptr);
+    ruled::v1::RuledCommand castC;
+    castC.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    castC.mutable_cast_spell()->mutable_source()->set_hand_index(boltForC->hand_index());
+    castC.mutable_cast_spell()->add_targets()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    castC.mutable_cast_spell()->mutable_targets(0)->set_object_id(p2.myId);
+    ASSERT_TRUE(sendAndSettle(p3, castC, QStringLiteral("C casts same-name Lightning Bolt at B")));
+    ASSERT_EQ(p3.lightningBoltStackOids.size(), 2u);
+    const quint32 cBoltOid = p3.lightningBoltStackOids.back();
+    ASSERT_NE(bBoltOid, cBoltOid);
+    ASSERT_TRUE(p3.serverCardByEngineOid.count(cBoltOid));
+    const int cBoltOldServerId = p3.serverCardByEngineOid.at(cBoltOid);
+    ASSERT_TRUE(p3.serverCardOwnerByEngineOid.count(cBoltOid));
+    ASSERT_EQ(p3.serverCardOwnerByEngineOid.at(cBoltOid), p1.myId);
+    ASSERT_TRUE(passPriority(p3));
+
+    p2.expectedConceder = p1.myId;
+    p3.expectedConceder = p1.myId;
+    const quint64 p2BeforeDeparture = p2.stateVersion;
+    const quint64 p3BeforeDeparture = p3.stateVersion;
+    if (useLeaveGame) {
+        CommandContainer leave;
+        leave.set_game_id(p1.gameId);
+        leave.add_game_command()->MutableExtension(Command_LeaveGame::ext);
+        p1.sendContainer(leave);
+    } else {
+        CommandContainer concede;
+        concede.set_game_id(p1.gameId);
+        concede.add_game_command()->MutableExtension(Command_Concede::ext);
+        const quint64 commandId = p1.nextCmdId;
+        p1.sendContainer(concede);
+        ASSERT_TRUE(p1.pumpUntil([&] { return p1.responses.count(commandId) > 0; }, 10000,
+                                 "canonical host concession response"));
+        ASSERT_EQ(p1.responses[commandId].response_code(), Response::RespOk);
+    }
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.sawEngineConcession && p2.stateVersion > p2BeforeDeparture; }, 10000,
+                             "engine departure batch at B"));
+    ASSERT_TRUE(p3.pumpUntil([&] { return p3.sawEngineConcession && p3.stateVersion > p3BeforeDeparture; }, 10000,
+                             "engine departure batch at C"));
+    p2.pump(100);
+    p3.pump(100);
+
+    const auto migrationMoves = [&](const DepartureObserver &client) {
+        std::vector<Event_MoveCard> moves;
+        for (const auto &move : client.physicalMoveEvents) {
+            if (move.start_zone() == ZoneNames::STACK && move.target_zone() == ZoneNames::STACK &&
+                move.start_player_id() == p1.myId && move.target_player_id() == p2.myId) {
+                moves.push_back(move);
+            }
+        }
+        return moves;
+    };
+    for (const auto *client : {&p2, &p3}) {
+        const auto moves = migrationMoves(*client);
+        ASSERT_EQ(moves.size(), 2u) << "both survivor spells must move off A's stack before its zones are cleared";
+        EXPECT_EQ(moves[0].card_id(), bBoltOldServerId) << "the physical source order is preserved";
+        EXPECT_EQ(moves[1].card_id(), cBoltOldServerId);
+        ASSERT_TRUE(client->serverCardOwnerByEngineOid.count(bBoltOid));
+        ASSERT_TRUE(client->serverCardOwnerByEngineOid.count(cBoltOid));
+        EXPECT_EQ(client->serverCardOwnerByEngineOid.at(bBoltOid), p2.myId);
+        EXPECT_EQ(client->serverCardOwnerByEngineOid.at(cBoltOid), p2.myId);
+        EXPECT_EQ(client->serverCardByEngineOid.at(bBoltOid), moves[0].new_card_id());
+        EXPECT_EQ(client->serverCardByEngineOid.at(cBoltOid), moves[1].new_card_id());
+        EXPECT_EQ(client->stackDepth, 2);
+        EXPECT_EQ(std::count_if(client->destroyedStackCards.begin(), client->destroyedStackCards.end(),
+                                [&](const auto &destroyed) {
+                                    return destroyed.first == p1.myId &&
+                                           (destroyed.second == bBoltOldServerId ||
+                                            destroyed.second == cBoltOldServerId);
+                                }),
+                  0);
+    }
+
+    auto sendAndSettleSurvivors = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                                      const QString &label) {
+        const quint64 commandId = sender.nextCmdId;
+        const std::array<quint64, 2> before{p2.stateVersion, p3.stateVersion};
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (sender.responses.count(commandId) == 0 && wait.elapsed() < 10000) {
+            p2.pump(20);
+            p3.pump(20);
+        }
+        if (sender.responses.count(commandId) == 0 || sender.responses.at(commandId).response_code() != Response::RespOk)
+            return false;
+        wait.restart();
+        const auto bothUpdated = [&] { return p2.stateVersion > before[0] && p3.stateVersion > before[1]; };
+        while (!bothUpdated() && wait.elapsed() < 10000) {
+            p2.pump(20);
+            p3.pump(20);
+        }
+        return bothUpdated();
+    };
+    ruled::v1::RuledCommand putAnotherBolt;
+    putAnotherBolt.mutable_dev_command()->set_target_player_id(p2.myId);
+    putAnotherBolt.mutable_dev_command()->mutable_put_card_in_zone()->set_card_name("Lightning Bolt");
+    putAnotherBolt.mutable_dev_command()->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+    ASSERT_TRUE(sendAndSettleSurvivors(p2, putAnotherBolt, QStringLiteral("B gets another Lightning Bolt")));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p2.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_r(1);
+    ASSERT_TRUE(sendAndSettleSurvivors(p2, addMana, QStringLiteral("B gets red mana after A departs")));
+    ASSERT_EQ(p2.priorityPlayer, p2.myId);
+    const auto *laterBolt = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"));
+    ASSERT_NE(laterBolt, nullptr);
+    ruled::v1::RuledCommand castLaterBolt;
+    castLaterBolt.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    castLaterBolt.mutable_cast_spell()->mutable_source()->set_hand_index(laterBolt->hand_index());
+    castLaterBolt.mutable_cast_spell()->add_targets()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    castLaterBolt.mutable_cast_spell()->mutable_targets(0)->set_object_id(p3.myId);
+    ASSERT_TRUE(sendAndSettleSurvivors(p2, castLaterBolt, QStringLiteral("B casts Lightning Bolt after A departs")));
+    ASSERT_EQ(p2.stackDepth, 3);
+    ASSERT_EQ(p3.lightningBoltStackOids.size(), 3u);
+    const quint32 laterBoltOid = p3.lightningBoltStackOids.back();
+
+    QElapsedTimer resolveDeadline;
+    resolveDeadline.start();
+    while (p2.stackDepth > 0 && resolveDeadline.elapsed() < 30000) {
+        SmokeClient *priority = p2.priorityPlayer == p2.myId ? static_cast<SmokeClient *>(&p2)
+                             : p2.priorityPlayer == p3.myId ? static_cast<SmokeClient *>(&p3)
+                                                            : nullptr;
+        ASSERT_NE(priority, nullptr) << "the surviving players must continue receiving priority";
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        ASSERT_TRUE(sendAndSettleSurvivors(*priority, pass,
+                                          QStringLiteral("survivor passes while resolving migrated spells")));
+    }
+    ASSERT_EQ(p2.stackDepth, 0) << "the migrated spells and a later cast must resolve";
+    for (const quint32 oid : {bBoltOid, cBoltOid, laterBoltOid}) {
+        ASSERT_TRUE(p2.graveyardOwnerByEngineOid.count(oid));
+        EXPECT_TRUE(p2.graveyardOwnerByEngineOid.at(oid) == p2.myId ||
+                    p2.graveyardOwnerByEngineOid.at(oid) == p3.myId);
+        EXPECT_EQ(p2.graveyardOwnerByEngineOid.at(oid), oid == cBoltOid ? p3.myId : p2.myId);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(ConcedeAndLeaveGame,
+                         CanonicalStackHostDepartureTest,
+                         ::testing::Values(false, true),
+                         [](const ::testing::TestParamInfo<bool> &info) {
+                             return info.param ? "LeaveGame" : "Concede";
+                         });
+
+enum class PendingPublicSource
+{
+    GraveyardFlashback,
+    ExilePermission
+};
+
+struct PendingPublicSourceCase
+{
+    PendingPublicSource source;
+    bool cancel;
+};
+
+class CanonicalStackPendingPublicSourceTest
+    : public RuledE2ESmokeTest,
+      public ::testing::WithParamInterface<PendingPublicSourceCase>
+{
+};
+
+TEST_P(CanonicalStackPendingPublicSourceTest, HostDeparturePreservesAcceptedPublicSourceTransaction)
+{
+    const PendingPublicSourceCase testCase = GetParam();
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+
+    DepartureObserver p1(QStringLiteral("pending-stack-host-a"), &transcript);
+    DepartureObserver p2(QStringLiteral("pending-stack-host-b"), &transcript);
+    DepartureObserver p3(QStringLiteral("pending-stack-host-c"), &transcript);
+    std::array<SmokeClient *, 3> clients{&p1, &p2, &p3};
+    for (auto *client : clients)
+        ASSERT_TRUE(client->loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame(3));
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p3.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p3.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    for (auto *client : clients)
+        client->sendReady();
+    for (auto *client : clients) {
+        ASSERT_TRUE(client->pumpUntil([&] { return client->gameStarted && client->stateVersion > 0; }, 20000,
+                                      "public-source host-departure game start"));
+        ASSERT_TRUE(client->publishMain1Stops());
+    }
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    std::map<int, quint64> actedAtVersion;
+    int keeps = 0;
+    bool choseCaster = false;
+    const auto allAtMain = [&] {
+        return std::all_of(clients.begin(), clients.end(), [](const auto *client) {
+            return client->gameStarted && client->stateVersion > 0 && client->phase == ruled::v1::PHASE_ID_MAIN1;
+        });
+    };
+    while (!allAtMain() && openingDeadline.elapsed() < 30000) {
+        for (auto *client : clients)
+            client->pump(20);
+        for (auto *client : clients) {
+            if (!client->gameStarted || client->stateVersion == 0 ||
+                actedAtVersion[client->myId] == client->stateVersion)
+                continue;
+            const auto &opening = client->latestLegal.opening();
+            ruled::v1::RuledCommand command;
+            if (!choseCaster && opening.stage() == ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                opening.eligible_starting_player_ids_size() > 0) {
+                command.mutable_choose_starting_player()->set_starting_player_id(p2.myId);
+                choseCaster = true;
+                client->sendRuled(command, QStringLiteral("choose B to cast the public-source spell"));
+            } else if (opening.stage() == ruled::v1::OPENING_STAGE_MULLIGAN && opening.can_keep()) {
+                command.mutable_mulligan()->set_keep(true);
+                ++keeps;
+                client->sendRuled(command, QStringLiteral("keep public-source host-departure hand"));
+            } else if (client->priorityPlayer == client->myId && client->phase != ruled::v1::PHASE_ID_MAIN1 &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_MULLIGAN) {
+                command.mutable_pass_priority();
+                client->sendRuled(command, QStringLiteral("advance to B's main phase"));
+            } else {
+                continue;
+            }
+            actedAtVersion[client->myId] = client->stateVersion;
+        }
+    }
+    ASSERT_TRUE(allAtMain());
+    ASSERT_TRUE(choseCaster);
+    ASSERT_EQ(keeps, 3);
+    ASSERT_EQ(p2.activePlayer, p2.myId);
+    ASSERT_EQ(p2.priorityPlayer, p2.myId);
+    ASSERT_EQ(p1.myId, std::min({p1.myId, p2.myId, p3.myId})) << "A remains the canonical physical Stack host";
+
+    auto sendAndSettle = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 commandId = sender.nextCmdId;
+        const std::array<quint64, 3> before{p1.stateVersion, p2.stateVersion, p3.stateVersion};
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (sender.responses.count(commandId) == 0 && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        if (sender.responses.count(commandId) == 0 ||
+            sender.responses.at(commandId).response_code() != Response::RespOk)
+            return false;
+        wait.restart();
+        const auto allUpdated = [&] {
+            return p1.stateVersion > before[0] && p2.stateVersion > before[1] && p3.stateVersion > before[2];
+        };
+        while (!allUpdated() && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        return allUpdated();
+    };
+    auto devPut = [&](int targetPlayer, const char *name, ruled::v1::DevZone zone, bool ready = false) {
+        ruled::v1::RuledCommand command;
+        auto *put = command.mutable_dev_command();
+        put->set_target_player_id(targetPlayer);
+        put->mutable_put_card_in_zone()->set_card_name(name);
+        put->mutable_put_card_in_zone()->set_zone(zone);
+        put->mutable_put_card_in_zone()->set_ready(ready);
+        return sendAndSettle(p1, command, QStringLiteral("dev put %1").arg(QString::fromLatin1(name)));
+    };
+    auto devMove = [&](int targetPlayer, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *move = command.mutable_dev_command();
+        move->set_target_player_id(targetPlayer);
+        move->mutable_move_card()->set_card_name(name);
+        move->mutable_move_card()->set_zone(zone);
+        return sendAndSettle(p1, command, QStringLiteral("dev move %1").arg(QString::fromLatin1(name)));
+    };
+    auto devMana = [&](int targetPlayer, int white, int red, int colorless) {
+        ruled::v1::RuledCommand command;
+        auto *mana = command.mutable_dev_command();
+        mana->set_target_player_id(targetPlayer);
+        mana->mutable_add_mana()->set_w(white);
+        mana->mutable_add_mana()->set_r(red);
+        mana->mutable_add_mana()->set_c(colorless);
+        return sendAndSettle(p1, command, QStringLiteral("dev fund public-source cast"));
+    };
+    auto passPriority = [&](SmokeClient &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndSettle(sender, command, QStringLiteral("pass priority in public-source setup"));
+    };
+
+    quint32 sourceOid = 0;
+    int sourceServerId = -1;
+    ruled::v1::RuledCommand begin;
+    if (testCase.source == PendingPublicSource::GraveyardFlashback) {
+        ASSERT_TRUE(devPut(p2.myId, "Bump in the Night", ruled::v1::DEV_ZONE_HAND));
+        ASSERT_TRUE(devMove(p2.myId, "Bump in the Night", ruled::v1::DEV_ZONE_GRAVEYARD));
+        ASSERT_TRUE(devMana(p2.myId, 0, 1, 5));
+        const auto action = std::find_if(p2.latestLegal.zone_cast_actions().begin(),
+                                         p2.latestLegal.zone_cast_actions().end(), [](const auto &candidate) {
+                                             return candidate.card_name() == "Bump in the Night" &&
+                                                    candidate.source_zone() ==
+                                                        ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD &&
+                                                    candidate.cast_method() == ruled::v1::CAST_METHOD_FLASHBACK;
+                                         });
+        ASSERT_NE(action, p2.latestLegal.zone_cast_actions().end());
+        sourceOid = action->object_id();
+        ASSERT_TRUE(p2.serverCardByEngineOid.count(sourceOid));
+        sourceServerId = p2.serverCardByEngineOid.at(sourceOid);
+        auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+        announcement->set_cast_method(action->cast_method());
+        announcement->set_face_index(action->face_index());
+        announcement->mutable_source()->set_graveyard_object_id(sourceOid);
+        announcement->mutable_source()->set_expected_zone_change_generation(action->zone_change_generation());
+        auto *target = announcement->add_targets();
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+        target->set_object_id(p3.myId);
+    } else {
+        ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+        ASSERT_TRUE(devPut(p2.myId, "Airbending Lesson", ruled::v1::DEV_ZONE_HAND));
+        const auto battlefield = p2.battlefieldByPlayer.find(p2.myId);
+        ASSERT_NE(battlefield, p2.battlefieldByPlayer.end());
+        const auto bear = std::find_if(battlefield->second.begin(), battlefield->second.end(), [](const auto &object) {
+            return object.cardId == QLatin1String("grizzly_bears");
+        });
+        ASSERT_NE(bear, battlefield->second.end());
+        sourceOid = bear->oid;
+        ASSERT_TRUE(devMana(p2.myId, 1, 0, 4));
+        const auto *lesson = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Airbending Lesson"));
+        ASSERT_NE(lesson, nullptr);
+        ruled::v1::RuledCommand castLesson;
+        auto *lessonCast = castLesson.mutable_cast_spell();
+        lessonCast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        lessonCast->mutable_source()->set_hand_index(lesson->hand_index());
+        auto *lessonTarget = lessonCast->add_targets();
+        lessonTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        lessonTarget->set_group_index(0);
+        lessonTarget->set_object_id(sourceOid);
+        ASSERT_TRUE(sendAndSettle(p2, castLesson, QStringLiteral("B casts Airbending Lesson")));
+        ASSERT_EQ(p2.stackDepth, 1);
+        ASSERT_TRUE(passPriority(p2));
+        ASSERT_TRUE(passPriority(p3));
+        ASSERT_TRUE(passPriority(p1));
+        ASSERT_EQ(p2.stackDepth, 0);
+        ASSERT_TRUE(std::any_of(p2.latestLegal.exile_play_permission_groups().begin(),
+                                p2.latestLegal.exile_play_permission_groups().end(), [&](const auto &group) {
+                                    return std::find(group.object_ids().begin(), group.object_ids().end(), sourceOid) !=
+                                           group.object_ids().end();
+                                }));
+        const auto action = std::find_if(p2.latestLegal.zone_cast_actions().begin(),
+                                         p2.latestLegal.zone_cast_actions().end(), [&](const auto &candidate) {
+                                             return candidate.object_id() == sourceOid &&
+                                                    candidate.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE &&
+                                                    candidate.cast_method() == ruled::v1::CAST_METHOD_PERMISSION;
+                                         });
+        ASSERT_NE(action, p2.latestLegal.zone_cast_actions().end());
+        ASSERT_TRUE(action->has_casting_permission_id());
+        ASSERT_TRUE(p2.serverCardByEngineOid.count(sourceOid));
+        sourceServerId = p2.serverCardByEngineOid.at(sourceOid);
+        auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+        announcement->set_cast_method(action->cast_method());
+        announcement->set_face_index(action->face_index());
+        announcement->set_casting_permission_id(action->casting_permission_id());
+        announcement->mutable_source()->set_exile_object_id(sourceOid);
+        announcement->mutable_source()->set_expected_zone_change_generation(action->zone_change_generation());
+    }
+    ASSERT_GE(sourceServerId, 0);
+    ASSERT_EQ(p2.priorityPlayer, p2.myId);
+
+    const quint64 beginCommandId = p2.nextCmdId;
+    const quint64 p1BeforeBegin = p1.stateVersion;
+    const quint64 p3BeforeBegin = p3.stateVersion;
+    p2.sendRuled(begin, QStringLiteral("B begins a public-source cast"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.latestLegal.has_pending_spell_cast(); }, 10000,
+                             "accepted public-source BeginSpellCast"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.responses.count(beginCommandId) > 0; }, 10000,
+                             "public-source BeginSpellCast response"));
+    ASSERT_EQ(p2.responses.at(beginCommandId).response_code(), Response::RespOk);
+    QElapsedTimer beginObservers;
+    beginObservers.start();
+    while ((p1.stateVersion <= p1BeforeBegin || p3.stateVersion <= p3BeforeBegin) &&
+           beginObservers.elapsed() < 10000) {
+        p1.pump(20);
+        p3.pump(20);
+    }
+    ASSERT_GT(p1.stateVersion, p1BeforeBegin);
+    ASSERT_GT(p3.stateVersion, p3BeforeBegin);
+    const auto &pendingBeforeDeparture = p2.latestLegal.pending_spell_cast();
+    const quint64 transactionId = pendingBeforeDeparture.transaction_id();
+    const quint32 reservedOid = pendingBeforeDeparture.reserved_object_id();
+    const std::string acceptedAnnouncement = pendingBeforeDeparture.announcement().SerializeAsString();
+    const auto initialStackMove = std::find_if(p2.physicalMoveEvents.rbegin(), p2.physicalMoveEvents.rend(),
+                                               [&](const auto &move) {
+                                                   return move.card_id() == sourceServerId &&
+                                                          move.start_player_id() == p2.myId &&
+                                                          move.target_player_id() == p1.myId &&
+                                                          move.target_zone() == ZoneNames::STACK;
+                                               });
+    ASSERT_NE(initialStackMove, p2.physicalMoveEvents.rend())
+        << "the accepted public source must be physically staged on A's canonical Stack";
+    const int pendingStackCardId = initialStackMove->new_card_id();
+    ASSERT_GE(pendingStackCardId, 0);
+
+    p2.expectedConceder = p1.myId;
+    p3.expectedConceder = p1.myId;
+    p2.departureEventOrder.clear();
+    p3.departureEventOrder.clear();
+    p2.physicalMoveEvents.clear();
+    p3.physicalMoveEvents.clear();
+    const int p2BatchesBeforeDeparture = p2.completedRuledBatches;
+    const int p3BatchesBeforeDeparture = p3.completedRuledBatches;
+    CommandContainer concede;
+    concede.set_game_id(p1.gameId);
+    concede.add_game_command()->MutableExtension(Command_Concede::ext);
+    const quint64 concedeCommandId = p1.nextCmdId;
+    p1.sendContainer(concede);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.responses.count(concedeCommandId) > 0; }, 10000,
+                             "canonical physical host concession"));
+    ASSERT_EQ(p1.responses.at(concedeCommandId).response_code(), Response::RespOk);
+    ASSERT_TRUE(p2.pumpUntil([&] {
+                                 return p2.sawEngineConcession &&
+                                        p2.completedRuledBatches > p2BatchesBeforeDeparture;
+                             }, 10000,
+                             "pending source host-departure response at B"));
+    ASSERT_TRUE(p3.pumpUntil([&] {
+                                 return p3.sawEngineConcession &&
+                                        p3.completedRuledBatches > p3BatchesBeforeDeparture;
+                             }, 10000,
+                             "pending source host-departure response at C"));
+    p2.pump(100);
+    p3.pump(100);
+
+    ASSERT_TRUE(p2.latestLegal.has_pending_spell_cast());
+    EXPECT_EQ(p2.latestLegal.pending_spell_cast().transaction_id(), transactionId);
+    EXPECT_EQ(p2.latestLegal.pending_spell_cast().reserved_object_id(), reservedOid);
+    EXPECT_EQ(p2.latestLegal.pending_spell_cast().announcement().SerializeAsString(), acceptedAnnouncement)
+        << "host departure must preserve the caster's exact targets and cast choices";
+    const auto findRehome = [&](const DepartureObserver &client) {
+        return std::find_if(client.physicalMoveEvents.begin(), client.physicalMoveEvents.end(), [&](const auto &move) {
+            return move.start_zone() == ZoneNames::STACK && move.target_zone() == ZoneNames::STACK &&
+                   move.start_player_id() == p1.myId && move.target_player_id() == p2.myId;
+        });
+    };
+    const auto rehomeAtB = findRehome(p2);
+    const auto rehomeAtC = findRehome(p3);
+    ASSERT_NE(rehomeAtB, p2.physicalMoveEvents.end()) << "the pending physical card must leave A's zones";
+    ASSERT_NE(rehomeAtC, p3.physicalMoveEvents.end()) << "every survivor must receive the same rehome move";
+    EXPECT_EQ(rehomeAtB->card_id(), pendingStackCardId);
+    EXPECT_EQ(rehomeAtC->card_id(), pendingStackCardId);
+    ASSERT_TRUE(p2.serverCardOwnerByEngineOid.count(reservedOid));
+    ASSERT_TRUE(p3.serverCardOwnerByEngineOid.count(reservedOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(reservedOid));
+    ASSERT_TRUE(p3.serverCardByEngineOid.count(reservedOid));
+    EXPECT_EQ(p2.serverCardOwnerByEngineOid.at(reservedOid), p2.myId);
+    EXPECT_EQ(p3.serverCardOwnerByEngineOid.at(reservedOid), p2.myId);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(reservedOid), rehomeAtB->new_card_id());
+    EXPECT_EQ(p3.serverCardByEngineOid.at(reservedOid), rehomeAtC->new_card_id());
+    const int rehomedCardIdAtB = rehomeAtB->new_card_id();
+    const int rehomedCardIdAtC = rehomeAtC->new_card_id();
+    for (const auto *client : {&p2, &p3}) {
+        const auto move = std::find(client->departureEventOrder.begin(), client->departureEventOrder.end(),
+                                    QStringLiteral("stack-move"));
+        const auto objectMap = std::find(client->departureEventOrder.begin(), client->departureEventOrder.end(),
+                                         QStringLiteral("object-map"));
+        ASSERT_NE(move, client->departureEventOrder.end());
+        ASSERT_NE(objectMap, client->departureEventOrder.end());
+        EXPECT_LT(move, objectMap) << "physical migration must precede the engine-object map publication";
+        const auto snapshot = std::find(client->departureEventOrder.begin(), client->departureEventOrder.end(),
+                                        QStringLiteral("snapshot"));
+        if (snapshot != client->departureEventOrder.end())
+            EXPECT_LT(move, snapshot) << "physical migration must precede any departure snapshot";
+    }
+
+    auto sendAndSettleSurvivors = [&](const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 commandId = p2.nextCmdId;
+        const std::array<quint64, 2> before{p2.stateVersion, p3.stateVersion};
+        p2.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (p2.responses.count(commandId) == 0 && wait.elapsed() < 10000) {
+            p2.pump(20);
+            p3.pump(20);
+        }
+        if (p2.responses.count(commandId) == 0 || p2.responses.at(commandId).response_code() != Response::RespOk)
+            return false;
+        wait.restart();
+        const auto bothUpdated = [&] { return p2.stateVersion > before[0] && p3.stateVersion > before[1]; };
+        while (!bothUpdated() && wait.elapsed() < 10000) {
+            p2.pump(20);
+            p3.pump(20);
+        }
+        return bothUpdated();
+    };
+
+    if (testCase.cancel) {
+        ruled::v1::RuledCommand cancel;
+        cancel.mutable_cancel_spell_cast()->set_transaction_id(transactionId);
+        ASSERT_TRUE(sendAndSettleSurvivors(cancel, QStringLiteral("cancel public-source pending cast after A leaves")));
+        EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
+        const std::string expectedSourceZone = testCase.source == PendingPublicSource::GraveyardFlashback
+                                                   ? ZoneNames::GRAVE
+                                                   : ZoneNames::EXILE;
+        const auto restored = std::find_if(p2.physicalMoveEvents.begin(), p2.physicalMoveEvents.end(),
+                                           [&](const auto &move) {
+                                               return move.card_id() == rehomedCardIdAtB &&
+                                                      move.start_zone() == ZoneNames::STACK &&
+                                                      move.target_zone() == expectedSourceZone &&
+                                                      move.start_player_id() == p2.myId &&
+                                                      move.target_player_id() == p2.myId;
+                                           });
+        ASSERT_NE(restored, p2.physicalMoveEvents.end())
+            << "cancel must return the same physical source card to its original public zone";
+        EXPECT_EQ(p2.stackDepth, 0);
+        EXPECT_EQ(p3.stackDepth, 0);
+        EXPECT_TRUE(std::none_of(p2.stackPushedEvents.begin(), p2.stackPushedEvents.end(),
+                                 [&](const auto &event) { return event.object_id() == reservedOid; }))
+            << "canceling the reservation must never commit it as a StackPushed spell";
+    } else {
+        const int previewCount = p2.paymentPreviewCount;
+        ruled::v1::RuledCommand preview;
+        auto *paymentQuery = preview.mutable_preview_payment();
+        paymentQuery->set_transaction_id(9001u);
+        paymentQuery->set_revision(1u);
+        auto *previewCommit = paymentQuery->mutable_commit_spell_cast();
+        previewCommit->set_transaction_id(transactionId);
+        previewCommit->mutable_payment()->CopyFrom(
+            p2.latestLegal.pending_spell_cast().payment_preview().selection());
+        if (testCase.source == PendingPublicSource::GraveyardFlashback) {
+            previewCommit->mutable_payment()->mutable_mana()->set_r(1);
+            previewCommit->mutable_payment()->mutable_mana()->set_c(5);
+        } else {
+            previewCommit->mutable_payment()->mutable_mana()->set_c(2);
+        }
+        p2.sendRuled(preview, QStringLiteral("preview pending public-source cast payment after migration"));
+        ASSERT_TRUE(p2.pumpUntil([&] { return p2.paymentPreviewCount > previewCount; }, 10000,
+                                 "migrated public-source payment preview"));
+        ASSERT_TRUE(p2.paymentPreview.valid()) << p2.paymentPreview.error();
+        ASSERT_TRUE(p2.paymentPreview.complete()) << p2.paymentPreview.remaining_cost();
+        ruled::v1::RuledCommand commit;
+        auto *commitCast = commit.mutable_commit_spell_cast();
+        commitCast->set_transaction_id(transactionId);
+        commitCast->mutable_payment()->CopyFrom(p2.paymentPreview.selection());
+        commitCast->mutable_restricted_mana()->CopyFrom(p2.paymentPreview.restricted_mana());
+        ASSERT_TRUE(sendAndSettleSurvivors(commit, QStringLiteral("commit migrated public-source cast")));
+        EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
+        EXPECT_EQ(p2.stackDepth, 1);
+        EXPECT_EQ(p3.stackDepth, 1);
+        ASSERT_TRUE(p2.serverCardByEngineOid.count(reservedOid));
+        ASSERT_TRUE(p3.serverCardByEngineOid.count(reservedOid));
+        EXPECT_EQ(p2.serverCardByEngineOid.at(reservedOid), rehomedCardIdAtB);
+        EXPECT_EQ(p3.serverCardByEngineOid.at(reservedOid), rehomedCardIdAtC);
+        EXPECT_EQ(p2.serverCardOwnerByEngineOid.at(reservedOid), p2.myId);
+        EXPECT_EQ(p3.serverCardOwnerByEngineOid.at(reservedOid), p2.myId);
+        const auto pushed = std::find_if(p2.stackPushedEvents.begin(), p2.stackPushedEvents.end(),
+                                         [&](const auto &event) { return event.object_id() == reservedOid; });
+        ASSERT_NE(pushed, p2.stackPushedEvents.end()) << "commit binds the same reservation on StackPushed";
+        if (testCase.source == PendingPublicSource::GraveyardFlashback) {
+            ASSERT_EQ(pushed->targets_size(), 1);
+            EXPECT_EQ(pushed->targets(0).kind(), ruled::v1::TARGET_REF_KIND_PLAYER);
+            EXPECT_EQ(pushed->targets(0).object_id(), static_cast<quint32>(p3.myId));
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(GraveyardAndExile,
+                         CanonicalStackPendingPublicSourceTest,
+                         ::testing::Values(PendingPublicSourceCase{PendingPublicSource::GraveyardFlashback, false},
+                                           PendingPublicSourceCase{PendingPublicSource::GraveyardFlashback, true},
+                                           PendingPublicSourceCase{PendingPublicSource::ExilePermission, false},
+                                           PendingPublicSourceCase{PendingPublicSource::ExilePermission, true}),
+                         [](const ::testing::TestParamInfo<PendingPublicSourceCase> &info) {
+                             const auto source = info.param.source == PendingPublicSource::GraveyardFlashback
+                                                     ? "GraveyardFlashback"
+                                                     : "ExilePermission";
+                             return QStringLiteral("%1_%2")
+                                 .arg(QLatin1String(source), info.param.cancel ? "Cancel" : "Commit")
+                                 .toStdString();
+                         });
 
 TEST_F(RuledE2ESmokeTest, BitterTriumphPayingAllLifePushesAndRemovesInOneBatch)
 {

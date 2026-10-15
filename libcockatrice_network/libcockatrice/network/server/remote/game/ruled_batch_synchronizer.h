@@ -19,6 +19,7 @@
 
 class RuledGameSession;
 class Server_Card;
+class Server_CardZone;
 class Server_Game;
 
 class RuledBatchSynchronizer
@@ -101,6 +102,8 @@ private:
                                  const QHash<quint32, int> &battlefieldDisplayPlayers);
     void applyStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered);
     void applyStackObjectsRemovedEvent(const ruled::v1::RuledEventBatch &batch);
+    Server_CardZone *canonicalStackZone(int excludedPlayerId = -1) const;
+    void rehomeCanonicalStackForDeparture(int departingPlayerId);
 
     RuledPlayerBinding &playerBinding(int playerId);
 
