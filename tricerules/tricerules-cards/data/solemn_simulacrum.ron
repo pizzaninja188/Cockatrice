@@ -35,15 +35,22 @@
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WhenSelfDies,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "draw_a_card",
-          presentation: OracleLines([2]),
-          cost: None,
-          effects: [Draw(who: Controller, count: 1)],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_solemn_death_draw", kind: Choose(
+          choice: "solemn_death_draw",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "draw_a_card",
+            presentation: OracleLines([2]),
+            cost: None,
+            requirement: Always,
+            body: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+          )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
   ],
 )

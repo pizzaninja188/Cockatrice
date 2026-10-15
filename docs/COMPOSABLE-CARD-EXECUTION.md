@@ -40,6 +40,11 @@ once. The exact admitted syntax and fail-closed limits are in the
 [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs).
 This ports only those two definitions: legacy flat branch resolution remains live for other
 callers and has not been retired.
+The following five 2026-10-15 Choose ports reuse that runner without runtime changes: Ant-Man's
+Army's mandatory Food-or-Treasure choice, Consecrated Sphinx's optional free Draw 2, Mentor of the
+Meek's optional `{1}`-for-Draw 1, Mind's Eye's optional `{1}`-for-Draw 1, and only Solemn
+Simulacrum's `triggered_02` death-draw owner. Solemn's `triggered_01` ETB basic-land search remains
+on its existing legacy branch; the tranche adds no card admissions.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

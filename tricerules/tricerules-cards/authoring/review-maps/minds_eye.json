@@ -8,7 +8,10 @@
       "end_line": 1,
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
       ]
     }
   ],
@@ -22,16 +25,16 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerDrawsCard/drawer"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "ResolutionCost::Mana",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/cost"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
     }
   ],
   "tokens": [],
@@ -39,6 +42,10 @@
     {
       "test": "scenario deck_coverage_opponent_draw::minds_eye_pays_once_for_two_opponent_draw_triggers",
       "covers": "wrong-player and out-of-range branch choices are rejected without consuming the offer; paying the first {1} draws exactly one card; an unaffordable payment on the second trigger is rejected without changing state before declining it"
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::minds_eye_keeps_its_payment_choice_when_narset_would_prevent_the_draw",
+      "covers": "The {1} payment remains available under a draw restriction, with no card drawn when the payment resolves."
     },
     {
       "test": "scenario deck_coverage_opponent_draw::opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics",

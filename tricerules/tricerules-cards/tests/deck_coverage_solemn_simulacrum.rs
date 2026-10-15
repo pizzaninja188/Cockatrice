@@ -1,8 +1,8 @@
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, PlayerRecipient, SearchDestination, SpellEffectKind, TriggerCondition,
-    ZoneCardFilter,
+    Amount, CardTypeFilter, CompiledChooseRequirement, CompiledInstructionKind, PlayerRecipient,
+    ResolutionCost, SearchDestination, SpellEffectKind, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, Layout};
+use tricerules_cards::{AbilityDefinitionId, AbilityPresentation, Layout, ProgramOwnerId};
 
 #[test]
 fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
@@ -67,21 +67,63 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
         AbilityPresentation::OracleLines(vec![2])
     );
     assert_eq!(death.trigger, TriggerCondition::WhenSelfDies);
+    assert!(death.effect.is_empty());
+    assert!(death.program.is_some());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "solemn_simulacrum".to_owned(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![death.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Solemn death trigger compiled program");
+    assert_eq!(program.owner, owner);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Solemn death trigger has one top-level Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &instruction.kind
+    else {
+        panic!("Solemn death trigger compiles as Choose");
+    };
+    assert_eq!(choice.as_str(), "solemn_death_draw");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Solemn death trigger has one draw branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "draw_a_card");
+    assert_eq!(branch.cost, ResolutionCost::None);
+    assert_eq!(
+        branch.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
     assert!(matches!(
-        death.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch {
-            optional: true,
-            branches,
-            ..
-        }] if branches.len() == 1
-            && branches[0].branch_id.as_str() == "draw_a_card"
-            && branches[0].presentation == AbilityPresentation::OracleLines(vec![2])
-            && matches!(
-                branches[0].effects.as_slice(),
-                [SpellEffectKind::Draw {
-                    who: PlayerRecipient::Controller,
-                    count: Amount::Fixed(1),
-                }]
-            )
+        &branch.requirement,
+        CompiledChooseRequirement::Always
     ));
+    assert!(branch.body.yields.is_empty());
+    let [leaf] = branch.body.steps.as_slice() else {
+        panic!("Solemn death draw branch has one Perform leaf");
+    };
+    let CompiledInstructionKind::Perform(effect) = &leaf.kind else {
+        panic!("Solemn death draw leaf is Perform");
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        }
+    );
 }

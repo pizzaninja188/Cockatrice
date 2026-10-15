@@ -7,7 +7,10 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0"
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokens",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/CreateTokens"
       ]
     }
   ],
@@ -17,8 +20,16 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokens"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/CreateTokens"
     }
   ],
   "tokens": [

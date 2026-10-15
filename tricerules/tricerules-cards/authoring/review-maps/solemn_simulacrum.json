@@ -12,7 +12,12 @@
       "face_id": "solemn_simulacrum",
       "start_line": 2,
       "end_line": 2,
-      "typed_paths": ["/faces/0/triggered_abilities/1"]
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/program/body/steps/0",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+      ]
     }
   ],
   "primitive_references": [
@@ -41,8 +46,12 @@
       "typed_path": "/faces/0/triggered_abilities/1/trigger"
     },
     {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose"
+    },
+    {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/triggered_abilities/1/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
     }
   ],
   "tokens": [],
@@ -57,7 +66,11 @@
     },
     {
       "test": "deck_registry::deck_coverage_solemn_simulacrum::solemn_simulacrum_registers_both_optional_triggered_abilities",
-      "covers": "exact identity, characteristics, both triggers, basic-land filter, tapped destination, shuffle, controller draw, and Oracle-line mappings"
+      "covers": "exact identity and characteristics; the ETB search remains its legacy optional branch with a basic-land filter, tapped destination, and shuffle, while the death owner compiles as a controller-only optional Choose that draws one card"
+    },
+    {
+      "test": "deck_registry::structural_choose_later_ports::solemn_simulacrum_registry_programs_only_the_death_draw_owner",
+      "covers": "the existing triggered_01 ETB search owner remains legacy while triggered_02 alone is the new Choose program"
     }
   ],
   "complete_definition_review_confirmed": true

@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "b9f4f96b-6e54-4fe6-8df7-623e0fc72409",
+  "spans": [
+    {
+      "face_id": "mentor_of_the_meek",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_127_trigger_event_filters::issue_127_mentor_optional_payment_draws_exactly_one_card",
+      "covers": "Mentor's eligible entry trigger accepts one {1} payment and draws exactly one card."
+    },
+    {
+      "test": "scenario issue_127_trigger_event_filters::issue_127_entry_counters_are_included_in_the_trigger_power_check",
+      "covers": "Entry-time counters are included in the event power filter."
+    },
+    {
+      "test": "scenario issue_127_trigger_event_filters::issue_127_continuous_effects_are_included_in_the_entry_power_check",
+      "covers": "Entry-time continuous effects are included in the event power filter."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

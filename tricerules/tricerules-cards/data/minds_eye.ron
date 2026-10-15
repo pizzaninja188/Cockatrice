@@ -11,14 +11,21 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerDrawsCard(drawer: Opponent),
-    effect: [ChooseResolutionBranch(
-      optional: true,
-      branches: [(
-        branch_id: "pay_1",
-        presentation: OracleLines([1]),
-        cost: Mana("{1}"),
-        effects: [Draw(count: 1)],
-      )],
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_minds_eye_pay_draw", kind: Choose(
+        choice: "minds_eye_pay_draw",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_1",
+          presentation: OracleLines([1]),
+          cost: Mana("{1}"),
+          requirement: Always,
+          body: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

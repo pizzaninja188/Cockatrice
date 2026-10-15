@@ -14,7 +14,9 @@
       "end_line": 2,
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
       ]
     }
   ],
@@ -32,12 +34,12 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerDrawsCard/drawer"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
     }
   ],
   "tokens": [],
@@ -45,6 +47,10 @@
     {
       "test": "scenario deck_coverage_opponent_draw::consecrated_sphinx_gets_two_triggers_and_each_choice_is_draw_two_or_decline",
       "covers": "wrong-player and out-of-range branch choices are rejected without consuming the offer; two separate opponent draws create two independently resolved choices; the chosen trigger draws exactly two cards and the declined trigger draws none"
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_makes_consecrated_sphinx_optional_draw_unavailable_after_the_limit",
+      "covers": "Narset suppresses an optional Draw 2 trigger after the opponent has drawn once."
     },
     {
       "test": "scenario deck_coverage_opponent_draw::opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics",
