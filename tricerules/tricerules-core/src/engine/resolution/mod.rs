@@ -43,6 +43,7 @@ mod destruction;
 mod destruction_tests;
 mod dispatch;
 mod join_forces;
+pub(in crate::engine) mod library_cohorts;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;
@@ -1156,14 +1157,6 @@ impl GameEngine {
         let is_ability = top.ability_text.is_some();
         let permanent_copy = self.materialize_permanent_spell_copy(&top);
         let leaves_no_object = is_ability || (top.is_copy && !permanent_copy);
-        let custom_key = (!is_ability && !top.is_copy)
-            .then(|| {
-                self.registry
-                    .get(&card_id)
-                    .and_then(|definition| definition.face(top.face_index))
-                    .and_then(|face| face.custom_effect.clone())
-            })
-            .flatten();
         let defer_soft_counter_exit = self.build_resolution_effects(&top).0.iter().any(|entry| {
             matches!(
                 entry.effect,
@@ -1208,9 +1201,7 @@ impl GameEngine {
             // physical card on the stack until the whole effect list or finite program completes;
             // immediate resolutions still publish the same final batch, while parked resolutions
             // keep the visible stack faithful to the resolution boundary. This includes Adventure.
-            // Tier-3 custom spells retain their specialized exit ownership below.
-            let defer_authored_nonpermanent_exit =
-                !resolves_to_battlefield_raw && custom_key.is_none();
+            let defer_authored_nonpermanent_exit = !resolves_to_battlefield_raw;
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
@@ -1356,28 +1347,7 @@ impl GameEngine {
                 } else {
                     Zone::Graveyard
                 };
-                if custom_key.is_some() {
-                    let occurrence = crate::state::StackObjectRef {
-                        object_id: top.id,
-                        zone_change_generation: Some(
-                            self.state
-                                .zone_change_generation
-                                .get(&top.id)
-                                .copied()
-                                .unwrap_or(0),
-                        ),
-                    };
-                    let fact = move_object_to_zone_with_entry_receipt(
-                        &mut self.state,
-                        self.registry,
-                        top.id,
-                        zone,
-                        None,
-                    )?;
-                    self.state.deferred_graveyard_entry = fact.map(|entry| (occurrence, entry));
-                } else {
-                    move_object_to_zone(&mut self.state, self.registry, top.id, zone, None)?;
-                }
+                move_object_to_zone(&mut self.state, self.registry, top.id, zone, None)?;
             }
             if adventure_resolves_to_exile
                 && !defer_authored_nonpermanent_exit
@@ -1395,19 +1365,6 @@ impl GameEngine {
                     "{aura_name} fizzles (enchant target left the battlefield)."
                 )));
                 return Ok(ResolutionProgress::Completed);
-            }
-        }
-
-        // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
-        // already moved to its zone above; hand off to the registered `CardEffect`, which either
-        // completes now or parks awaiting a player choice. Authored programs use the data-driven
-        // deferred-exit path below.
-        // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
-        // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
-        // limitation (the copy resolves its non-custom effects only, if any).
-        if !is_ability && !top.is_copy {
-            if let Some(custom_key) = custom_key {
-                return self.begin_custom_resolution(top, custom_key, events);
             }
         }
 
@@ -1567,8 +1524,8 @@ impl GameEngine {
 
     /// Complete a stack exit deferred until the data-driven effect list finishes. This keeps an
     /// instant or sorcery visible on the physical stack throughout any resolution-time choice.
-    /// Permanent and tier-3 custom spells retain their specialized exit paths and
-    /// make this a no-op after they have already moved.
+    /// Permanent spells retain their specialized entry path and make this a no-op after they
+    /// have already moved.
     pub(super) fn finish_deferred_stack_exit(
         &mut self,
         top: &StackItem,
@@ -4052,41 +4009,6 @@ pub(super) fn commit_zone_move(
         .flatten())
 }
 
-/// CR 608.2n: finish a custom spell's history without changing its physical projection.
-pub(super) fn finish_deferred_graveyard_entry(state: &mut GameState, item: &StackItem) {
-    if !state
-        .deferred_graveyard_entry
-        .as_ref()
-        .is_some_and(|(occurrence, _)| {
-            occurrence.object_id == item.id
-                && item.cast_occurrence.is_none_or(|cast| cast == *occurrence)
-        })
-    {
-        return;
-    }
-    let (_, fact) = state
-        .deferred_graveyard_entry
-        .take()
-        .expect("matched receipt");
-    if state
-        .objects
-        .get(&fact.object_id)
-        .is_some_and(|object| object.zone == Zone::Graveyard)
-        && state
-            .zone_change_generation
-            .get(&fact.object_id)
-            .copied()
-            .unwrap_or(0)
-            == fact.zone_change_generation
-    {
-        state
-            .turn_history
-            .current
-            .permanent_cards_entered_graveyard
-            .push(fact);
-    }
-}
-
 pub(super) fn destroy_permanent(
     state: &mut GameState,
     registry: &'static CardRegistry,
@@ -4176,12 +4098,6 @@ pub(super) fn sacrifice_permanents(
 /// CR 608.2n: the spell enters its owner's graveyard after its effects have been applied. A
 /// self-targeted Tome Scour must therefore end up beneath the five cards it milled, not on top
 /// of them.
-///
-/// Authored spells defer their actual stack exit. Custom spells retain early physical movement;
-/// this re-seats their already-moved card at the back of its owner's graveyard at completion.
-///
-/// Custom physical placement timing remains a simplification. History accounting is separately
-/// deferred by `finish_deferred_graveyard_entry`; reseating must never manufacture another entry.
 ///
 /// A no-op unless `oid` is currently in a graveyard and not already last, so it is safe to call
 /// on any resolution path, including ones that end with the spell on the battlefield.
@@ -9578,7 +9494,6 @@ mod attached_subject_tests {
             assert_eq!(engine.state.command_index, command_index);
             engine.apply_scenario_command(0, &command).unwrap();
             assert!(engine.state.pending_resolution.is_none());
-            assert!(engine.state.deferred_graveyard_entry.is_none());
             assert_eq!(
                 engine
                     .state

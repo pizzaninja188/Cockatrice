@@ -223,6 +223,7 @@ fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
             shuffle: true,
             reveal: true,
             result_id: None,
+            selection_bounds: None,
         }]
     );
     assert!(cycling.targeting.is_none());

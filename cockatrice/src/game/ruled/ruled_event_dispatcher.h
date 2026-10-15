@@ -89,6 +89,9 @@ private:
         /// non-authoritative payload and deliberately do not participate in teardown.
         bool reconcilePublicReveal = true;
         bool publicRevealSeen = false;
+        /// Preserve only an already-validated local reveal choice confirmed by this batch's exact
+        /// authoritative active-reveal snapshot. A snapshot never creates a chooser association.
+        bool preserveExistingPublicRevealChoice = false;
         bool replacementEffectSeen = false;
         bool resolutionPromptSnapshotValid = false;
         bool resolutionPromptActive = false;

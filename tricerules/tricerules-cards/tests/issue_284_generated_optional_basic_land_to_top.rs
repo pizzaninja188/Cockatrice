@@ -90,6 +90,7 @@ fn assert_optional_basic_land_to_top(
         shuffle,
         reveal,
         result_id,
+        selection_bounds: None,
     }] = branch.effects.as_slice()
     else {
         panic!("issue #284 branch must search the library");

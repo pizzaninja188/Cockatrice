@@ -10,9 +10,11 @@
 //! separately typed context/result contract.
 
 use super::{
-    Amount, CardResultAction, CardTypeFilter, ChooseCardSource, EffectContext, EffectSubject,
-    GameCondition, PlayerRecipient, RelativePlayerSet, SpellEffectKind, TargetFilter, TargetSchema,
-    TargetingDef, TokenCopySource,
+    Amount, CardResultAction, CardSearchZone, CardTypeFilter, ChooseCardSource,
+    CohortPartitionSelection, EffectContext, EffectSubject, GameCondition, PlayerRecipient,
+    RelativePlayerSet, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
+    SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
+    TokenCopySource,
 };
 use crate::{ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -237,6 +239,9 @@ pub enum ResultType {
         who: PlayerRecipient,
         cardinality: Cardinality,
     },
+    FoundLibraryCohort,
+    RevealedLibraryCohort,
+    CardPartition,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -411,6 +416,13 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
                 subject: EffectSubject::Chosen(_),
             },
             ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::ChooseCohortPartition {
+                chooser: PlayerRecipient::TargetedPlayer { .. },
+                ..
+            },
+            ProgramTargetRole::Target,
         ) => Some(0),
         _ => None,
     }
@@ -470,6 +482,20 @@ impl Compiler {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let result_types = validate_and_result_types(effect, self.context)?;
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::SearchLibrary {
+                            selection_bounds: Some(_),
+                            ..
+                        } | SpellEffectKind::RevealCohort
+                            | SpellEffectKind::ChooseCohortPartition { .. }
+                    ) && instruction.bind.len() != 1
+                    {
+                        return Err(format!(
+                            "instruction '{}' must bind its typed cohort result",
+                            instruction.id
+                        ));
+                    }
                     (
                         input,
                         result_types,
@@ -737,6 +763,9 @@ fn compile_input(
             source: ChooseCardSource::CardResultCohort { .. },
             ..
         } => Some("CardResultCohort"),
+        EffectOp::RevealCohort => Some("FoundLibraryCohort"),
+        EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
+        EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
         _ => None,
     };
     match (expected, input) {
@@ -762,6 +791,15 @@ fn compile_input(
                         ..
                     }
                 ),
+                EffectOp::RevealCohort => {
+                    matches!(actual.result_type, ResultType::FoundLibraryCohort)
+                }
+                EffectOp::ChooseCohortPartition { .. } => {
+                    matches!(actual.result_type, ResultType::RevealedLibraryCohort)
+                }
+                EffectOp::MoveCohortPartition { .. } => {
+                    matches!(actual.result_type, ResultType::CardPartition)
+                }
                 _ => matches!(
                     (&actual.result_type, expected),
                     (ResultType::PermanentSelection { .. }, "PermanentSelection")
@@ -907,6 +945,13 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             who: *aw,
             cardinality: union(*ac, *bc),
         },
+        (ResultType::FoundLibraryCohort, ResultType::FoundLibraryCohort) => {
+            ResultType::FoundLibraryCohort
+        }
+        (ResultType::RevealedLibraryCohort, ResultType::RevealedLibraryCohort) => {
+            ResultType::RevealedLibraryCohort
+        }
+        (ResultType::CardPartition, ResultType::CardPartition) => ResultType::CardPartition,
         _ => return None,
     })
 }
@@ -1000,6 +1045,58 @@ fn validate_and_result_types(
                     max: amount_upper_bound(count),
                 },
             }])
+        }
+        SpellEffectKind::SearchLibrary {
+            selection_bounds: Some(_),
+            ..
+        } => validate_retained_library_search(effect, context),
+        SpellEffectKind::SearchLibrary { .. } => {
+            Err("SearchLibrary in spell_program requires typed retained selection_bounds".into())
+        }
+        SpellEffectKind::RevealCohort => Ok(vec![ResultType::RevealedLibraryCohort]),
+        SpellEffectKind::ChooseCohortPartition { chooser, selection } => {
+            let PlayerRecipient::TargetedPlayer { kind, .. } = chooser else {
+                return Err(
+                    "ChooseCohortPartition requires a targeted player chooser in spell_program"
+                        .into(),
+                );
+            };
+            if *kind != TargetKind::OpponentPlayer {
+                return Err(
+                    "ChooseCohortPartition chooser must target an opponent in spell_program".into(),
+                );
+            }
+            match selection {
+                CohortPartitionSelection::ExactlyUpTo(limit) if *limit > 0 => {}
+                CohortPartitionSelection::ExactlyUpTo(_) => {
+                    return Err("ChooseCohortPartition ExactlyUpTo limit must be positive".into())
+                }
+            }
+            Ok(vec![ResultType::CardPartition])
+        }
+        SpellEffectKind::MoveCohortPartition {
+            selected_to,
+            remainder_to,
+        } => {
+            let valid_destination = |destination| {
+                matches!(
+                    destination,
+                    SearchDestination::Hand | SearchDestination::Graveyard
+                )
+            };
+            if !valid_destination(*selected_to)
+                || !valid_destination(*remainder_to)
+                || selected_to == remainder_to
+            {
+                return Err(
+                    "MoveCohortPartition requires distinct Hand or Graveyard destinations".into(),
+                );
+            }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ShuffleLibrary { who } => {
+            validate_program_controller(*who, "ShuffleLibrary recipient")?;
+            Ok(Vec::new())
         }
         SpellEffectKind::ChooseCard {
             filter,
@@ -1111,6 +1208,77 @@ fn validate_program_controller(recipient: PlayerRecipient, role: &str) -> Result
             "{role} supports only the resolving spell controller in spell_program"
         ))
     }
+}
+
+fn validate_retained_library_search(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds: Some(SearchSelectionBounds { min, max }),
+    } = effect
+    else {
+        return Err("SearchLibrary requires typed retained selection_bounds".into());
+    };
+    if *count == 0 || min > max || *max != *count {
+        return Err(
+            "retained SearchLibrary bounds must satisfy 0 <= min <= max == count and count > 0"
+                .into(),
+        );
+    }
+    if *who != PlayerRecipient::Controller
+        || *optional
+        || count_by_cast_cost.is_some()
+        || filter.is_some()
+        || !matches!(
+            selection_constraint,
+            None | Some(SearchSelectionConstraint::DifferentNames)
+        )
+        || !slots.is_empty()
+        || *zones != SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+        || *destination != SearchDestination::KeepInLibrary
+        || conditional_destination.is_some()
+        || *shuffle
+        || *reveal
+        || result_id.is_some()
+    {
+        return Err(
+            "retained SearchLibrary supports only a mandatory controller library search with fixed bounds, optional DifferentNames, and KeepInLibrary"
+                .into(),
+        );
+    }
+
+    // Reuse the ordinary direct-search validator for its shared positive-count and zone rules,
+    // removing only the program-owned fields it intentionally rejects.
+    let mut ordinary = effect.clone();
+    if let SpellEffectKind::SearchLibrary {
+        selection_bounds,
+        selection_constraint,
+        destination,
+        ..
+    } = &mut ordinary
+    {
+        *selection_bounds = None;
+        if *selection_constraint == Some(SearchSelectionConstraint::DifferentNames) {
+            *selection_constraint = None;
+        }
+        *destination = SearchDestination::Hand;
+    }
+    ordinary.validate(context)?;
+    Ok(vec![ResultType::FoundLibraryCohort])
 }
 
 fn validate_program_recipient(

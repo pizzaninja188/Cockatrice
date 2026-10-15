@@ -2,7 +2,8 @@
 
 use super::{
     CastCostReceiptCondition, Color, CompiledBlock, CompiledInstructionKind, CompiledProgram,
-    ConditionObjectRef, Keyword, PermanentChoiceConstraint, SpellEffectKind, ZoneCardFilter,
+    ConditionObjectRef, Keyword, PermanentChoiceConstraint, PlayerRecipient, SpellEffectKind,
+    ZoneCardFilter,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -460,6 +461,40 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             }
             if group.prompt.trim().is_empty() {
                 return Err("target group prompt must not be empty".into());
+            }
+            if group_program_bindings.iter().any(|binding| {
+                effects_by_address
+                    .get(&binding.instruction_address)
+                    .is_some_and(|effect| {
+                        matches!(effect, SpellEffectKind::ChooseCohortPartition { .. })
+                    })
+            }) {
+                let chooser_matches_group = group_program_bindings.len() == 1
+                    && group.min == 1
+                    && group.max == 1
+                    && group.chooser == TargetChooser::Controller
+                    && group_program_bindings.iter().all(|binding| {
+                        effects_by_address
+                            .get(&binding.instruction_address)
+                            .is_some_and(|effect| {
+                                matches!(
+                                    effect,
+                                    SpellEffectKind::ChooseCohortPartition {
+                                        chooser: PlayerRecipient::TargetedPlayer {
+                                            group_index: chooser_group,
+                                            kind: TargetKind::AnyPlayer | TargetKind::OpponentPlayer,
+                                        },
+                                        ..
+                                    } if *chooser_group as usize == group_index
+                                )
+                            })
+                    });
+                if !chooser_matches_group {
+                    return Err(
+                        "ChooseCohortPartition requires its bound caster-chosen singleton player target group"
+                            .into(),
+                    );
+                }
             }
             if let Some(expansion) = &group.cast_cost_expansion {
                 if group_program_bindings.len() != 1 {

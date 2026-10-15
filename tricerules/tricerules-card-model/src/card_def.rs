@@ -657,16 +657,13 @@ pub struct CardFace {
     pub spell_program: Option<crate::CardProgram>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
-    /// Modal data-driven spell effects. Mutually exclusive with `spell_effect` and
-    /// `custom_effect`; selected modes resolve in printed order.
+    /// Modal data-driven spell effects. Mutually exclusive with `spell_effect`; selected modes
+    /// resolve in printed order. Legacy `custom_effect` values are rejected during registry load.
     #[serde(default)]
     pub modal_spell: Option<ModalDef>,
-    /// Tier-3 escape hatch (CR-faithful per-card algorithm). `Some(key)` routes this face's
-    /// resolution to a `CardEffect` in `tricerules-core`'s `custom` module instead of the
-    /// data-driven `spell_effect` list — for cards whose resolution is a unique algorithm
-    /// (mid-resolution player choice over live objects), not `(effect_kind, parameters)` static
-    /// data. Mutually exclusive with a non-empty `spell_effect` (one resolution owner per face,
-    /// CR 608) — enforced at registry load.
+    /// Legacy custom-resolution marker retained so imported card data remains detectable and the
+    /// registry can report its key. The registry rejects every `Some(key)` before admission; new
+    /// card behavior belongs in `spell_program`, `modal_spell`, or typed `spell_effect` primitives.
     #[serde(default)]
     pub custom_effect: Option<String>,
     /// Static keyword abilities (Flying, Reach, Intimidate, …). Omit for keywordless faces.

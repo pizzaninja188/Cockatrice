@@ -1763,6 +1763,24 @@ pub(crate) fn cast_instant_and_resolve(
         .expect("other pass")
 }
 
+pub(crate) fn cast_targeted_instant_and_resolve(
+    e: &mut GameEngine,
+    caster: i32,
+    card_id: &str,
+    mana: ManaGift,
+    targets: Vec<TargetRef>,
+) -> RuledEventBatch {
+    ensure_in_hand(e, caster as usize, card_id);
+    give_mana(e, caster, mana);
+    let idx = hand_index_for_card(e, caster as usize, card_id);
+    e.apply_scenario_command(caster, &cast_spell(idx, targets))
+        .expect("cast targeted instant");
+    e.apply_scenario_command(caster, &pass())
+        .expect("caster pass");
+    e.apply_scenario_command(1 - caster, &pass())
+        .expect("other pass")
+}
+
 // ===========================================================================
 // Card-coverage expansion — P1 (static anthems / lords, one-shot mass pump)
 // and P2 (target-filter widening). See docs/plan-card-coverage-expansion.md.

@@ -3645,19 +3645,28 @@ impl CardRegistry {
                         },
                     )?;
                 }
-                // One resolution owner per face (CR 608): ordinary data, modal data, and a
-                // custom (tier-3) effect are mutually exclusive. The
-                // matching custom impl is validated to exist on the `tricerules-core` side
-                // (it owns the `CardEffect` lookup; this crate has no engine access).
+                // `custom_effect` remains a recognized legacy RON field so old/imported data
+                // receives an actionable error instead of being silently treated as a no-op.
+                // It has no admitted runtime owner: reject it before this definition enters the
+                // registry and before any engine can put it on the stack.
+                if let Some(key) = &face.custom_effect {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: format!(
+                            "custom_effect `{key}` is unsupported; use typed spell_program, modal_spell, or spell_effect data"
+                        ),
+                    });
+                }
+
+                // One supported resolution owner per face (CR 608).
                 let resolution_owners = usize::from(!face.spell_effect.is_empty())
                     + usize::from(face.modal_spell.is_some())
-                    + usize::from(face.custom_effect.is_some())
                     + usize::from(face.spell_program.is_some());
                 if resolution_owners > 1 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "face has more than one of spell_effect, spell_program, modal_spell, and \
-                                 custom_effect (one resolution owner allowed)"
+                        reason: "face has more than one of spell_effect, spell_program, and \
+                                 modal_spell (one resolution owner allowed)"
                             .into(),
                     });
                 }

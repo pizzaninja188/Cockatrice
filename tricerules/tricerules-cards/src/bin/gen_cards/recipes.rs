@@ -934,6 +934,7 @@ fn legendary_creature_search_effect() -> SpellEffectKind {
         optional: false,
         count: 1,
         count_by_cast_cost: None,
+        selection_bounds: None,
         filter: Some(ZoneCardFilter {
             card_type: Some(CardTypeFilter::Creature),
             required_supertypes: vec!["Legendary".into()],
@@ -4236,6 +4237,7 @@ fn match_modal_destroy_land_its_controller_search_basic(
                         optional: true,
                         count: 1,
                         count_by_cast_cost: None,
+                        selection_bounds: None,
                         filter: Some(ZoneCardFilter {
                             card_type: Some(CardTypeFilter::BasicLand),
                             ..ZoneCardFilter::default()
@@ -4399,6 +4401,7 @@ fn match_modal_search_artifact_reveal_hand(
                     optional: false,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::Artifact),
                         ..ZoneCardFilter::default()
@@ -4707,6 +4710,7 @@ fn match_modal_search_basic_land_tapped(text: &str, _: &RecipeContext) -> Option
                     optional: false,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::BasicLand),
                         ..ZoneCardFilter::default()
@@ -5336,6 +5340,7 @@ fn match_self_enters_optional_search_basic_land_to_top(
                             optional: false,
                             count: 1,
                             count_by_cast_cost: None,
+                            selection_bounds: None,
                             filter: Some(ZoneCardFilter {
                                 card_type: Some(CardTypeFilter::BasicLand),
                                 ..ZoneCardFilter::default()
@@ -8333,6 +8338,7 @@ fn match_station_etb_sac_land_search_two(
                             optional: false,
                             count: 2,
                             count_by_cast_cost: None,
+                            selection_bounds: None,
                             filter: Some(ZoneCardFilter {
                                 card_type: Some(CardTypeFilter::BasicLand),
                                 ..ZoneCardFilter::default()
@@ -8396,6 +8402,7 @@ fn match_station_attack_put_creature_from_hand(
                     optional: true,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::Creature),
                         ..ZoneCardFilter::default()
@@ -10357,6 +10364,7 @@ fn match_land_tap_sacrifice_search_basic_tapped(
                     optional: false,
                     count: 1,
                     count_by_cast_cost: None,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::BasicLand),
                         ..ZoneCardFilter::default()
@@ -10475,6 +10483,7 @@ fn typecycling_search(
             optional: false,
             count: 1,
             count_by_cast_cost: None,
+            selection_bounds: None,
             filter: Some(filter),
             slots: Vec::new(),
             zones: SearchZoneSelection::default(),
@@ -10837,6 +10846,7 @@ fn match_spell_search_basic_land_battlefield_tapped(
             optional: false,
             count: 1,
             count_by_cast_cost: None,
+            selection_bounds: None,
             filter: Some(ZoneCardFilter {
                 card_type: Some(CardTypeFilter::BasicLand),
                 ..ZoneCardFilter::default()
@@ -13615,6 +13625,7 @@ fn match_etb_enchantment_search_two_basic_lands_tapped(
                 optional: false,
                 count: 2,
                 count_by_cast_cost: None,
+                selection_bounds: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
                     ..ZoneCardFilter::default()

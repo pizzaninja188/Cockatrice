@@ -3128,6 +3128,72 @@ TEST_F(RuledBatchTest, SimultaneousEntryOrderCandidatesStayPrivateUntilEntryComm
     EXPECT_EQ(observer.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, PublicGiftsGraveyardSubsetStaysVisibleThroughEntryOrderRouting)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER);
+    choice->set_prompt_text("Choose the order of the graveyard cards.");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->set_ordered(true);
+
+    auto *reveal = choice->mutable_public_reveal();
+    reveal->set_reveal_id("gifts:4043:stack:900:cursor:0");
+    reveal->set_source_object_id(900);
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_description("Gifts Ungiven");
+    const char *names[] = {"Forest", "Island", "Plains", "Swamp"};
+    for (int i = 0; i < 4; ++i) {
+        auto *card = reveal->add_cards();
+        card->set_object_id(900u + static_cast<quint32>(i));
+        card->set_zone_change_generation(4);
+        card->set_card_id(QString::fromLatin1(names[i]).toLower().toStdString());
+        card->set_card_name(names[i]);
+    }
+    for (const int revealIndex : {3, 1}) {
+        const auto &card = reveal->cards(revealIndex);
+        choice->add_candidate_object_ids(card.object_id());
+        choice->add_candidate_card_ids(card.card_id());
+        choice->add_candidate_names(card.card_name());
+    }
+
+    const auto forOwner = redactFor(batch, p1);
+    const auto &owner = forOwner.events(0).resolution_choice_required();
+    EXPECT_TRUE(owner.has_public_reveal());
+    EXPECT_EQ(owner.public_reveal().cards_size(), 4);
+    EXPECT_EQ(owner.candidate_object_ids_size(), 2);
+    EXPECT_EQ(owner.candidate_object_ids(0), 903u);
+    EXPECT_EQ(owner.candidate_object_ids(1), 901u);
+    EXPECT_EQ(owner.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(owner.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(owner.candidate_server_card_ids(1), 1);
+
+    const auto forObserver = redactFor(batch, p2);
+    const auto &observer = forObserver.events(0).resolution_choice_required();
+    EXPECT_TRUE(observer.has_public_reveal());
+    EXPECT_EQ(observer.public_reveal().cards_size(), 4);
+    EXPECT_EQ(observer.candidate_object_ids_size(), 2);
+    EXPECT_EQ(observer.candidate_card_ids_size(), 2);
+    EXPECT_EQ(observer.candidate_names_size(), 2);
+    EXPECT_EQ(observer.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(observer.candidate_selectable_size(), 0);
+    EXPECT_EQ(observer.prompt_text(), "Opponent is making a resolution choice.");
+
+    auto malformed = batch;
+    malformed.mutable_events(0)
+        ->mutable_resolution_choice_required()
+        ->set_candidate_card_ids(0, "not_in_the_reveal");
+    const auto rejected = redactFor(malformed, p1);
+    const auto &invalid = rejected.events(0).resolution_choice_required();
+    EXPECT_FALSE(invalid.has_public_reveal());
+    EXPECT_EQ(invalid.candidate_object_ids_size(), 0);
+    EXPECT_EQ(invalid.candidate_names_size(), 0);
+    EXPECT_GT(invalid.min(), invalid.max());
+}
+
 TEST_F(RuledBatchTest, ProposedTokenIdentitiesArePrivateValidatedAndRestoredOnReconnect)
 {
     ruled::v1::RuledEventBatch batch;

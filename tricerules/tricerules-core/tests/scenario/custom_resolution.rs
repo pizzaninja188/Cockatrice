@@ -3,6 +3,96 @@ use crate::helpers::*;
 use prost::Message;
 use std::collections::BTreeSet;
 
+/// Rejected typed-Gifts answers must be pure: the parked program frame/slots, exact game state,
+/// command index, deterministic random inputs, and library ordering all remain unchanged.
+fn assert_rejected_gifts_answer_is_immutable(
+    engine: &mut GameEngine,
+    actor: i32,
+    command: &RuledCommand,
+    label: &str,
+) {
+    let pending_before = format!("{:?}", engine.state.pending_resolution);
+    let state_before = format!("{:?}", engine.state);
+    let seed_before = engine.state.seed;
+    let command_index_before = engine.state.command_index;
+    let libraries_before = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.library.iter().copied().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    assert!(
+        engine.apply_command(actor, command).is_err(),
+        "{label} must reject"
+    );
+    assert_eq!(
+        format!("{:?}", engine.state.pending_resolution),
+        pending_before
+    );
+    assert_eq!(format!("{:?}", engine.state), state_before);
+    assert_eq!(engine.state.seed, seed_before);
+    assert_eq!(engine.state.command_index, command_index_before);
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .map(|player| player.library.iter().copied().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        libraries_before,
+        "a rejected command must not consume or reorder library state"
+    );
+}
+
+fn make_gifts_partition_prompt(
+    seed: u64,
+) -> (
+    GameEngine,
+    Vec<u32>,
+    tricerules_proto::ruled::v1::ResolutionChoiceRequired,
+) {
+    let decks = Some(vec![
+        {
+            let mut deck = vec!["gifts_ungiven".to_string()];
+            deck.extend(std::iter::repeat_n("island".to_string(), 29));
+            deck
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new Gifts stale-reference scenario");
+    advance_to_main1_from_game_start(&mut engine);
+    let found = ["lightning_bolt", "divination", "counterspell", "murder"]
+        .iter()
+        .map(|card_id| inject_library_card(&mut engine, 0, card_id))
+        .collect::<Vec<_>>();
+    let search_batch = cast_targeted_instant_and_resolve(
+        &mut engine,
+        0,
+        "gifts_ungiven",
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+        target_player(1),
+    );
+    let search = find_resolution_choice(&search_batch).expect("Gifts search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    let split_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(found.clone()))
+        .expect("submit retained library cohort");
+    let split = find_resolution_choice(&split_batch).expect("Gifts target split offer");
+    (engine, found, split)
+}
+
 fn insert_authored_activated_owner(
     owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
     card_id: &str,
@@ -367,11 +457,12 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(prompt_state.deciding_player_id, 0);
     assert_eq!(prompt_state.resolution_prompt_id, Some(internal_prompt_id));
     assert!(
-        !matches!(
+        matches!(
             &pending.continuation,
-            ResolutionContinuation::Custom { key, .. } if key == "brainstorm"
+            ResolutionContinuation::HandChoice { hand_choice, .. }
+                if hand_choice.program_selection
         ),
-        "Brainstorm must suspend through the standard program runner, not its per-card custom path"
+        "Brainstorm suspends through the typed program runner"
     );
     // Cast removed brainstorm from hand; begin drew three.
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
@@ -379,7 +470,7 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(
         e.state.turn_history.current.player(0).cards_drawn,
         3,
-        "custom draws report the same committed draw history as primitive draws"
+        "program draws report the same committed history as primitive draws"
     );
 
     // Put two specific hand cards on top: last chosen = top (intuitive "place A, then B on top").
@@ -1102,8 +1193,10 @@ fn nested_authored_if_announces_each_owner_local_target_group() {
     pass_priority_round(&mut engine);
 
     assert_eq!(engine.state.objects[&opposing_creature].damage, 1);
-    assert_eq!(engine.state.players[1].life, 20,
-        "the nested ControllerLibraryEmpty no-arm receives only group 0; group 1 was still announced")
+    assert_eq!(
+        engine.state.players[1].life, 20,
+        "the nested ControllerLibraryEmpty no-arm receives only group 0; group 1 was still announced"
+    )
 }
 
 #[test]
@@ -3563,6 +3656,62 @@ fn brainstorm_resolution_is_deterministic() {
 }
 
 #[test]
+fn gifts_split_rejects_stale_selected_generation_without_mutating_the_prompt() {
+    let (mut engine, found, split) = make_gifts_partition_prompt(8_702);
+    let stale_selected = found[0];
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&stale_selected)
+        .copied()
+        .unwrap_or(0);
+    engine
+        .state
+        .zone_change_generation
+        .insert(stale_selected, generation + 1);
+
+    let mut answer = submit_resolution_choice(vec![found[0], found[1]]);
+    let Some(Cmd::SubmitResolutionChoice(command)) = answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.resolution_prompt_id = split.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut engine,
+        1,
+        &answer,
+        "split answer naming a cohort member with a stale generation",
+    );
+}
+
+#[test]
+fn gifts_split_rejects_stale_unselected_complement_without_mutating_the_prompt() {
+    let (mut engine, found, split) = make_gifts_partition_prompt(8_703);
+    let stale_complement = found[3];
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&stale_complement)
+        .copied()
+        .unwrap_or(0);
+    engine
+        .state
+        .zone_change_generation
+        .insert(stale_complement, generation + 1);
+
+    let mut answer = submit_resolution_choice(vec![found[0], found[1]]);
+    let Some(Cmd::SubmitResolutionChoice(command)) = answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.resolution_prompt_id = split.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut engine,
+        1,
+        &answer,
+        "split answer while its unselected complement has a stale generation",
+    );
+}
+
+#[test]
 fn gifts_ungiven_opponent_chooses_the_split() {
     use tricerules_core::Zone;
     // Minimal deck: inject specific distinct-name cards after setup so shuffle order
@@ -3592,8 +3741,11 @@ fn gifts_ungiven_opponent_chooses_the_split() {
     let ctsp_id = inject_library_card(&mut e, 0, "counterspell");
     let murd_id = inject_library_card(&mut e, 0, "murder");
     let found = vec![lb_id, div_id, ctsp_id, murd_id];
+    e.state.players[0]
+        .declared_commander_object_ids
+        .push(ctsp_id);
 
-    let batch = cast_instant_and_resolve(
+    let batch = cast_targeted_instant_and_resolve(
         &mut e,
         0,
         "gifts_ungiven",
@@ -3602,6 +3754,7 @@ fn gifts_ungiven_opponent_chooses_the_split() {
             c: 3,
             ..Default::default()
         },
+        target_player(1),
     );
 
     // First interrupt: the controller searches their library (up to four). This is a *private*
@@ -3620,6 +3773,49 @@ fn gifts_ungiven_opponent_chooses_the_split() {
             search.candidate_object_ids.contains(&oid),
             "injected card must be a search candidate"
         );
+    }
+
+    let mut wrong_search_actor = submit_resolution_choice(found.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = wrong_search_actor.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = search.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        1,
+        &wrong_search_actor,
+        "wrong actor on the private search",
+    );
+    let mut stale_search_prompt = submit_resolution_choice(found.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_search_prompt.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = search.resolution_prompt_id + 1;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        0,
+        &stale_search_prompt,
+        "stale private-search prompt ID",
+    );
+    let initial_generation = e.state.zone_change_generation.get(&lb_id).copied();
+    e.state
+        .zone_change_generation
+        .insert(lb_id, initial_generation.unwrap_or(0) + 1);
+    let mut stale_candidate = submit_resolution_choice(found.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_candidate.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = search.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        0,
+        &stale_candidate,
+        "search candidate whose exact generation is stale",
+    );
+    if let Some(generation) = initial_generation {
+        e.state.zone_change_generation.insert(lb_id, generation);
+    } else {
+        e.state.zone_change_generation.remove(&lb_id);
     }
 
     let batch2 = e
@@ -3642,8 +3838,44 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         found
     );
     assert!(!reveal.reveal_id.is_empty());
+    assert_eq!(
+        batch2.events.iter().find_map(|event| match &event.ev {
+            Some(Ev::CardsRevealed(receipt)) => Some(receipt),
+            _ => None,
+        }),
+        Some(reveal),
+        "the standalone reveal and split metadata share one immutable receipt"
+    );
+    assert_eq!(
+        batch2
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::CardsRevealed(_))))
+            .count(),
+        1,
+        "one Gifts resolution emits one reveal event for its cohort"
+    );
+    let active_reveals = batch2
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ActivePublicRevealSnapshot(snapshot)) => Some(&snapshot.reveals),
+            _ => None,
+        })
+        .expect("active public reveal snapshot");
+    assert_eq!(
+        active_reveals
+            .iter()
+            .find(|active| active.reveal_id == reveal.reveal_id),
+        Some(reveal),
+        "the active reveal projection keeps the exact cohort receipt while the split is pending"
+    );
     assert_eq!(split.deciding_player_id, 1, "opponent decides the split");
     assert_eq!((split.min, split.max), (2, 2));
+    assert!(
+        !split.unique_names,
+        "different names constrain the search, not the target's subset of the revealed cohort"
+    );
     assert_eq!(
         split.candidate_object_ids, found,
         "split is over the revealed set"
@@ -3651,14 +3883,140 @@ fn gifts_ungiven_opponent_chooses_the_split() {
 
     let to_grave: Vec<u32> = found.iter().take(2).copied().collect();
     let to_hand: Vec<u32> = found.iter().skip(2).copied().collect();
-    // The controller cannot make the opponent's choice.
-    assert!(
-        e.apply_scenario_command(0, &submit_resolution_choice(to_grave.clone()))
-            .is_err(),
-        "only the deciding (opponent) player may submit"
+    let split_prompt_id = split.resolution_prompt_id;
+    let mut wrong_split_actor = submit_resolution_choice(to_grave.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = wrong_split_actor.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = split_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        0,
+        &wrong_split_actor,
+        "wrong actor on the target's split",
     );
-    e.apply_scenario_command(1, &submit_resolution_choice(to_grave.clone()))
+    let mut stale_split_prompt = submit_resolution_choice(to_grave.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_split_prompt.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = split_prompt_id + 1;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        1,
+        &stale_split_prompt,
+        "stale split prompt ID",
+    );
+    let mut over_cardinality = submit_resolution_choice(found[..3].to_vec());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = over_cardinality.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = split_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        1,
+        &over_cardinality,
+        "split selection over its maximum cardinality",
+    );
+    let mut duplicate_partition = submit_resolution_choice(vec![found[0], found[0]]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = duplicate_partition.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = split_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        1,
+        &duplicate_partition,
+        "duplicate physical object in split selection",
+    );
+    let commander_batch = e
+        .apply_scenario_command(1, &submit_resolution_choice(to_grave.clone()))
         .expect("opponent submits split");
+    let commander_choice = find_resolution_choice(&commander_batch)
+        .expect("the hand-bound commander receives its CR 903.9b replacement choice");
+    assert_eq!(commander_choice.deciding_player_id, 0);
+    assert!(commander_choice.prompt_text.contains("903.9b"));
+    assert_eq!(commander_choice.public_reveal.as_ref(), Some(reveal));
+    assert!(found
+        .iter()
+        .all(|oid| e.state.objects[oid].zone == Zone::Library));
+    let mut invalid_commander_branch = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = invalid_commander_branch.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = commander_choice.resolution_prompt_id;
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 99;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        0,
+        &invalid_commander_branch,
+        "invalid CR 903.9b commander replacement branch",
+    );
+    assert!(found
+        .iter()
+        .all(|oid| e.state.objects[oid].zone == Zone::Library));
+    let mut decline_command_zone = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = decline_command_zone.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 1;
+    let order_batch = e
+        .apply_scenario_command(0, &decline_command_zone)
+        .expect("commander owner accepts the hand destination");
+    let graveyard_order = find_resolution_choice(&order_batch)
+        .expect("CR 404.3 asks for the graveyard order before any partition move");
+    assert_eq!(graveyard_order.deciding_player_id, 0);
+    assert_eq!(
+        graveyard_order.choice_kind(),
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    assert_eq!(graveyard_order.candidate_object_ids, to_grave);
+    assert_eq!(
+        graveyard_order.public_reveal.as_ref(),
+        Some(reveal),
+        "the precommit order choice keeps the original public cohort receipt"
+    );
+    let mut malformed_graveyard_order = submit_resolution_choice(vec![to_grave[0], to_grave[0]]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = malformed_graveyard_order.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = graveyard_order.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut e,
+        0,
+        &malformed_graveyard_order,
+        "CR 404.3 order with a duplicate and missing partition member",
+    );
+    assert!(found
+        .iter()
+        .all(|oid| e.state.objects[oid].zone == Zone::Library));
+    let active_reveals = order_batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ActivePublicRevealSnapshot(snapshot)) => Some(&snapshot.reveals),
+            _ => None,
+        })
+        .expect("active public reveal snapshot");
+    assert_eq!(
+        active_reveals
+            .iter()
+            .find(|active| active.reveal_id == reveal.reveal_id),
+        Some(reveal),
+        "both observers retain the exact unrevealed-movement cohort during CR 404.3 ordering"
+    );
+    for oid in &found {
+        assert_eq!(
+            e.state.objects[oid].zone,
+            Zone::Library,
+            "no partition member moves before every replacement and order choice is collected"
+        );
+    }
+
+    let moved = e
+        .apply_scenario_command(0, &submit_resolution_choice(to_grave.clone()))
+        .expect("controller submits the graveyard order");
 
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
     for oid in &to_grave {
@@ -3673,7 +4031,1201 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         assert_eq!(e.state.objects[oid].zone, Zone::Hand, "rest -> hand");
         assert!(e.state.players[0].hand.contains(oid));
     }
+    assert_eq!(e.state.objects[&ctsp_id].zone, Zone::Hand);
     assert_eq!(count_card_id_in_graveyard(&e, 0, "gifts_ungiven"), 1);
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library."))
+            .count(),
+        1,
+        "Gifts shuffles its controller's library exactly once after moving the partition"
+    );
+}
+
+#[test]
+fn gifts_ungiven_search_and_partition_cover_zero_through_four_cards() {
+    use tricerules_core::Zone;
+
+    let names = ["lightning_bolt", "divination", "counterspell", "murder"];
+    for count in 0..=4 {
+        let decks = Some(vec![
+            {
+                let mut d = vec!["gifts_ungiven".to_string()];
+                d.extend(std::iter::repeat_n("island".to_string(), 29));
+                d
+            },
+            vec!["forest".into(); 30],
+        ]);
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            700 + count as u64,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
+        advance_to_main1_from_game_start(&mut e);
+
+        let found = names[..count]
+            .iter()
+            .map(|name| inject_library_card(&mut e, 0, name))
+            .collect::<Vec<_>>();
+        let search_batch = cast_targeted_instant_and_resolve(
+            &mut e,
+            0,
+            "gifts_ungiven",
+            ManaGift {
+                u: 1,
+                c: 3,
+                ..Default::default()
+            },
+            target_player(1),
+        );
+        let search = find_resolution_choice(&search_batch).expect("search choice");
+        assert_eq!(search.deciding_player_id, 0);
+        assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+        assert!(search.public_reveal.is_none());
+        assert!(found
+            .iter()
+            .all(|object_id| search.candidate_object_ids.contains(object_id)));
+
+        let after_search = e
+            .apply_scenario_command(0, &submit_resolution_choice(found.clone()))
+            .expect("submit selected search cohort");
+        let split = find_resolution_choice(&after_search);
+        let mut after_partition = after_search.clone();
+        if count > 0 {
+            let chosen_count = count.min(2);
+            let split = split.expect("opponent confirms the full smaller cohort or chooses two");
+            assert_eq!(split.deciding_player_id, 1);
+            assert_eq!(
+                (split.min, split.max),
+                (chosen_count as u32, chosen_count as u32)
+            );
+            assert_eq!(split.candidate_object_ids, found);
+            assert!(split.public_reveal.is_some());
+            assert!(!split.unique_names);
+            after_partition = e
+                .apply_scenario_command(
+                    1,
+                    &submit_resolution_choice(found.iter().take(chosen_count).copied().collect()),
+                )
+                .expect("opponent confirms/submits the partition");
+        } else {
+            assert!(split.is_none(), "an empty cohort needs no subset choice");
+        }
+
+        // With two or more cards, the selected graveyard cohort is ordered before any move
+        // (CR 404.3). For >2 cards the opponent's earlier choice selected the first two.
+        let grave_cards = found.iter().take(count.min(2)).copied().collect::<Vec<_>>();
+        let mut moved = after_partition.clone();
+        if grave_cards.len() >= 2 {
+            let order_choice = find_resolution_choice(&after_partition)
+                .expect("graveyard order is offered before the cohort moves");
+            assert_eq!(
+                order_choice.choice_kind(),
+                ChoiceKind::SimultaneousEntryOrder
+            );
+            assert_eq!(order_choice.candidate_object_ids, grave_cards);
+            let order = e
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("graveyard order pending")
+                .presentation
+                .candidates
+                .clone();
+            assert_eq!(order, grave_cards);
+            moved = e
+                .apply_scenario_command(
+                    0,
+                    &submit_resolution_choice(grave_cards.iter().rev().copied().collect()),
+                )
+                .expect("controller orders the graveyard cohort");
+        } else {
+            assert!(
+                find_resolution_choice(&after_partition).is_none(),
+                "the one-card confirmation is already complete and needs no ordering choice"
+            );
+        }
+
+        assert!(e.state.pending_resolution.is_none(), "Gifts completes");
+        for (index, object_id) in found.iter().enumerate() {
+            let expected = if index < grave_cards.len() {
+                Zone::Graveyard
+            } else {
+                Zone::Hand
+            };
+            assert_eq!(
+                e.state.objects[object_id].zone, expected,
+                "cohort size {count}"
+            );
+        }
+        assert_eq!(
+            moved
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library."))
+                .count(),
+            1,
+            "cohort size {count} shuffles exactly once"
+        );
+    }
+}
+
+#[test]
+fn gifts_target_departing_during_search_chooses_a_live_partition_delegate() {
+    use tricerules_core::Zone;
+
+    let decks = Some(
+        (0..4)
+            .map(|player| {
+                if player == 0 {
+                    let mut deck = vec!["gifts_ungiven".to_string()];
+                    deck.extend(std::iter::repeat_n("island".to_string(), 29));
+                    deck
+                } else {
+                    vec!["forest".to_string(); 30]
+                }
+            })
+            .collect(),
+    );
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        704,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player Gifts engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let found = [
+        inject_library_card(&mut e, 0, "lightning_bolt"),
+        inject_library_card(&mut e, 0, "divination"),
+        inject_library_card(&mut e, 0, "counterspell"),
+        inject_library_card(&mut e, 0, "murder"),
+    ];
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&e, 0, "gifts_ungiven");
+    e.apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
+        .expect("cast Gifts targeting P1");
+    pass_priority_round(&mut e);
+    let search_before_departure = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("controller searches before target leaves");
+    assert_eq!(search_before_departure.deciding_player, 0);
+    assert_eq!(
+        search_before_departure.presentation.choice_kind,
+        ChoiceKind::LibrarySearch
+    );
+
+    let departure = e
+        .apply_scenario_command(1, &concede())
+        .expect("target leaves while the search is pending");
+    assert!(
+        departure
+            .events
+            .iter()
+            .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))),
+        "leaving during a private search must not reveal or repeat a reveal"
+    );
+    assert!(
+        e.state.players[1].has_lost,
+        "the targeted player is marked departed"
+    );
+    let search = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("search offer remains for its live controller");
+    assert_eq!(search.deciding_player, 0);
+    assert!(found
+        .iter()
+        .all(|id| search.presentation.candidates.contains(id)));
+
+    let after_search = e
+        .apply_scenario_command(0, &submit_resolution_choice(found.to_vec()))
+        .expect("controller submits the retained search cohort");
+    let delegate_prompt = find_resolution_choice(&after_search)
+        .expect("controller chooses a live player after the target departed during search");
+    assert_eq!(delegate_prompt.deciding_player_id, 0);
+    assert_eq!(delegate_prompt.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_eq!(delegate_prompt.candidate_player_ids, vec![2, 3]);
+
+    let mut stale_target = submit_resolution_choice(vec![found[0], found[1]]);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_target.cmd.as_mut() {
+        answer.resolution_prompt_id = delegate_prompt.resolution_prompt_id;
+    }
+    assert!(
+        e.apply_scenario_command(1, &stale_target).is_err(),
+        "a departed target cannot answer the stale split command"
+    );
+    assert_eq!(
+        e.state.pending_resolution.as_ref().unwrap().deciding_player,
+        0,
+        "rejecting the departed actor preserves the delegate prompt"
+    );
+
+    let mut choose_delegate = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = choose_delegate.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 0;
+    let delegated = e
+        .apply_scenario_command(0, &choose_delegate)
+        .expect("controller delegates P1's choice to live opponent P2");
+    let split = find_resolution_choice(&delegated).expect("P2 receives the split choice");
+    let reveal = split
+        .public_reveal
+        .as_ref()
+        .expect("retained public reveal");
+    assert_eq!(split.deciding_player_id, 2);
+    assert_eq!(split.candidate_object_ids, found);
+    assert_eq!((split.min, split.max), (2, 2));
+    assert!(!split.unique_names);
+    assert_eq!(
+        delegated
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::CardsRevealed(_))))
+            .count(),
+        0,
+        "delegation reuses the first reveal without emitting another"
+    );
+    let original_reveal = after_search
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::CardsRevealed(receipt)) => Some(receipt),
+            _ => None,
+        })
+        .expect("the search result was revealed exactly once");
+    assert_eq!(reveal, original_reveal);
+
+    let order = e
+        .apply_scenario_command(2, &submit_resolution_choice(vec![found[0], found[1]]))
+        .expect("delegate chooses the two graveyard cards");
+    let order_prompt = find_resolution_choice(&order).expect("controller orders the graveyard");
+    assert_eq!(order_prompt.deciding_player_id, 0);
+    assert_eq!(order_prompt.public_reveal.as_ref(), Some(original_reveal));
+    let moved = e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found[1], found[0]]))
+        .expect("controller submits the precommit graveyard order");
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(e.state.objects[&found[0]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[1]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[2]].zone, Zone::Hand);
+    assert_eq!(e.state.objects[&found[3]].zone, Zone::Hand);
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "gifts_ungiven"), 1);
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1,
+        "the delegated resolution shuffles exactly once"
+    );
+}
+
+#[test]
+fn gifts_target_departing_during_partition_chooses_a_live_delegate_without_revealing_again() {
+    use tricerules_core::Zone;
+
+    let decks = Some(
+        (0..4)
+            .map(|player| {
+                if player == 0 {
+                    let mut deck = vec!["gifts_ungiven".to_string()];
+                    deck.extend(std::iter::repeat_n("island".to_string(), 29));
+                    deck
+                } else {
+                    vec!["forest".to_string(); 30]
+                }
+            })
+            .collect(),
+    );
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        705,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player Gifts engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let found = [
+        inject_library_card(&mut e, 0, "lightning_bolt"),
+        inject_library_card(&mut e, 0, "divination"),
+        inject_library_card(&mut e, 0, "counterspell"),
+        inject_library_card(&mut e, 0, "murder"),
+    ];
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&e, 0, "gifts_ungiven");
+    e.apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
+        .expect("cast Gifts targeting P1");
+    pass_priority_round(&mut e);
+    let search = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("controller searches");
+    assert_eq!(search.presentation.choice_kind, ChoiceKind::LibrarySearch);
+    let searched = e
+        .apply_scenario_command(0, &submit_resolution_choice(found.to_vec()))
+        .expect("controller completes the private search");
+    let split = find_resolution_choice(&searched).expect("target P1 receives the partition");
+    assert_eq!(split.deciding_player_id, 1);
+    assert_eq!(split.candidate_object_ids, found);
+    let receipt = split.public_reveal.clone().expect("one public reveal");
+    assert_eq!(
+        searched
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::CardsRevealed(_))))
+            .count(),
+        1
+    );
+
+    let departure = e
+        .apply_scenario_command(1, &concede())
+        .expect("target leaves while the revealed partition is pending");
+    assert!(e.state.players[1].has_lost);
+    assert!(departure
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    let delegate_prompt =
+        find_resolution_choice(&departure).expect("controller receives a delegate choice");
+    assert_eq!(delegate_prompt.deciding_player_id, 0);
+    assert_eq!(delegate_prompt.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_eq!(delegate_prompt.candidate_player_ids, vec![2, 3]);
+    let published = departure.events.iter().find_map(|event| match &event.ev {
+        Some(Ev::ActivePublicRevealSnapshot(snapshot)) => snapshot
+            .reveals
+            .iter()
+            .find(|active| active.reveal_id == receipt.reveal_id),
+        _ => None,
+    });
+    assert_eq!(published, Some(&receipt));
+
+    let mut stale_target = submit_resolution_choice(found[..2].to_vec());
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_target.cmd.as_mut() {
+        answer.resolution_prompt_id = delegate_prompt.resolution_prompt_id;
+    }
+    assert!(e.apply_scenario_command(1, &stale_target).is_err());
+    assert_eq!(
+        e.state.pending_resolution.as_ref().unwrap().deciding_player,
+        0
+    );
+    let mut choose_delegate = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = choose_delegate.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 0;
+    let delegated = e
+        .apply_scenario_command(0, &choose_delegate)
+        .expect("P0 assigns P2 as the live chooser");
+    let new_split = find_resolution_choice(&delegated).expect("P2 receives the split");
+    assert_eq!(new_split.deciding_player_id, 2);
+    assert_eq!(new_split.candidate_object_ids, found);
+    assert_eq!(new_split.public_reveal.as_ref(), Some(&receipt));
+    assert!(delegated
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    let order = e
+        .apply_scenario_command(2, &submit_resolution_choice(found[..2].to_vec()))
+        .expect("P2 chooses two graveyard cards");
+    let order_prompt = find_resolution_choice(&order).expect("P0 orders the GY cohort");
+    assert_eq!(order_prompt.deciding_player_id, 0);
+    assert_eq!(order_prompt.public_reveal.as_ref(), Some(&receipt));
+    let moved = e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found[1], found[0]]))
+        .expect("P0 supplies the CR 404.3 order");
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(e.state.objects[&found[0]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[1]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[2]].zone, Zone::Hand);
+    assert_eq!(e.state.objects[&found[3]].zone, Zone::Hand);
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn gifts_source_owner_departure_preserves_surviving_controller_library_cohort() {
+    use tricerules_core::Zone;
+
+    let decks = Some(
+        (0..4)
+            .map(|player| {
+                if player == 0 {
+                    let mut deck = vec!["gifts_ungiven".to_string()];
+                    deck.extend(std::iter::repeat_n("island".to_string(), 29));
+                    deck
+                } else {
+                    vec!["forest".to_string(); 30]
+                }
+            })
+            .collect(),
+    );
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        706,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player Gifts engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let found = [
+        inject_library_card(&mut e, 1, "lightning_bolt"),
+        inject_library_card(&mut e, 1, "divination"),
+        inject_library_card(&mut e, 1, "counterspell"),
+        inject_library_card(&mut e, 1, "murder"),
+    ];
+    let generations = found
+        .iter()
+        .map(|id| e.state.zone_change_generation.get(id).copied().unwrap_or(0))
+        .collect::<Vec<_>>();
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&e, 0, "gifts_ungiven");
+    e.apply_scenario_command(0, &cast_spell(gifts, target_player(2)))
+        .expect("P0 casts Gifts at P2");
+    let physical_spell = e.state.stack.last().expect("Gifts on stack").id;
+    assert_eq!(e.state.objects[&physical_spell].owner, 0);
+    e.state.stack.last_mut().unwrap().controller = 1;
+    pass_priority_round(&mut e);
+    let search = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the resolving spell is controlled by P1");
+    assert_eq!(search.deciding_player, 1);
+    assert!(found
+        .iter()
+        .all(|id| search.presentation.candidates.contains(id)));
+
+    let departure = e
+        .apply_scenario_command(0, &concede())
+        .expect("physical source owner P0 leaves while P1 controls the resolving program");
+    assert!(e.state.players[0].has_lost);
+    assert!(!e.state.objects.contains_key(&physical_spell));
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed)) if removed.object_id == physical_spell
+            ))
+            .count(),
+        1,
+        "the departed physical spell exits the stack exactly once"
+    );
+    assert!(departure
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    let refreshed = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P1's search offer survives source-owner departure");
+    assert_eq!(refreshed.deciding_player, 1);
+    assert!(found.iter().all(|id| {
+        e.state.objects.get(id).is_some_and(|object| {
+            object.owner == 1
+                && object.zone == Zone::Library
+                && e.state.players[1].library.contains(id)
+        })
+    }));
+
+    let searched = e
+        .apply_scenario_command(1, &submit_resolution_choice(found.to_vec()))
+        .expect("surviving controller completes the original retained search");
+    let split = find_resolution_choice(&searched).expect("target P2 chooses the partition");
+    assert_eq!(split.deciding_player_id, 2);
+    assert_eq!(split.candidate_object_ids, found);
+    let receipt = split
+        .public_reveal
+        .clone()
+        .expect("cohort was revealed once");
+    assert_eq!(
+        searched
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::CardsRevealed(_))))
+            .count(),
+        1
+    );
+    let partition = e
+        .apply_scenario_command(2, &submit_resolution_choice(found[..2].to_vec()))
+        .expect("P2 chooses the graveyard half");
+    let order = find_resolution_choice(&partition).expect("P1 orders their graveyard");
+    assert_eq!(order.deciding_player_id, 1);
+    assert_eq!(order.public_reveal.as_ref(), Some(&receipt));
+    let moved = e
+        .apply_scenario_command(1, &submit_resolution_choice(vec![found[1], found[0]]))
+        .expect("P1 orders and completes the physical cohort");
+    assert!(e.state.pending_resolution.is_none());
+    assert!(!e.state.objects.contains_key(&physical_spell));
+    assert_eq!(e.state.objects[&found[0]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[1]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[2]].zone, Zone::Hand);
+    assert_eq!(e.state.objects[&found[3]].zone, Zone::Hand);
+    for (id, before) in found.iter().zip(generations) {
+        assert_eq!(e.state.zone_change_generation[id], before + 1);
+    }
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P1 shuffles their library."
+            ))
+            .count(),
+        1
+    );
+    assert!(moved.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::StackObjectRemoved(removed)) if removed.object_id == physical_spell
+    )));
+}
+
+#[test]
+fn gifts_source_owner_departure_during_precommit_keeps_controller_cohort_and_does_not_resurrect_spell(
+) {
+    use tricerules_core::Zone;
+
+    let decks = Some(
+        (0..4)
+            .map(|player| {
+                if player == 0 {
+                    let mut deck = vec!["gifts_ungiven".to_string()];
+                    deck.extend(std::iter::repeat_n("island".to_string(), 29));
+                    deck
+                } else {
+                    vec!["forest".to_string(); 30]
+                }
+            })
+            .collect(),
+    );
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        707,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player Gifts engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let found = [
+        inject_library_card(&mut e, 1, "lightning_bolt"),
+        inject_library_card(&mut e, 1, "divination"),
+        inject_library_card(&mut e, 1, "counterspell"),
+        inject_library_card(&mut e, 1, "murder"),
+    ];
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&e, 0, "gifts_ungiven");
+    e.apply_scenario_command(0, &cast_spell(gifts, target_player(2)))
+        .expect("P0 casts Gifts at P2");
+    let physical_spell = e.state.stack.last().expect("Gifts on stack").id;
+    assert_eq!(e.state.objects[&physical_spell].owner, 0);
+    e.state.stack.last_mut().unwrap().controller = 1;
+    pass_priority_round(&mut e);
+    let search = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P1 controls the resolving search");
+    assert_eq!(search.deciding_player, 1);
+    let searched = e
+        .apply_scenario_command(1, &submit_resolution_choice(found.to_vec()))
+        .expect("P1 completes the library search");
+    let split = find_resolution_choice(&searched).expect("P2 chooses the partition");
+    assert_eq!(split.deciding_player_id, 2);
+    let receipt = split.public_reveal.clone().expect("public cohort receipt");
+    let order = e
+        .apply_scenario_command(2, &submit_resolution_choice(found[..2].to_vec()))
+        .expect("P2 chooses two cards for the graveyard");
+    let order_prompt = find_resolution_choice(&order).expect("P1 receives the precommit order");
+    assert_eq!(order_prompt.deciding_player_id, 1);
+    assert_eq!(order_prompt.public_reveal.as_ref(), Some(&receipt));
+    assert!(found
+        .iter()
+        .all(|id| e.state.objects[id].zone == Zone::Library));
+
+    let departure = e
+        .apply_scenario_command(0, &concede())
+        .expect("source owner A leaves during the precommit movement prompt");
+    assert!(e.state.players[0].has_lost);
+    assert!(!e.state.objects.contains_key(&physical_spell));
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed)) if removed.object_id == physical_spell
+            ))
+            .count(),
+        1,
+        "CR 800.4a publishes one removal for the parked physical spell"
+    );
+    assert!(departure
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    let refreshed = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the surviving controller retains the CR 404.3 prompt");
+    assert_eq!(refreshed.deciding_player, 1);
+    assert_eq!(refreshed.presentation.candidates, found[..2]);
+    assert!(found.iter().all(|id| {
+        e.state.objects.get(id).is_some_and(|object| {
+            object.owner == 1
+                && object.zone == Zone::Library
+                && e.state.players[1].library.contains(id)
+        })
+    }));
+
+    let moved = e
+        .apply_scenario_command(1, &submit_resolution_choice(vec![found[1], found[0]]))
+        .expect("P1 completes the still-live partition");
+    assert!(e.state.pending_resolution.is_none());
+    assert!(!e.state.objects.contains_key(&physical_spell));
+    assert_eq!(e.state.objects[&found[0]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[1]].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&found[2]].zone, Zone::Hand);
+    assert_eq!(e.state.objects[&found[3]].zone, Zone::Hand);
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P1 shuffles their library."
+            ))
+            .count(),
+        1,
+        "the surviving controller completes the explicit shuffle tail once"
+    );
+    assert!(moved.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::StackObjectRemoved(removed)) if removed.object_id == physical_spell
+    )));
+    assert!(
+        moved.events.iter().all(|event| !matches!(
+            &event.ev,
+            Some(Ev::StackResolved(resolved)) if resolved.object_id == physical_spell
+        )),
+        "the resumed private frame does not publish a second stack exit"
+    );
+    assert!(
+        !e.state.players[0].graveyard.contains(&physical_spell),
+        "the missing physical spell is not resurrected into its former owner's graveyard"
+    );
+}
+
+#[test]
+fn gifts_controller_departure_during_precommit_exiles_survivor_owned_spell_once_and_prunes_cohort()
+{
+    use tricerules_core::Zone;
+
+    let decks = Some(vec![
+        deck_with("island", &["gifts_ungiven", "wan_shi_tong,_librarian"]),
+        deck_with("forest", &[]),
+        deck_with("swamp", &[]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        708,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player Gifts engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let wan = move_ready_to_battlefield(&mut e, 0, "wan_shi_tong,_librarian");
+    pass_priority_round(&mut e);
+    ensure_card_in_hand(&mut e, 0, "gifts_ungiven");
+    let found = [
+        inject_library_card(&mut e, 1, "lightning_bolt"),
+        inject_library_card(&mut e, 1, "divination"),
+        inject_library_card(&mut e, 1, "counterspell"),
+        inject_library_card(&mut e, 1, "murder"),
+    ];
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&e, 0, "gifts_ungiven");
+    e.apply_scenario_command(0, &cast_spell(gifts, target_player(2)))
+        .expect("P0 casts Gifts at P2");
+    let physical_spell = e.state.stack.last().expect("Gifts on stack").id;
+    assert_eq!(e.state.objects[&physical_spell].owner, 0);
+    e.state.stack.last_mut().unwrap().controller = 1;
+    pass_priority_round(&mut e);
+    assert_eq!(
+        e.state.pending_resolution.as_ref().unwrap().deciding_player,
+        1
+    );
+    let searched = e
+        .apply_scenario_command(1, &submit_resolution_choice(found.to_vec()))
+        .expect("P1 searches their own library");
+    let split = find_resolution_choice(&searched).expect("P2 chooses the split");
+    assert_eq!(split.deciding_player_id, 2);
+    let receipt = split.public_reveal.clone().expect("public reveal receipt");
+    let order = e
+        .apply_scenario_command(2, &submit_resolution_choice(found[..2].to_vec()))
+        .expect("P2 selects the graveyard partition");
+    let order_prompt = find_resolution_choice(&order).expect("P1 orders the graveyard side");
+    assert_eq!(order_prompt.deciding_player_id, 1);
+    assert_eq!(order_prompt.public_reveal.as_ref(), Some(&receipt));
+    assert_eq!(
+        e.state.staged_trigger_groups.len(),
+        1,
+        "Wan observes the search once"
+    );
+    let spell_generation = e
+        .state
+        .zone_change_generation
+        .get(&physical_spell)
+        .copied()
+        .unwrap_or(0);
+    assert!(found
+        .iter()
+        .all(|id| e.state.objects[id].zone == Zone::Library));
+
+    let departure = e
+        .apply_scenario_command(1, &concede())
+        .expect("controller and library owner P1 leaves during precommit");
+    assert!(e.state.players[1].has_lost);
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(
+        e.state.zone_change_generation.get(&physical_spell).copied(),
+        Some(spell_generation + 1),
+        "the surviving owner's spell makes one true exit to exile"
+    );
+    assert_eq!(e.state.objects[&physical_spell].zone, Zone::Exile);
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::PermanentMoved(moved))
+                    if moved.object_id == physical_spell
+                        && moved.destination == tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32
+            ))
+            .count(),
+        1,
+        "the physical spell is visibly exiled once"
+    );
+    assert!(departure.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::CardsRevealed(_) | Ev::ResolutionChoiceRequired(_))
+    )));
+    assert!(
+        found.iter().all(|id| !e.state.objects.contains_key(id)),
+        "departed B's library refs are pruned"
+    );
+    assert!(departure.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::Log(log)) if log.text == "P1 shuffles their library."
+    )));
+    assert_eq!(
+        e.state
+            .stack
+            .iter()
+            .filter(|item| item.source_permanent_id == Some(wan))
+            .count(),
+        1,
+        "the already-staged LibrarySearched trigger remains single"
+    );
+
+    let hand_before_trigger = e.state.players[0].hand.len();
+    pass_priority_round(&mut e);
+    assert_eq!(
+        e.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne),
+        1
+    );
+    assert_eq!(e.state.players[0].hand.len(), hand_before_trigger + 1);
+    assert_eq!(e.state.objects[&physical_spell].zone, Zone::Exile);
+    assert_eq!(
+        e.state.zone_change_generation.get(&physical_spell).copied(),
+        Some(spell_generation + 1),
+        "finishing the frozen cursor neither resurrects nor moves the spell again"
+    );
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "gifts_ungiven"), 0);
+}
+
+#[test]
+fn intuition_comparator_reverses_the_typed_partition_without_unique_names() {
+    use tricerules_core::Zone;
+
+    // Test-only comparator. This deliberately adds no card data or admission: it proves the
+    // shared typed cohort primitive also supports Intuition's opposite destination mapping.
+    let intuition = r#"(
+        id: "intuition_comparator_fixture", name: "Intuition Comparator Fixture",
+        face_id: "intuition_comparator_fixture", mana_cost: "{3}{U}", types: ["Instant"],
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+        )])),
+        spell_program: Some((
+            body: (steps: [
+                (id: "search", bind: ["found"], input: None,
+                    kind: Perform(SearchLibrary(
+                        who: Controller, optional: false, count: 3,
+                        count_by_cast_cost: None, filter: None,
+                        selection_constraint: None, slots: [],
+                        zones: Fixed([Library]), destination: KeepInLibrary,
+                        conditional_destination: None, shuffle: false, reveal: false,
+                        result_id: None, selection_bounds: Some((min: 3, max: 3)),
+                    ))),
+                (id: "reveal", bind: ["revealed"], input: Some("found"),
+                    kind: Perform(RevealCohort)),
+                (id: "choose_one", bind: ["partition"], input: Some("revealed"),
+                    kind: Perform(ChooseCohortPartition(
+                        chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                        selection: ExactlyUpTo(1),
+                    ))),
+                (id: "move_partition", bind: [], input: Some("partition"),
+                    kind: Perform(MoveCohortPartition(
+                        selected_to: Hand, remainder_to: Graveyard,
+                    ))),
+                (id: "shuffle", bind: [], input: None,
+                    kind: Perform(ShuffleLibrary(who: Controller))),
+            ], yields: []),
+            target_bindings: [
+                (instruction_id: "choose_one", role: Target, target_group_index: 0),
+            ],
+        ))
+    )"#;
+    let duplicate_a = r#"(id: "intuition_duplicate_a", name: "Repeated Name",
+        face_id: "intuition_duplicate_a", mana_cost: "{0}", types: ["Sorcery"])"#;
+    let distinct = r#"(id: "intuition_distinct", name: "Distinct Name",
+        face_id: "intuition_distinct", mana_cost: "{0}", types: ["Sorcery"])"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                intuition,
+                duplicate_a,
+                distinct,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("test-only Intuition comparator compiles through the same typed program"),
+    ));
+
+    let make_engine = |seed: u64, short_library: bool| {
+        let p0_size = if short_library { 9 } else { 30 };
+        let decks = Some(vec![
+            vec!["island".to_string(); p0_size],
+            vec!["forest".into(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+            .expect("new Intuition comparison engine");
+        advance_to_main1_from_game_start(&mut engine);
+        inject_card_into_hand(&mut engine, 0, "intuition_comparator_fixture");
+        engine
+    };
+
+    // Three search results include two distinct physical cards with the same name. The search
+    // admits both; the opponent puts one card in hand and the two-card graveyard side requires
+    // the controller's CR 404.3 order. Run once for the command-zone choice and once for the
+    // graveyard branch, proving all replacement/order decisions precede the single commit.
+    for commander_to_command_zone in [true, false] {
+        let mut e = make_engine(71 + u64::from(commander_to_command_zone), false);
+        let duplicate_a = inject_library_card(&mut e, 0, "intuition_duplicate_a");
+        let duplicate_b = inject_library_card(&mut e, 0, "intuition_duplicate_a");
+        let distinct = inject_library_card(&mut e, 0, "intuition_distinct");
+        let found = vec![duplicate_a, duplicate_b, distinct];
+        let before_generations = found
+            .iter()
+            .map(|id| e.state.zone_change_generation.get(id).copied().unwrap_or(0))
+            .collect::<Vec<_>>();
+        let batch = cast_targeted_instant_and_resolve(
+            &mut e,
+            0,
+            "intuition_comparator_fixture",
+            ManaGift {
+                u: 1,
+                c: 3,
+                ..Default::default()
+            },
+            target_player(1),
+        );
+        let search = find_resolution_choice(&batch).expect("exact three-card search");
+        assert_eq!(search.deciding_player_id, 0);
+        assert_eq!((search.min, search.max), (3, 3));
+        assert!(!search.unique_names);
+        assert!(search.public_reveal.is_none());
+        assert!(found
+            .iter()
+            .all(|id| search.candidate_object_ids.contains(id)));
+        let search_result = e
+            .apply_scenario_command(0, &submit_resolution_choice(found.clone()))
+            .expect("submit two duplicate names and the distinct card");
+        let split = find_resolution_choice(&search_result).expect("opponent chooses one");
+        assert_eq!(split.deciding_player_id, 1);
+        assert_eq!((split.min, split.max), (1, 1));
+        assert!(!split.unique_names);
+        assert_eq!(split.candidate_object_ids, found);
+        let reveal = split
+            .public_reveal
+            .clone()
+            .expect("public comparator reveal");
+        assert_eq!(
+            search_result
+                .events
+                .iter()
+                .filter(|event| { matches!(&event.ev, Some(Ev::CardsRevealed(_))) })
+                .count(),
+            1,
+            "one standalone public reveal is emitted for the chosen cohort"
+        );
+        assert_eq!(
+            search_result
+                .events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(Ev::CardsRevealed(receipt)) => Some(receipt),
+                    _ => None,
+                }),
+            Some(&reveal)
+        );
+
+        e.state.players[0]
+            .declared_commander_object_ids
+            .extend([duplicate_a, distinct]);
+        let split_batch = e
+            .apply_scenario_command(1, &submit_resolution_choice(vec![distinct]))
+            .expect("the target chooses the one card that goes to hand");
+        let commander_choice = find_resolution_choice(&split_batch)
+            .expect("a hand-bound commander asks before movement under CR 903.9b");
+        assert_eq!(commander_choice.deciding_player_id, 0);
+        assert!(commander_choice.prompt_text.contains("903.9b"));
+        assert_eq!(commander_choice.public_reveal.as_ref(), Some(&reveal));
+        assert!(found
+            .iter()
+            .all(|id| e.state.objects[id].zone == Zone::Library));
+        assert_eq!(
+            split_batch.events.iter().find_map(|event| match &event.ev {
+                Some(Ev::ActivePublicRevealSnapshot(snapshot)) => snapshot
+                    .reveals
+                    .iter()
+                    .find(|active| active.reveal_id == reveal.reveal_id),
+                _ => None,
+            }),
+            Some(&reveal)
+        );
+
+        let mut branch = submit_resolution_choice(Vec::new());
+        let Some(Cmd::SubmitResolutionChoice(answer)) = branch.cmd.as_mut() else {
+            unreachable!()
+        };
+        answer.decision =
+            tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+        answer.selected_branch_index = if commander_to_command_zone { 0 } else { 1 };
+        let commander_batch = e
+            .apply_scenario_command(0, &branch)
+            .expect("the card owner chooses a commander destination");
+        let order = find_resolution_choice(&commander_batch)
+            .expect("the two graveyard cards receive the CR 404.3 order choice");
+        assert_eq!(order.deciding_player_id, 0);
+        assert_eq!(order.choice_kind(), ChoiceKind::SimultaneousEntryOrder);
+        assert_eq!(order.candidate_object_ids, vec![duplicate_a, duplicate_b]);
+        assert_eq!(order.public_reveal.as_ref(), Some(&reveal));
+        assert!(found
+            .iter()
+            .all(|id| e.state.objects[id].zone == Zone::Library));
+        let mut batches = vec![e
+            .apply_scenario_command(0, &submit_resolution_choice(vec![duplicate_b, duplicate_a]))
+            .expect("controller supplies the precommit graveyard order")];
+        let sba = find_resolution_choice(&batches[0])
+            .expect("the graveyard-bound commander receives 903.9a after resolution");
+        assert_eq!(sba.deciding_player_id, 0);
+        assert!(sba.prompt_text.contains("903.9a"));
+        assert_eq!(e.state.objects[&duplicate_a].zone, Zone::Graveyard);
+        assert_eq!(e.state.objects[&duplicate_b].zone, Zone::Graveyard);
+        let mut leave_commander = submit_resolution_choice(Vec::new());
+        let Some(Cmd::SubmitResolutionChoice(answer)) = leave_commander.cmd.as_mut() else {
+            unreachable!()
+        };
+        answer.decision =
+            tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+        answer.selected_branch_index = 1;
+        batches.push(
+            e.apply_scenario_command(0, &leave_commander)
+                .expect("CR 903.9a owner leaves the commander in their graveyard"),
+        );
+        assert!(e.state.pending_resolution.is_none());
+        assert_eq!(e.state.objects[&duplicate_a].zone, Zone::Graveyard);
+        assert_eq!(e.state.objects[&duplicate_b].zone, Zone::Graveyard);
+        assert_eq!(
+            e.state.objects[&distinct].zone,
+            if commander_to_command_zone {
+                Zone::Command
+            } else {
+                Zone::Hand
+            }
+        );
+        assert_eq!(
+            batches
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+                ))
+                .count(),
+            1
+        );
+        for (id, before) in found.iter().zip(before_generations) {
+            assert_eq!(
+                e.state.zone_change_generation.get(id).copied().unwrap_or(0),
+                before + 1,
+                "each member of the Intuition partition has one committed zone transition"
+            );
+        }
+    }
+
+    // The Intuition template asks for three cards (bounds 3/3) without a DifferentNames rule.
+    // With only two physical copies of the same name in P0's library, the actual runtime search
+    // clamps both ends to two and admits both copies before reversing the destination partition.
+    let mut e = make_engine(79, true);
+    assert_eq!(e.state.players[0].library.len(), 2, "short-library fixture");
+    let short = e.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    let before_generations = short
+        .iter()
+        .map(|id| e.state.zone_change_generation.get(id).copied().unwrap_or(0))
+        .collect::<Vec<_>>();
+    for id in &short {
+        e.state.objects.get_mut(id).unwrap().card_id = "intuition_duplicate_a".into();
+    }
+    let batch = cast_targeted_instant_and_resolve(
+        &mut e,
+        0,
+        "intuition_comparator_fixture",
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+        target_player(1),
+    );
+    let search = find_resolution_choice(&batch).expect("clamped short-library search");
+    assert_eq!((search.min, search.max), (2, 2));
+    assert_eq!(search.candidate_object_ids, short);
+    assert!(!search.unique_names);
+    let after_search = e
+        .apply_scenario_command(0, &submit_resolution_choice(short.clone()))
+        .expect("submit all available library cards");
+    let split = find_resolution_choice(&after_search).expect("target chooses from two cards");
+    assert_eq!(split.deciding_player_id, 1);
+    assert_eq!((split.min, split.max), (1, 1));
+    assert!(!split.unique_names);
+    assert_eq!(split.candidate_object_ids, short);
+    let chosen = split.candidate_object_ids[0];
+    let moved = e
+        .apply_scenario_command(1, &submit_resolution_choice(vec![chosen]))
+        .expect("target puts one card in hand; the remainder enters graveyard");
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(e.state.objects[&chosen].zone, Zone::Hand);
+    let remainder = *short.iter().find(|id| **id != chosen).expect("remainder");
+    assert_eq!(e.state.objects[&remainder].zone, Zone::Graveyard);
+    for (id, before) in short.iter().zip(before_generations) {
+        assert_eq!(e.state.zone_change_generation[id], before + 1);
+    }
+    assert_eq!(
+        moved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1
+    );
 }
 
 /// Gifts Ungiven: submitting two library cards with the same name must be rejected (Oracle:
@@ -3710,7 +5262,7 @@ fn gifts_ungiven_rejects_same_name_in_search() {
     let ctsp_id = inject_library_card(&mut e, 0, "counterspell");
     let murd_id = inject_library_card(&mut e, 0, "murder");
 
-    let batch = cast_instant_and_resolve(
+    let batch = cast_targeted_instant_and_resolve(
         &mut e,
         0,
         "gifts_ungiven",
@@ -3719,6 +5271,7 @@ fn gifts_ungiven_rejects_same_name_in_search() {
             c: 3,
             ..Default::default()
         },
+        target_player(1),
     );
 
     let search = find_resolution_choice(&batch).expect("search choice");
@@ -3763,68 +5316,111 @@ fn gifts_ungiven_rejects_same_name_in_search() {
     );
 }
 
-/// Registry `custom_effect` key → the card ids claiming it, for the two directions below.
-fn custom_effect_claims() -> std::collections::BTreeMap<&'static str, Vec<&'static str>> {
-    let reg = tricerules_cards::registry::global();
-    let mut claims: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
-    for def in reg.definitions() {
-        for face in def.faces_iter() {
-            if let Some(key) = face.custom_effect.as_deref() {
-                claims.entry(key).or_default().push(def.id.as_str());
-            }
+#[test]
+fn gifts_different_names_search_rejects_duplicate_split_and_room_physical_copies() {
+    // Each pair has two distinct physical objects with the same legal multiface definition.
+    // This reaches Gifts' actual DifferentNames search validator while keeping the synthetic
+    // registry's deck aliases valid; names_outside_stack supplies both face names for each copy.
+    let split = r#"(
+        id: "layout_overlap_split",
+        name: "First Flame // Split Frost",
+        layout: Split,
+        faces: [
+            (name: "First Flame", face_id: "first_flame", mana_cost: "{0}", types: ["Sorcery"]),
+            (name: "Split Frost", face_id: "split_frost", mana_cost: "{0}", types: ["Sorcery"]),
+        ],
+    )"#;
+    let room = r#"(
+        id: "layout_overlap_room",
+        name: "North Room // South Room",
+        layout: Room,
+        faces: [
+            (name: "North Room", face_id: "north_room", mana_cost: "{0}", types: ["Enchantment", "Room"]),
+            (name: "South Room", face_id: "south_room", mana_cost: "{0}", types: ["Enchantment", "Room"]),
+        ],
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/gifts_ungiven.ron"),
+                split,
+                room,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("test-only Split/Room definitions and Gifts validate"),
+    ));
+    let decks = Some(vec![
+        {
+            let mut deck = vec!["gifts_ungiven".to_string()];
+            deck.extend(std::iter::repeat_n("island".to_string(), 29));
+            deck
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 8_701, &[0, 1], 20, decks, true)
+        .expect("new test-only layout-overlap fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    let split_id = inject_library_card(&mut engine, 0, "layout_overlap_split");
+    let split_copy_id = inject_library_card(&mut engine, 0, "layout_overlap_split");
+    let room_id = inject_library_card(&mut engine, 0, "layout_overlap_room");
+    let room_copy_id = inject_library_card(&mut engine, 0, "layout_overlap_room");
+    let cast = cast_targeted_instant_and_resolve(
+        &mut engine,
+        0,
+        "gifts_ungiven",
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+        target_player(1),
+    );
+    let search = find_resolution_choice(&cast).expect("actual Gifts search offer");
+    assert!(search.unique_names);
+    for object_id in [split_id, split_copy_id, room_id, room_copy_id] {
+        assert!(search.candidate_object_ids.contains(&object_id));
+    }
+    let mut duplicate_split_copies = submit_resolution_choice(vec![split_id, split_copy_id]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = duplicate_split_copies.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = search.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut engine,
+        0,
+        &duplicate_split_copies,
+        "two physical Split cards with overlapping face-name sets",
+    );
+    let mut duplicate_room_copies = submit_resolution_choice(vec![room_id, room_copy_id]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = duplicate_room_copies.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = search.resolution_prompt_id;
+    assert_rejected_gifts_answer_is_immutable(
+        &mut engine,
+        0,
+        &duplicate_room_copies,
+        "two physical Room cards with overlapping face-name sets",
+    );
+}
+
+/// The ruled runtime rejects legacy `custom_effect` syntax before moving or resolving a spell.
+/// Keep current card data free of that retired path; new mechanics belong in typed programs or
+/// engine primitives so their parked state is replayable and validated centrally.
+#[test]
+fn card_registry_has_no_legacy_custom_effect_owners() {
+    for definition in tricerules_cards::registry::global().definitions() {
+        for face in definition.faces_iter() {
+            assert!(
+                face.custom_effect.is_none(),
+                "{}:{} still uses unsupported custom_effect syntax",
+                definition.id,
+                face.face_id
+            );
         }
-    }
-    claims
-}
-
-/// Every `custom_effect` key in the card registry must resolve to a registered `CardEffect`
-/// (an unregistered key is uncastable card data), and no two cards may claim one key. The "one
-/// resolution owner *per face*" rule is enforced in the cards crate; this is the core-side half:
-/// the impl must exist, and it must belong to exactly one card.
-///
-/// Custom effects are 1:1 with card ids, like RON data cards — two cards wanting one algorithm
-/// is the signal to widen a primitive, not to share an impl. Without this check, two cards
-/// accidentally set to an unregistered `custom_effect` key would fail the forward registration
-/// check rather than silently using another card's implementation.
-/// Two faces of one card sharing a key fails too: the impl cannot tell faces apart either.
-#[test]
-fn every_custom_effect_key_has_exactly_one_card_and_one_impl() {
-    for (key, claimants) in custom_effect_claims() {
-        assert!(
-            tricerules_core::custom::lookup(key).is_some(),
-            "card '{}' has custom_effect '{key}' with no registered CardEffect",
-            claimants[0]
-        );
-        assert_eq!(
-            claimants.len(),
-            1,
-            "custom_effect '{key}' is claimed by {} cards ({}); each key belongs to exactly one \
-             card. If these really share an algorithm, that algorithm is expressible as \
-             (effect_kind, parameters) and belongs in a primitive.",
-            claimants.len(),
-            claimants.join(", ")
-        );
-        assert_eq!(
-            claimants[0], key,
-            "custom_effect '{key}' is claimed by card '{}'; the custom-effect file stem, RON \
-             custom_effect, and claiming card id must all match",
-            claimants[0]
-        );
-    }
-}
-
-/// The reverse direction: every registered impl is claimed by a card. A registered key is a file
-/// stem under `src/custom/`, so an orphan means a typo'd filename or a deleted RON — neither of
-/// which the forward check above can see, since it only walks keys the registry already has.
-#[test]
-fn every_registered_impl_is_claimed_by_a_card() {
-    let claims = custom_effect_claims();
-    for key in tricerules_core::custom::keys() {
-        assert!(
-            claims.contains_key(key),
-            "custom effect `{key}` (from `src/custom/{key}.rs`) is claimed by no registry card. \
-             The file stem must equal the card id whose RON sets custom_effect: \"{key}\"."
-        );
     }
 }
 

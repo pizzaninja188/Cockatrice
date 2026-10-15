@@ -6811,7 +6811,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Gideon Blackblade
 - [ ] Gideon Jura
 - [ ] Gideon of the Trials
-- [ ] Gifts Ungiven — 🟡 partial: 1v1 opponent is the automatic target (no separate target step for multi-player)
+- [ ] Gifts Ungiven — 🟡 partial: Composable execution migrated; whole-card admission review remains deferred
 - [ ] Gilanra, Caller of Wirewood
 - [ ] Gitaxian Probe
 - [ ] Giver of Runes

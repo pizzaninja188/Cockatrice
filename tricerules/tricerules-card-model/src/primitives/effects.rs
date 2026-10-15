@@ -2116,6 +2116,27 @@ pub enum SpellEffectKind {
         /// battlefield search. Later effects may consume it through `SearchedObject`.
         #[serde(default)]
         result_id: Option<SearchResultId>,
+        /// Bounds for the typed, retained library-search form used by resolution programs.
+        /// Direct SearchLibrary effects keep their existing count/optional contract.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selection_bounds: Option<SearchSelectionBounds>,
+    },
+    /// Publish a previously completed retained library search to all players.
+    RevealCohort,
+    /// Let the authored player target choose an exact capped subset of a revealed cohort.
+    ChooseCohortPartition {
+        chooser: PlayerRecipient,
+        selection: CohortPartitionSelection,
+    },
+    /// Move the selected and remaining portions of a typed card partition as one transaction.
+    MoveCohortPartition {
+        selected_to: SearchDestination,
+        remainder_to: SearchDestination,
+    },
+    /// Shuffle one player's library at this instruction in the typed program.
+    ShuffleLibrary {
+        #[serde(default)]
+        who: PlayerRecipient,
     },
     /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
     /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
@@ -2340,6 +2361,22 @@ pub enum SearchDestination {
     /// The first selected card enters the battlefield tapped and any remaining selected cards
     /// go to the searching player's hand (Cultivate, Kodama's Reach).
     BattlefieldTappedThenHand,
+    /// Retain the exact selected objects in the searched library for a later typed instruction.
+    KeepInLibrary,
+}
+
+/// Fixed bounds for a typed retained library search. The maximum must equal its search count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchSelectionBounds {
+    pub min: u32,
+    pub max: u32,
+}
+
+/// Cardinality contract for choosing from a previously revealed cohort.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CohortPartitionSelection {
+    /// Choose exactly min(limit, current cohort size) cards.
+    ExactlyUpTo(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2354,6 +2391,8 @@ pub enum CardSearchZone {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SearchSelectionConstraint {
     SharedLandType,
+    /// Every selected card must have a name set disjoint from the other selected cards.
+    DifferentNames,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3492,6 +3531,12 @@ impl SpellEffectKind {
             } => mass_player_target(*kind)
                 .map(|target| vec![TargetRole::Filtered(target)])
                 .unwrap_or_default(),
+            SpellEffectKind::ChooseCohortPartition { chooser, .. } => match chooser {
+                PlayerRecipient::TargetedPlayer { kind, .. } => mass_player_target(*kind)
+                    .map(|target| vec![TargetRole::Filtered(target)])
+                    .unwrap_or_default(),
+                _ => Vec::new(),
+            },
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::CreateTokenCopies {
                 source:
@@ -3516,6 +3561,9 @@ impl SpellEffectKind {
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
+            | SpellEffectKind::RevealCohort
+            | SpellEffectKind::MoveCohortPartition { .. }
+            | SpellEffectKind::ShuffleLibrary { .. }
             | SpellEffectKind::ChoosePermanents { .. }
             | SpellEffectKind::SelectHandCards { .. }
             | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
@@ -4485,8 +4533,27 @@ impl SpellEffectKind {
             Self::SelectHandCards { .. }
                 | Self::PutSelectedHandCardsOnLibraryTop
                 | Self::ChooseCard { .. }
+                | Self::RevealCohort
+                | Self::ChooseCohortPartition { .. }
+                | Self::MoveCohortPartition { .. }
+                | Self::ShuffleLibrary { .. }
+                | Self::SearchLibrary {
+                    selection_bounds: Some(_),
+                    ..
+                }
+                | Self::SearchLibrary {
+                    selection_constraint: Some(SearchSelectionConstraint::DifferentNames),
+                    ..
+                }
+                | Self::SearchLibrary {
+                    destination: SearchDestination::KeepInLibrary,
+                    ..
+                }
         ) {
-            return Err("SelectHandCards, PutSelectedHandCardsOnLibraryTop, and ChooseCard are valid only inside a spell_program".into());
+            return Err(
+                "typed retained search/cohort operations are valid only inside a spell_program"
+                    .into(),
+            );
         }
         if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
             return Err("ExileObservedObjects requires an ability context".into());
@@ -6380,7 +6447,7 @@ impl SpellEffectKind {
                 if slots.is_empty() && *count == 0 {
                     return Err("SearchLibrary requires a positive count".into());
                 }
-                if selection_constraint.is_some()
+                if *selection_constraint == Some(SearchSelectionConstraint::SharedLandType)
                     && (*optional
                         || *count != 2
                         || count_by_cast_cost.is_some()

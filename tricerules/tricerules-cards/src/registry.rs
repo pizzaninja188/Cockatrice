@@ -2678,12 +2678,12 @@ mod tests {
     }
 
     #[test]
-    fn load_rejects_card_with_both_spell_effect_and_custom_effect() {
-        // A face may have exactly one resolution owner (tier-1/2 data or tier-3 custom).
+    fn load_rejects_legacy_custom_effect_before_card_admission() {
+        // The old marker is parsed for an actionable error, but no custom runtime owner remains.
         let bad = r#"(
-            id: "double_owner",
-            name: "Double Owner",
-            face_id: "double_owner",
+            id: "legacy_custom",
+            name: "Legacy Custom",
+            face_id: "legacy_custom",
             mana_cost: "{U}",
             types: ["Instant"],
             spell_effect: [Draw(count: 1)],
@@ -2692,8 +2692,8 @@ mod tests {
         let err = super::from_chunks(&[bad]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
-                assert_eq!(id, "double_owner");
-                assert!(reason.contains("one resolution owner"));
+                assert_eq!(id, "legacy_custom");
+                assert!(reason.contains("custom_effect `brainstorm` is unsupported"));
             }
             other => panic!("expected InvalidCard, got {other:?}"),
         }

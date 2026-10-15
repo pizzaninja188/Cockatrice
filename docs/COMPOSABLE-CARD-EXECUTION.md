@@ -59,8 +59,8 @@ generation-bound identity, deterministic logged decisions, and fail-closed priva
 Retain typed RON as the authoring format. Implement a finite instruction tree with exhaustive Rust
 operations; no arbitrary scripts, author-defined functions, jumps, dynamic recursion, or general-purpose
 VM. Finite nested blocks are allowed; author-directed loops are not.
-The custom Rust escape hatch remains for a genuinely exceptional algorithm and uses the same runner,
-transactions and choice interface.
+The legacy custom Rust escape hatch is retired: card-model registry admission rejects every parsed
+`custom_effect` key. New behavior belongs in typed programs and shared engine primitives.
 
 The design replaces composition contracts, not every rules subsystem. Combat, turn structure,
 continuous effects, costs, triggers, state-based actions and replacement ordering retain their
@@ -352,20 +352,23 @@ These are dependencies for the broader migration; the bounded pilot does not com
    were not refreshed as part of the retirement. Broader generator and corpus migrations remain
    separate work.
 
-Deletion is mandatory when no admitted definition, custom effect, generated template or runtime caller
-uses a superseded path and its independent assertions pass through the shared implementation. Temporary
-lowering has a family-specific retirement condition; there is no permanent second execution architecture.
+Deletion is mandatory when no admitted definition, generated template or runtime caller uses a
+superseded path and its independent assertions pass through the shared implementation. Legacy
+`custom_effect` data fails registry admission; temporary lowering has a family-specific retirement
+condition, and there is no permanent second execution architecture.
 
 Pilot retirement inventory: `custom::Brainstorm`, `ResolutionStep::Draw`, `PostDrawPhase`,
 `DrawCompletion::BrainstormPutBack`, the custom draw-completion bridge and its library-placement
 helper are removed. Brainstorm uses shared draw, private ordered hand selection and bound top
 placement through the program runner. The `DrawDiscard` variant, source lowerer and `BeginDiscard`
-continuation are now removed; all 45 owners from the original census use authored programs. Retain
-`custom::GiftsUngiven`
-until shared search/reveal, different chooser, subset/partition, movement and shuffle cover its full
-algorithm and target semantics, then retire its custom continuation use. Keep `custom_resolution/*`
-where it implements shared mechanic transactions, copy legality or entry/APNAP work; its directory
-name does not make every contained mechanism card-specific.
+continuation are now removed; all 45 owners from the original census use authored programs. The
+`custom::GiftsUngiven` implementation and generated custom-effect registry are removed. Gifts now
+uses a typed retained search, explicit reveal, target-bound partition, movement and shuffle; scenarios cover the
+0–4 cohort matrix, target delegation, source/controller departure, commander replacement, and
+precommit graveyard order. This composable execution migration does not change Gifts' whole-card
+admission status; whole-card review remains deferred. Keep `custom_resolution/*` where it implements
+shared mechanic transactions, copy legality or entry/APNAP work; its directory name does not make every
+contained mechanism card-specific.
 
 Pilot selection and implementation remain separate. Freeze representative existing and later-consumer
 examples before coding. Brainstorm and Faithless Looting exercise sequential draw/hand actions; Gifts

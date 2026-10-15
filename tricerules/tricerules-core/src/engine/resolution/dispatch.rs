@@ -382,6 +382,16 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(cx, effect)?,
         effect @ SpellEffectKind::MayBehold { .. } => choices::may_behold(cx, effect)?,
         effect @ SpellEffectKind::SearchLibrary { .. } => zones::search_library(cx, effect)?,
+        SpellEffectKind::RevealCohort => library_cohorts::reveal_cohort(cx)?,
+        effect @ SpellEffectKind::ChooseCohortPartition { .. } => {
+            library_cohorts::choose_cohort_partition(cx, effect)?
+        }
+        effect @ SpellEffectKind::MoveCohortPartition { .. } => {
+            library_cohorts::move_cohort_partition(cx, effect)?
+        }
+        effect @ SpellEffectKind::ShuffleLibrary { .. } => {
+            library_cohorts::shuffle_library(cx, effect)?
+        }
         effect @ SpellEffectKind::Regenerate { .. } => misc::regenerate(cx, effect)?,
         effect @ SpellEffectKind::ChangeSourceFace { .. } => misc::change_source_face(cx, effect)?,
         SpellEffectKind::CastMadness { cost } => zones::madness_cast(cx, cost)?,

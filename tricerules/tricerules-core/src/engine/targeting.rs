@@ -1294,6 +1294,11 @@ fn validate_effect_targets(
                 "multi-subject targets require grouped target-role validation",
             ));
         }
+        SpellEffectKind::ChooseCohortPartition { .. } => {
+            return Err(EngineError::Illegal(
+                "targeted player cohort choice requires grouped target-role validation",
+            ));
+        }
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(_),
         }
@@ -1859,6 +1864,9 @@ fn validate_effect_targets(
         | SpellEffectKind::Proliferate
         | SpellEffectKind::DoubleTimeCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
+        | SpellEffectKind::RevealCohort
+        | SpellEffectKind::MoveCohortPartition { .. }
+        | SpellEffectKind::ShuffleLibrary { .. }
         | SpellEffectKind::ExileResolvingSpell
         | SpellEffectKind::None => {
             if !targets.is_empty() {

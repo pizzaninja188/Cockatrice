@@ -6484,6 +6484,30 @@ pub(in crate::engine) fn search_selection_constraint_holds(
                     .iter()
                     .any(|subtype| searched_land_types(engine, selected[1]).contains(subtype))
         }
+        Some(tricerules_card_model::primitives::SearchSelectionConstraint::DifferentNames) => {
+            let mut names = HashSet::new();
+            selected.iter().all(|object_id| {
+                let Some(object) = engine.state.objects.get(object_id) else {
+                    return false;
+                };
+                let card_names = engine
+                    .registry
+                    .get(&object.card_id)
+                    .map(|definition| {
+                        definition
+                            .names_outside_stack()
+                            .into_iter()
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| vec![object.card_id.clone()]);
+                if card_names.is_empty() || card_names.iter().any(|name| names.contains(name)) {
+                    return false;
+                }
+                names.extend(card_names);
+                true
+            })
+        }
     }
 }
 
@@ -6492,7 +6516,11 @@ fn shared_land_search_alternatives(
     candidates: &[ObjectId],
     constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
 ) -> Vec<rv1::ResolutionSelectionAlternative> {
-    if constraint.is_none() || candidates.is_empty() {
+    if !matches!(
+        constraint,
+        Some(tricerules_card_model::primitives::SearchSelectionConstraint::SharedLandType)
+    ) || candidates.is_empty()
+    {
         return Vec::new();
     }
     let mut groups: BTreeMap<String, Vec<u32>> = BTreeMap::new();
@@ -6524,6 +6552,7 @@ fn shared_land_search_alternatives(
 
 pub(in crate::engine) struct ZoneSearchRequest {
     pub count: u32,
+    pub selection_bounds: Option<tricerules_card_model::primitives::SearchSelectionBounds>,
     pub filter: Option<ZoneCardFilter>,
     pub selection_constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
@@ -6533,10 +6562,12 @@ pub(in crate::engine) struct ZoneSearchRequest {
     pub shuffle: bool,
     pub reveal: bool,
     pub result_id: Option<tricerules_card_model::SearchResultId>,
+    pub program: Option<ProgramRunState>,
 }
 
 pub(in crate::engine) struct SearchRequest {
     pub count: u32,
+    pub selection_bounds: Option<tricerules_card_model::primitives::SearchSelectionBounds>,
     pub filter: Option<ZoneCardFilter>,
     pub selection_constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
@@ -6546,6 +6577,7 @@ pub(in crate::engine) struct SearchRequest {
     pub shuffle: bool,
     pub reveal: bool,
     pub result_id: Option<tricerules_card_model::SearchResultId>,
+    pub program: Option<ProgramRunState>,
 }
 
 pub(in crate::engine) fn park_zone_search_choice(
@@ -6557,6 +6589,7 @@ pub(in crate::engine) fn park_zone_search_choice(
 ) -> Result<(), EngineError> {
     let ZoneSearchRequest {
         count,
+        selection_bounds,
         filter,
         selection_constraint,
         slots,
@@ -6566,6 +6599,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         shuffle,
         reveal,
         result_id,
+        program,
     } = request;
     let idx = engine
         .state
@@ -6602,7 +6636,10 @@ pub(in crate::engine) fn park_zone_search_choice(
         .iter()
         .zip(&candidate_zones)
         .any(|(_, zone)| *zone == rv1::ChoiceCandidateSourceZone::Graveyard as i32);
-    let min = if heterogeneous {
+    let bounded_min = selection_bounds.map(|bounds| bounds.min.min(candidates.len() as u32));
+    let min = if let Some(min) = bounded_min {
+        min
+    } else if destination == SearchDestination::KeepInLibrary || heterogeneous {
         0
     } else if public_graveyard_match || (filter.is_none() && !candidates.is_empty()) {
         count.min(candidates.len() as u32)
@@ -6614,13 +6651,21 @@ pub(in crate::engine) fn park_zone_search_choice(
         .map(|zone| search_zone_label(*zone))
         .collect::<Vec<_>>()
         .join(" / ");
-    let max = if heterogeneous {
+    let max = if let Some(bounds) = selection_bounds {
+        bounds.max.min(count).min(candidates.len() as u32)
+    } else if heterogeneous {
         slots.len() as u32
     } else {
         count
     };
     let ordered = matches!(destination, SearchDestination::BattlefieldTappedThenHand);
-    let prompt = if selection_constraint.is_some() {
+    let prompt = if selection_bounds.is_some() && min == max {
+        format!("P{searcher}: search {zone_names} for exactly {min} matching card(s).")
+    } else if selection_constraint
+        == Some(tricerules_card_model::primitives::SearchSelectionConstraint::DifferentNames)
+    {
+        format!("P{searcher}: search {zone_names} for up to {max} cards with different names.")
+    } else if selection_constraint.is_some() {
         format!("P{searcher}: search your library for up to two basic land cards. If you choose two, they must share a land type.")
     } else if ordered {
         format!(
@@ -6714,7 +6759,8 @@ pub(in crate::engine) fn park_zone_search_choice(
                 min,
                 max,
                 ordered,
-                unique_names: false,
+                unique_names: selection_constraint
+                    == Some(tricerules_card_model::primitives::SearchSelectionConstraint::DifferentNames),
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
                 resolution_branches: Vec::new(),
@@ -6736,6 +6782,8 @@ pub(in crate::engine) fn park_zone_search_choice(
         )),
     });
     events.push(ev_log(prompt.clone()));
+    let mut stack = ParkedStackResolution::new(top.clone());
+    stack.program = program;
     engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
@@ -6747,12 +6795,15 @@ pub(in crate::engine) fn park_zone_search_choice(
             min,
             max,
             ordered,
-            unique_names: false,
+            unique_names: selection_constraint
+                == Some(
+                    tricerules_card_model::primitives::SearchSelectionConstraint::DifferentNames,
+                ),
             prompt,
             choice_kind,
         },
         continuation: ResolutionContinuation::SearchLibrary {
-            stack: ParkedStackResolution::new(top.clone()),
+            stack,
             searcher,
             zones,
             filter,
@@ -6778,6 +6829,7 @@ pub(in crate::engine) fn begin_search_request(
 ) -> Result<(), EngineError> {
     let SearchRequest {
         count,
+        selection_bounds,
         filter,
         selection_constraint,
         slots,
@@ -6787,6 +6839,7 @@ pub(in crate::engine) fn begin_search_request(
         shuffle,
         reveal,
         result_id,
+        program,
     } = request;
     match zones {
         SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
@@ -6796,6 +6849,7 @@ pub(in crate::engine) fn begin_search_request(
             searcher,
             ZoneSearchRequest {
                 count,
+                selection_bounds,
                 filter,
                 selection_constraint,
                 slots,
@@ -6805,12 +6859,13 @@ pub(in crate::engine) fn begin_search_request(
                 shuffle,
                 reveal,
                 result_id,
+                program,
             },
         ),
         SearchZoneSelection::PlayerChoice(available_zones) => {
-            if result_id.is_some() || selection_constraint.is_some() {
+            if result_id.is_some() || selection_constraint.is_some() || selection_bounds.is_some() {
                 return Err(EngineError::Illegal(
-                    "search result binding requires a fixed library search",
+                    "typed search bounds require a fixed library search",
                 ));
             }
             let combinations = search_zone_combinations(&available_zones);
@@ -6918,6 +6973,7 @@ pub(super) fn search_library(
         shuffle,
         reveal,
         result_id,
+        selection_bounds,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -6925,6 +6981,11 @@ pub(super) fn search_library(
     if optional && selection_constraint.is_some() {
         return Err(EngineError::Illegal(
             "shared land constraint requires a mandatory search",
+        ));
+    }
+    if optional && selection_bounds.is_some() {
+        return Err(EngineError::Illegal(
+            "typed retained library search cannot be optional",
         ));
     }
     let count = count_by_cast_cost.map_or(count, |conditional| {
@@ -6945,6 +7006,25 @@ pub(super) fn search_library(
     let Some(searcher) = super::player_recipients(cx, who).into_iter().next() else {
         return Ok(EffectOutcome::Continue);
     };
+    if selection_bounds.is_some()
+        && cx
+            .engine
+            .state
+            .player_idx(searcher)
+            .is_some_and(|index| cx.engine.state.players[index].library.is_empty())
+    {
+        cx.events
+            .push(ev_log(format!("P{searcher} finds no card.")));
+        cx.engine.fire_triggers(
+            &[GameEvent::LibrarySearched {
+                searcher,
+                library_owner: searcher,
+            }],
+            cx.events,
+        );
+        cx.effect_result.program_value = Some(ProgramValue::FoundLibraryCohort(Vec::new()));
+        return Ok(EffectOutcome::Continue);
+    }
     if optional {
         let prompt = format!("P{searcher}: search your library?");
         cx.events.push(rv1::RuledEvent {
@@ -7028,6 +7108,7 @@ pub(super) fn search_library(
         searcher,
         SearchRequest {
             count,
+            selection_bounds,
             filter,
             selection_constraint,
             slots,
@@ -7037,6 +7118,7 @@ pub(super) fn search_library(
             shuffle,
             reveal,
             result_id,
+            program: cx.program_state.clone(),
         },
     )?;
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.

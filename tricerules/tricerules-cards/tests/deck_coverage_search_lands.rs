@@ -211,6 +211,7 @@ fn myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented() {
         filter: Some(filter), selection_constraint: Some(SearchSelectionConstraint::SharedLandType),
         slots, zones: SearchZoneSelection::Fixed(zones), destination: SearchDestination::Battlefield { tapped: true },
         conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+        selection_bounds: None,
     }] if filter == &ZoneCardFilter { card_type: Some(CardTypeFilter::BasicLand), ..Default::default() }
        && slots.is_empty() && zones == &[CardSearchZone::Library])
     );

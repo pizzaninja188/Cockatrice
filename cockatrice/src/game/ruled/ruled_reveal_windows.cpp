@@ -93,13 +93,13 @@ void RuledRevealWindows::refresh()
                 zone = tr("cards");
                 break;
         }
-        const bool interactive =
-            entry.phase == RuledRevealState::Phase::Choice && entry.choiceCardIds.size() == entry.cards.size();
+        const bool interactive = entry.hasInteractiveChoice();
         QList<ServerInfo_Card> storage;
         for (int i = 0; i < entry.cards.size(); ++i) {
             ServerInfo_Card card;
             card.set_name(entry.cards[i].name.toStdString());
-            card.set_id(interactive ? entry.choiceCardIds[i] : -1 - i);
+            const int choiceCardId = entry.choiceCardIdForIndex(i);
+            card.set_id(choiceCardId >= 0 ? choiceCardId : -1 - i);
             card.set_face_down(false);
             card.set_annotation((entry.phase == RuledRevealState::Phase::Completed
                                      ? tr("Revealed earlier from %1").arg(zone)

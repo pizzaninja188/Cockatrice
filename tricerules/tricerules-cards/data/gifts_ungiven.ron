@@ -4,8 +4,36 @@
   face_id: "gifts_ungiven",
   mana_cost: "{3}{U}",
   types: ["Instant"],
-  // Tier-3: "Search your library for up to four cards with different names and reveal them. Target
-  // opponent chooses two of those cards. Put the chosen cards into your graveyard and the rest into
-  // your hand. Then shuffle." The opponent decides part of resolution (see custom/gifts_ungiven.rs).
-  custom_effect: "gifts_ungiven",
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+  )])),
+  spell_program: Some((
+    body: (steps: [
+      (id: "search", bind: ["found"], input: None,
+        kind: Perform(SearchLibrary(
+          who: Controller,
+          optional: false, count: 4, count_by_cast_cost: None, filter: None,
+          selection_constraint: Some(DifferentNames), slots: [],
+          zones: Fixed([Library]), destination: KeepInLibrary,
+          conditional_destination: None, shuffle: false, reveal: false,
+          result_id: None, selection_bounds: Some((min: 0, max: 4)),
+        ))),
+      (id: "reveal", bind: ["revealed"], input: Some("found"),
+        kind: Perform(RevealCohort)),
+      (id: "choose_partition", bind: ["partition"], input: Some("revealed"),
+        kind: Perform(ChooseCohortPartition(
+          chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+          selection: ExactlyUpTo(2),
+        ))),
+      (id: "move_partition", bind: [], input: Some("partition"),
+        kind: Perform(MoveCohortPartition(
+          selected_to: Graveyard, remainder_to: Hand,
+        ))),
+      (id: "shuffle_library", bind: [], input: None,
+        kind: Perform(ShuffleLibrary(who: Controller))),
+    ], yields: []),
+    target_bindings: [
+      (instruction_id: "choose_partition", role: Target, target_group_index: 0),
+    ],
+  )),
 )

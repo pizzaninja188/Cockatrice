@@ -90,6 +90,7 @@ impl GameEngine {
         departed: &[PlayerId],
         events: &mut Vec<rv1::RuledEvent>,
         moved_stack_to_exile: &mut HashSet<ObjectId>,
+        parked_stack_removal_ids: &mut HashSet<ObjectId>,
     ) -> Result<(), EngineError> {
         let is_departed = |stack: &ParkedStackResolution| {
             departed.contains(&stack.item.controller)
@@ -190,6 +191,22 @@ impl GameEngine {
         let Some(outer) = outer else {
             return Ok(());
         };
+        if !outer.item.is_copy
+            && outer.item.ability_text.is_none()
+            && self
+                .state
+                .objects
+                .get(&outer.item.id)
+                .is_some_and(|object| {
+                    object.zone == Zone::Stack && departed.contains(&object.owner)
+                })
+        {
+            // A resolving spell has already been popped from `state.stack`, but a departing
+            // owner still removes that physical stack object under CR 800.4a. Carry its OID to
+            // the ordinary departure event path so clients receive the same public removal as
+            // they do for a spell that had not begun resolving.
+            parked_stack_removal_ids.insert(outer.item.id);
+        }
         if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
             batch.resume_stack = None;
         }
@@ -243,6 +260,16 @@ impl GameEngine {
                     // The owner may leave while a library special-cast choice is parked. Retain
                     // the exact resolving parent until departure cleanup can retire that choice
                     // and run its remaining cleanup and parent tail.
+                    preserve = true;
+                }
+                ResolutionContinuation::SearchLibrary { stack, .. }
+                | ResolutionContinuation::ProgramCohortPartition { stack, .. }
+                | ResolutionContinuation::ProgramPartitionMove { stack, .. }
+                    if stack.program.is_some() =>
+                {
+                    // A typed library program is already resolving. Preserve its exact frame
+                    // when either the physical spell or its controller leaves; post-cleanup
+                    // reconciliation prunes the departed library owner's exact references.
                     preserve = true;
                 }
                 ResolutionContinuation::AuraReturn { stack, .. } => {
@@ -300,6 +327,7 @@ impl GameEngine {
         departed: &[PlayerId],
         events: &mut Vec<rv1::RuledEvent>,
         moved_stack_to_exile: &mut HashSet<ObjectId>,
+        parked_stack_removal_ids: &HashSet<ObjectId>,
     ) -> Result<(), EngineError> {
         let owned: HashSet<ObjectId> = self
             .state
@@ -461,7 +489,16 @@ impl GameEngine {
                 removed_stack_object_ids.push(*id);
             }
         }
+        for id in parked_stack_removal_ids {
+            if owned.contains(id)
+                && !departing_stack_ids.contains(id)
+                && !moved_stack_to_exile.contains(id)
+            {
+                removed_stack_object_ids.push(*id);
+            }
+        }
         removed_stack_object_ids.sort_unstable();
+        removed_stack_object_ids.dedup();
         self.state
             .stack
             .retain(|item| !owned.contains(&item.id) && item.controller != player);
@@ -701,13 +738,20 @@ impl GameEngine {
             }
         }
         let mut moved_stack_to_exile = HashSet::new();
-        self.detach_departed_outer_resolution(&departed, events, &mut moved_stack_to_exile)?;
+        let mut parked_stack_removal_ids = HashSet::new();
+        self.detach_departed_outer_resolution(
+            &departed,
+            events,
+            &mut moved_stack_to_exile,
+            &mut parked_stack_removal_ids,
+        )?;
         for &player in &departed {
             self.remove_departing_player_objects(
                 player,
                 &departed,
                 events,
                 &mut moved_stack_to_exile,
+                &parked_stack_removal_ids,
             )?;
             // CR 800.4a: an effect granting control to a player who left ends immediately.
             self.state.continuous_effects.retain(|effect| {
@@ -791,6 +835,7 @@ impl GameEngine {
         self.refresh_authored_branch_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;
+        self.refresh_program_library_cohort_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
         self.flush_staged_triggers(events);
@@ -1020,9 +1065,9 @@ impl GameEngine {
         if progress == super::resolution::ResolutionProgress::GameEnded {
             return Ok(finish_with_events(self, ev));
         }
-        // A tier-3 custom resolution may have parked mid-resolution awaiting a player choice
-        // (CR 608): no player holds priority then — the ResolutionChoiceRequired event already
-        // drives the deciding player — so don't advance priority or run SBAs until it completes.
+        // A rules resolution may have parked mid-resolution awaiting a player choice (CR 608):
+        // no player holds priority then — the ResolutionChoiceRequired event already drives the
+        // deciding player — so don't advance priority or run SBAs until it completes.
         if self.state.pending_resolution.is_none() {
             ev.push(ev_priority_changed(self));
             self.apply_sbas(&mut ev)?;

@@ -257,6 +257,7 @@ impl GameEngine {
             searcher,
             resolution::zones::ZoneSearchRequest {
                 count,
+                selection_bounds: None,
                 filter,
                 selection_constraint: None,
                 slots: Vec::new(),
@@ -266,6 +267,7 @@ impl GameEngine {
                 shuffle,
                 reveal,
                 result_id: None,
+                program: stack.program.clone(),
             },
         )?;
         let next = self
@@ -351,6 +353,7 @@ impl GameEngine {
             searcher,
             resolution::zones::SearchRequest {
                 count,
+                selection_bounds: None,
                 filter,
                 selection_constraint: None,
                 slots,
@@ -360,6 +363,7 @@ impl GameEngine {
                 shuffle,
                 reveal,
                 result_id: None,
+                program: stack.program.clone(),
             },
         )?;
         let Some(next) = self
@@ -1208,6 +1212,55 @@ self.state.pending_resolution = Some(PendingResolution {
 
         let mut ev = vec![];
 
+        if destination == SearchDestination::KeepInLibrary {
+            if stack.program.is_none() || !searched_library || shuffle || reveal {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "retained library search lost its typed program continuation",
+                ));
+            }
+            let cohort =
+                chosen
+                    .iter()
+                    .map(|object_id| {
+                        let object = self.state.objects.get(object_id).ok_or(
+                            EngineError::ProgramInvariant(
+                                "retained library search candidate disappeared",
+                            ),
+                        )?;
+                        if object.zone != Zone::Library || object.owner != searcher {
+                            return Err(EngineError::ProgramInvariant(
+                                "retained library search candidate changed zone or owner",
+                            ));
+                        }
+                        Ok(crate::state::ProgramCardRef {
+                            object_id: *object_id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0),
+                            zone: Zone::Library,
+                            owner: object.owner,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, EngineError>>()?;
+            if cohort.is_empty() {
+                ev.push(ev_log(format!("P{controller} finds no card.")));
+            }
+            self.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher,
+                    library_owner: controller,
+                }],
+                &mut ev,
+            );
+            let mut previous = stack.previous_result.clone();
+            previous.program_value = Some(crate::state::ProgramValue::FoundLibraryCohort(cohort));
+            return self.complete_parked_stack_with_previous(stack, previous, ev);
+        }
+
         if reveal {
             ev.extend(super::super::reveals::reveal_cards(
                 &self.state,
@@ -1441,6 +1494,11 @@ self.state.pending_resolution = Some(PendingResolution {
                         },
                         ev,
                     );
+                }
+                SearchDestination::KeepInLibrary => {
+                    return Err(EngineError::ProgramInvariant(
+                        "retained library search escaped its program result path",
+                    ));
                 }
             }
         }
@@ -2686,6 +2744,7 @@ mod tests {
                 0,
                 resolution::zones::ZoneSearchRequest {
                     count: 1,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::Artifact),
                         ..Default::default()
@@ -2698,6 +2757,7 @@ mod tests {
                     shuffle: true,
                     reveal: false,
                     result_id: None,
+                    program: None,
                 },
             )
             .unwrap();
@@ -2927,6 +2987,7 @@ mod tests {
                 0,
                 resolution::zones::ZoneSearchRequest {
                     count: 2,
+                    selection_bounds: None,
                     filter: Some(ZoneCardFilter {
                         card_type: Some(CardTypeFilter::BasicLand),
                         ..Default::default()
@@ -2939,6 +3000,7 @@ mod tests {
                     shuffle: true,
                     reveal: false,
                     result_id: None,
+                    program: None,
                 },
             )
             .unwrap();

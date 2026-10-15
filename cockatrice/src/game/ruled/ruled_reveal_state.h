@@ -45,6 +45,9 @@ public:
         Phase phase = Phase::Completed;
         QVector<int> choiceCardIds;
         QStringList cardNames() const;
+        [[nodiscard]] bool hasInteractiveChoice() const;
+        /// Returns the physical popup identity for a candidate, or -1 for a noncandidate.
+        [[nodiscard]] int choiceCardIdForIndex(int revealCardIndex) const;
         bool operator==(const Entry &) const = default;
     };
 
@@ -52,6 +55,7 @@ public:
     {
     }
     bool publish(const ruled::v1::CardsRevealed &reveal);
+    [[nodiscard]] bool matchesReceipt(const ruled::v1::CardsRevealed &reveal) const;
     bool beginChoice(const ruled::v1::CardsRevealed &reveal, const QVector<int> &choiceCardIds);
     void completeChoice();
     void applyPublicHands(const ruled::v1::ZoneViewSync &snapshot);
@@ -94,6 +98,7 @@ private:
     QStringList order_;
     QSet<QString> seen_;
     QSet<QString> active_;
+    QSet<QString> retired_;
     QString choiceId_;
     bool suppressed_ = false;
 };

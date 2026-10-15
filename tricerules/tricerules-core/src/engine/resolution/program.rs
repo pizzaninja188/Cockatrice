@@ -572,6 +572,11 @@ impl GameEngine {
                             ProgramValue::CardResultCohort(cohort) => {
                                 previous.cards = cohort.cards.clone();
                             }
+                            value @ (ProgramValue::FoundLibraryCohort(_)
+                            | ProgramValue::RevealedLibraryCohort(_)
+                            | ProgramValue::CardPartition(_)) => {
+                                previous.program_value = Some(value.clone());
+                            }
                             _ => {
                                 return Err(EngineError::ProgramInvariant(
                                     "resolution program input has the wrong type",
@@ -864,6 +869,30 @@ fn capture_program_outputs(
                     program_discard_result: None,
                 })
             }
+            ResultType::FoundLibraryCohort => match result.program_value.as_ref() {
+                Some(value @ ProgramValue::FoundLibraryCohort(_)) => value.clone(),
+                _ => {
+                    return Err(EngineError::ProgramInvariant(
+                        "retained library search did not publish its exact cohort",
+                    ))
+                }
+            },
+            ResultType::RevealedLibraryCohort => match result.program_value.as_ref() {
+                Some(value @ ProgramValue::RevealedLibraryCohort(_)) => value.clone(),
+                _ => {
+                    return Err(EngineError::ProgramInvariant(
+                        "cohort reveal did not publish its typed result",
+                    ))
+                }
+            },
+            ResultType::CardPartition => match result.program_value.as_ref() {
+                Some(value @ ProgramValue::CardPartition(_)) => value.clone(),
+                _ => {
+                    return Err(EngineError::ProgramInvariant(
+                        "cohort split did not publish its typed partition",
+                    ))
+                }
+            },
         };
         let destination =
             run.slots

@@ -1,7 +1,7 @@
 # Card authoring guide
 
 This is the canonical workflow for adding or changing cards in the ruled `tricerules` registry.
-It covers source research, implementation-tier selection, RON and custom-Rust authoring,
+It covers source research, implementation-tier selection, RON and typed engine authoring,
 presentation metadata, partial-card tracking, generation, and completion checks.
 
 Repository-level authority, architecture, and verification rules still apply. Follow
@@ -70,7 +70,7 @@ There are two card databases, and they must not be mixed:
 | Database | Owner | Purpose |
 |---|---|---|
 | `cards.xml` and external Oracle/Scryfall data | Cockatrice client and freeform | Display, images, names, type lines, and search |
-| `tricerules-cards` data, primitives, and custom Rust | Rules engine | Costs, legality, targets, characteristics, abilities, and effects |
+| `tricerules-cards` data and typed primitives | Rules engine | Costs, legality, targets, characteristics, abilities, and effects |
 
 - RON and Rust are authoritative for every ruled mechanical decision.
 - External Oracle data supplies presentation wording only. The engine, relay, and client must not
@@ -105,13 +105,13 @@ Use the lowest tier that completely expresses the behavior:
 2. **Hand-authored data:** RON under `tricerules-cards/data/`, using existing typed primitives.
 3. **Generic primitive:** widen or add a typed effect, trigger, cost, condition, filter, or keyword
    when static parameters can describe the behavior.
-4. **Custom Rust:** only for a unique resumable resolution algorithm involving live
-   mid-resolution or interdependent choices.
+4. **Engine capability:** add typed rules semantics only when the existing data model cannot
+   express the required behavior; do not add card-specific resolution handlers.
 
 Before adding a primitive, name at least two real cards or two distinct mechanics it supports.
 Generalize only for demonstrated uses. If only the motivating card fits, justify the necessary
-specialized behavior rather than adding speculative parameters. Two cards sharing a custom
-algorithm are evidence that the algorithm belongs in a generic primitive.
+specialized behavior rather than adding speculative parameters. A second real use is evidence that
+the primitive should be reusable, while unique behavior needs a narrow, explicit contract.
 
 `SpellEffectKind` is shared by spells, activated abilities, and triggered abilities. Prefer a
 reusable typed effect over a card-specific path. `TargetKind::Self_` binds the source without
@@ -751,21 +751,13 @@ Do not put combat restrictions on a conditioned `AttachedModifier`; conditions t
 to characteristic modifiers. Add a separate typed restriction primitive if a future mechanic
 needs a conditional combat rule.
 
-## 7. Add a custom Rust card
+## 7. Keep card behavior data-driven
 
-Use custom Rust only when the resolution algorithm itself is unique and cannot be described as
-static `(effect_kind, parameters)` data.
-
-1. Set `custom_effect: "<card_id>"` in RON; it is mutually exclusive with `spell_effect`.
-2. Create `tricerules-core/src/custom/<card_id>.rs` outside `support/`.
-3. Export `pub(crate) static EFFECT: &dyn CardEffect = &YourType;`.
-4. Match the card definition ID, RON `custom_effect`, and file stem exactly. Registration is
-   automatic.
-5. Keep the implementation one-to-one with a card ID. Shared algorithms belong in a primitive.
-6. Use the capability-narrowed `ResolutionCtx`; never give custom code `&mut GameState`.
-7. Reuse `resolution_choice_required` and `SubmitResolutionChoice`; do not add per-card protobuf.
-8. Cite the checked Oracle text and governing CR concepts in the implementation header.
-9. Add happy and illegal scenario coverage for `begin`, every resumable choice, and completion.
+Do not add card-specific Rust resolution handlers. Describe behavior with supported
+`spell_effect`, `modal_spell`, or typed `spell_program` data and widen an engine primitive when a
+second real card or mechanic needs it. The legacy `custom_effect` field remains parseable only so
+registry validation can name the unsupported key; any non-empty value rejects that card before
+registry admission.
 
 ## 8. Generate supported cards
 

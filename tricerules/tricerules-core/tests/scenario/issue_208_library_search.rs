@@ -212,17 +212,36 @@ fn opponent_own_library_search_triggers_once_including_failure_to_find() {
         engine
             .apply_scenario_command(0, &cast_spell(tutor_index, Vec::new()))
             .expect("cast tutor");
-        pass_both_players(&mut engine);
-        let pending = engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .expect("search choice");
+        let search_batch = pass_both_players_with_batch(&mut engine);
+        let search = find_resolution_choice(&search_batch).expect("private tutor search offer");
+        assert_eq!(search.deciding_player_id, 0);
+        assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+        assert!(search.public_reveal.is_none());
         let chosen = if tutor == "demonic_tutor" {
-            vec![pending.presentation.candidates[0]]
+            vec![*search
+                .candidate_object_ids
+                .first()
+                .expect("Demonic Tutor can choose the injected library card")]
         } else {
             Vec::new()
         };
+        assert!(
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(chosen.clone()))
+                .is_err(),
+            "the opponent cannot submit the controller's direct-tutor search"
+        );
+        assert!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    pending.deciding_player == 0
+                        && pending.presentation.choice_kind == ChoiceKind::LibrarySearch
+                }),
+            "the rejected actor leaves the private search with its controller"
+        );
         let opponent_hand_before = engine.state.players[1].hand.len();
         engine
             .apply_scenario_command(0, &submit_resolution_choice(chosen))
@@ -289,7 +308,7 @@ fn gifts_search_trigger_waits_until_the_whole_spell_finishes() {
     );
     let gifts = hand_index_for_card(&engine, 0, "gifts_ungiven");
     engine
-        .apply_scenario_command(0, &cast_spell(gifts, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
         .expect("cast Gifts Ungiven");
     pass_both_players(&mut engine);
     engine
@@ -305,9 +324,19 @@ fn gifts_search_trigger_waits_until_the_whole_spell_finishes() {
         "opponent still chooses"
     );
     assert_eq!(engine.state.staged_trigger_groups.len(), 1);
-    engine
+    let order_batch = engine
         .apply_scenario_command(1, &submit_resolution_choice(revealed[..2].to_vec()))
         .expect("finish Gifts");
+    let graveyard_order = find_resolution_choice(&order_batch)
+        .expect("Gifts collects CR 404.3 graveyard order before moving the partition");
+    assert_eq!(graveyard_order.deciding_player_id, 0);
+    assert_eq!(
+        graveyard_order.choice_kind(),
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(revealed[..2].to_vec()))
+        .expect("complete Gifts after the graveyard order choice");
 
     assert_eq!(
         engine.state.stack.len(),
@@ -316,6 +345,337 @@ fn gifts_search_trigger_waits_until_the_whole_spell_finishes() {
     );
     let hand_before_trigger = engine.state.players[1].hand.len();
     pass_both_players(&mut engine);
+    assert_eq!(counter_count(&engine, wan), 1);
+    assert_eq!(engine.state.players[1].hand.len(), hand_before_trigger + 1);
+}
+
+#[test]
+fn gifts_empty_library_search_has_no_cohort_prompt_and_stages_one_trigger_before_shuffle_tail() {
+    let decks = Some(vec![
+        {
+            let mut p0 = vec!["gifts_ungiven".to_string()];
+            p0.extend(std::iter::repeat_n("island".to_string(), 6));
+            p0
+        },
+        {
+            let mut p1 = vec!["wan_shi_tong,_librarian".to_string()];
+            p1.extend(std::iter::repeat_n("forest".to_string(), 29));
+            p1
+        },
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        208_031,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new empty-library Gifts engine");
+    advance_to_main1_from_game_start(&mut engine);
+    assert!(engine.state.players[0].library.is_empty());
+    ensure_card_in_hand(&mut engine, 0, "gifts_ungiven");
+    let wan = move_ready_to_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "Wan's enter trigger is waiting"
+    );
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.stack.len(), 0, "resolve Wan before Gifts");
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&engine, 0, "gifts_ungiven");
+    engine
+        .apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
+        .expect("cast Gifts with an empty library");
+    let resolved = pass_both_players_with_batch(&mut engine);
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "one Wan search trigger is staged"
+    );
+    assert_eq!(engine.state.stack[0].card_id, "wan_shi_tong,_librarian");
+    assert_eq!(engine.state.staged_trigger_groups.len(), 0);
+    assert_eq!(
+        counter_count(&engine, wan),
+        0,
+        "the trigger waits until after Gifts"
+    );
+    assert_eq!(count_card_id_in_graveyard(&engine, 0, "gifts_ungiven"), 1);
+    assert!(engine.state.players[0].library.is_empty());
+    assert!(
+        resolved
+            .events
+            .iter()
+            .all(|event| !matches!(&event.ev, Some(Ev::ResolutionChoiceRequired(_)))),
+        "empty search, empty reveal, and empty partition need no prompts"
+    );
+    assert_eq!(
+        resolved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 finds no card."
+            ))
+            .count(),
+        1,
+        "the empty library search is observed once"
+    );
+    assert_eq!(
+        resolved
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1,
+        "the explicit Gifts shuffle tail runs once after the empty search"
+    );
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        counter_count(&engine, wan),
+        1,
+        "the one staged search trigger resolves"
+    );
+}
+
+#[test]
+fn gifts_target_that_leaves_before_resolution_does_not_search_or_trigger_wan() {
+    let decks = Some(vec![
+        {
+            let mut p0 = vec![
+                "gifts_ungiven".to_string(),
+                "wan_shi_tong,_librarian".to_string(),
+            ];
+            p0.extend(std::iter::repeat_n("island".to_string(), 28));
+            p0
+        },
+        vec!["forest".into(); 30],
+        vec!["swamp".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        208_032,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player Gifts target-legality engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "gifts_ungiven");
+    let wan = move_ready_to_battlefield(&mut engine, 0, "wan_shi_tong,_librarian");
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "Wan's enter trigger is waiting"
+    );
+    pass_priority_round(&mut engine);
+    assert!(
+        engine.state.stack.is_empty(),
+        "Wan's enter trigger resolved first"
+    );
+
+    let library_before = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts_index = hand_index_for_card(&engine, 0, "gifts_ungiven");
+    let cast = engine
+        .apply_scenario_command(0, &cast_spell(gifts_index, target_player(1)))
+        .expect("cast Gifts targeting P1 while all three players are active");
+    assert_eq!(engine.state.stack.last().unwrap().card_id, "gifts_ungiven");
+    let mut batches = vec![cast];
+    batches.push(
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("caster passes priority"),
+    );
+    batches.push(
+        engine
+            .apply_scenario_command(
+                1,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("target concedes before the spell resolves"),
+    );
+    assert!(engine.state.players[1].has_lost);
+
+    for _ in 0..3 {
+        if engine.state.stack.is_empty() {
+            break;
+        }
+        let actor = engine.state.priority_player_id();
+        assert_ne!(actor, 1, "the departed target is not offered priority");
+        batches.push(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .expect("remaining players pass until Gifts resolves"),
+        );
+    }
+    assert!(engine.state.stack.is_empty(), "Gifts resolves once");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(count_card_id_in_graveyard(&engine, 0, "gifts_ungiven"), 1);
+    assert_eq!(
+        counter_count(&engine, wan),
+        0,
+        "no search observer triggered"
+    );
+    assert_eq!(
+        engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "an illegal target prevents search and shuffle"
+    );
+    for event in batches.iter().flat_map(|batch| &batch.events) {
+        match &event.ev {
+            Some(Ev::ResolutionChoiceRequired(_)) | Some(Ev::CardsRevealed(_)) => {
+                panic!("illegal target caused a search or reveal event: {event:#?}")
+            }
+            Some(Ev::ActivePublicRevealSnapshot(snapshot)) => assert!(
+                snapshot.reveals.is_empty(),
+                "illegal target left a public cohort reveal active"
+            ),
+            _ => {}
+        }
+    }
+    assert_eq!(
+        batches
+            .iter()
+            .flat_map(|batch| &batch.events)
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn gifts_controller_departing_during_retained_search_fires_one_search_trigger_then_empty_completes()
+{
+    let decks = Some(vec![
+        deck_with("island", &["gifts_ungiven"]),
+        deck_with("forest", &["wan_shi_tong,_librarian"]),
+        deck_with("swamp", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        208_032,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player Gifts departure engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "gifts_ungiven");
+    let wan = move_ready_to_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.stack.len(), 0, "resolve Wan's X=0 ETB trigger");
+    assert!(!engine.state.players[0].library.is_empty());
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&engine, 0, "gifts_ungiven");
+    engine
+        .apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
+        .expect("cast Gifts at Wan's controller");
+    pass_priority_round(&mut engine);
+    let search = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Gifts is parked at its private retained search");
+    assert_eq!(search.deciding_player, 0);
+    assert_eq!(search.presentation.choice_kind, ChoiceKind::LibrarySearch);
+    assert!(!search.presentation.candidates.is_empty());
+    let candidates = search.presentation.candidates.clone();
+
+    let departed = engine
+        .apply_scenario_command(0, &concede())
+        .expect("controller and library owner leaves during the retained search");
+    assert!(engine.state.players[0].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        departed.events.iter().all(|event| !matches!(
+            &event.ev,
+            Some(
+                rv1::ruled_event::Ev::CardsRevealed(_)
+                    | rv1::ruled_event::Ev::ResolutionChoiceRequired(_)
+            )
+        )),
+        "empty completion does not re-publish a reveal or ask a partition/order question"
+    );
+    assert_eq!(
+        departed
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        0,
+        "the departed controller's library is not shuffled after its owner leaves"
+    );
+    assert!(
+        candidates
+            .iter()
+            .all(|id| !engine.state.objects.contains_key(id)),
+        "concession removes the exact physical search candidates so no old reference can be rebound"
+    );
+    assert_eq!(
+        engine
+            .state
+            .stack
+            .iter()
+            .filter(|item| item.source_permanent_id == Some(wan))
+            .count(),
+        1,
+        "one completed LibrarySearched event stages one surviving Wan observer"
+    );
+
+    let hand_before_trigger = engine.state.players[1].hand.len();
+    pass_priority_round(&mut engine);
     assert_eq!(counter_count(&engine, wan), 1);
     assert_eq!(engine.state.players[1].hand.len(), hand_before_trigger + 1);
 }

@@ -4406,6 +4406,21 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+#[test]
+fn legacy_custom_effect_is_rejected_before_registry_admission() {
+    let legacy = r#"(id: "legacy_custom_fixture", name: "Legacy Custom Fixture",
+        face_id: "legacy_custom_fixture", mana_cost: "{U}", types: ["Instant"],
+        custom_effect: "retired_algorithm")"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[legacy], &[])
+        .expect_err("retired custom effects must not enter an admitted registry")
+        .to_string();
+
+    assert!(
+        error.contains("custom_effect `retired_algorithm` is unsupported"),
+        "registry rejection must identify the unsupported legacy key: {error}"
+    );
+}
+
 fn choose_lands_instruction(id: &str, bind: &str) -> String {
     format!(
         r#"(id: "{id}", bind: ["{bind}"], kind: Perform(ChoosePermanents(
@@ -4923,6 +4938,310 @@ fn program_compiler_accepts_a_bound_mill_cohort_for_choose_card() {
         compiled.slots[0].result_type,
         super::ResultType::CardResultCohort { .. }
     ));
+}
+
+#[test]
+fn gifts_typed_program_shape_compiles_with_an_explicit_target_binding() {
+    let definition = r#"(id: "gifts_program_fixture", name: "Gifts Program Fixture",
+        face_id: "gifts_program_fixture", mana_cost: "{3}{U}", types: ["Instant"],
+        spell_program: Some((
+            body: (steps: [
+                (id: "search", bind: ["found"], input: None,
+                    kind: Perform(SearchLibrary(
+                        who: Controller, optional: false, count: 4,
+                        count_by_cast_cost: None, filter: None,
+                        selection_constraint: Some(DifferentNames), slots: [],
+                        zones: Fixed([Library]), destination: KeepInLibrary,
+                        conditional_destination: None, shuffle: false, reveal: false,
+                        result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                    ))),
+                (id: "reveal", bind: ["revealed"], input: Some("found"),
+                    kind: Perform(RevealCohort)),
+                (id: "choose_split", bind: ["partition"], input: Some("revealed"),
+                    kind: Perform(ChooseCohortPartition(
+                        chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                        selection: ExactlyUpTo(2),
+                    ))),
+                (id: "move_split", bind: [], input: Some("partition"),
+                    kind: Perform(MoveCohortPartition(
+                        selected_to: Graveyard, remainder_to: Hand,
+                    ))),
+                (id: "shuffle_library", bind: [], input: None,
+                    kind: Perform(ShuffleLibrary(who: Controller))),
+            ], yields: []),
+            target_bindings: [
+                (instruction_id: "choose_split", role: Target, target_group_index: 0),
+            ],
+        )),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+        )])))"#;
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("the complete typed Gifts authoring shape compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "gifts_program_fixture",
+        crate::CardFaceId::new("gifts_program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the Gifts program is retained by the exact face owner");
+    assert_eq!(compiled.target_bindings.len(), 1);
+}
+
+#[test]
+fn gifts_partition_rejects_nonopponent_and_missing_target_bindings() {
+    let definition = r#"(id: "gifts_program_fixture", name: "Gifts Program Fixture",
+        face_id: "gifts_program_fixture", mana_cost: "{3}{U}", types: ["Instant"],
+        spell_program: Some((
+            body: (steps: [
+                (id: "search", bind: ["found"], input: None,
+                    kind: Perform(SearchLibrary(
+                        who: Controller, optional: false, count: 4,
+                        count_by_cast_cost: None, filter: None,
+                        selection_constraint: Some(DifferentNames), slots: [],
+                        zones: Fixed([Library]), destination: KeepInLibrary,
+                        conditional_destination: None, shuffle: false, reveal: false,
+                        result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                    ))),
+                (id: "reveal", bind: ["revealed"], input: Some("found"),
+                    kind: Perform(RevealCohort)),
+                (id: "choose_split", bind: ["partition"], input: Some("revealed"),
+                    kind: Perform(ChooseCohortPartition(
+                        chooser: TargetedPlayer(group_index: 0, kind: AnyPlayer),
+                        selection: ExactlyUpTo(2),
+                    ))),
+                (id: "move_split", bind: [], input: Some("partition"),
+                    kind: Perform(MoveCohortPartition(
+                        selected_to: Graveyard, remainder_to: Hand,
+                    ))),
+                (id: "shuffle_library", bind: [], input: None,
+                    kind: Perform(ShuffleLibrary(who: Controller))),
+            ], yields: []),
+            target_bindings: [
+                (instruction_id: "choose_split", role: Target, target_group_index: 0),
+            ],
+        )),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+        )])))"#;
+
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect_err("cohort partition only admits the intended opponent chooser");
+    assert!(format!("{error:#}").contains("must target an opponent"));
+
+    let missing_binding = definition
+        .replace("kind: AnyPlayer", "kind: OpponentPlayer")
+        .replace(
+            "target_bindings: [\n                (instruction_id: \"choose_split\", role: Target, target_group_index: 0),\n            ],",
+            "target_bindings: [],",
+        );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&missing_binding], &[])
+        .expect_err("a targeted cohort chooser must bind to the authored opponent group")
+        .to_string();
+    assert!(
+        error.contains("target group must reference at least one instruction role"),
+        "missing target binding should be an admission error: {error}"
+    );
+}
+
+#[test]
+fn intuition_retained_search_without_different_names_compiles_with_fixed_three_card_bounds() {
+    let intuition = r#"(id: "intuition_retained_fixture", name: "Intuition Retained Fixture",
+        face_id: "intuition_retained_fixture", mana_cost: "{1}{U}{U}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "search", bind: ["found"], input: None,
+                kind: Perform(SearchLibrary(
+                    who: Controller, optional: false, count: 3,
+                    count_by_cast_cost: None, filter: None,
+                    selection_constraint: None, slots: [],
+                    zones: Fixed([Library]), destination: KeepInLibrary,
+                    conditional_destination: None, shuffle: false, reveal: false,
+                    result_id: None, selection_bounds: Some((min: 3, max: 3)),
+                ))),
+            (id: "reveal", bind: ["revealed"], input: Some("found"),
+                kind: Perform(RevealCohort)),
+            (id: "choose_split", bind: ["partition"], input: Some("revealed"),
+                kind: Perform(ChooseCohortPartition(
+                    chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                    selection: ExactlyUpTo(1),
+                ))),
+            (id: "move_split", bind: [], input: Some("partition"),
+                kind: Perform(MoveCohortPartition(
+                    selected_to: Hand, remainder_to: Graveyard,
+                ))),
+            (id: "shuffle", bind: [], input: None,
+                kind: Perform(ShuffleLibrary(who: Controller))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "choose_split", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+        )])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[intuition], &[])
+        .expect("retained Intuition search permits a typed fixed count without DifferentNames");
+    let owner = crate::ProgramOwnerId::face(
+        "intuition_retained_fixture",
+        crate::CardFaceId::new("intuition_retained_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Intuition fixture receives a compiled program");
+    let super::CompiledInstructionKind::Perform(effect) = &compiled.body.steps[0].kind else {
+        panic!("the first instruction is the retained search");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        super::SpellEffectKind::SearchLibrary {
+            count: 3,
+            selection_constraint: None,
+            selection_bounds: Some(super::SearchSelectionBounds { min: 3, max: 3 }),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn retained_cohort_compiler_rejects_broken_input_bindings_and_target_contracts() {
+    let definition = r#"(id: "cohort_validation_fixture", name: "Cohort Validation Fixture",
+        face_id: "cohort_validation_fixture", mana_cost: "{3}{U}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "search", bind: ["found"], input: None,
+                kind: Perform(SearchLibrary(
+                    who: Controller, optional: false, count: 4,
+                    count_by_cast_cost: None, filter: None,
+                    selection_constraint: Some(DifferentNames), slots: [],
+                    zones: Fixed([Library]), destination: KeepInLibrary,
+                    conditional_destination: None, shuffle: false, reveal: false,
+                    result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                ))),
+            (id: "reveal", bind: ["revealed"], input: Some("found"),
+                kind: Perform(RevealCohort)),
+            (id: "choose", bind: ["partition"], input: Some("revealed"),
+                kind: Perform(ChooseCohortPartition(
+                    chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                    selection: ExactlyUpTo(2),
+                ))),
+            (id: "move", bind: [], input: Some("partition"),
+                kind: Perform(MoveCohortPartition(
+                    selected_to: Graveyard, remainder_to: Hand,
+                ))),
+            (id: "shuffle", bind: [], input: None,
+                kind: Perform(ShuffleLibrary(who: Controller))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "choose", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+        )])))"#;
+
+    let rejected = [
+        (
+            definition.replace(
+                "(id: \"choose\", bind: [\"partition\"], input: Some(\"revealed\")",
+                "(id: \"choose\", bind: [\"partition\"], input: Some(\"found\")",
+            ),
+            "wrong type for this instruction",
+        ),
+        (
+            definition.replace(
+                "(id: \"reveal\", bind: [\"revealed\"],",
+                "(id: \"reveal\", bind: [\"revealed\", \"extra\"],",
+            ),
+            "must bind its typed cohort result",
+        ),
+        (
+            definition.replace("chooser: TargetedPlayer(group_index: 0", "chooser: TargetedPlayer(group_index: 1"),
+            "requires its bound caster-chosen singleton player target group",
+        ),
+        (
+            definition.replace(
+                "target_bindings: [",
+                "target_bindings: [(instruction_id: \"choose\", role: Target, target_group_index: 0),",
+            ),
+            "ChooseCohortPartition requires its bound caster-chosen singleton player target group",
+        ),
+        (
+            definition.replace("role: Target, target_group_index: 0", "role: Source, target_group_index: 0"),
+            "does not expose target role Source",
+        ),
+        (
+            definition.replace("min: 1, max: 1, prompt: \"Choose target opponent\"", "min: 1, max: 2, prompt: \"Choose target opponent\""),
+            "requires its bound caster-chosen singleton player target group",
+        ),
+    ];
+    for (malformed, expected) in rejected {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[])
+            .expect_err("malformed typed cohort contract must fail at admission")
+            .to_string();
+        assert!(
+            error.contains(expected),
+            "expected {expected:?}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn typed_retained_search_fields_are_rejected_on_direct_effects_and_shared_land_search_remains_valid(
+) {
+    let direct = |search: &str| {
+        format!(
+            r#"(id: "direct_search_fixture", name: "Direct Search Fixture",
+                face_id: "direct_search_fixture", mana_cost: "{{1}}{{U}}", types: ["Instant"],
+                spell_effect: [{search}])"#
+        )
+    };
+    let ordinary = r#"SearchLibrary(
+        who: Controller, optional: false, count: 4, count_by_cast_cost: None,
+        filter: None, selection_constraint: None, slots: [],
+        zones: Fixed([Library]), destination: Hand,
+        conditional_destination: None, shuffle: false, reveal: false,
+        result_id: None, selection_bounds: None,
+    )"#;
+    for (unsupported, expected_field) in [
+        (
+            ordinary.replace(
+                "selection_bounds: None",
+                "selection_bounds: Some((min: 0, max: 4))",
+            ),
+            "selection_bounds",
+        ),
+        (
+            ordinary.replace(
+                "selection_constraint: None",
+                "selection_constraint: Some(DifferentNames)",
+            ),
+            "DifferentNames",
+        ),
+        (
+            ordinary.replace("destination: Hand", "destination: KeepInLibrary"),
+            "KeepInLibrary",
+        ),
+    ] {
+        let definition = direct(&unsupported);
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("typed retained-search fields cannot be smuggled into direct effects")
+            .to_string();
+        assert!(
+            error.contains(
+                "typed retained search/cohort operations are valid only inside a spell_program"
+            ),
+            "{expected_field} should be rejected on a direct effect, got {error}"
+        );
+    }
+
+    let shared_land = direct(
+        r#"SearchLibrary(
+            who: Controller, optional: false, count: 2, count_by_cast_cost: None,
+            filter: Some((card_type: Some(BasicLand))),
+            selection_constraint: Some(SharedLandType), slots: [],
+            zones: Fixed([Library]), destination: Battlefield(tapped: true),
+            conditional_destination: None, shuffle: true, reveal: false,
+            result_id: None, selection_bounds: None,
+        )"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&shared_land], &[])
+        .expect("the unrelated direct SharedLandType operation remains supported");
 }
 
 #[test]

@@ -26,6 +26,19 @@ pub(super) struct ZoneChangeReceipt {
     pub destination_generation: u64,
 }
 
+/// Exact committed movement receipt for a prevalidated operation. Unlike the trigger batch this
+/// includes private-zone origins (such as Library), which are intentionally absent from public
+/// zone-observer snapshots.
+#[derive(Debug, Clone)]
+pub(super) struct CommittedZoneMoveReceipt {
+    pub object_id: ObjectId,
+    pub owner: PlayerId,
+    pub origin: Zone,
+    pub destination: Zone,
+    pub before_zone_change_generation: u64,
+    pub destination_generation: u64,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub(super) struct ZoneEventBatch {
     pub sources: Vec<TriggerSourceSnapshot>,
@@ -536,6 +549,116 @@ impl GameEngine {
         Ok(())
     }
 
+    /// Commit a prevalidated simultaneous set of non-entry zone changes as one observed event.
+    /// The returned receipts describe the actual generations and destinations after the whole
+    /// set has committed; callers publish move events only after receiving this complete batch.
+    pub(super) fn commit_observed_zone_move_batch(
+        &mut self,
+        moves: &[(ObjectId, Zone, Option<PlayerId>)],
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Vec<CommittedZoneMoveReceipt>, EngineError> {
+        if moves.is_empty() {
+            return Err(EngineError::Illegal(
+                "an observed zone batch must contain a move",
+            ));
+        }
+        let mut seen = HashSet::new();
+        let mut prepared = Vec::with_capacity(moves.len());
+        let mut before = Vec::with_capacity(moves.len());
+        for &(oid, destination, controller) in moves {
+            if !seen.insert(oid) {
+                return Err(EngineError::Illegal(
+                    "an observed zone batch cannot move one object twice",
+                ));
+            }
+            let object = self
+                .state
+                .objects
+                .get(&oid)
+                .ok_or(EngineError::Illegal("no object"))?;
+            before.push((
+                oid,
+                object.owner,
+                object.zone,
+                self.state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0),
+            ));
+            let movement = super::resolution::prepare_zone_move(
+                &self.state,
+                self.registry,
+                oid,
+                destination,
+                controller,
+            )?
+            .ok_or(EngineError::Illegal(
+                "an observed zone batch contains an unmovable object",
+            ))?;
+            prepared.push(movement);
+        }
+
+        // All choices have been validated before mutation, and every member gets the same
+        // event-time observer snapshot. Commit in the requested order so graveyard append order
+        // follows the controller's CR 404.3 choice, then collect triggers once for the whole set.
+        let snapshot = self.snapshot_zone_event();
+        let leave_events = moves
+            .iter()
+            .filter_map(|(oid, destination, _)| {
+                (*destination != Zone::Battlefield
+                    && self
+                        .state
+                        .objects
+                        .get(oid)
+                        .is_some_and(|object| object.zone == Zone::Battlefield))
+                .then(|| {
+                    snapshot
+                        .source(*oid)
+                        .map(|source| GameEvent::LeavesBattlefield { source })
+                })
+                .flatten()
+            })
+            .collect();
+        for movement in prepared {
+            super::resolution::commit_zone_move(&mut self.state, self.registry, movement)?;
+        }
+        self.fire_zone_triggers(snapshot, leave_events, out);
+        before
+            .into_iter()
+            .map(
+                |(object_id, owner, origin, before_zone_change_generation)| {
+                    let object =
+                        self.state
+                            .objects
+                            .get(&object_id)
+                            .ok_or(EngineError::ProgramInvariant(
+                                "a committed zone move lost its physical object",
+                            ))?;
+                    let destination_generation = self
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0);
+                    if destination_generation != before_zone_change_generation + 1 {
+                        return Err(EngineError::ProgramInvariant(
+                            "a committed zone move did not advance exactly one generation",
+                        ));
+                    }
+                    Ok(CommittedZoneMoveReceipt {
+                        object_id,
+                        owner,
+                        origin,
+                        destination: object.zone,
+                        before_zone_change_generation,
+                        destination_generation,
+                    })
+                },
+            )
+            .collect()
+    }
+
     pub(super) fn finish_single_zone_event(
         &self,
         snapshot: ZoneEventSnapshot,
@@ -686,11 +809,14 @@ impl GameEngine {
         snapshot: ZoneEventSnapshot,
         mut events: Vec<GameEvent>,
         out: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let zone = self.finish_zone_event(snapshot);
+    ) -> ZoneEventBatch {
+        let GameEvent::ZoneChanges(batch) = self.finish_zone_event(snapshot) else {
+            unreachable!()
+        };
         // One collection retains the existing history/delayed-event handling and APNAP group.
-        events.push(zone);
+        events.push(GameEvent::ZoneChanges(batch.clone()));
         self.fire_triggers(&events, out);
+        batch
     }
 
     pub(super) fn collect_zone_triggers(
@@ -792,6 +918,123 @@ fn destination_matches(filter: &ZoneEventDestination, zone: Zone) -> bool {
 #[cfg(test)]
 mod timestamp_order_tests {
     use super::*;
+
+    #[test]
+    fn observed_zone_batch_is_one_one_or_more_graveyard_departure_event() {
+        use tricerules_card_model::primitives::{
+            CastTriggerPlayer, ContinuousEffectKind, EffectDuration, PermanentEventFilter,
+            PermanentTypeFilter, ZoneEventCardinality,
+        };
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026101511,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 20], vec!["forest".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        let (observer, first, second) = {
+            let hand = &engine.state.players[0].hand;
+            (hand[0], hand[1], hand[2])
+        };
+        for (oid, card_id) in [
+            (observer, "grizzly_bears"),
+            (first, "grizzly_bears"),
+            (second, "hill_giant"),
+        ] {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = card_id.into();
+        }
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            observer,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        for oid in [first, second] {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let mut ability = engine
+            .registry
+            .get("ajanis_pridemate")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.trigger = TriggerCondition::WheneverCardsLeaveGraveyard {
+            owner: CastTriggerPlayer::Controller,
+            filter: PermanentEventFilter {
+                permanent_type: Some(PermanentTypeFilter::Creature),
+                ..Default::default()
+            },
+            cardinality: ZoneEventCardinality::OneOrMore,
+        };
+        engine.state.add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(observer),
+            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        let library_card = *engine.state.players[0].library.front().unwrap();
+        engine.state.objects.get_mut(&library_card).unwrap().card_id = "grizzly_bears".into();
+        let generations: HashMap<_, _> = [library_card, first, second]
+            .into_iter()
+            .map(|oid| {
+                (
+                    oid,
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect();
+        let mut events = Vec::new();
+        let receipts = engine
+            .commit_observed_zone_move_batch(
+                &[
+                    (library_card, Zone::Graveyard, None),
+                    (first, Zone::Hand, None),
+                    (second, Zone::Command, None),
+                ],
+                &mut events,
+            )
+            .unwrap();
+
+        assert_eq!(receipts.len(), 3);
+        for (oid, destination) in [
+            (library_card, Zone::Graveyard),
+            (first, Zone::Hand),
+            (second, Zone::Command),
+        ] {
+            let receipt = receipts
+                .iter()
+                .find(|receipt| receipt.object_id == oid)
+                .expect("one actual receipt for each planned member");
+            assert_eq!(receipt.before_zone_change_generation, generations[&oid]);
+            assert_eq!(receipt.destination_generation, generations[&oid] + 1);
+            assert_eq!(receipt.destination, destination);
+        }
+        assert_eq!(engine.state.staged_trigger_groups.len(), 1);
+        assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
+        assert_eq!(engine.state.objects[&second].zone, Zone::Command);
+        assert_eq!(engine.state.objects[&library_card].zone, Zone::Graveyard);
+    }
 
     #[test]
     fn paired_artifact_exchange_commits_both_generations_and_preserves_entry_replacement() {

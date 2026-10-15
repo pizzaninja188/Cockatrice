@@ -17,7 +17,9 @@ use tricerules_card_model::{
     is_creature_type, AbilityLinkId, CardFace, ChoiceId, DiscardResultOutcome, ExiledCohortId,
     ManaCost, ManaSymbol, ModeId, ProgramOwnerId, SearchResultId,
 };
-use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated};
+use tricerules_proto::ruled::v1::{
+    CardsRevealed, ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated,
+};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -247,6 +249,9 @@ pub(crate) struct EffectResult {
     /// Teferi's choice retains a control-membership receipt for 800.4i LKI if the target leaves.
     /// While the target remains in the game, later instructions read current battlefield state.
     pub targeted_player_control_cohort: Option<TargetedPlayerControlCohort>,
+    /// Typed library cohort/partition output from one composable resolution-program operation.
+    /// This remains private to the engine and is never reconstructed from display data.
+    pub program_value: Option<ProgramValue>,
 }
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -302,6 +307,7 @@ impl From<CardResultCohort> for EffectResult {
             sacrificed_objects: Vec::new(),
             targeted_spell_controller: None,
             targeted_player_control_cohort: None,
+            program_value: None,
         }
     }
 }
@@ -1065,7 +1071,7 @@ pub enum BlockingChoice {
     AbilityActivation,
     /// CR 508.1h-j: an attack declaration is waiting for its locked tax payment or reversal.
     AttackDeclaration,
-    /// A tier-3 custom resolution is parked mid-resolution (CR 608).
+    /// A rules resolution is parked while it awaits a logged player choice (CR 608).
     Resolution,
     /// Simultaneous triggers are staged awaiting their controller's ordering (CR 603.3b).
     TriggerOrder,
@@ -1281,6 +1287,68 @@ pub(crate) enum ProgramValue {
     PermanentSelection(Vec<TriggerObjectRef>),
     HandSelection(Vec<TriggerObjectRef>),
     CardResultCohort(CardResultCohort),
+    FoundLibraryCohort(Vec<ProgramCardRef>),
+    RevealedLibraryCohort(ProgramRevealedLibraryCohort),
+    CardPartition(ProgramCardPartition),
+}
+
+/// Physical card identity frozen for a typed resolution-program library cohort.
+/// The generation, zone, and owner together prevent a moved or departed card from being rebound.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProgramCardRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub zone: Zone,
+    pub owner: PlayerId,
+}
+
+/// A public reveal receipt paired with the exact engine-owned cohort it disclosed. The receipt
+/// is reused by later prompts and reconnect projections so one reveal never becomes a second
+/// popup or changes identity after a member leaves its library.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramRevealedLibraryCohort {
+    pub cards: Vec<ProgramCardRef>,
+    pub public_reveal: Option<CardsRevealed>,
+}
+
+/// Result of a targeted split over one retained cohort. The source cohort is partitioned without
+/// reordering it; graveyard ordering is requested separately at the transaction boundary.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramCardPartition {
+    pub selected: Vec<ProgramCardRef>,
+    pub remainder: Vec<ProgramCardRef>,
+    /// The exact public receipt produced by the cohort reveal. Keep it through every precommit
+    /// choice so reconnects and later prompts do not rebuild it from changed library contents.
+    pub public_reveal: Option<CardsRevealed>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PendingProgramCohortPartitionStage {
+    ChoosingPartition,
+    ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingProgramPartitionMoveStage {
+    ReadyToCommit,
+    ChoosingCommander { index: usize },
+    ChoosingGraveyardOrder,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramPartitionMovePlan {
+    pub partition: ProgramCardPartition,
+    /// The two partition sides' destinations, retained while replacement and ordering choices
+    /// suspend the shared transaction (Gifts and the reverse Intuition comparator use opposite
+    /// mappings).
+    pub selected_to: tricerules_card_model::primitives::SearchDestination,
+    pub remainder_to: tricerules_card_model::primitives::SearchDestination,
+    /// (graveyard-cohort index, replacement destination); omitted commanders stay in Graveyard.
+    pub commander_replacements: Vec<(usize, Zone)>,
+    pub commander_choice_indices: Vec<usize>,
+    pub commander_choice_cursor: usize,
+    pub graveyard_order: Vec<ProgramCardRef>,
+    pub stage: PendingProgramPartitionMoveStage,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1432,12 +1500,6 @@ pub enum ResolutionContinuation {
     DiscardReplacement {
         stack: ParkedStackResolution,
     },
-    Custom {
-        stack: ParkedStackResolution,
-        key: String,
-        step: u32,
-        scratch: Vec<ObjectId>,
-    },
     ManaPayment {
         stack: ParkedStackResolution,
         payment: PendingManaPayment,
@@ -1478,6 +1540,23 @@ pub enum ResolutionContinuation {
         constraints: Vec<PermanentChoiceConstraint>,
         candidate_generations: Vec<(ObjectId, u64)>,
         stage: PendingTargetedPlayerChoiceStage,
+    },
+    /// A targeted player partitions the exact, already-revealed cohort retained by a spell program.
+    ProgramCohortPartition {
+        stack: ParkedStackResolution,
+        target_player: PlayerId,
+        offered_cohort: Vec<ProgramCardRef>,
+        limit: u32,
+        /// Immutable public identity snapshot from the original reveal, retained across chooser
+        /// replacement and library departure refreshes.
+        public_reveal: Option<CardsRevealed>,
+        stage: PendingProgramCohortPartitionStage,
+    },
+    /// All commander replacement choices and the CR 404.3 graveyard order are collected before
+    /// the program moves any card from the partition.
+    ProgramPartitionMove {
+        stack: ParkedStackResolution,
+        plan: ProgramPartitionMovePlan,
     },
     BeholdChoice {
         stack: ParkedStackResolution,
@@ -1886,13 +1965,14 @@ impl ResolutionContinuation {
             Self::OptionalTriggeredAbility { stack } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_ref(),
             Self::DiscardReplacement { stack }
-            | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
+            | Self::ProgramCohortPartition { stack, .. }
+            | Self::ProgramPartitionMove { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
@@ -1951,13 +2031,14 @@ impl ResolutionContinuation {
             Self::OptionalTriggeredAbility { stack } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_mut(),
             Self::DiscardReplacement { stack }
-            | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
+            | Self::ProgramCohortPartition { stack, .. }
+            | Self::ProgramPartitionMove { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
@@ -3433,9 +3514,6 @@ pub struct GameState {
     pub(crate) discard_reference_successors: BTreeMap<(ObjectId, u64), u64>,
     pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,
-    /// A custom resolution may move its physical card early. Only its completed resolution
-    /// commits this generation-bound receipt to rules history; it is never a published field.
-    pub(crate) deferred_graveyard_entry: Option<(StackObjectRef, PermanentHistoryFact)>,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
     /// The authoritative terminal result, including a draw with no winning player.
@@ -3485,9 +3563,9 @@ pub struct GameState {
     /// The outstanding CR 603.3b ordering prompt, or `None`. At most one at a time; while set it
     /// blocks every command but `SubmitTriggerOrder`.
     pub pending_trigger_order: Option<PendingTriggerOrder>,
-    /// A tier-3 custom resolution paused mid-way awaiting a player choice (CR 608), or `None`.
+    /// A rules resolution paused mid-way awaiting a player choice (CR 608), or `None`.
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
-    /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
+    /// deciding player submits their choice. See [`PendingResolution`].
     pub pending_resolution: Option<PendingResolution>,
     /// Next nonzero prompt ID for each chooser. Monotonic and per player for deterministic replay.
     #[serde(skip_serializing)]

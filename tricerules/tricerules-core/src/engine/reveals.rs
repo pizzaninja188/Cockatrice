@@ -141,6 +141,20 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
     }
     let mut reveals = Vec::new();
     reveals.extend(eng.draw_action_reveal());
+    if let Some(pending) = &eng.state.pending_resolution {
+        let receipt = match &pending.continuation {
+            ResolutionContinuation::ProgramCohortPartition { public_reveal, .. } => {
+                public_reveal.as_ref()
+            }
+            ResolutionContinuation::ProgramPartitionMove { plan, .. } => {
+                plan.partition.public_reveal.as_ref()
+            }
+            _ => None,
+        };
+        if let Some(receipt) = receipt {
+            reveals.push(receipt.clone());
+        }
+    }
     if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
         &eng.state.pending_replacement_event
     {

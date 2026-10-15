@@ -13,7 +13,7 @@ pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, m
 
 /// Shuffle a player's library using the deterministic mix shared by effects resolved during an
 /// accepted command. Keeping this derivation in one place preserves replay behavior for searches,
-/// custom effects, and battlefield-to-library moves.
+/// typed programs, and battlefield-to-library moves.
 pub(crate) fn shuffle_player_library_for_current_command(state: &mut GameState, player: PlayerId) {
     let Some(idx) = state.player_idx(player) else {
         return;

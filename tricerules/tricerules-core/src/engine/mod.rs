@@ -1,6 +1,6 @@
 //! Core rules processing (vanilla core — simplified combat & mana).
 
-use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
+use crate::custom;
 use crate::state::{
     AbilityDefinitionId, ActivatedAbilityOccurrence, ActivatedAbilitySlotLedger,
     ActivationCostCommandKind, ActivationUseIdentity, ActivationUseKey, ActiveDamageDoubling,
@@ -20,10 +20,12 @@ use crate::state::{
     PendingEntryTimestampOrder, PendingHandChoice, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingObserverReturnBatch, PendingPlayerDiscardChoice, PendingPlayerSetDiscard,
-    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
-    PendingResolutionPresentation, PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder,
-    PendingWardPayment, PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
-    ProgramRunState, ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState,
+    PendingProgramCohortPartitionStage, PendingProgramPartitionMoveStage, PendingResolution,
+    PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
+    PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
+    PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
+    ProgramCardPartition, ProgramCardRef, ProgramPartitionMovePlan, ProgramRunState, ProgramValue,
+    ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState,
     SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
     StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
     TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
@@ -1911,7 +1913,6 @@ impl GameEngine {
             discard_reference_successors: BTreeMap::new(),
             next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),
-            deferred_graveyard_entry: None,
             combat: None,
             outcome: None,
             cleanup_discard_player: None,
@@ -2836,7 +2837,7 @@ impl GameEngine {
         }
         // Refuse dev commands explicitly rather than letting them fall into the two guards below.
         // During the opening procedure a zone move would desync the mulligan bookkeeping, and a
-        // parked tier-3 resolution holds candidate object ids that a zone move could invalidate.
+        // a parked resolution holds candidate object ids that a zone move could invalidate.
         // Explicit beats implicit here: `apply_opening_command`'s rejection message would be
         // misleading, and the parked-resolution guard is an allowlist that would silently widen
         // if a future command joined it.
@@ -3193,7 +3194,7 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
-        // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
+        // CR 704.4: SBAs are not checked while a resolution is parked mid-resolution; they
         // run when it completes, including the CR 121.4/704.5b library-loss action. Zone view +
         // legal actions still refresh so the deciding player's client sees the drawn/revealed
         // cards and the choice prompt. Spell payment is another incomplete rules transaction: a
