@@ -280,13 +280,22 @@ Never merge or reorder these stages:
    dead permanents, so the upcoming zone-view sync would otherwise lose the mapping
    `PermanentMoved` needs;
 3. `applyTokenCreations` — mint physical token cards (CR 111) so the zone-view sync can bind them;
-4. `applyPermanentMoves` — translate `PermanentMoved` into `moveCard`, using the pre-batch map;
-5. `applyPhaseStackAndZoneViews` — apply phase/priority and stack push/resolve events, then
+4. `applyStackPushBindings` — classify copy/ability pushes and bind each physical spell's exact
+   stack ObjectId, consuming its pending cast visual once. This follows catalog and token creation
+   and precedes moves and removals so a `StackPushed` and `StackObjectRemoved` in one batch can
+   still destroy the just-cast physical card; the later presentation pass must not bind it again;
+5. `applyPermanentMoves` — translate `PermanentMoved` into `moveCard`, using the pre-batch map;
+6. `applyStackObjectsRemovedEvent` — retire an exact stack ObjectId that left without a zone
+   destination, deleting its mapped physical card from the canonical stack zone and clearing its
+   stack bindings. This is distinct from both `PermanentMoved` (which projects a real zone change)
+   and stack resolution/counter events. Because physical push bindings already exist, it can retire
+   a same-batch push/removal before zone-view reconciliation and prevent the card from reappearing;
+7. `applyPhaseStackAndZoneViews` — apply phase/priority and stack resolve/counter events, then
    reconcile each player's `ZoneViewSync`, rebuilding the identity maps;
-6. `applyFaceDisplays` — apply face and effective-display names only after zone-view
+8. `applyFaceDisplays` — apply face and effective-display names only after zone-view
    reconciliation has produced fresh object-to-physical-card mappings;
-7. `applyAttachmentRestores` — `AuraAttached` → `Event_AttachCard`, using those refreshed maps;
-8. `applyLifeManaAndCombatEvents` — apply life totals, mana-pool counters, combat declarations,
+9. `applyAttachmentRestores` — `AuraAttached` → `Event_AttachCard`, using those refreshed maps;
+10. `applyLifeManaAndCombatEvents` — apply life totals, mana-pool counters, combat declarations,
    combat damage, and removal from combat.
 
 `RuledBroadcastRouter::broadcast` then stages: `appendServerObjectMaps` (inject the server-built

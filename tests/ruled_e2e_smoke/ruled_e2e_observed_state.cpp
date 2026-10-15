@@ -117,6 +117,8 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
     } else if (ev.has_stack_object_countered()) {
         stackDepth = std::max(0, stackDepth - 1);
         counteredStackObjectIds.insert(ev.stack_object_countered().object_id());
+    } else if (ev.has_stack_object_removed()) {
+        stackDepth = std::max(0, stackDepth - 1);
     } else if (ev.has_life_changed()) {
         const auto &lc = ev.life_changed();
         lifeByPlayer[lc.player_id()] = lc.new_total();

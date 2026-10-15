@@ -18,6 +18,7 @@
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/event_create_counter.pb.h>
+#include <libcockatrice/protocol/pb/event_destroy_card.pb.h>
 #include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_say.pb.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
@@ -700,6 +701,142 @@ void RuledBatchSynchronizer::applyStackObjectCounteredEvent(const ruled::v1::Sta
     ruledEngineStackPushDescriptionsByObjectId.remove(objectId);
 }
 
+void RuledBatchSynchronizer::applyStackObjectsRemovedEvent(const ruled::v1::RuledEventBatch &batch)
+{
+    Server_CardZone *canonicalStack = ruledCanonicalStackZone(game);
+    GameEventStorage destroyEvents;
+    bool queuedDestroy = false;
+    for (const auto &event : batch.events()) {
+        if (!event.has_stack_object_removed()) {
+            continue;
+        }
+        const quint32 objectId = static_cast<quint32>(event.stack_object_removed().object_id());
+        const auto mapped = ruledStackObjectIdToServerCardId.constFind(objectId);
+        if (mapped != ruledStackObjectIdToServerCardId.constEnd() && canonicalStack &&
+            canonicalStack->getPlayer()) {
+            const int serverCardId = *mapped;
+            if (Server_Card *card = canonicalStack->getCard(serverCardId, nullptr, false)) {
+                canonicalStack->removeCard(card);
+                Event_DestroyCard destroyed;
+                destroyed.set_zone_name(ZoneNames::STACK);
+                destroyed.set_card_id(static_cast<::google::protobuf::uint32>(serverCardId));
+                destroyEvents.enqueueGameEvent(destroyed, canonicalStack->getPlayer()->getPlayerId());
+                card->deleteLater();
+                queuedDestroy = true;
+            } else {
+                RULED_TRACE("relay") << "stackObjectRemoved: mapped physical card missing; oid=" << objectId
+                                      << " serverCardId=" << serverCardId;
+            }
+        }
+
+        // Removal has no destination and never matches by card name or top-of-stack position.
+        // Retire every exact engine binding even for synthetic abilities/copies with no card.
+        ruledStackCopyObjectIds.remove(objectId);
+        ruledStackAbilityObjectIds.remove(objectId);
+        ruledStackTargetsByObjectId.remove(objectId);
+        ruledStackObjectIdToServerCardId.remove(objectId);
+        ruledStackObjectIdToCasterPlayerId.remove(objectId);
+        ruledEngineStackPushDescriptionsByObjectId.remove(objectId);
+    }
+    if (queuedDestroy) {
+        destroyEvents.sendToGame(game);
+    }
+}
+
+// Stack pushes establish physical and synthetic ObjectId bindings needed by PermanentMoved and
+// StackObjectRemoved in this same batch. Catalog/DevCard/token passes have already established the
+// names and physical cards; preserve event order here so pending cast visuals are consumed once.
+void RuledBatchSynchronizer::applyStackPushBindings(const ruled::v1::RuledEventBatch &batch)
+{
+    for (const auto &event : batch.events()) {
+        if (!event.has_stack_pushed()) {
+            continue;
+        }
+        const auto &sp = event.stack_pushed();
+        const quint32 pushedOid = static_cast<quint32>(sp.object_id());
+        // CR 707.10: a spell copy (Twincast/Fork) has no physical card on the shared stack.
+        // Record its display name (for the prompt/log) but never bind it to a Server_Card —
+        // its card_id matches the original, so binding would steal the original's physical
+        // card. The resolve handler treats it as a no-op move (see ruledStackCopyObjectIds).
+        if (sp.is_copy()) {
+            ruledStackCopyObjectIds.insert(pushedOid);
+            QString copyName = QString::fromStdString(sp.description());
+            if (!sp.is_prepare_spell() && !sp.card_id().empty()) {
+                const QString catalogName = cardNameForId(QString::fromStdString(sp.card_id()));
+                if (!catalogName.isEmpty()) {
+                    copyName = catalogName;
+                }
+            }
+            ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, copyName);
+            continue;
+        }
+        // Abilities have no physical card. In particular, a madness trigger resolves
+        // after its identically named source has been cast onto the physical stack.
+        // Neither binding nor the resolve-time name fallback may consume that spell.
+        if (sp.is_triggered() || sp.card_id().empty()) {
+            ruledStackAbilityObjectIds.insert(pushedOid);
+            ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, QString::fromStdString(sp.description()));
+            continue;
+        }
+        // Physical binding matches on display names. For spells, resolve the engine
+        // card id through the catalog (authoritative Oracle name) rather than trusting
+        // the free-form description; abilities carry no card_id and keep the description.
+        QString pushedName = QString::fromStdString(sp.description());
+        if (!sp.card_id().empty()) {
+            const QString catalogName = cardNameForId(QString::fromStdString(sp.card_id()));
+            if (!catalogName.isEmpty()) {
+                pushedName = catalogName;
+            }
+        }
+        ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, pushedName);
+        const QString normalizedPushedName = normalizeRuledCardName(pushedName);
+        QList<PendingRuledCastVisual>::iterator bindIt = ruledPendingCastVisualQueue.end();
+        for (auto it = ruledPendingCastVisualQueue.begin(); it != ruledPendingCastVisualQueue.end(); ++it) {
+            if (normalizeRuledCardName(it->cardName) == normalizedPushedName) {
+                bindIt = it;
+                break;
+            }
+        }
+        // CastSpell always enqueues one pending entry before applyBatch; if the engine
+        // stack description and Cockatrice printing names differ, name match fails and clients
+        // never get BattlefieldObjectMap rows for stack oids (spell targeting arrows break).
+        if (bindIt == ruledPendingCastVisualQueue.end() && !ruledPendingCastVisualQueue.isEmpty()) {
+            bindIt = ruledPendingCastVisualQueue.begin();
+        }
+        if (bindIt != ruledPendingCastVisualQueue.end()) {
+            ruledStackTargetsByObjectId.insert(pushedOid, bindIt->targetOids);
+            if (bindIt->serverCardId >= 0) {
+                ruledStackObjectIdToServerCardId.insert(pushedOid, bindIt->serverCardId);
+            }
+            if (bindIt->casterPlayerId >= 0) {
+                ruledStackObjectIdToCasterPlayerId.insert(pushedOid, bindIt->casterPlayerId);
+            }
+            ruledPendingCastVisualQueue.erase(bindIt);
+        } else {
+            QVector<quint32> tlist;
+            tlist.reserve(sp.targets_size());
+            for (int ti = 0; ti < sp.targets_size(); ++ti) {
+                tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
+            }
+            if (!tlist.isEmpty()) {
+                ruledStackTargetsByObjectId.insert(pushedOid, tlist);
+            }
+        }
+        // Authoritative: map engine stack oid to the physical card. All spells now go into
+        // the canonical zone so always look there. This runs before same-batch moves/removals.
+        Server_CardZone *spellZone = ruledCanonicalStackZone(game);
+        Server_Card *phys = spellZone ? ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName) : nullptr;
+        if (phys) {
+            ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
+        }
+        RULED_TRACE("relay") << "stackPushed: oid=" << pushedOid << " cardId=" << QString::fromStdString(sp.card_id())
+                             << " name='" << pushedName << "'"
+                             << " stackZoneSize=" << (spellZone ? spellZone->getCards().size() : -1)
+                             << " physicalCardOnStack=" << (phys ? phys->getId() : -1)
+                             << " boundServerCardId=" << ruledStackObjectIdToServerCardId.value(pushedOid, -1);
+    }
+}
+
 RuledBatchSynchronizer::BatchApplyResult RuledBatchSynchronizer::applyBatch(const ruled::v1::IpcResponse &resp)
 {
     BatchApplyResult result;
@@ -712,10 +849,10 @@ RuledBatchSynchronizer::BatchApplyResult RuledBatchSynchronizer::applyBatch(cons
 
     // One named method per pass. The pass order is load-bearing — never merge or reorder:
     // the catalog must be indexed before anything resolves a card name through it, the
-    // pre-batch oid capture feeds PermanentMoved translation, tokens must exist before
-    // the zone-view sync binds battlefield slots, PermanentMoved must run before zone views
-    // reconcile hand/library counts, and attachment restore plus life/mana/combat
-    // translation need the fresh post-zone-view oid maps.
+    // pre-batch oid capture feeds PermanentMoved translation, tokens and StackPushed bindings
+    // must exist before same-batch moves/removals and zone-view reconciliation, PermanentMoved
+    // and exact stack removals must run first reconcile hand/library counts, and attachment
+    // restore plus life/mana/combat translation need the fresh post-zone-view oid maps.
 
     // Mid-game catalog refresh. Almost every batch carries no CardCatalog and leaves the index
     // untouched; a batch that does carries the whole catalog and replaces it.
@@ -735,7 +872,9 @@ RuledBatchSynchronizer::BatchApplyResult RuledBatchSynchronizer::applyBatch(cons
     }
 
     applyTokenCreations(batch, battlefieldGridRows);
+    applyStackPushBindings(batch);
     applyPermanentMoves(batch, preBatchOidMaps, battlefieldGridRows, battlefieldDisplayPlayers);
+    applyStackObjectsRemovedEvent(batch);
     applyPhaseStackAndZoneViews(batch, battlefieldGridRows, battlefieldDisplayPlayers, result);
     applyFaceDisplays(batch, result);
     applyAttachmentRestores(batch);
@@ -1397,95 +1536,6 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
             }
         }
         if (!e.has_zone_view()) {
-            if (e.has_stack_pushed()) {
-                const auto &sp = e.stack_pushed();
-                const quint32 pushedOid = static_cast<quint32>(sp.object_id());
-                // CR 707.10: a spell copy (Twincast/Fork) has no physical card on the shared stack.
-                // Record its display name (for the prompt/log) but never bind it to a Server_Card —
-                // its card_id matches the original, so binding would steal the original's physical
-                // card. The resolve handler treats it as a no-op move (see ruledStackCopyObjectIds).
-                if (sp.is_copy()) {
-                    ruledStackCopyObjectIds.insert(pushedOid);
-                    QString copyName = QString::fromStdString(sp.description());
-                    if (!sp.is_prepare_spell() && !sp.card_id().empty()) {
-                        const QString catalogName = cardNameForId(QString::fromStdString(sp.card_id()));
-                        if (!catalogName.isEmpty()) {
-                            copyName = catalogName;
-                        }
-                    }
-                    ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, copyName);
-                    continue;
-                }
-                // Abilities have no physical card. In particular, a madness trigger resolves
-                // after its identically named source has been cast onto the physical stack.
-                // Neither binding nor the resolve-time name fallback may consume that spell.
-                if (sp.is_triggered() || sp.card_id().empty()) {
-                    ruledStackAbilityObjectIds.insert(pushedOid);
-                    ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, QString::fromStdString(sp.description()));
-                    continue;
-                }
-                // Physical binding matches on display names. For spells, resolve the engine
-                // card id through the catalog (authoritative Oracle name) rather than trusting
-                // the free-form description; abilities carry no card_id and keep the description.
-                QString pushedName = QString::fromStdString(sp.description());
-                if (!sp.card_id().empty()) {
-                    const QString catalogName = cardNameForId(QString::fromStdString(sp.card_id()));
-                    if (!catalogName.isEmpty()) {
-                        pushedName = catalogName;
-                    }
-                }
-                ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, pushedName);
-                const QString normalizedPushedName = normalizeRuledCardName(pushedName);
-                QList<PendingRuledCastVisual>::iterator bindIt = ruledPendingCastVisualQueue.end();
-                for (auto it = ruledPendingCastVisualQueue.begin(); it != ruledPendingCastVisualQueue.end(); ++it) {
-                    if (normalizeRuledCardName(it->cardName) == normalizedPushedName) {
-                        bindIt = it;
-                        break;
-                    }
-                }
-                // CastSpell always enqueues one pending entry before applyBatch; if the engine
-                // stack description and Cockatrice printing names differ, name match fails and clients
-                // never get BattlefieldObjectMap rows for stack oids (spell targeting arrows break).
-                if (bindIt == ruledPendingCastVisualQueue.end() && !ruledPendingCastVisualQueue.isEmpty()) {
-                    bindIt = ruledPendingCastVisualQueue.begin();
-                }
-                if (bindIt != ruledPendingCastVisualQueue.end()) {
-                    ruledStackTargetsByObjectId.insert(pushedOid, bindIt->targetOids);
-                    if (bindIt->serverCardId >= 0) {
-                        ruledStackObjectIdToServerCardId.insert(pushedOid, bindIt->serverCardId);
-                    }
-                    if (bindIt->casterPlayerId >= 0) {
-                        ruledStackObjectIdToCasterPlayerId.insert(pushedOid, bindIt->casterPlayerId);
-                    }
-                    ruledPendingCastVisualQueue.erase(bindIt);
-                } else {
-                    QVector<quint32> tlist;
-                    tlist.reserve(sp.targets_size());
-                    for (int ti = 0; ti < sp.targets_size(); ++ti) {
-                        tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
-                    }
-                    if (!tlist.isEmpty()) {
-                        ruledStackTargetsByObjectId.insert(pushedOid, tlist);
-                    }
-                }
-                // Authoritative: map engine stack oid to the physical card.
-                // All spells now go into the canonical zone so always look there.
-                {
-                    Server_CardZone *spellZone = ruledCanonicalStackZone(game);
-                    Server_Card *phys =
-                        spellZone ? ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName) : nullptr;
-                    if (phys) {
-                        ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
-                    }
-                    RULED_TRACE("relay") << "stackPushed: oid=" << pushedOid
-                                         << " cardId=" << QString::fromStdString(sp.card_id()) << " name='"
-                                         << pushedName << "'"
-                                         << " stackZoneSize=" << (spellZone ? spellZone->getCards().size() : -1)
-                                         << " physicalCardOnStack=" << (phys ? phys->getId() : -1)
-                                         << " boundServerCardId="
-                                         << ruledStackObjectIdToServerCardId.value(pushedOid, -1);
-                }
-            }
             if (e.has_stack_resolved()) {
                 applyStackResolvedEvent(e.stack_resolved(), battlefieldGridRows, battlefieldDisplayPlayers);
             }

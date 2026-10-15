@@ -50,6 +50,7 @@ class RuledEventBatch;
 class StackPushed;
 class StackResolved;
 class StackObjectCountered;
+class StackObjectRemoved;
 class TriggerNeedsTarget;
 class TriggerOrderRequired;
 class ZoneViewSync;
@@ -112,6 +113,7 @@ private:
     void applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx);
     void applyStackResolved(const ruled::v1::StackResolved &sr, BatchContext &ctx);
     void applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered, BatchContext &ctx);
+    void applyStackObjectRemoved(const ruled::v1::StackObjectRemoved &removed, BatchContext &ctx);
     void applyPermanentMoved(const ruled::v1::PermanentMoved &moved, BatchContext &ctx);
     void retireStackObject(quint32 objectId, BatchContext &ctx);
     void applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx);

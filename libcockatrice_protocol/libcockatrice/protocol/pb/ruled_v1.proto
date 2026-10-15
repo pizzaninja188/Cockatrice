@@ -1419,6 +1419,9 @@ message RuledEvent {
     // choice is pending. An empty list retires the display markers when the instruction ends.
     ResolutionChoiceProgress resolution_choice_progress = 39
         [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // An exact stack object removed from the game without a destination move (for example,
+    // an object owned by a player who left the game). Real zone moves use PermanentMoved.
+    StackObjectRemoved stack_object_removed = 40 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
@@ -2055,6 +2058,13 @@ message StackResolved {
 }
 
 message StackObjectCountered {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// An exact stack object that ceases to exist without resolving, being countered, or moving to a
+// rules zone. The relay retires its physical stack presentation by OID; clients retire its stack
+// and target bookkeeping. This carries no destination semantics.
+message StackObjectRemoved {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 

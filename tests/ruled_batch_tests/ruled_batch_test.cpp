@@ -318,7 +318,10 @@ protected:
         game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
     }
 
-    void seedSyntheticStackBookkeeping(quint32 engineOid, quint32 targetOid, bool isCopy)
+    void seedSyntheticStackBookkeeping(quint32 engineOid,
+                                       quint32 targetOid,
+                                       bool isCopy,
+                                       bool isAbility = false)
     {
         game->ruled()->synchronizer->ruledStackTargetsByObjectId.insert(engineOid, {targetOid});
         game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.insert(engineOid, p1->getPlayerId());
@@ -326,6 +329,9 @@ protected:
                                                                                        QStringLiteral("Synthetic"));
         if (isCopy) {
             game->ruled()->synchronizer->ruledStackCopyObjectIds.insert(engineOid);
+        }
+        if (isAbility) {
+            game->ruled()->synchronizer->ruledStackAbilityObjectIds.insert(engineOid);
         }
     }
 
@@ -341,12 +347,18 @@ protected:
         return game->ruled()->synchronizer->ruledStackTargetsByObjectId.contains(engineOid) ||
                game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.contains(engineOid) ||
                game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.contains(engineOid) ||
-               game->ruled()->synchronizer->ruledStackCopyObjectIds.contains(engineOid);
+               game->ruled()->synchronizer->ruledStackCopyObjectIds.contains(engineOid) ||
+               game->ruled()->synchronizer->ruledStackAbilityObjectIds.contains(engineOid);
     }
 
     int boundStackServerCardId(quint32 engineOid) const
     {
         return game->ruled()->synchronizer->ruledStackObjectIdToServerCardId.value(engineOid, -1);
+    }
+
+    int pendingCastVisualCount() const
+    {
+        return game->ruled()->synchronizer->ruledPendingCastVisualQueue.size();
     }
 
     QVector<quint32> boundStackTargets(quint32 engineOid) const
@@ -5231,6 +5243,132 @@ TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBindi
 
     EXPECT_FALSE(hasSyntheticStackBookkeeping(900u));
     EXPECT_TRUE(hasSyntheticStackBookkeeping(901u));
+}
+
+TEST_F(RuledBatchTest, StackObjectRemovedDeletesOnlyExactPhysicalCardAndRetiresSyntheticObjects)
+{
+    Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(hand, nullptr);
+    ASSERT_NE(stack, nullptr);
+    ASSERT_NE(table, nullptr);
+
+    Server_Card *departingBolt = addCardToHand(p1, QStringLiteral("Lightning Bolt"));
+    Server_Card *sameNameSurvivor = addCardToHand(p1, QStringLiteral("Lightning Bolt"));
+    hand->removeCard(departingBolt);
+    hand->removeCard(sameNameSurvivor);
+    stack->insertCard(departingBolt, -1, 0);
+    stack->insertCard(sameNameSurvivor, -1, 0);
+    Server_Card *abilitySource = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    bindStackObject(900u, departingBolt, p1->getPlayerId(), QStringLiteral("Lightning Bolt"));
+    bindStackObject(901u, sameNameSurvivor, p1->getPlayerId(), QStringLiteral("Lightning Bolt"));
+    seedSyntheticStackBookkeeping(902u, 777u, true);
+    seedSyntheticStackBookkeeping(903u, 778u, false, true);
+    ASSERT_TRUE(hasSyntheticStackBookkeeping(902u));
+    ASSERT_TRUE(hasSyntheticStackBookkeeping(903u));
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(900u);
+    response.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(902u);
+    response.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(903u);
+    response.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(
+        900u); // duplicate delivery is a no-op after exact retirement
+    response.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(
+        999u); // unknown OIDs never fall back to a name or stack position
+    callBatchApply(response);
+
+    EXPECT_EQ(stack->getCards(), (QList<Server_Card *>{sameNameSurvivor}));
+    EXPECT_TRUE(table->getCards().contains(abilitySource))
+        << "retiring a synthetic ability/copy stack item must leave its source permanent alone";
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(900u));
+    EXPECT_TRUE(hasSyntheticStackBookkeeping(901u));
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(902u));
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(903u));
+    EXPECT_EQ(boundStackServerCardId(900u), -1);
+    EXPECT_EQ(boundStackServerCardId(901u), sameNameSurvivor->getId());
+}
+
+TEST_F(RuledBatchTest, SameBatchStackPushAndRemovalRetiresDeferredCastAndSyntheticBindings)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    const QString cardId = QStringLiteral("lightning_bolt");
+    const QString displayName = QStringLiteral("Lightning Bolt");
+    Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(hand, nullptr);
+    ASSERT_NE(stack, nullptr);
+
+    // Keep an unrelated same-name spell on the shared stack. The deferred hand cast below must
+    // bind and remove its own exact Server_Card even though name lookup has a valid sibling.
+    Server_Card *castCard = addCardToHand(p1, displayName);
+    Server_Card *sameNameSurvivor = addCardToHand(p1, displayName);
+    hand->removeCard(sameNameSurvivor);
+    stack->insertCard(sameNameSurvivor, -1, 0);
+    bindStackObject(819u, sameNameSurvivor, p2->getPlayerId(), displayName);
+
+    ruled::v1::IpcResponse seeded;
+    seeded.set_ok(true);
+    appendP1ZoneViewWithPrivateCards(seeded, {{817u, cardId}}, {});
+    ASSERT_TRUE(callBatchApply(seeded).zoneViewApplied);
+
+    // Model the private-zone begin/commit flow: Begin reserves the exact hand card and publishes a
+    // pending visual; Commit's response can push and remove the resulting stack object together.
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_hand_index(0u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(43u);
+    pending->set_reserved_object_id(818u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    // Reserved private cards stay physically in hand but disappear from the accepted hand view.
+    appendP1ZoneViewWithPrivateCards(begun, {}, {});
+    ASSERT_TRUE(callBatchApply(begun).zoneViewApplied);
+    ASSERT_EQ(hand->getCards(), (QList<Server_Card *>{castCard}));
+    ASSERT_EQ(stack->getCards(), (QList<Server_Card *>{sameNameSurvivor}));
+    ASSERT_EQ(pendingCastVisualCount(), 1);
+
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(43u);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    auto *physicalPush = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    physicalPush->set_object_id(830u);
+    physicalPush->set_card_id(cardId.toStdString());
+    physicalPush->set_description(displayName.toStdString());
+    auto *copyPush = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    copyPush->set_object_id(831u);
+    copyPush->set_card_id(cardId.toStdString());
+    copyPush->set_description(displayName.toStdString());
+    copyPush->set_is_copy(true);
+    auto *abilityPush = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    abilityPush->set_object_id(832u);
+    abilityPush->set_description(displayName.toStdString());
+    abilityPush->set_is_triggered(true);
+    // Engine identity is exact: only the newly pushed physical spell leaves this batch, while the
+    // unrelated same-name sibling remains. Copy and ability OIDs have no physical card to delete.
+    committed.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(830u);
+    committed.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(831u);
+    committed.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(832u);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+    ASSERT_TRUE(stack->getCards().contains(castCard));
+    ASSERT_EQ(stack->getCards(), (QList<Server_Card *>{sameNameSurvivor, castCard}));
+    ASSERT_EQ(pendingCastVisualCount(), 1);
+
+    callBatchApply(committed);
+
+    EXPECT_EQ(stack->getCards(), (QList<Server_Card *>{sameNameSurvivor}));
+    EXPECT_FALSE(stack->getCards().contains(castCard));
+    EXPECT_EQ(boundStackServerCardId(830u), -1);
+    EXPECT_EQ(boundStackServerCardId(819u), sameNameSurvivor->getId());
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(830u));
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(831u));
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(832u));
+    EXPECT_EQ(pendingCastVisualCount(), 0);
 }
 
 TEST_F(RuledBatchTest, PermanentMovedFromStackRetiresItsBindingAndRegistersLibraryIdentity)

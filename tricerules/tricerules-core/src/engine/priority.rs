@@ -88,6 +88,8 @@ impl GameEngine {
     fn detach_departed_outer_resolution(
         &mut self,
         departed: &[PlayerId],
+        events: &mut Vec<rv1::RuledEvent>,
+        moved_stack_to_exile: &mut HashSet<ObjectId>,
     ) -> Result<(), EngineError> {
         let is_departed = |stack: &ParkedStackResolution| {
             departed.contains(&stack.item.controller)
@@ -266,11 +268,12 @@ impl GameEngine {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
         }
-        if self
+        if let Some(owner) = self
             .state
             .objects
             .get(&outer.item.id)
-            .is_some_and(|object| !departed.contains(&object.owner) && object.zone == Zone::Stack)
+            .filter(|object| !departed.contains(&object.owner) && object.zone == Zone::Stack)
+            .map(|object| object.owner)
         {
             move_object_to_zone(
                 &mut self.state,
@@ -279,6 +282,13 @@ impl GameEngine {
                 Zone::Exile,
                 None,
             )?;
+            moved_stack_to_exile.insert(outer.item.id);
+            events.push(permanent_moved_event(
+                &self.state,
+                outer.item.id,
+                owner,
+                rv1::permanent_moved::Destination::Exile,
+            ));
         }
         Ok(())
     }
@@ -287,7 +297,9 @@ impl GameEngine {
     fn remove_departing_player_objects(
         &mut self,
         player: PlayerId,
+        departed: &[PlayerId],
         events: &mut Vec<rv1::RuledEvent>,
+        moved_stack_to_exile: &mut HashSet<ObjectId>,
     ) -> Result<(), EngineError> {
         let owned: HashSet<ObjectId> = self
             .state
@@ -409,8 +421,12 @@ impl GameEngine {
                 self.state
                     .objects
                     .get(&item.id)
-                    .filter(|object| object.owner != player && object.zone == Zone::Stack)
-                    .map(|_| item.id)
+                    .filter(|object| {
+                        object.owner != player
+                            && !departed.contains(&object.owner)
+                            && object.zone == Zone::Stack
+                    })
+                    .map(|object| (item.id, object.owner))
             })
             .collect();
         let departing_stack_ids: Vec<_> = self
@@ -432,11 +448,20 @@ impl GameEngine {
         for key in departing_stack_cohorts {
             self.state.observed_object_cohorts.remove(&key);
         }
-        for id in departing_stack_ids {
+        let mut removed_stack_object_ids = Vec::new();
+        for id in &departing_stack_ids {
             self.state
                 .millennium_calendar_state_trigger_stack_keys
-                .remove(&id);
+                .remove(id);
+            if !moved_stack_to_exile.contains(id)
+                && !unowned_stack_cards
+                    .iter()
+                    .any(|(moved_id, _)| moved_id == id)
+            {
+                removed_stack_object_ids.push(*id);
+            }
         }
+        removed_stack_object_ids.sort_unstable();
         self.state
             .stack
             .retain(|item| !owned.contains(&item.id) && item.controller != player);
@@ -450,8 +475,22 @@ impl GameEngine {
         self.state
             .chosen_creature_types
             .retain(|record| !owned.contains(&record.key.source_object_id));
-        for id in unowned_stack_cards {
+        for (id, owner) in unowned_stack_cards {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
+            moved_stack_to_exile.insert(id);
+            events.push(permanent_moved_event(
+                &self.state,
+                id,
+                owner,
+                rv1::permanent_moved::Destination::Exile,
+            ));
+        }
+        for object_id in removed_stack_object_ids {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackObjectRemoved(
+                    rv1::StackObjectRemoved { object_id },
+                )),
+            });
         }
         Ok(())
     }
@@ -661,9 +700,15 @@ impl GameEngine {
                 }
             }
         }
-        self.detach_departed_outer_resolution(&departed)?;
-        for player in departed {
-            self.remove_departing_player_objects(player, events)?;
+        let mut moved_stack_to_exile = HashSet::new();
+        self.detach_departed_outer_resolution(&departed, events, &mut moved_stack_to_exile)?;
+        for &player in &departed {
+            self.remove_departing_player_objects(
+                player,
+                &departed,
+                events,
+                &mut moved_stack_to_exile,
+            )?;
             // CR 800.4a: an effect granting control to a player who left ends immediately.
             self.state.continuous_effects.retain(|effect| {
                 !matches!(effect.kind, ContinuousEffectKind::Layer2Control {

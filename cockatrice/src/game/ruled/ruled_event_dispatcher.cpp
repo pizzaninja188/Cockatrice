@@ -749,6 +749,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_stack_object_countered()) {
             applyStackObjectCountered(e.stack_object_countered(), ctx);
         }
+        if (e.has_stack_object_removed()) {
+            applyStackObjectRemoved(e.stack_object_removed(), ctx);
+        }
         if (e.has_permanent_moved()) {
             applyPermanentMoved(e.permanent_moved(), ctx);
         }
@@ -1088,6 +1091,12 @@ void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjec
     retireStackObject(objectId, ctx);
     RULED_TRACE("client") << "stackObjectCountered: oid=" << objectId
                           << " stackOidOrderRemaining=" << state->stackOidOrder.size();
+}
+
+void RuledEventDispatcher::applyStackObjectRemoved(const ruled::v1::StackObjectRemoved &removed,
+                                                   BatchContext &ctx)
+{
+    retireStackObject(removed.object_id(), ctx);
 }
 
 void RuledEventDispatcher::applyPermanentMoved(const ruled::v1::PermanentMoved &moved, BatchContext &ctx)

@@ -4016,6 +4016,66 @@ TEST_F(RuledClientTest, PermanentMovedRetiresOnlyTheExactStackObjectAndTargets)
     EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
 }
 
+TEST_F(RuledClientTest, StackObjectRemovedRetiresOnlyExactSyntheticPresentation)
+{
+    ruled::v1::RuledEventBatch source;
+    addPermanent(source.add_events(), kLocalPlayer, 100, 7);
+    auto *trigger = source.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_ability_index(0);
+    trigger->set_ability_text("Return target creature card from your graveyard to your hand.");
+    trigger->set_controller_player_id(kLocalPlayer);
+    apply(source);
+
+    ruled::v1::RuledEventBatch pushed;
+    auto *departingAbility = pushed.add_events()->mutable_stack_pushed();
+    departingAbility->set_object_id(900);
+    departingAbility->set_description("Departing triggered ability");
+    departingAbility->set_ability_annotation("Return target creature card...");
+    departingAbility->set_is_triggered(true);
+    departingAbility->mutable_targets()->Add()->set_object_id(200);
+
+    auto *unrelatedAbility = pushed.add_events()->mutable_stack_pushed();
+    unrelatedAbility->set_object_id(901);
+    unrelatedAbility->set_description("Unrelated ability");
+    unrelatedAbility->set_ability_annotation("Unrelated ability text");
+    unrelatedAbility->set_is_triggered(true);
+
+    auto *unrelatedPhysicalSpell = pushed.add_events()->mutable_stack_pushed();
+    unrelatedPhysicalSpell->set_object_id(902);
+    unrelatedPhysicalSpell->set_description("Lightning Bolt");
+    unrelatedPhysicalSpell->set_card_id("lightning_bolt");
+    apply(pushed);
+
+    ASSERT_EQ(host.createdSyntheticCards.size(), 2);
+    EXPECT_EQ(state->stackSourceOidByStackOid.value(900), 100u);
+    EXPECT_EQ(state->cardIdForEngineOid(100), 7);
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({902, 901, 900}));
+    const auto departingTargetKey = RuledClientState::stackTargetKey(900, 200);
+    const auto unrelatedTargetKey = RuledClientState::stackTargetKey(901, 201);
+    state->stackTargetKindByStackAndTargetOid.insert(departingTargetKey,
+                                                     RuledTargetItemKind::Battlefield);
+    state->stackTargetsByStackOid[901] = {201};
+    state->stackTargetKindByStackAndTargetOid.insert(unrelatedTargetKey,
+                                                     RuledTargetItemKind::Battlefield);
+
+    ruled::v1::RuledEventBatch removed;
+    removed.add_events()->mutable_stack_object_removed()->set_object_id(900);
+    apply(removed);
+
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({902, 901}));
+    EXPECT_FALSE(state->stackTargetsByStackOid.contains(900));
+    EXPECT_FALSE(state->stackTargetKindByStackAndTargetOid.contains(departingTargetKey));
+    EXPECT_EQ(state->stackTargetsByStackOid.value(901), QVector<quint32>({201}));
+    EXPECT_TRUE(state->stackTargetKindByStackAndTargetOid.contains(unrelatedTargetKey));
+    EXPECT_EQ(state->stackAnnotation(901), QStringLiteral("Unrelated ability text"));
+    EXPECT_EQ(state->cardIdForEngineOid(100), 7)
+        << "retiring the ability presentation leaves its source permanent mapped";
+    EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({900}));
+    EXPECT_EQ(host.createdSyntheticCards.size(), 2)
+        << "the unrelated ability and physical spell presentation are not recreated or removed";
+}
+
 TEST_F(RuledClientTest, PhysicalStackCardIsPublishedOnlyAfterStackPushed)
 {
     constexpr quint32 reservedOid = 20;

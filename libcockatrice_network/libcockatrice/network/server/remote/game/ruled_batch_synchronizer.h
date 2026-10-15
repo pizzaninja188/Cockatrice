@@ -86,6 +86,7 @@ private:
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
                              const QHash<quint32, int> &battlefieldGridRows,
                              const QHash<quint32, int> &battlefieldDisplayPlayers);
+    void applyStackPushBindings(const ruled::v1::RuledEventBatch &batch);
     void applyBattlefieldControllerTransfers(const ruled::v1::ZoneViewSync &zoneView, BatchApplyResult &result);
     void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
                                      const QHash<quint32, int> &battlefieldGridRows,
@@ -99,6 +100,7 @@ private:
                                  const QHash<quint32, int> &battlefieldGridRows,
                                  const QHash<quint32, int> &battlefieldDisplayPlayers);
     void applyStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered);
+    void applyStackObjectsRemovedEvent(const ruled::v1::RuledEventBatch &batch);
 
     RuledPlayerBinding &playerBinding(int playerId);
 

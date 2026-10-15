@@ -125,6 +125,7 @@ fn registry() -> &'static tricerules_card_model::CardRegistry {
                 include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
                 include_str!("../../../tricerules-cards/data/island.ron"),
                 include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
                 include_str!(
                     "../../../tricerules-cards/data/generated/c/confusticate_and_bebother.ron"
                 ),
@@ -590,6 +591,41 @@ fn departed_soft_counter_payer_does_not_leave_a_blocking_payment_prompt() {
     let departure = engine
         .apply_scenario_command(0, &concede())
         .expect("B concedes while A and C survive");
+
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed))
+                    if removed.object_id == bolt
+            ))
+            .count(),
+        1,
+        "a payer-owned spell leaves the stack through an exact removal event"
+    );
+    assert!(
+        !departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::PermanentMoved(moved)) if moved.object_id == bolt
+        )),
+        "leaving the game is not a zone move"
+    );
+    assert!(
+        !departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::StackResolved(resolved)) if resolved.object_id == bolt
+        )),
+        "leaving the game is not resolution"
+    );
+    assert!(
+        !departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::StackObjectCountered(countered)) if countered.object_id == bolt
+        )),
+        "leaving the game is not a counter action"
+    );
     assert!(!engine.state.is_terminal(), "A and C remain in the game");
     assert!(engine.state.players[0].has_lost);
     assert!(!engine.state.players[1].has_lost && !engine.state.players[2].has_lost);
@@ -790,11 +826,333 @@ fn departed_counter_source_does_not_resume_a_surviving_payer_choice() {
     assert!(engine.state.pending_resolution.is_none());
     assert!(!engine.state.stack.iter().any(|item| item.id == convolute));
     assert!(engine.state.stack.iter().any(|item| item.id == bolt));
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed))
+                    if removed.object_id == convolute
+            ))
+            .count(),
+        1,
+        "the departed counter source is removed by exact OID without claiming its target"
+    );
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectRemoved(removed)) if removed.object_id == bolt
+    )));
     assert!(!departure.events.iter().any(|event| matches!(
         &event.ev,
         Some(Ev::ResolutionChoiceRequired(choice))
             if choice.choice_kind == ChoiceKind::ManaPayment as i32
     )));
+}
+
+#[test]
+fn departing_controller_moves_a_foreign_owned_stack_spell_to_exile_once() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt"]),
+        deck_with("island", &["opt"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(registry(), 75_144, &[0, 1, 2], 20, decks, true)
+        .expect("foreign-owned stack departure engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "lightning_bolt");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "lightning_bolt"),
+                target_player(1),
+            ),
+        )
+        .expect("P0 casts Bolt");
+    let bolt = engine.state.stack.last().expect("Bolt on stack").id;
+    // Casting a card owned by another player leaves the spell controlled by its caster.
+    // This fixture directly models that already-established ownership identity.
+    engine
+        .state
+        .objects
+        .get_mut(&bolt)
+        .expect("Bolt object")
+        .owner = 2;
+    let generation_before = engine.state.zone_change_generation[&bolt];
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 leaves while two players survive");
+
+    assert!(!engine.state.is_terminal());
+    assert!(!engine.state.stack.iter().any(|item| item.id == bolt));
+    assert_eq!(engine.state.objects[&bolt].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&bolt].owner, 2);
+    assert_eq!(
+        engine.state.zone_change_generation[&bolt],
+        generation_before + 1
+    );
+    let moves: Vec<_> = departure
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::PermanentMoved(moved)) if moved.object_id == bolt => Some(moved),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        moves.len(),
+        1,
+        "the actual exile move is published exactly once"
+    );
+    assert_eq!(moves[0].owner_player_id, 2);
+    assert_eq!(
+        moves[0].destination,
+        tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32
+    );
+    assert!(
+        !departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::StackObjectRemoved(removed)) if removed.object_id == bolt
+        )),
+        "a real exile move is not duplicated as a no-destination removal"
+    );
+}
+
+#[test]
+fn simultaneously_departing_owner_and_controller_remove_the_spell_without_an_exile_move() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt"]),
+        deck_with("island", &["opt"]),
+        deck_with("forest", &[]),
+        deck_with("mountain", &["lightning_bolt"]),
+    ]);
+    let mut engine = GameEngine::new(registry(), 75_146, &[0, 1, 2, 3], 20, decks, true)
+        .expect("simultaneous-departure stack engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "lightning_bolt");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "lightning_bolt"),
+                target_player(1),
+            ),
+        )
+        .expect("P0 casts Bolt");
+    let bolt = engine.state.stack.last().expect("Bolt on stack").id;
+    engine
+        .state
+        .objects
+        .get_mut(&bolt)
+        .expect("Bolt object")
+        .owner = 2;
+    while engine.state.priority_player_id() != 3 {
+        let priority = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(priority, &pass())
+            .expect("pass priority to the surviving P3");
+    }
+    ensure_in_hand(&mut engine, 3, "lightning_bolt");
+    give_mana(
+        &mut engine,
+        3,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            3,
+            &cast_spell(
+                hand_index_for_card(&engine, 3, "lightning_bolt"),
+                target_player(1),
+            ),
+        )
+        .expect("surviving P3 casts an unrelated same-name Bolt");
+    let survivor_bolt = engine.state.stack.last().expect("P3 Bolt on stack").id;
+    assert_ne!(survivor_bolt, bolt);
+    engine
+        .state
+        .players
+        .iter_mut()
+        .find(|player| player.id == 2)
+        .expect("P2")
+        .has_lost = true;
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 and the Bolt's owner P2 leave in the same reconciliation");
+
+    assert!(!engine.state.is_terminal(), "P1 and P3 remain in the game");
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .filter(|player| player.has_lost)
+            .count(),
+        2,
+        "both departing seats are removed while two seats survive"
+    );
+    assert!(!engine.state.objects.contains_key(&bolt));
+    assert!(!engine.state.stack.iter().any(|item| item.id == bolt));
+    assert!(engine.state.objects.contains_key(&survivor_bolt));
+    assert!(engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == survivor_bolt));
+    assert_eq!(engine.state.objects[&survivor_bolt].zone, Zone::Stack);
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed)) if removed.object_id == bolt
+            ))
+            .count(),
+        1,
+        "an object whose owner and controller both leave has no destination move"
+    );
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::PermanentMoved(moved)) if moved.object_id == bolt
+    )));
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectRemoved(removed)) if removed.object_id == survivor_bolt
+    )));
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::PermanentMoved(moved)) if moved.object_id == survivor_bolt
+    )));
+}
+
+#[test]
+fn departed_controller_exiles_a_parked_foreign_owned_parent_before_removing_owned_target() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt", "convolute"]),
+        deck_with("island", &["opt"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(registry(), 75_145, &[0, 1, 2], 20, decks, true)
+        .expect("foreign-owned parked parent departure engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "lightning_bolt");
+    ensure_in_hand(&mut engine, 0, "convolute");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "lightning_bolt"),
+                target_player(1),
+            ),
+        )
+        .expect("P0 casts Bolt");
+    let bolt = engine.state.stack.last().expect("Bolt on stack").id;
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "convolute"),
+                vec![stack_target(0, bolt)],
+            ),
+        )
+        .expect("P0 casts Convolute at their own spell");
+    let convolute = engine.state.stack.last().expect("Convolute on stack").id;
+    engine
+        .state
+        .objects
+        .get_mut(&convolute)
+        .expect("Convolute object")
+        .owner = 2;
+    let generation_before = engine.state.zone_change_generation[&convolute];
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("P0 receives the payment offer for their Bolt")
+            .deciding_player,
+        0
+    );
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 leaves while P1 and P2 survive");
+
+    assert!(!engine.state.is_terminal());
+    assert_eq!(engine.state.objects[&convolute].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&convolute].owner, 2);
+    assert_eq!(
+        engine.state.zone_change_generation[&convolute],
+        generation_before + 1
+    );
+    let parent_moves = departure
+        .events
+        .iter()
+        .filter(|event| matches!(
+            &event.ev,
+            Some(Ev::PermanentMoved(moved))
+                if moved.object_id == convolute
+                    && moved.owner_player_id == 2
+                    && moved.destination == tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32
+        ))
+        .count();
+    assert_eq!(
+        parent_moves, 1,
+        "the detached foreign-owned parent is exiled exactly once"
+    );
+    assert!(
+        !departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::StackObjectRemoved(removed)) if removed.object_id == convolute
+        )),
+        "the detached parent is excluded from no-destination stack removal"
+    );
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed)) if removed.object_id == bolt
+            ))
+            .count(),
+        1,
+        "the departing player's owned target is removed without a zone move"
+    );
 }
 
 #[test]
