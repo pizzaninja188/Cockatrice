@@ -289,9 +289,12 @@ do not infer optional payment from a nonempty receipt or an ordinary `UpTo` sele
 `CounterTargetSpell(unless_controller_pays: Some(amount))` exposes one optional typed result only
 when `amount` is a positive fixed literal. Bind it to consume the accepted payment outcome with
 `IfResult(CounterPayment(result: "payment", outcome: Paid))`; the status type also supports
-`Declined` and `NotOffered`. `Paid` is published only after the payer accepts and the payment
+`Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` is published only after the payer accepts and the payment
 transaction commits. `Declined` records the accepted decline even when the target spell cannot be
-countered. `NotOffered` records a completed counter instruction that begins without its captured
+countered. `ForcedUnpaid` records an already-offered payment whose payer leaves before answering;
+after departure cleanup the engine consumes that standalone choice and resumes the retained
+source's parked cursor without delegation or an accepted decline. `NotOffered` records a completed
+counter instruction that begins without its captured
 spell still on the stack, including when an earlier instruction removed it or its zone-change
 generation no longer matches. It also records a target-group skip when another legal group keeps
 the program resolving. A failed/unpayable Pay submission leaves the existing offer pending and

@@ -19,11 +19,16 @@ Prompt identity applies to legacy resolution choices as well as program choices;
 the accepted syntax.
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
-`Paid`, `Declined` and `NotOffered`; `NotOffered` means the counter instruction began without its
-captured stack target still present as that exact object, including when an earlier instruction
-removed it, or its target group was skipped while another legal group kept the owner resolving.
-Invalid or unpayable Pay submissions remain pending and publish no result. Divert's Lander effect
-consumes only `Paid`. The `CounterUnlessPaid` branch
+`Paid`, `Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` follows an accepted, committed payment;
+`Declined` follows the payer's accepted decline. `ForcedUnpaid` records an already-offered payment
+whose payer leaves before answering. After departure detaches any departed outer source and removes
+the payer's objects, the engine consumes the standalone `ManaPayment` choice and resumes the same
+parked cursor with `ForcedUnpaid`; it does not delegate or synthesize a decline. `NotOffered` means
+the counter instruction began without its captured stack target still present as that exact object,
+including when an earlier instruction removed it, or its target group was skipped while another
+legal group kept the owner resolving. Invalid or unpayable Pay submissions remain pending and
+publish no result. Divert's Lander effect consumes only `Paid`, so a departed payer does not create
+one. The `CounterUnlessPaid` branch
 receipt condition and now-unused `PreviousResultReceipt` wrapper are retired; the shared counter-
 placement/sacrifice receipt matcher and other resolution receipts remain.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an

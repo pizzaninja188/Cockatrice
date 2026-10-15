@@ -267,6 +267,76 @@ impl GameEngine {
                 ));
             }
         }
+        let counter_payment_outcome = soft_counter_paid.map(|paid| {
+            if paid {
+                tricerules_card_model::primitives::CounterPaymentOutcome::Paid
+            } else {
+                tricerules_card_model::primitives::CounterPaymentOutcome::Declined
+            }
+        });
+        self.resume_mana_payment_continuation(pending, counter_payment_outcome, events)
+    }
+
+    /// A departed payer cannot answer or delegate a standalone pay-or-decline choice. Once the
+    /// departed player's objects are removed, complete the retained source at the exact parked
+    /// cursor with an explicit ForcedUnpaid result. This intentionally does not call the ordinary
+    /// decline path, which can rewind mana abilities and attempts to counter the payer's target.
+    pub(in crate::engine) fn refresh_departed_standalone_mana_payment(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(());
+        };
+        let ResolutionContinuation::ManaPayment { stack, .. } = &pending.continuation else {
+            return Ok(());
+        };
+        let payer_departed = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_none_or(|index| self.state.players[index].has_lost);
+        if !payer_departed {
+            return Ok(());
+        }
+
+        // `detach_departed_outer_resolution` remains authoritative. It clears a pending choice
+        // when the resolving object's controller or owner left. The checks here make that
+        // retention boundary explicit before completing a still-live parent's parked operation.
+        let source_controller_survives = self
+            .state
+            .player_idx(stack.item.controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let source_owner_survives = self.state.objects.get(&stack.item.id).is_none_or(|object| {
+            self.state
+                .player_idx(object.owner)
+                .is_some_and(|index| !self.state.players[index].has_lost)
+        });
+        if !source_controller_survives || !source_owner_survives {
+            return Ok(());
+        }
+
+        let pending = self
+            .state
+            .pending_resolution
+            .take()
+            .expect("standalone mana-payment continuation was observed");
+        let completed = self.resume_mana_payment_continuation(
+            pending,
+            Some(tricerules_card_model::primitives::CounterPaymentOutcome::ForcedUnpaid),
+            std::mem::take(events),
+        )?;
+        *events = completed.events;
+        Ok(())
+    }
+
+    /// Shared final tail for accepted and forced mana-payment completion. The caller owns all
+    /// decision-specific work; this resumes the exact parked program frame or effect-list cursor.
+    fn resume_mana_payment_continuation(
+        &mut self,
+        pending: PendingResolution,
+        counter_payment_outcome: Option<tricerules_card_model::primitives::CounterPaymentOutcome>,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
         let stack = pending
             .continuation
             .stack()
@@ -283,17 +353,19 @@ impl GameEngine {
             stack.resume_effect_index
         };
         let mut previous_result = stack.previous_result.clone();
-        if let Some(paid) = soft_counter_paid {
-            previous_result.counter_payment_outcome = Some(if paid {
-                tricerules_card_model::primitives::CounterPaymentOutcome::Paid
-            } else {
-                tricerules_card_model::primitives::CounterPaymentOutcome::Declined
-            });
+        if let Some(outcome) = counter_payment_outcome {
+            previous_result.counter_payment_outcome = Some(outcome);
         }
         if stack.program.is_some() {
-            return self.complete_parked_stack_with_previous(stack, previous_result, events);
+            self.complete_parked_stack_with_previous(stack, previous_result, events)
+        } else {
+            self.complete_parked_resolution_with_previous(
+                stack.item,
+                resume,
+                previous_result,
+                events,
+            )
         }
-        self.complete_parked_resolution_with_previous(stack.item, resume, previous_result, events)
     }
 
     pub(in crate::engine) fn resolution_cost_candidates(

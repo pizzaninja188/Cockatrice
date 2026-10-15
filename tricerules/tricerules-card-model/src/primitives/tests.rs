@@ -4494,13 +4494,15 @@ fn program_compiler_resolves_only_dominating_discard_result_conditions() {
 
 #[test]
 fn program_conditions_accept_typed_counter_payment_result_ron() {
-    let condition = ron::from_str::<crate::primitives::ProgramResultCondition>(
-        r#"CounterPayment(result: "payment", outcome: Paid)"#,
-    );
-    assert!(
-        condition.is_ok(),
-        "a fixed-cost counter result should expose its typed payment status"
-    );
+    for outcome in ["Paid", "Declined", "NotOffered", "ForcedUnpaid"] {
+        let condition = ron::from_str::<crate::primitives::ProgramResultCondition>(&format!(
+            r#"CounterPayment(result: "payment", outcome: {outcome})"#,
+        ));
+        assert!(
+            condition.is_ok(),
+            "a fixed-cost counter result should expose {outcome} as a typed payment status"
+        );
+    }
 }
 
 #[test]

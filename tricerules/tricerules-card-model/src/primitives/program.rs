@@ -161,15 +161,16 @@ pub enum DiscardResultOutcome {
     Unpayable,
 }
 
-/// The accepted payment state for a fixed-cost soft-counter instruction. `NotOffered` records a
-/// completed instruction that found no current captured stack target, including when an earlier
-/// instruction removed it; it also covers a skipped target group when another legal group keeps
-/// the program resolving.
+/// The payment state for a fixed-cost soft-counter instruction. `ForcedUnpaid` records that an
+/// already-offered payer left the game before answering; `NotOffered` records a completed
+/// instruction that found no current captured stack target, including when an earlier instruction
+/// removed it, or a skipped target group while another legal group keeps the program resolving.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CounterPaymentOutcome {
     NotOffered,
     Declined,
     Paid,
+    ForcedUnpaid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -747,6 +747,7 @@ impl GameEngine {
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
+        self.refresh_departed_standalone_mana_payment(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }
