@@ -286,6 +286,22 @@ An exact choice yields `ChosenToPay` independently of replacement destinations o
 Use that outcome for a subsequent "if you do" instruction. Mandatory discard yields `Performed`;
 do not infer optional payment from a nonempty receipt or an ordinary `UpTo` selection.
 
+`CounterTargetSpell(unless_controller_pays: Some(amount))` exposes one optional typed result only
+when `amount` is a positive fixed literal. Bind it to consume the accepted payment outcome with
+`IfResult(CounterPayment(result: "payment", outcome: Paid))`; the status type also supports
+`Declined` and `NotOffered`. `Paid` is published only after the payer accepts and the payment
+transaction commits. `Declined` records the accepted decline even when the target spell cannot be
+countered. `NotOffered` records a completed counter instruction that begins without its captured
+spell still on the stack, including when an earlier instruction removed it or its zone-change
+generation no longer matches. It also records a target-group skip when another legal group keeps
+the program resolving. A failed/unpayable Pay submission leaves the existing offer pending and
+publishes no result, and the all-targets-illegal exit still bypasses the program. Binding is optional
+so plain counter leaves and existing fixed-cost counter leaves that do not consume the result remain
+valid; `unless_controller_pays: None` has no output. Programs continue
+to reject `unless_controller_pays_by_cast_cost`, which needs cast-time receipt inputs outside this
+typed result contract. Conditions must read a dominating in-scope binding of the matching result
+type; missing, forward and wrong-type references fail compilation.
+
 For example, the land-choice tail of Frantic Search is:
 
 ```ron

@@ -296,6 +296,7 @@ mod counters_and_pump;
 mod current_standard_coverage_2026_09_10;
 #[path = "scenario/custom_resolution.rs"]
 mod custom_resolution;
+
 #[path = "scenario/damage_prevention.rs"]
 mod damage_prevention;
 #[path = "scenario/deck_coverage_ancient_grudge.rs"]
@@ -440,6 +441,8 @@ mod deck_coverage_words_of_wisdom;
 mod deck_coverage_zurs_weirding;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
+#[path = "scenario/divert_payment_outcomes.rs"]
+mod divert_payment_outcomes;
 #[path = "scenario/dynamic_amounts.rs"]
 mod dynamic_amounts;
 #[path = "scenario/end_step_triggers.rs"]

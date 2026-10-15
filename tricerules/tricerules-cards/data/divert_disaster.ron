@@ -1,24 +1,28 @@
-// Oracle verified 2026-08-29. CR 118.12a/608.2g: remember whether the resolving
-// soft-counter payment was actually made; do not infer it from mana state.
+// Oracle verified 2026-08-29. CR 118.12a/608.2g: the accepted payment decision
+// controls the token effect; do not infer it from mana state or counter success.
 (
   id: "divert_disaster",
   name: "Divert Disaster",
   face_id: "divert_disaster",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_effect: [
-    CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(2)),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "create_a_lander", presentation: Fallback,
-          cost: None,
-          requirement: PreviousResultReceipt(CounterUnlessPaid(paid: true)),
-          effects: [CreateTokens(token: "lander", count: 1)],
-        ),
-        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
-      ],
-    ),
-  ],
+  spell_program: Some((
+    body: (steps: [
+      (id: "counter_spell", bind: ["counter_payment"], kind: Perform(CounterTargetSpell(
+        spell_filter: (), unless_controller_pays: Some(2),
+      ))),
+      (id: "create_a_lander_if_paid", kind: IfResult(
+        condition: CounterPayment(result: "counter_payment", outcome: Paid),
+        yes: (steps: [(id: "create_lander", kind: Perform(CreateTokens(
+          token: "lander", count: 1, who: Controller, tapped: false,
+          sacrifice_timing: None,
+        )))], yields: []),
+        no: (steps: [], yields: []),
+      )),
+    ], yields: []),
+    target_bindings: [(instruction_id: "counter_spell", role: Spell, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose a target", effect_indices: [],
+  )])),
 )

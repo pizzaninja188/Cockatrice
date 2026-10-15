@@ -768,10 +768,6 @@ pub enum ResolutionBranchRequirement {
     /// A linked cast-time choice recorded on this spell's stack item (CR 607.2i). Kicker and
     /// behold effects remain true even if the object used for the choice later changes zones.
     CastCostReceipt(CastCostReceiptCondition),
-    /// A typed result emitted by the immediately preceding primitive instruction. Divert
-    /// Disaster distinguishes an actual soft-counter payment from a decline without inspecting
-    /// mana pools or logs.
-    PreviousResultReceipt(ResolutionReceiptCondition),
     /// Compare the size of an exact paid-or-moved card cohort. Grab the Prize reads its discard
     /// payment; Soul-Shackled Zombie and Fanatic of the Harrowing read a preceding instruction.
     CardResultCount {
@@ -785,9 +781,6 @@ pub enum ResolutionBranchRequirement {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionReceiptCondition {
-    CounterUnlessPaid {
-        paid: bool,
-    },
     /// The immediately preceding counter instruction successfully placed this kind of counter on
     /// the exact generation-bound object selected by `object`.
     CountersPlaced {
@@ -795,9 +788,7 @@ pub enum ResolutionReceiptCondition {
         object: ConditionObjectRef,
     },
     /// The immediately preceding sacrifice instruction sacrificed this exact object generation.
-    Sacrificed {
-        object: ConditionObjectRef,
-    },
+    Sacrificed { object: ConditionObjectRef },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

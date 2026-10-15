@@ -19,19 +19,40 @@ pub(super) fn counter_target_spell(
     let spell_label = cx.spell_label;
 
     if let Some(&tid) = targets.first() {
-        // CR 608.2b already filtered illegal targets. Capture the current spell controller
-        // before countering changes its zone and generation; even a legal uncounterable spell
-        // must give its controller the following instruction's tokens.
-        cx.effect_result.targeted_spell_controller = cx
+        // A resolving program shares one target snapshot across its instructions. An earlier
+        // instruction may have removed this spell before a later counter starts; compare the
+        // captured generation before looking up its ObjectId so a same-id re-entry cannot satisfy
+        // the old target. Modal targets are stored on the chosen mode, not `top.targets`.
+        let target_group_index = cx.target_group_indices.first().copied();
+        let matching_target_refs = cx
             .top
             .targets
             .iter()
-            .any(|target| {
-                target.object_id == tid && stack_target_identity_is_current(engine, target)
+            .chain(
+                cx.top
+                    .chosen_modes
+                    .iter()
+                    .flat_map(|mode| mode.targets.iter()),
+            )
+            .filter(|target| {
+                target.object_id == tid
+                    && target_group_index
+                        .is_none_or(|group_index| target.group_index == group_index)
             })
+            .collect::<Vec<_>>();
+        let target_identity_is_current =
+            counter_target_refs_are_current(engine, &matching_target_refs);
+        cx.effect_result.targeted_spell_controller = target_identity_is_current
             .then(|| engine.state.stack.iter().find(|item| item.id == tid))
             .flatten()
             .map(|item| item.controller);
+        if !target_identity_is_current {
+            if unless_controller_pays.is_some() {
+                cx.effect_result.counter_payment_outcome =
+                    Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
+            }
+            return Ok(EffectOutcome::Continue);
+        }
         let receipt_payment = unless_controller_pays_by_cast_cost.map(|conditional| {
             if cx.top.cast_cost_condition_matches(&conditional.condition) {
                 conditional.if_selected
@@ -54,6 +75,10 @@ pub(super) fn counter_target_spell(
                 .find(|item| item.id == tid)
                 .cloned()
             else {
+                if unless_controller_pays.is_some() {
+                    cx.effect_result.counter_payment_outcome =
+                        Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
+                }
                 return Ok(EffectOutcome::Continue);
             };
             let deciding_player = target.controller;
@@ -132,9 +157,157 @@ pub(super) fn counter_target_spell(
             return Ok(EffectOutcome::Suspended);
         }
         counter_stack_object(engine, tid, spell_label, events)?;
+    } else if unless_controller_pays.is_some() {
+        cx.effect_result.counter_payment_outcome =
+            Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+fn counter_target_refs_are_current(
+    engine: &GameEngine,
+    target_refs: &[&crate::state::StackTarget],
+) -> bool {
+    !target_refs.is_empty()
+        && target_refs
+            .iter()
+            .all(|target| stack_target_identity_is_current(engine, target))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn soft_counter_does_not_offer_to_same_object_id_with_newer_generation() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            159_008,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["opt".into(); 20],
+                vec!["counterspell".into(); 20],
+            ]),
+            true,
+        )
+        .expect("new test engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        engine.state.players[0].mana_pool.blue = 1;
+        engine.state.players[1].mana_pool.blue = 2;
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("cast the target spell");
+        let target_id = engine.state.stack.last().expect("target spell").id;
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(
+                        rv1::PassPriority::default(),
+                    )),
+                },
+            )
+            .expect("pass priority to the counter spell's controller");
+        let captured_generation = engine
+            .state
+            .zone_change_generation
+            .get(&target_id)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .apply_scenario_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                            ..Default::default()
+                        }),
+                        targets: vec![rv1::TargetRef {
+                            object_id: target_id,
+                            group_index: 0,
+                            kind: rv1::TargetRefKind::Stack as i32,
+                            expected_zone_change_generation: Some(captured_generation),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("cast a counter spell targeting the captured object");
+        let top = engine.state.stack.last().expect("counter spell").clone();
+        assert_eq!(
+            top.targets[0].zone_change_generation,
+            Some(captured_generation)
+        );
+        engine
+            .state
+            .zone_change_generation
+            .insert(target_id, captured_generation + 1);
+        assert!(engine.state.stack.iter().any(|item| item.id == target_id));
+
+        let prior = EffectResult::default();
+        let mut result = EffectResult::default();
+        let mut events = Vec::new();
+        let targets = [target_id];
+        let target_group_indices = [0];
+        let outcome = {
+            let mut cx = EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &targets,
+                targets_by_role: &[],
+                target_damage: &[],
+                target_group_indices: &target_group_indices,
+                top: &top,
+                controller: top.controller,
+                affected_player: top.controller,
+                spell_label: "Counterspell fixture",
+                previous_effect_result: &prior,
+                effect_result: &mut result,
+                effect_index: 0,
+                program_state: None,
+            };
+            counter_target_spell(
+                &mut cx,
+                SpellEffectKind::CounterTargetSpell {
+                    spell_filter: Default::default(),
+                    unless_controller_pays: Some(tricerules_card_model::Amount::Fixed(2)),
+                    unless_controller_pays_by_cast_cost: None,
+                },
+            )
+            .expect("resolve fixed-cost counter against stale captured incarnation")
+        };
+
+        assert!(matches!(outcome, EffectOutcome::Continue));
+        assert_eq!(
+            result.counter_payment_outcome,
+            Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered)
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.iter().any(|item| item.id == target_id));
+        assert!(!events.iter().any(|event| matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+    }
 }
 
 pub(super) fn counter_triggering_stack_object_unless_pays(

@@ -807,16 +807,11 @@ fn issue_153_cast_cost_amount_roundtrips_and_checks_references() {
 }
 
 #[test]
-fn issue_159_typed_receipts_and_current_target_conditions_deserialize() {
-    let requirement: super::ResolutionBranchRequirement =
-        ron::from_str("PreviousResultReceipt(CounterUnlessPaid(paid: true))")
-            .expect("soft-counter payment state is a typed previous-result receipt");
-    assert!(matches!(
-        requirement,
-        super::ResolutionBranchRequirement::PreviousResultReceipt(
-            super::ResolutionReceiptCondition::CounterUnlessPaid { paid: true }
-        )
-    ));
+fn issue_159_retires_legacy_counter_receipt_and_current_target_conditions_deserialize() {
+    assert!(ron::from_str::<super::ResolutionBranchRequirement>(
+        "PreviousResultReceipt(CounterUnlessPaid(paid: true))"
+    )
+    .is_err());
 
     let effect: super::SpellEffectKind = ron::from_str(
         r#"Conditional(
@@ -4495,6 +4490,183 @@ fn program_compiler_resolves_only_dominating_discard_result_conditions() {
         let error = invalid_program_reason(&invalid);
         assert!(error.contains(expected), "{error}");
     }
+}
+
+#[test]
+fn program_conditions_accept_typed_counter_payment_result_ron() {
+    let condition = ron::from_str::<crate::primitives::ProgramResultCondition>(
+        r#"CounterPayment(result: "payment", outcome: Paid)"#,
+    );
+    assert!(
+        condition.is_ok(),
+        "a fixed-cost counter result should expose its typed payment status"
+    );
+}
+
+#[test]
+fn program_compiler_types_fixed_cost_counter_payment_results() {
+    let body: crate::primitives::AuthoredBlock = ron::from_str(
+        r#"(steps: [
+            (id: "counter", bind: ["payment"], kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: Some(2)
+            ))),
+            (id: "paid", kind: IfResult(
+                condition: CounterPayment(result: "payment", outcome: Paid),
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    )
+    .expect("typed counter-payment result fixture parses");
+    let program = crate::primitives::CardProgram {
+        body,
+        target_bindings: vec![crate::primitives::ProgramTargetReference {
+            instruction_id: "counter".into(),
+            role: crate::primitives::ProgramTargetRole::Spell,
+            target_group_index: 0,
+        }],
+    };
+    let targeting = crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a target".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let owner = crate::ProgramOwnerId::face(
+        "counter_payment_program_fixture",
+        crate::CardFaceId::new("counter_payment_program_fixture").unwrap(),
+    );
+    let compiled = crate::primitives::CompiledProgram::compile_with_targeting(
+        owner,
+        crate::primitives::EffectContext::Spell,
+        &program,
+        Some(&targeting),
+    )
+    .expect("fixed-cost soft-counter results may feed a typed paid branch");
+
+    assert_eq!(
+        compiled
+            .slot(compiled.body.steps[0].outputs[0])
+            .unwrap()
+            .result_type,
+        crate::primitives::ResultType::CounterPaymentOutcome,
+    );
+    let crate::primitives::CompiledInstructionKind::If { condition, .. } =
+        &compiled.body.steps[1].kind
+    else {
+        panic!("payment status remains a typed result condition");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Result(
+            crate::primitives::CompiledProgramResultCondition::CounterPayment {
+                result,
+                outcome: crate::primitives::CounterPaymentOutcome::Paid,
+            }
+        ) if *result == compiled.body.steps[0].outputs[0]
+    ));
+}
+
+#[test]
+fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
+    let compile = |steps: &str| {
+        let body: crate::primitives::AuthoredBlock =
+            ron::from_str(&format!("(steps: [{steps}], yields: [])"))
+                .expect("counter-payment program fixture parses");
+        let program = crate::primitives::CardProgram {
+            body,
+            target_bindings: vec![crate::primitives::ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: crate::primitives::ProgramTargetRole::Spell,
+                target_group_index: 0,
+            }],
+        };
+        let owner = crate::ProgramOwnerId::face(
+            "counter_payment_optional_fixture",
+            crate::CardFaceId::new("counter_payment_optional_fixture").unwrap(),
+        );
+        let targeting = crate::primitives::TargetingDef {
+            groups: vec![crate::primitives::TargetGroupDef {
+                chooser: crate::primitives::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose a target".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner,
+            crate::primitives::EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+    };
+
+    let unbound = compile(
+        r#"(id: "counter", bind: [], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays: Some(2)
+        )))"#,
+    )
+    .expect("fixed-cost counter result binding remains optional");
+    assert!(unbound.body.steps[0].outputs.is_empty());
+
+    let plain_counter = compile(
+        r#"(id: "counter", bind: [], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays: None
+        )))"#,
+    )
+    .expect("plain counters remain valid with no payment output");
+    assert!(plain_counter.body.steps[0].outputs.is_empty());
+
+    let out_of_scope = compile(
+        r#"(id: "counter", bind: [], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays: Some(2)
+        ))), (id: "paid", kind: IfResult(
+            condition: CounterPayment(result: "later", outcome: Paid),
+            yes: (steps: [], yields: []), no: (steps: [], yields: [])
+        ))"#,
+    )
+    .expect_err("a payment condition cannot read a future result");
+    assert!(out_of_scope.contains("not in scope"), "{out_of_scope}");
+
+    let wrong_type = compile(
+        r#"(id: "draw", bind: ["drawn"], kind: Perform(Draw(
+            who: Controller, count: 1
+        ))), (id: "counter", bind: [], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays: Some(2)
+        ))), (id: "paid", kind: IfResult(
+            condition: CounterPayment(result: "drawn", outcome: Paid),
+            yes: (steps: [], yields: []), no: (steps: [], yields: [])
+        ))"#,
+    )
+    .expect_err("a payment condition cannot read a draw result");
+    assert!(
+        wrong_type.contains("not a compatible counter-payment result"),
+        "{wrong_type}"
+    );
+
+    let cast_cost_payment = compile(
+        r#"(id: "counter", bind: [], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays_by_cast_cost: Some((
+                condition: (group_id: "cast_cost_01", option_id: "option_01", expected_selected: true),
+                if_selected: 4, otherwise: 2
+            ))
+        )))"#,
+    )
+    .expect_err("by-cast-cost counter programs remain outside this result contract");
+    assert!(
+        cast_cost_payment.contains("cast-cost payment is outside the typed program input contract"),
+        "{cast_cost_payment}"
+    );
 }
 
 #[test]

@@ -145,6 +145,10 @@ pub enum ProgramResultCondition {
         result: String,
         outcome: DiscardResultOutcome,
     },
+    CounterPayment {
+        result: String,
+        outcome: CounterPaymentOutcome,
+    },
 }
 
 /// The semantic outcome of one typed discard operation. Empty selection is a decline only for an
@@ -155,6 +159,17 @@ pub enum DiscardResultOutcome {
     ChosenToPay,
     Declined,
     Unpayable,
+}
+
+/// The accepted payment state for a fixed-cost soft-counter instruction. `NotOffered` records a
+/// completed instruction that found no current captured stack target, including when an earlier
+/// instruction removed it; it also covers a skipped target group when another legal group keeps
+/// the program resolving.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CounterPaymentOutcome {
+    NotOffered,
+    Declined,
+    Paid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,6 +191,10 @@ pub enum CompiledProgramResultCondition {
         result: ResultSlotId,
         outcome: DiscardResultOutcome,
     },
+    CounterPayment {
+        result: ResultSlotId,
+        outcome: CounterPaymentOutcome,
+    },
 }
 
 /// Program leaves deliberately share the ordinary effect schema. The compiler below admits only
@@ -193,6 +212,7 @@ pub struct Cardinality {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultType {
+    CounterPaymentOutcome,
     DrawReceipt {
         who: PlayerRecipient,
         cardinality: Cardinality,
@@ -668,6 +688,23 @@ fn compile_program_condition(
                 },
             ))
         }
+        ProgramCondition::Result(ProgramResultCondition::CounterPayment { result, outcome }) => {
+            let slot = result_slot(result, names, slots)?;
+            if !matches!(
+                &slots[slot.0 as usize].result_type,
+                ResultType::CounterPaymentOutcome
+            ) {
+                return Err(format!(
+                    "result '{result}' is not a compatible counter-payment result"
+                ));
+            }
+            Ok(CompiledProgramCondition::Result(
+                CompiledProgramResultCondition::CounterPayment {
+                    result: slot,
+                    outcome: *outcome,
+                },
+            ))
+        }
     }
 }
 
@@ -792,6 +829,9 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
         }
     }
     Some(match (left, right) {
+        (ResultType::CounterPaymentOutcome, ResultType::CounterPaymentOutcome) => {
+            ResultType::CounterPaymentOutcome
+        }
         (
             ResultType::DrawReceipt {
                 who: a,
@@ -1011,7 +1051,11 @@ fn validate_and_result_types(
                 validate_program_amount(amount)?;
                 validate_fixed_program_amount("CounterTargetSpell payment", amount)?;
             }
-            Ok(Vec::new())
+            Ok(if unless_controller_pays.is_some() {
+                vec![ResultType::CounterPaymentOutcome]
+            } else {
+                Vec::new()
+            })
         }
         SpellEffectKind::ReturnToOwnersHand { subject } => {
             effect.validate(context)?;

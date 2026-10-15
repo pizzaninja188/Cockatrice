@@ -284,7 +284,11 @@ impl GameEngine {
         };
         let mut previous_result = stack.previous_result.clone();
         if let Some(paid) = soft_counter_paid {
-            previous_result.receipt = Some(ResolutionReceipt::CounterUnlessPaid { paid });
+            previous_result.counter_payment_outcome = Some(if paid {
+                tricerules_card_model::primitives::CounterPaymentOutcome::Paid
+            } else {
+                tricerules_card_model::primitives::CounterPaymentOutcome::Declined
+            });
         }
         if stack.program.is_some() {
             return self.complete_parked_stack_with_previous(stack, previous_result, events);

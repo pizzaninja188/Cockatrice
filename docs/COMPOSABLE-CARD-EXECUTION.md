@@ -17,6 +17,15 @@ generator pair for Long Lake Nuisance and Patient Instructor. The
 owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
 Prompt identity applies to legacy resolution choices as well as program choices; it does not widen
 the accepted syntax.
+The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
+for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
+`Paid`, `Declined` and `NotOffered`; `NotOffered` means the counter instruction began without its
+captured stack target still present as that exact object, including when an earlier instruction
+removed it, or its target group was skipped while another legal group kept the owner resolving.
+Invalid or unpayable Pay submissions remain pending and publish no result. Divert's Lander effect
+consumes only `Paid`. The `CounterUnlessPaid` branch
+receipt condition and now-unused `PreviousResultReceipt` wrapper are retired; the shared counter-
+placement/sacrifice receipt matcher and other resolution receipts remain.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.
@@ -119,7 +128,8 @@ lookup. `Unwritten` is an execution state and cannot be consumed as an empty sem
 Representative consumers ground the vocabulary: Brainstorm/Faithless Looting need a program spanning
 draw and hand actions; Gorging Vulture/Gerrard's Verdict distinguish action receipts and filtered card
 counts; Myr Battlesphere/Eerie Ultimatum use resolution-time selections with later actions;
-Divert Disaster/Chaos Spewer use branch/payment outcomes. These are API examples, not new admissions.
+Divert Disaster binds the fixed-cost counter-payment result and gates its Lander on `Paid`; these
+are API examples, not new admissions.
 
 The card-model crate owns compilation and validation. It produces immutable program/block IDs,
 instruction addresses, typed result-slot indexes, target-role mappings and required context.
@@ -144,7 +154,8 @@ conditions do not remove target requirements at announcement or change all-targe
   is the union of the arms' possible cardinalities. No implicit absent/zero value is supplied. An arm
   without exports has no outer result, and direct cross-arm reads always reject. Existing flat branch
   output-to-`PreviousEffect` flows must lower through explicit joins or be rewritten into the relevant
-  branch; audit all such consumers and preserve Divert Disaster's receipt dependency.
+  branch. Preserve Divert Disaster's semantic paid-result dependency through its typed slot; the
+  `CounterUnlessPaid` receipt condition and unused `PreviousResultReceipt` wrapper are retired.
 - A runtime-empty cohort is a valid value with count zero. It is distinct from an absent binding,
   declined optional action, failed payment, or an operation still waiting to commit. Those distinctions
   use typed status/receipts, not `None` interpreted differently by each consumer.

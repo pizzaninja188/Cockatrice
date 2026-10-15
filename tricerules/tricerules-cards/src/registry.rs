@@ -2967,6 +2967,139 @@ mod tests {
     }
 
     #[test]
+    fn divert_disaster_uses_typed_payment_and_preserves_its_inferred_target_contract() {
+        use crate::primitives::{
+            Amount, CompiledInstructionKind, CompiledProgramCondition,
+            CompiledProgramResultCondition, CounterPaymentOutcome, PlayerRecipient,
+            ProgramTargetBinding, ResultType, SpellEffectKind, StackSpellFilter, TargetRole,
+            TargetSchema,
+        };
+        use crate::ProgramOwnerId;
+
+        let registry = crate::registry::from_embedded().expect("embedded registry");
+        let face = registry
+            .get("divert_disaster")
+            .expect("Divert Disaster is registered")
+            .primary_face();
+        assert!(face.spell_effect.is_empty());
+        let targeting = face
+            .targeting
+            .as_ref()
+            .expect("Divert has an explicit legacy-equivalent target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Divert preserves one target group");
+        };
+        assert_eq!(
+            (group.chooser, group.min, group.max, group.prompt.as_str()),
+            (
+                crate::primitives::TargetChooser::Controller,
+                1,
+                1,
+                "Choose a target"
+            )
+        );
+        assert!(group.effect_indices.is_empty());
+
+        let owner = ProgramOwnerId::face("divert_disaster", face.face_id.clone());
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("Divert's authored program compiles");
+        assert_eq!(
+            compiled.target_bindings,
+            [ProgramTargetBinding {
+                instruction_address: 0,
+                target_group_index: 0,
+                role_index: 0,
+            }]
+        );
+        let [counter, paid_branch] = compiled.body.steps.as_slice() else {
+            panic!("Divert is one counter operation followed by one conditional");
+        };
+        let CompiledInstructionKind::Perform(counter_effect) = &counter.kind else {
+            panic!("Divert begins with its counter operation");
+        };
+        assert!(matches!(
+            counter_effect.as_ref(),
+            SpellEffectKind::CounterTargetSpell {
+                spell_filter,
+                unless_controller_pays: Some(Amount::Fixed(2)),
+                unless_controller_pays_by_cast_cost: None,
+            } if *spell_filter == StackSpellFilter::default()
+        ));
+        assert_eq!(counter.outputs.len(), 1);
+        assert_eq!(
+            compiled.slot(counter.outputs[0]).unwrap().result_type,
+            ResultType::CounterPaymentOutcome
+        );
+
+        let CompiledInstructionKind::If { condition, yes, no } = &paid_branch.kind else {
+            panic!("Divert follows the counter with a typed conditional");
+        };
+        assert!(matches!(
+            condition.as_ref(),
+            CompiledProgramCondition::Result(
+                CompiledProgramResultCondition::CounterPayment {
+                    result,
+                    outcome: CounterPaymentOutcome::Paid,
+                }
+            ) if *result == counter.outputs[0]
+        ));
+        assert!(no.steps.is_empty());
+        let [create_lander] = yes.steps.as_slice() else {
+            panic!("the paid branch contains exactly one token creation");
+        };
+        let CompiledInstructionKind::Perform(create_lander_effect) = &create_lander.kind else {
+            panic!("the paid branch performs token creation");
+        };
+        assert!(matches!(
+            create_lander_effect.as_ref(),
+            SpellEffectKind::CreateTokens {
+                token,
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                ..
+            } if token == "lander"
+        ));
+
+        let inferred_effects = [SpellEffectKind::CounterTargetSpell {
+            spell_filter: StackSpellFilter::default(),
+            unless_controller_pays: Some(Amount::Fixed(2)),
+            unless_controller_pays_by_cast_cost: None,
+        }];
+        let inferred = TargetSchema::compile(&inferred_effects, None)
+            .expect("the current legacy single-group schema compiles");
+        let explicit = TargetSchema::compile_program(compiled, Some(targeting))
+            .expect("the explicit authored schema compiles");
+        assert_eq!(inferred.groups.len(), 1);
+        assert_eq!(explicit.groups.len(), 1);
+        let inferred_group = &inferred.groups[0];
+        let explicit_group = &explicit.groups[0];
+        assert_eq!(
+            (
+                explicit_group.chooser,
+                explicit_group.min,
+                explicit_group.max,
+                explicit_group.prompt.as_ref(),
+                explicit_group.distinct_from.as_ref(),
+                explicit_group.same_graveyard,
+            ),
+            (
+                inferred_group.chooser,
+                inferred_group.min,
+                inferred_group.max,
+                inferred_group.prompt.as_ref(),
+                inferred_group.distinct_from.as_ref(),
+                inferred_group.same_graveyard,
+            )
+        );
+        assert_eq!(explicit_group.bindings.len(), 1);
+        assert!(matches!(
+            explicit_group.bindings[0].role,
+            TargetRole::StackSpell(filter) if *filter == StackSpellFilter::default()
+        ));
+    }
+
+    #[test]
     fn issue_276_generated_power_damage_cohort_registers_union_targeting() {
         let registry = crate::registry::from_embedded().expect("embedded registry");
         for card_id in ["bite_down", "hard-hitting_question"] {

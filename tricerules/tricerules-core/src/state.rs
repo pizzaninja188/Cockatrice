@@ -3,7 +3,7 @@ use tricerules_card_model::primitives::ResultSlotId;
 use tricerules_card_model::primitives::{
     ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
-    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
+    CounterKind, CounterPaymentOutcome, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryPlacement, LinkedExiledCardDestination, LinkedExiledCardPlayKind,
     ManaAmount, ManaSpendingRestriction, ObjectCastCostKind, PermanentChoiceConstraint,
@@ -234,6 +234,9 @@ pub(crate) struct EffectResult {
     /// interchangeable with the exact cohort produced by one replacement-expanded copy effect.
     pub produced_object_provenance: Option<ProducedObjectProvenance>,
     pub receipt: Option<ResolutionReceipt>,
+    /// Accepted outcome of one fixed-cost soft-counter instruction, captured in that program's
+    /// private result slot after the payment decision is committed.
+    pub counter_payment_outcome: Option<CounterPaymentOutcome>,
     /// Total mana committed by an immediately preceding Join Forces instruction.
     pub mana_paid: Option<u32>,
     pub counter_placements: Vec<CounterPlacementReceipt>,
@@ -281,7 +284,6 @@ pub(crate) struct CounterPlacementReceipt {
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ResolutionReceipt {
-    CounterUnlessPaid { paid: bool },
     RevealedCardsCount(u32),
 }
 
@@ -294,6 +296,7 @@ impl From<CardResultCohort> for EffectResult {
             selected_hand_cards: Vec::new(),
             produced_object_provenance: None,
             receipt: None,
+            counter_payment_outcome: None,
             mana_paid: None,
             counter_placements: Vec::new(),
             sacrificed_objects: Vec::new(),
@@ -1272,6 +1275,7 @@ pub(crate) struct ProgramFrame {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ProgramValue {
+    CounterPaymentOutcome(CounterPaymentOutcome),
     DrawReceipt(Vec<TriggerObjectRef>),
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),

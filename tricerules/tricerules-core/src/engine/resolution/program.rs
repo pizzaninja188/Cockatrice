@@ -585,64 +585,74 @@ impl GameEngine {
                         .and_then(|definition| definition.face(top.face_index))
                         .map(|face| face.name.to_string())
                         .unwrap_or_else(|| top.card_id.clone());
-                    let outcome =
-                        if target_context.has_bindings && target_context.targets.is_empty() {
-                            // CR 608.2b has already taken the one stack-wide target snapshot. A
-                            // authored leaf whose own owner-local role groups are now empty is
-                            // skipped while its program unit and any later selected modes continue.
-                            if outputs.iter().any(|slot_id| {
-                                compiled.slot(*slot_id).is_some_and(|slot| {
-                                    matches!(slot.result_type, ResultType::DiscardResult { .. })
-                                })
-                            }) {
-                                result.program_discard_result = Some(ProgramDiscardResult {
-                                    outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
-                                    batches: Vec::new(),
-                                    cards: Vec::new(),
-                                });
-                            }
-                            EffectOutcome::Continue
-                        } else {
-                            let affected_player = if compiled
-                                .required_inputs
-                                .contains(&ProgramRequiredInput::TriggerAffectedPlayer)
-                            {
-                                top.trigger_context
-                                    .affected_player
-                                    .ok_or(EngineError::ProgramInvariant(
+                    let outcome = if target_context.has_bindings
+                        && target_context.targets.is_empty()
+                    {
+                        // CR 608.2b has already taken the one stack-wide target snapshot. A
+                        // authored leaf whose own owner-local role groups are now empty is
+                        // skipped while its program unit and any later selected modes continue.
+                        if outputs.iter().any(|slot_id| {
+                            compiled.slot(*slot_id).is_some_and(|slot| {
+                                matches!(slot.result_type, ResultType::DiscardResult { .. })
+                            })
+                        }) {
+                            result.program_discard_result = Some(ProgramDiscardResult {
+                                outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
+                                batches: Vec::new(),
+                                cards: Vec::new(),
+                            });
+                        }
+                        if outputs.iter().any(|slot_id| {
+                            compiled.slot(*slot_id).is_some_and(|slot| {
+                                matches!(slot.result_type, ResultType::CounterPaymentOutcome)
+                            })
+                        }) {
+                            result.counter_payment_outcome = Some(
+                                    tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
+                                );
+                        }
+                        EffectOutcome::Continue
+                    } else {
+                        let affected_player = if compiled
+                            .required_inputs
+                            .contains(&ProgramRequiredInput::TriggerAffectedPlayer)
+                        {
+                            top.trigger_context.affected_player.ok_or(
+                                EngineError::ProgramInvariant(
                                     "resolution program is missing its captured affected player",
-                                ))?
-                            } else {
-                                top.trigger_context
-                                    .affected_player
-                                    .unwrap_or(top.controller)
-                            };
-                            let mut cx = EffectCx {
-                                engine: self,
-                                events,
-                                targets: &target_context.targets,
-                                targets_by_role: &target_context.targets_by_role,
-                                target_damage: &target_context.target_damage,
-                                target_group_indices: &target_context.target_group_indices,
-                                top,
-                                controller: top.controller,
-                                affected_player,
-                                spell_label: &label,
-                                previous_effect_result: &previous,
-                                effect_result: &mut result,
-                                effect_index: instruction_index as u32,
-                                program_state: Some(program_state.clone()),
-                            };
-                            if matches!(
-                                &effect,
-                                SpellEffectKind::SelectHandCards { .. }
-                                    | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
-                            ) {
-                                run_program_only_leaf(&mut cx, effect)?
-                            } else {
-                                dispatch::execute_effect(&mut cx, effect)?
-                            }
+                                ),
+                            )?
+                        } else {
+                            top.trigger_context
+                                .affected_player
+                                .unwrap_or(top.controller)
                         };
+                        let mut cx = EffectCx {
+                            engine: self,
+                            events,
+                            targets: &target_context.targets,
+                            targets_by_role: &target_context.targets_by_role,
+                            target_damage: &target_context.target_damage,
+                            target_group_indices: &target_context.target_group_indices,
+                            top,
+                            controller: top.controller,
+                            affected_player,
+                            spell_label: &label,
+                            previous_effect_result: &previous,
+                            effect_result: &mut result,
+                            effect_index: instruction_index as u32,
+                            program_state: Some(program_state.clone()),
+                        };
+                        if matches!(
+                            &effect,
+                            SpellEffectKind::SelectHandCards { .. }
+                                | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
+                        ) {
+                            run_program_only_leaf(&mut cx, effect)?
+                        } else {
+                            dispatch::execute_effect(&mut cx, effect)?
+                        }
+                    };
 
                     self.refresh_hideaway_look_permissions();
                     if outcome == EffectOutcome::GameEnded {
@@ -835,6 +845,13 @@ fn capture_program_outputs(
                     ),
                 )?)
             }
+            ResultType::CounterPaymentOutcome => {
+                ProgramValue::CounterPaymentOutcome(result.counter_payment_outcome.ok_or(
+                    EngineError::ProgramInvariant(
+                        "counter instruction did not publish its typed payment outcome",
+                    ),
+                )?)
+            }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
             }
@@ -882,6 +899,16 @@ fn program_result_condition_holds(
     condition: &CompiledProgramResultCondition,
 ) -> Result<bool, EngineError> {
     match condition {
+        CompiledProgramResultCondition::CounterPayment { result, outcome } => {
+            let Some(ProgramValue::CounterPaymentOutcome(actual)) =
+                run.slots.get(result.0 as usize).and_then(Option::as_ref)
+            else {
+                return Err(EngineError::ProgramInvariant(
+                    "counter payment condition read an unavailable or wrong-typed slot",
+                ));
+            };
+            Ok(actual == outcome)
+        }
         CompiledProgramResultCondition::DiscardOutcome { result, outcome } => {
             let Some(ProgramValue::DiscardResult(result)) =
                 run.slots.get(result.0 as usize).and_then(Option::as_ref)

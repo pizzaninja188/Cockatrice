@@ -748,9 +748,6 @@ pub(in crate::engine) fn resolution_branch_is_live(
         ResolutionBranchRequirement::CastCostReceipt(condition) => {
             top.cast_cost_condition_matches(condition)
         }
-        ResolutionBranchRequirement::PreviousResultReceipt(condition) => {
-            previous_result_receipt_matches(engine, top, previous_result, condition)
-        }
         ResolutionBranchRequirement::CardResultCount { filter, min, max } => {
             let count = card_result_count(engine, top, previous_result, filter);
             min.is_none_or(|minimum| count >= minimum) && max.is_none_or(|maximum| count <= maximum)
@@ -1020,10 +1017,6 @@ fn previous_result_receipt_matches(
     use tricerules_card_model::primitives::ResolutionReceiptCondition;
 
     match condition {
-        ResolutionReceiptCondition::CounterUnlessPaid { paid: expected } => matches!(
-            previous_result.receipt,
-            Some(crate::state::ResolutionReceipt::CounterUnlessPaid { paid }) if paid == *expected
-        ),
         ResolutionReceiptCondition::CountersPlaced { counter, object } => {
             let Some((object_id, zone_change_generation)) =
                 engine.condition_object_identity(*object, ConditionContext::for_stack_item(top))
