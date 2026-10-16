@@ -1,4 +1,4 @@
-// Oracle and rulings checked 2026-10-01: https://scryfall.com/card/2x2/67/wash-out
+// Oracle and rulings checked 2026-10-15: https://scryfall.com/card/2x2/67/wash-out
 // Each branch is a chosen-color fragment of the printed line; the whole line would mislabel it.
 (
   id: "wash_out",
@@ -6,20 +6,24 @@
   face_id: "wash_out",
   mana_cost: "{3}{U}",
   types: ["Sorcery"],
-  spell_effect: [ChooseResolutionBranch(
-    chooser: Controller,
-    optional: false,
-    branches: [
-      (branch_id: "white", presentation: Fallback, cost: None,
-       effects: [ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(White)))]),
-      (branch_id: "blue", presentation: Fallback, cost: None,
-       effects: [ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Blue)))]),
-      (branch_id: "black", presentation: Fallback, cost: None,
-       effects: [ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Black)))]),
-      (branch_id: "red", presentation: Fallback, cost: None,
-       effects: [ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Red)))]),
-      (branch_id: "green", presentation: Fallback, cost: None,
-       effects: [ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Green)))]),
-    ],
-  )],
+  spell_program: Some((body: (steps: [
+    (id: "choose_color", kind: Choose(
+      choice: "wash_out_color",
+      chooser: Controller,
+      optional: false,
+      branches: [
+        (branch_id: "white", presentation: Fallback, cost: None, requirement: Always,
+         body: (steps: [(id: "return_white", kind: Perform(ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(White)))))], yields: [])),
+        (branch_id: "blue", presentation: Fallback, cost: None, requirement: Always,
+         body: (steps: [(id: "return_blue", kind: Perform(ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Blue)))))], yields: [])),
+        (branch_id: "black", presentation: Fallback, cost: None, requirement: Always,
+         body: (steps: [(id: "return_black", kind: Perform(ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Black)))))], yields: [])),
+        (branch_id: "red", presentation: Fallback, cost: None, requirement: Always,
+         body: (steps: [(id: "return_red", kind: Perform(ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Red)))))], yields: [])),
+        (branch_id: "green", presentation: Fallback, cost: None, requirement: Always,
+         body: (steps: [(id: "return_green", kind: Perform(ReturnAllToOwnersHand(kind: (kind: AnyPermanent, is_color: Some(Green)))))], yields: [])),
+      ],
+      otherwise: (steps: [], yields: []),
+    )),
+  ], yields: []))),
 )

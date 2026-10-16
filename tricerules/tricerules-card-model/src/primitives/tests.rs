@@ -373,6 +373,36 @@ fn registry_compiles_authored_targeted_spell_siblings_in_instruction_order() {
 }
 
 #[test]
+fn registry_compiles_resultless_return_all_to_owners_hand_program_leaf() {
+    let ron = r#"(
+        id: "return_all_to_owners_hand_program_fixture",
+        name: "Return All To Owners Hand Program Fixture",
+        face_id: "return_all_to_owners_hand_program_fixture",
+        types: ["Sorcery"],
+        spell_program: Some((body: (steps: [
+            (id: "return_blue", kind: Perform(ReturnAllToOwnersHand(
+                kind: (kind: AnyPermanent, is_color: Some(Blue))))),
+        ], yields: []), target_bindings: [])),
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect("the existing mass-return leaf is valid inside a resolution program");
+    let owner = crate::ProgramOwnerId::face(
+        "return_all_to_owners_hand_program_fixture",
+        crate::CardFaceId::new("return_all_to_owners_hand_program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the complete authored owner should compile as one body");
+    assert_eq!(program.body.steps.len(), 1);
+    assert!(matches!(
+        &program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ReturnAllToOwnersHand { kind }
+                if kind.is_color == Some(crate::Color::Blue))
+    ));
+}
+
+#[test]
 fn registry_compiles_nested_authored_target_roles_by_instruction_id() {
     let ron = r#"(
         id: "nested_target_program_fixture", name: "Nested Target Program Fixture",

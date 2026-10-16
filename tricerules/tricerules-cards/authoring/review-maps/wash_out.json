@@ -5,12 +5,23 @@
     "face_id": "wash_out",
     "start_line": 1,
     "end_line": 1,
-    "typed_paths": ["/faces/0/spell_effect/0"]
+    "typed_paths": [
+      "/faces/0/spell_program/body/steps/0",
+      "/faces/0/spell_program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/ReturnAllToOwnersHand",
+      "/faces/0/spell_program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/ReturnAllToOwnersHand",
+      "/faces/0/spell_program/body/steps/0/kind/Choose/branches/2/body/steps/0/kind/Perform/ReturnAllToOwnersHand",
+      "/faces/0/spell_program/body/steps/0/kind/Choose/branches/3/body/steps/0/kind/Perform/ReturnAllToOwnersHand",
+      "/faces/0/spell_program/body/steps/0/kind/Choose/branches/4/body/steps/0/kind/Perform/ReturnAllToOwnersHand"
+    ]
   }],
   "semantic_fixtures": [
     {
       "test": "scenario deck_coverage_wash_out::wash_out_paid_cast_offers_all_five_colors_even_when_no_permanents_match",
       "covers": "Actual paid3U untargeted Sorcery; mandatory resolution choice with all five color-specific selectable labels even for absent colors; wrong actor, decline and out-of-range reject atomically; empty chosen color completes"
+    },
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_waits_for_a_selected_commanders_owner_before_moving_the_cohort",
+      "covers": "The selected color cohort is staged without movement; the declared commander owner chooses Command or Hand before one simultaneous movement batch"
     },
     {
       "test": "scenario deck_coverage_wash_out::wash_out_each_color_returns_only_matching_permanents_across_all_players",

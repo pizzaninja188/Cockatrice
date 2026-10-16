@@ -1258,6 +1258,50 @@ impl ParkedStackResolution {
     }
 }
 
+/// Exact battlefield incarnation retained while an owner answers the Commander hand replacement
+/// for one simultaneous return instruction. Controller is deliberately absent: CR 800.4a may
+/// end a control effect during concession while the owned permanent itself survives.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OwnerHandReturnRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub owner: PlayerId,
+    pub origin: Zone,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PendingBattlefieldReturnStage {
+    OrderingCommanders {
+        owner: PlayerId,
+        candidates: Vec<ObjectId>,
+    },
+    ChoosingCommanderDestination {
+        owner: PlayerId,
+        object_id: ObjectId,
+    },
+}
+
+/// Full precommit plan for one simultaneous battlefield-to-owner-hand instruction. The outer
+/// continuation stores this behind a Box so a large cohort does not enlarge every GameState.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingBattlefieldReturn {
+    pub stack: ParkedStackResolution,
+    pub spell_label: String,
+    pub cohort: Vec<OwnerHandReturnRef>,
+    /// (owner, exact commander object IDs), in APNAP order.
+    pub commander_groups: Vec<(PlayerId, Vec<ObjectId>)>,
+    pub next_commander_group: usize,
+    /// Same-owner order selected under CR 101.4c, or the singleton owner groups.
+    pub ordered_commanders: Vec<(PlayerId, ObjectId)>,
+    pub next_commander_destination: usize,
+    /// Exact CR 903.9b destinations selected before the shared move batch.
+    pub commander_destinations: Vec<(ObjectId, Zone)>,
+    /// Owner-controlled objects explicitly removed during post-concession reconciliation.
+    pub removed_cohort_ids: Vec<ObjectId>,
+    /// `None` while the internal cursor advances; set only while a choice is parked.
+    pub stage: Option<PendingBattlefieldReturnStage>,
+}
+
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProgramArm {
     Yes,
@@ -1594,6 +1638,11 @@ pub enum ResolutionContinuation {
     ProgramPartitionMove {
         stack: ParkedStackResolution,
         plan: ProgramPartitionMovePlan,
+    },
+    /// Owner choices for one simultaneous battlefield-to-hand cohort, parked intact until the
+    /// exact Command/Hand destinations can be committed together.
+    BattlefieldReturn {
+        pending: Box<PendingBattlefieldReturn>,
     },
     BeholdChoice {
         stack: ParkedStackResolution,
@@ -2047,6 +2096,7 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
+            Self::BattlefieldReturn { pending } => Some(&pending.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_ref(),
@@ -2114,6 +2164,7 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
+            Self::BattlefieldReturn { pending } => Some(&mut pending.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&mut progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_mut(),

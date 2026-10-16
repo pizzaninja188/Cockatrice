@@ -913,6 +913,9 @@ fn unsummon_rejects_land_target() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
+    let before_invalid_target = e
+        .diagnostic_snapshot()
+        .expect("snapshot before invalid target");
     let err = e
         .apply_scenario_command(
             0,
@@ -931,6 +934,12 @@ fn unsummon_rejects_land_target() {
     assert!(
         format!("{err:?}").contains("creature"),
         "unexpected: {err:?}"
+    );
+    assert_eq!(
+        e.diagnostic_snapshot()
+            .expect("snapshot after invalid target"),
+        before_invalid_target,
+        "rejecting the illegal land target leaves the cast/payment state unchanged"
     );
 }
 

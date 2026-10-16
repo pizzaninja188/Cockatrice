@@ -1181,67 +1181,7 @@ pub(super) fn return_to_owners_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    if matches!(
-        &effect,
-        SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::PreviousEffectObject
-        }
-    ) {
-        cx.effect_result.targeted_player_control_cohort = cx
-            .previous_effect_result
-            .targeted_player_control_cohort
-            .clone();
-    }
-    let subjects = match effect {
-        SpellEffectKind::ReturnAllToOwnersHand { kind } => {
-            battlefield_objects_matching(cx.engine, &kind)
-        }
-        SpellEffectKind::ReturnToOwnersHand { subject } => {
-            if matches!(
-                subject,
-                EffectSubject::Chosen(_) | EffectSubject::PreviousEffectObject
-            ) {
-                cx.resolve_battlefield_subjects(&subject)
-            } else {
-                resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-                    .into_iter()
-                    .collect()
-            }
-        }
-        _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
-    };
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let spell_label = cx.spell_label;
-
-    // Get Out and Sunderflock return their selected cohort simultaneously. Capture every leave
-    // observer before moving any subject, then publish triggers once for the whole instruction.
-    let zone_snapshot = engine.snapshot_zone_event();
-    let leave_events = subjects
-        .iter()
-        .filter_map(|&tid| engine.battlefield_leave_event(tid))
-        .collect::<Vec<_>>();
-    for tid in subjects {
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        // Transient battlefield state (damage, counters, tap) is reset centrally
-        // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
-        move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
-        events.push(ev_log(format!(
-            "{spell_label} returns {tgt} to its owner's hand"
-        )));
-        if let Some(owner_id) = owner {
-            events.push(permanent_moved_event(
-                &engine.state,
-                tid,
-                owner_id,
-                rv1::permanent_moved::Destination::Hand,
-            ));
-        }
-    }
-    engine.fire_zone_triggers(zone_snapshot, leave_events, events);
-
-    Ok(EffectOutcome::Continue)
+    super::battlefield_returns::return_to_owners_hand(cx, effect)
 }
 
 pub(in crate::engine) fn move_permanent_to_owners_library(

@@ -33,6 +33,7 @@ pub(in crate::engine) use choices::{
     current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,
 };
 mod amass;
+mod battlefield_returns;
 mod blight;
 mod boompile;
 #[cfg(test)]

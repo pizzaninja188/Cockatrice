@@ -8,8 +8,8 @@
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::Zone;
-use tricerules_proto::ruled::v1::TargetRefKind;
+use tricerules_core::{TurnStep, Zone};
+use tricerules_proto::ruled::v1::{DeclareAttackers, TargetRefKind};
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
@@ -190,6 +190,72 @@ fn issue_misc1_aetherize() {
         Zone::Battlefield,
         "a nonattacking creature stays"
     );
+}
+
+#[test]
+fn issue_misc1_aetherize_returns_attackers_aimed_at_a_different_defender() {
+    let deck = deck_with("island", &[]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        725_014,
+        &[20, 30, 10],
+        20,
+        Some(vec![deck.clone(), deck.clone(), deck]),
+        true,
+    )
+    .expect("three-player combat fixture with P20 active, P30 defending, and P10 casting");
+    advance_to_main1_from_game_start(&mut e);
+    // Start this focused combat fixture at the declaration boundary without passing through the
+    // first player's cleanup step; combat behavior itself still goes through engine validation.
+    e.state.turn_step = TurnStep::DeclareAttackers;
+
+    let attacker_a = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let attacker_b = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let idle = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let legal = e.initial_response_batch().legal_by_player[&20]
+        .legal_attack_assignments
+        .clone();
+    let assignments = [attacker_a, attacker_b]
+        .into_iter()
+        .map(|attacker| {
+            legal
+                .iter()
+                .find(|assignment| {
+                    assignment.attacker_object_id == attacker
+                        && assignment.defending_player_id == 30
+                })
+                .cloned()
+                .expect("P20 may attack P30 independently of P10")
+        })
+        .collect::<Vec<_>>();
+    e.apply_scenario_command(
+        20,
+        &RuledCommand {
+            cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
+        },
+    )
+    .expect("attack P30, not the Aetherize caster P10");
+    assert_eq!(e.state.priority_player_id(), 20);
+    e.apply_scenario_command(20, &pass())
+        .expect("active player passes");
+    e.apply_scenario_command(30, &pass())
+        .expect("the attacked defender passes");
+    assert_eq!(e.state.priority_player_id(), 10);
+
+    inject_card_into_hand(&mut e, 2, "aetherize");
+    e.state.players[2].mana_pool.blue = 1;
+    e.state.players[2].mana_pool.colorless = 3;
+    let slot = hand_index_for_card(&e, 2, "aetherize");
+    semantic::accepted(&mut e, 10, &cast_spell(slot, vec![]));
+    while !e.state.stack.is_empty() {
+        pass_priority_round(&mut e);
+    }
+
+    for (attacker, owner_index) in [(attacker_a, 0), (attacker_b, 0)] {
+        assert_eq!(e.state.objects[&attacker].zone, Zone::Hand);
+        assert!(e.state.players[owner_index].hand.contains(&attacker));
+    }
+    assert_eq!(e.state.objects[&idle].zone, Zone::Battlefield);
 }
 
 #[test]

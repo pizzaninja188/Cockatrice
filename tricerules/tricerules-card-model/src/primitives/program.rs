@@ -1489,6 +1489,10 @@ fn validate_and_result_types(
             validate_program_target_filter(filter, "ReturnToOwnersHand target")?;
             Ok(Vec::new())
         }
+        SpellEffectKind::ReturnAllToOwnersHand { .. } => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::CreateTokens {
             count,
             who,

@@ -45,6 +45,11 @@ Army's mandatory Food-or-Treasure choice, Consecrated Sphinx's optional free Dra
 Meek's optional `{1}`-for-Draw 1, Mind's Eye's optional `{1}`-for-Draw 1, and only Solemn
 Simulacrum's `triggered_02` death-draw owner. Solemn's `triggered_01` ETB basic-land search remains
 on its existing legacy branch; the tranche adds no card admissions.
+The 2026-10-15 Wash Out port uses an all-free color `Choose` and the resultless
+`ReturnAllToOwnersHand` program leaf. Mass and single-card owner-hand returns share the Commander
+replacement handler, which parks the exact resolving operation through APNAP ordering and
+destination choices. Library-return cohort consolidation remains deferred; its existing path is
+still separate, and this port adds no card admission.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.
@@ -383,6 +388,8 @@ precommit graveyard order. This composable execution migration does not change G
 admission status; whole-card review remains deferred. Keep `custom_resolution/*` where it implements
 shared mechanic transactions, copy legality or entry/APNAP work; its directory name does not make every
 contained mechanism card-specific.
+Wash Out uses the shared owner-hand return continuation for matching mass returns and individual
+returns. Library-return cohort consolidation remains separate and deferred for a later migration.
 
 Pilot selection and implementation remain separate. Freeze representative existing and later-consumer
 examples before coding. Brainstorm and Faithless Looting exercise sequential draw/hand actions; Gifts

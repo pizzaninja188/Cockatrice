@@ -268,6 +268,12 @@ impl GameEngine {
                     // can route the occurrence to a legal delegate or its Otherwise block.
                     preserve = true;
                 }
+                ResolutionContinuation::BattlefieldReturn { .. } => {
+                    // This object cohort belongs to one begun instruction. Preserve the complete
+                    // parked cursor until concession removes exact departed-owner members and
+                    // the simultaneous hand replacements can be refreshed (CR 608.2m).
+                    preserve = true;
+                }
                 ResolutionContinuation::SearchLibrary { stack, .. }
                 | ResolutionContinuation::ProgramCohortPartition { stack, .. }
                 | ResolutionContinuation::ProgramPartitionMove { stack, .. }
@@ -782,6 +788,7 @@ impl GameEngine {
                 .then_some(id)
             })
             .collect();
+        let stranded_objects: HashSet<_> = stranded.iter().copied().collect();
         for id in stranded {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
@@ -840,6 +847,7 @@ impl GameEngine {
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_program_choose_departure(events)?;
+        self.refresh_owner_hand_return_departure(&departed_objects, &stranded_objects, events)?;
         self.refresh_blight_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;

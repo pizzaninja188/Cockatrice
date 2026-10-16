@@ -195,8 +195,12 @@ programs limit draw/discard recipients to `Controller`; triggered ability progra
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
 not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
 must be fixed literals.
+`ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
+the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
+operation, and the leaf cannot bind or yield a result.
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
-`DefendingPlayer` or `AttachedObject`, including inside `any_of`, and constraints must be empty.
+`DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
+must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, and valid `AllOf`/`AnyOf`
 combinations of those conditions. Other contexts and leaf operations fail registration.
 

@@ -1013,6 +1013,16 @@ impl GameEngine {
         ) {
             return self.select_program_choose(pending, answer, decision);
         }
+        if let ResolutionContinuation::BattlefieldReturn { pending: plan } = &pending.continuation {
+            if matches!(
+                plan.stage.as_ref(),
+                Some(
+                    crate::state::PendingBattlefieldReturnStage::ChoosingCommanderDestination { .. }
+                )
+            ) {
+                return self.finish_owner_hand_return_branch(pending, answer, decision);
+            }
+        }
         if matches!(
             pending.continuation,
             ResolutionContinuation::OwnerLibraryPlacement { .. }
@@ -1196,6 +1206,9 @@ impl GameEngine {
             }
             ResolutionContinuation::ProgramPartitionMove { .. } => {
                 self.finish_program_graveyard_order(pending, chosen)
+            }
+            ResolutionContinuation::BattlefieldReturn { .. } => {
+                self.finish_owner_hand_return_order(pending, chosen)
             }
             ResolutionContinuation::LibraryLook { .. } => {
                 self.finish_look_choose_bottom(pending, chosen)

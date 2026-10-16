@@ -454,6 +454,110 @@ fn target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_contr
 }
 
 #[test]
+fn commander_return_after_targeted_player_choice_preserves_the_lki_shuffle_tail() {
+    use tricerules_core::EngineDeck;
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let empty = EngineDeck {
+        mainboard: deck_with("forest", &[]),
+        commanders: Vec::new(),
+    };
+    let mut decks = vec![empty; 4];
+    decks[1].commanders = vec!["kami_of_the_crescent_moon".into()];
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        26_106_008,
+        &[10, 20, 30, 40],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("Commander fixture with P20's exact declared commander");
+    advance_to_main1_from_game_start(&mut engine);
+    let commander = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            20,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 20,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Kami of the Crescent Moon".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("move P20's declared commander to the battlefield");
+    assert!(engine.state.players[1]
+        .declared_commander_object_ids
+        .contains(&commander));
+
+    let source = inject_permanent_on_battlefield(&mut engine, 0, TEFERI);
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .set_counter(CounterKind::Loyalty, 12);
+    let borrowed = inject_permanent_on_battlefield(&mut engine, 2, "bonesplitter");
+    give_control_to(&mut engine, borrowed, 20);
+
+    engine
+        .apply_scenario_command(
+            10,
+            &activate_ability_for(&engine, source, 2, target_player(20)),
+        )
+        .expect("activate Teferi's targeted ultimate against P20");
+    let chooser_prompt = resolve_until_permanent_choice(&mut engine);
+    assert_eq!(chooser_prompt.deciding_player_id, 20);
+    engine
+        .apply_scenario_command(20, &targeted_player_choice_answer(vec![commander]))
+        .expect("P20 chooses the exact declared Commander for return");
+    let replacement = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the Commander owner receives the CR 903.9b choice");
+    assert_eq!(replacement.deciding_player, 20);
+    assert!(matches!(
+        replacement.continuation,
+        ResolutionContinuation::BattlefieldReturn { .. }
+    ));
+
+    let departure = engine
+        .apply_scenario_command(20, &concede())
+        .expect("the targeted player leaves during the Commander replacement choice");
+    assert!(engine.state.players[1].has_lost);
+    assert!(!engine.state.objects.contains_key(&commander));
+    assert_eq!(
+        engine.state.objects[&borrowed].zone,
+        Zone::Library,
+        "the following targeted-player LKI shuffle still processes the captured foreign-owned permanent"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    let p30_shuffles = departure
+        .events
+        .iter()
+        .filter_map(|event| match event.ev.as_ref() {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                if log.text == "P30 shuffles their library." =>
+            {
+                Some(log.text.as_str())
+            }
+            _ => None,
+        })
+        .count();
+    assert_eq!(
+        p30_shuffles, 1,
+        "the completed return result preserves the exact target control cohort for the following shuffle"
+    );
+}
+
+#[test]
 fn owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate() {
     let mut engine = multiplayer_engine(26_106_004);
     let source = inject_permanent_on_battlefield(&mut engine, 0, TEFERI);
