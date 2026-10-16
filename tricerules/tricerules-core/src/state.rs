@@ -1559,6 +1559,16 @@ pub(crate) struct CardChoiceCandidateRef {
     pub source_zone: Zone,
 }
 
+/// CR 903.9b interrupts a resultless library-to-hand program search until the declared
+/// commander’s owner chooses Command or Hand. Keep the exact physical incarnation inside the
+/// original SearchLibrary continuation so departure reconciliation retains the started search.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SearchLibraryCommanderChoice {
+    pub object_id: ObjectId,
+    pub owner: PlayerId,
+    pub zone_change_generation: u64,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)] // The Teferi cohort is engine-private even though continuations are inspectable.
 pub enum ResolutionContinuation {
@@ -1739,6 +1749,8 @@ pub enum ResolutionContinuation {
         shuffle: bool,
         reveal: bool,
         result_id: Option<SearchResultId>,
+        #[serde(default)]
+        commander_choice: Option<SearchLibraryCommanderChoice>,
     },
     SearchZoneScope {
         stack: ParkedStackResolution,

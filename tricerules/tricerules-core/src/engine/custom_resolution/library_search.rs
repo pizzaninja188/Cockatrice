@@ -722,7 +722,7 @@ impl GameEngine {
         }
         let mut events = Vec::new();
         if command_zone {
-            self.commit_observed_zone_move(oid, Zone::Command, None, &mut events)?;
+            events.extend(self.commit_exact_card_choice_move(candidate, owner, Zone::Command)?);
             events.push(permanent_moved_event(
                 &self.state,
                 oid,
@@ -735,7 +735,11 @@ impl GameEngine {
         } else {
             match destination {
                 tricerules_card_model::primitives::GraveyardDestination::Hand => {
-                    self.commit_observed_zone_move(oid, Zone::Hand, None, &mut events)?;
+                    events.extend(self.commit_exact_card_choice_move(
+                        candidate,
+                        owner,
+                        Zone::Hand,
+                    )?);
                     events.push(ev_log(format!(
                         "{spell_label} puts {card_label} into P{owner}'s hand."
                     )));
@@ -750,7 +754,11 @@ impl GameEngine {
                 | tricerules_card_model::primitives::GraveyardDestination::LibraryBottom => {
                     let top = destination
                         == tricerules_card_model::primitives::GraveyardDestination::LibraryTop;
-                    self.commit_observed_zone_move(oid, Zone::Library, None, &mut events)?;
+                    events.extend(self.commit_exact_card_choice_move(
+                        candidate,
+                        owner,
+                        Zone::Library,
+                    )?);
                     let index = self
                         .state
                         .player_idx(owner)
@@ -1151,6 +1159,7 @@ self.state.pending_resolution = Some(PendingResolution {
                 shuffle,
                 reveal,
                 result_id,
+                commander_choice: None,
             } => (
                 stack.clone(),
                 *searcher,
@@ -1170,6 +1179,10 @@ self.state.pending_resolution = Some(PendingResolution {
         let controller = searcher;
         let searched_library = zones.contains(&CardSearchZone::Library);
         let shuffle = shuffle && zones.contains(&CardSearchZone::Library);
+        let live_library = self
+            .state
+            .player_idx(searcher)
+            .map(|index| &self.state.players[index].library);
         let choices_are_current = chosen.iter().all(|oid| {
             let expected_generation = candidate_generations
                 .iter()
@@ -1186,7 +1199,10 @@ self.state.pending_resolution = Some(PendingResolution {
                         && match object.zone {
                             Zone::Hand => zones.contains(&CardSearchZone::Hand),
                             Zone::Graveyard => zones.contains(&CardSearchZone::Graveyard),
-                            Zone::Library => zones.contains(&CardSearchZone::Library),
+                            Zone::Library => {
+                                zones.contains(&CardSearchZone::Library)
+                                    && live_library.is_some_and(|library| library.contains(oid))
+                            }
                             _ => false,
                         }
                 })
@@ -1276,6 +1292,37 @@ self.state.pending_resolution = Some(PendingResolution {
                 stack.item.id,
                 &object_display_name(&self.state, self.registry, stack.item.id),
             ));
+        }
+
+        if is_resultless_program_search(&stack)
+            && destination == SearchDestination::Hand
+            && chosen.len() == 1
+        {
+            let object_id = chosen[0];
+            let generation = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| {
+                    (*candidate == object_id).then_some(*generation)
+                });
+            let owner = self
+                .state
+                .objects
+                .get(&object_id)
+                .map(|object| object.owner);
+            if let (Some(generation), Some(owner)) = (generation, owner) {
+                let declared_commander = owner == searcher
+                    && self.state.player_idx(owner).is_some_and(|index| {
+                        !self.state.players[index].has_lost
+                            && self.state.players[index]
+                                .declared_commander_object_ids
+                                .contains(&object_id)
+                    });
+                if declared_commander {
+                    return self.offer_search_library_commander_choice(
+                        pending, object_id, owner, generation, ev,
+                    );
+                }
+            }
         }
 
         if chosen.is_empty() {
@@ -1532,6 +1579,269 @@ self.state.pending_resolution = Some(PendingResolution {
             stack.previous_result,
             ev,
         )
+    }
+
+    fn offer_search_library_commander_choice(
+        &mut self,
+        pending: PendingResolution,
+        object_id: ObjectId,
+        owner: PlayerId,
+        zone_change_generation: u64,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::SearchLibrary {
+            stack,
+            searcher,
+            zones,
+            filter,
+            selection_constraint,
+            candidate_generations,
+            selection_slot_candidates,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+            result_id,
+            ..
+        } = pending.continuation
+        else {
+            return Err(EngineError::Illegal(
+                "library-search commander continuation missing",
+            ));
+        };
+        let card_label = object_display_name(&self.state, self.registry, object_id);
+        let prompt =
+            format!("P{owner}: put {card_label} into the command zone or its owner's hand?");
+        let branches = ["Command zone", "Hand"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: label.into(),
+                selectable: true,
+                ..Default::default()
+            })
+            .collect();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
+                    deciding_player_id: owner,
+                    source_object_id: stack.item.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 1,
+                    max: 1,
+                    resolution_branches: branches,
+                    ..Default::default()
+                },
+            )),
+        });
+        events.push(ev_log(prompt.clone()));
+        self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player: owner,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: custom::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::SearchLibrary {
+                stack,
+                searcher,
+                zones,
+                filter,
+                selection_constraint,
+                candidate_generations,
+                selection_slot_candidates,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+                result_id,
+                commander_choice: Some(crate::state::SearchLibraryCommanderChoice {
+                    object_id,
+                    owner,
+                    zone_change_generation,
+                }),
+            },
+        });
+        Ok(finish_with_events(self, events))
+    }
+
+    pub(super) fn finish_search_library_commander_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::SearchLibrary {
+            stack,
+            searcher,
+            commander_choice: Some(choice),
+            shuffle,
+            ..
+        } = pending.continuation.clone()
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "library-search commander choice continuation missing",
+            ));
+        };
+        let correct_shape = decision == rv1::ResolutionChoiceDecision::SelectBranch
+            && answer.selected_branch_index <= 1
+            && answer.chosen_object_ids.is_empty()
+            && answer.chosen_player_ids.is_empty()
+            && answer.payment.is_none()
+            && answer.restricted_mana.is_empty()
+            && answer.cast_spell.is_none()
+            && answer.spell_cast_announcement.is_none()
+            && answer.chosen_combat_defender.is_none();
+        let owner_index = self.state.player_idx(choice.owner);
+        let owner_live = owner_index.is_some_and(|index| {
+            !self.state.players[index].has_lost
+                && self.state.players[index]
+                    .declared_commander_object_ids
+                    .contains(&choice.object_id)
+        });
+        let candidate = crate::state::CardChoiceCandidateRef {
+            object_id: choice.object_id,
+            zone_change_generation: choice.zone_change_generation,
+            source_zone: Zone::Library,
+        };
+        let target_live = owner_index.is_some_and(|index| {
+            self.exact_card_choice_candidate_is_current(candidate, choice.owner)
+                && self.state.players[index]
+                    .library
+                    .contains(&choice.object_id)
+        });
+        if !correct_shape
+            || pending.deciding_player != choice.owner
+            || choice.owner != searcher
+            || !owner_live
+            || !target_live
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "invalid or stale library-search commander choice",
+            ));
+        }
+
+        let mut events = Vec::new();
+        let card_label = object_display_name(&self.state, self.registry, choice.object_id);
+        let destination = if answer.selected_branch_index == 0 {
+            Zone::Command
+        } else {
+            Zone::Hand
+        };
+        events.extend(self.commit_exact_card_choice_move(candidate, choice.owner, destination)?);
+        if destination == Zone::Command {
+            events.push(permanent_moved_event(
+                &self.state,
+                choice.object_id,
+                choice.owner,
+                rv1::permanent_moved::Destination::Command,
+            ));
+            events.push(ev_log(format!(
+                "P{} puts {card_label} into the command zone instead.",
+                choice.owner
+            )));
+        } else {
+            events.push(permanent_moved_event(
+                &self.state,
+                choice.object_id,
+                choice.owner,
+                rv1::permanent_moved::Destination::Hand,
+            ));
+            events.push(ev_log(format!(
+                "P{} puts {card_label} into their hand.",
+                choice.owner
+            )));
+        }
+        if shuffle {
+            crate::engine::shuffle_player_library_for_current_command(&mut self.state, searcher);
+            events.push(ev_log(format!("P{searcher} shuffles their library.")));
+        }
+        self.fire_triggers(
+            &[GameEvent::LibrarySearched {
+                searcher,
+                library_owner: searcher,
+            }],
+            &mut events,
+        );
+        self.complete_parked_stack_with_previous(
+            stack.clone(),
+            stack.previous_result.clone(),
+            events,
+        )
+    }
+
+    fn exact_card_choice_candidate_is_current(
+        &self,
+        candidate: crate::state::CardChoiceCandidateRef,
+        owner: PlayerId,
+    ) -> bool {
+        let exact_object = self
+            .state
+            .zone_change_generation
+            .get(&candidate.object_id)
+            .copied()
+            .unwrap_or(0)
+            == candidate.zone_change_generation
+            && self
+                .state
+                .objects
+                .get(&candidate.object_id)
+                .is_some_and(|object| {
+                    object.owner == owner
+                        && object.zone == candidate.source_zone
+                        && !object.face_down
+                        && self.state.is_card_object(candidate.object_id)
+                });
+        if !exact_object {
+            return false;
+        }
+        match candidate.source_zone {
+            Zone::Library => self.state.player_idx(owner).is_some_and(|index| {
+                self.state.players[index]
+                    .library
+                    .contains(&candidate.object_id)
+            }),
+            // ChooseCard removes the exact cast object from the stack immediately before it
+            // commits the selected destination. Its outer handler already verified the cast.
+            Zone::Stack => true,
+            _ => super::super::resolution::zones::live_choose_card_candidate(
+                self,
+                candidate.object_id,
+                candidate.zone_change_generation,
+                candidate.source_zone,
+            ),
+        }
+    }
+
+    /// Commit one exact object-to-zone movement after an owner choice. The ChooseCard CR 903.9b
+    /// path and a program SearchLibrary path share this transaction; each caller retains its own
+    /// parked continuation and completion ordering.
+    fn commit_exact_card_choice_move(
+        &mut self,
+        candidate: crate::state::CardChoiceCandidateRef,
+        owner: PlayerId,
+        destination: Zone,
+    ) -> Result<Vec<rv1::RuledEvent>, EngineError> {
+        if !self.exact_card_choice_candidate_is_current(candidate, owner) {
+            return Err(EngineError::ProgramInvariant(
+                "exact owner-selected card changed before its destination move",
+            ));
+        }
+        let mut events = Vec::new();
+        self.commit_observed_zone_move(candidate.object_id, destination, None, &mut events)?;
+        Ok(events)
     }
 }
 

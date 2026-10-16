@@ -477,3 +477,74 @@ fn altanak_triggers_only_for_an_opponent_controlled_spell_or_ability_target() {
         "Bolt remains below the trigger"
     );
 }
+
+#[test]
+fn tempest_hawk_combat_damage_trigger_searches_an_exact_copy_into_hand() {
+    let decks = Some(vec![deck_with("plains", &[]), deck_with("island", &[])]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        110_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_declare_attackers(&mut engine);
+    let hawk = inject_creature_on_battlefield(&mut engine, 0, "tempest_hawk");
+    let searched_hawk = inject_library_card(&mut engine, 0, "tempest_hawk");
+    let opponent_life = engine.state.players[1].life;
+
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![hawk]))
+        .expect("Tempest Hawk attacks");
+    pass_priority_round(&mut engine);
+    engine
+        .apply_scenario_command(1, &declare_blockers(vec![]))
+        .expect("opponent leaves Tempest Hawk unblocked");
+    for _ in 0..5 {
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+        pass_priority_round(&mut engine);
+    }
+
+    assert_eq!(engine.state.players[1].life, opponent_life - 2);
+    let branch = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("combat-damage trigger offers its optional branch");
+    assert_eq!(
+        branch.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    assert_eq!(branch.deciding_player, 0);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the search branch");
+    let search = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("exact-name library search")
+        .presentation
+        .clone();
+    assert_eq!(search.choice_kind, ChoiceKind::LibrarySearch);
+    assert_eq!(search.candidates, [searched_hawk]);
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![searched_hawk]))
+        .expect("choose the exact Tempest Hawk copy");
+
+    assert_eq!(engine.state.objects[&searched_hawk].zone, Zone::Hand);
+    assert!(engine.state.players[0].hand.contains(&searched_hawk));
+    assert!(completion.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::CardsRevealed(reveal)) if reveal.cards.iter().any(|card| card.object_id == searched_hawk)
+    )));
+    assert!(completion.events.iter().any(
+        |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library.")
+    ));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}

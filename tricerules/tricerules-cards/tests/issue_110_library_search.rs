@@ -1,8 +1,10 @@
 use tricerules_cards::primitives::{
-    AbilityCost, CardProgram, CardSearchZone, CardTypeFilter, GraveyardDestination,
-    LibraryBottomOrder, LibraryPlacement, PowerComparison, SearchDestination, SearchZoneSelection,
-    SpellEffectKind, ZoneCardFilter,
+    AbilityCost, CardProgram, CardSearchZone, CardTypeFilter, CompiledChooseRequirement,
+    CompiledInstructionKind, GraveyardDestination, LibraryBottomOrder, LibraryPlacement,
+    PlayerRecipient, PowerComparison, ResolutionCost, SearchDestination, SearchSelectionBounds,
+    SearchZoneSelection, SpellEffectKind, ZoneCardFilter,
 };
+use tricerules_cards::{AbilityDefinitionId, ProgramOwnerId};
 
 fn card(id: &str) -> &'static tricerules_cards::CardDefinition {
     tricerules_cards::registry::global()
@@ -44,19 +46,78 @@ fn issue_110_filters_cover_exact_name_recursive_type_or_and_printed_power() {
 
 #[test]
 fn issue_110_search_and_look_cards_use_the_shared_primitives() {
-    let tempest = card("tempest_hawk").primary_face();
-    assert!(tempest.triggered_abilities.iter().any(|ability| matches!(
-        ability.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch { branches, optional: true, .. }]
-            if matches!(branches[0].effects.as_slice(),
-                [SpellEffectKind::SearchLibrary {
-                    filter: Some(ZoneCardFilter { exact_name: Some(name), .. }),
-                    destination: SearchDestination::Hand,
-                    shuffle: true,
-                    reveal: true,
-                    ..
-                }] if name == "Tempest Hawk")
-    )));
+    let registry = tricerules_cards::registry::global();
+    let tempest_card = card("tempest_hawk");
+    let tempest = tempest_card.primary_face();
+    let [tempest_ability] = tempest.triggered_abilities.as_slice() else {
+        panic!("Tempest Hawk has one combat-damage trigger");
+    };
+    assert!(tempest_ability.effect.is_empty());
+    assert!(tempest_ability.program.is_some());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "tempest_hawk".to_owned(),
+        face_id: tempest.face_id.clone(),
+        ability_path: vec![tempest_ability.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Tempest Hawk's exact triggered ability owns its search program");
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    let [choice_step] = program.body.steps.as_slice() else {
+        panic!("Tempest Hawk has one top-level search choice");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choice_step.kind
+    else {
+        panic!("Tempest Hawk's trigger compiles to a structural Choose");
+    };
+    assert_eq!(choice.as_str(), "search");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Tempest Hawk has one exact-name search branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "search_for_tempest_hawk");
+    assert_eq!(branch.cost, ResolutionCost::None);
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::Always
+    ));
+    let [search_step] = branch.body.steps.as_slice() else {
+        panic!("Tempest Hawk's search branch has one operation");
+    };
+    let CompiledInstructionKind::Perform(effect) = &search_step.kind else {
+        panic!("Tempest Hawk's search branch is a Perform instruction");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(ZoneCardFilter { exact_name: Some(name), .. }),
+            selection_constraint: None,
+            slots,
+            zones: SearchZoneSelection::Fixed(zones),
+            destination: SearchDestination::Hand,
+            conditional_destination: None,
+            shuffle: true,
+            reveal: true,
+            result_id: None,
+            selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
+        } if name == "Tempest Hawk"
+            && zones == &[CardSearchZone::Library]
+            && slots.is_empty()
+    ));
 
     let living = card("living_phone").primary_face();
     assert!(living.triggered_abilities.iter().any(|ability| matches!(

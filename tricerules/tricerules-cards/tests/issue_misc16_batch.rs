@@ -9,9 +9,9 @@
 //! CR 702.122 (crew), and CR 702.190 (sneak).
 
 use tricerules_cards::primitives::{
-    AbilityCost, ActivationLimit, Amount, EffectSubject, LifeAmount, ObjectCastCostKind,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-    SearchDestination, SpellCostModifier, SpellEffectKind, TargetKind,
+    AbilityCost, ActivationLimit, Amount, EffectSubject, InstructionKind, LifeAmount,
+    ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter,
+    PlayerRecipient, SearchDestination, SpellCostModifier, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{CardRegistry, Keyword, Layout};
 
@@ -231,20 +231,21 @@ fn issue_misc16_batch_maps_definitions() {
 
     // Fountainport Bell: optional basic-land search onto the top, then sac to draw.
     let bell = primary(registry, "fountainport_bell");
-    let [SpellEffectKind::ChooseResolutionBranch {
-        optional: true,
-        branches,
-        ..
-    }] = bell.triggered_abilities[0].effect.as_slice()
-    else {
-        panic!("{:?}", bell.triggered_abilities[0].effect);
+    let bell_trigger = &bell.triggered_abilities[0];
+    assert!(bell_trigger.effect.is_empty());
+    let program = bell_trigger.program.as_ref().expect("typed search program");
+    let [step] = program.body.steps.as_slice() else {
+        panic!("one entry-search instruction");
     };
     assert!(matches!(
-        branches[0].effects.as_slice(),
-        [SpellEffectKind::SearchLibrary {
-            destination: SearchDestination::TopOfLibrary,
-            ..
-        }]
+        &step.kind,
+        InstructionKind::Choose { optional: true, branches, otherwise, .. }
+            if branches.len() == 1 && otherwise.steps.is_empty()
+                && matches!(branches[0].body.steps.as_slice(), [search]
+                    if matches!(&search.kind, InstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::SearchLibrary {
+                            destination: SearchDestination::TopOfLibrary, ..
+                        })))
     ));
     let bell_sac = activated(registry, "fountainport_bell", 0);
     assert!(

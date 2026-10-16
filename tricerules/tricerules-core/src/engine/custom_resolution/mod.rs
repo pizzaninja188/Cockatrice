@@ -1042,6 +1042,15 @@ impl GameEngine {
             return self.finish_choose_card_commander(pending, answer, decision);
         }
         if matches!(
+            &pending.continuation,
+            ResolutionContinuation::SearchLibrary {
+                commander_choice: Some(_),
+                ..
+            }
+        ) {
+            return self.finish_search_library_commander_choice(pending, answer, decision);
+        }
+        if matches!(
             pending.continuation,
             ResolutionContinuation::SpecialCastCommanderCleanup { .. }
         ) {

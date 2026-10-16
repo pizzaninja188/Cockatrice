@@ -4436,6 +4436,112 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+fn resultless_direct_hand_search_program(filter: &str) -> String {
+    program_fixture(&format!(
+        r#"(steps: [
+            (id: "search_choice", bind: [], input: None, kind: Choose(
+                choice: "search", chooser: Controller, optional: true,
+                branches: [(branch_id: "search_for_card", presentation: Fallback,
+                    cost: None, requirement: Always, body: (steps: [
+                        (id: "search_hand", bind: [], input: None, kind: Perform(SearchLibrary(
+                            who: Controller, optional: false, count: 1,
+                            count_by_cast_cost: None,
+                            filter: Some({filter}),
+                            selection_constraint: None, slots: [],
+                            zones: Fixed([Library]), destination: Hand,
+                            conditional_destination: None, shuffle: true, reveal: true,
+                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                        )))
+                    ], yields: []))], otherwise: (steps: [], yields: []))),
+        ], yields: [])"#
+    ))
+}
+
+#[test]
+fn authored_choose_accepts_resultless_direct_hand_search_filters() {
+    for (label, filter) in [
+        ("BasicLand", "(card_type: Some(BasicLand))"),
+        ("exact name", "(exact_name: Some(\"Legal Test Commander\"))"),
+    ] {
+        let definition = resultless_direct_hand_search_program(filter);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| {
+                panic!(
+                    "the resultless direct Hand search with {label} filter must compile: {error}"
+                )
+            });
+        let owner = crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        );
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the fixture face owns its compiled Choose program");
+        let [choice] = program.body.steps.as_slice() else {
+            panic!("expected one outer optional Choose instruction");
+        };
+        let crate::primitives::CompiledInstructionKind::Choose { branches, .. } = &choice.kind
+        else {
+            panic!("the optionality must remain on the outer Choose");
+        };
+        assert!(choice.outputs.is_empty());
+        let [branch] = branches.as_slice() else {
+            panic!("expected one direct Hand search branch");
+        };
+        let [search] = branch.body.steps.as_slice() else {
+            panic!("expected one direct Hand search operation");
+        };
+        assert!(search.outputs.is_empty(), "the direct search is resultless");
+        let crate::primitives::CompiledInstructionKind::Perform(effect) = &search.kind else {
+            panic!("the selected branch must execute the direct search leaf");
+        };
+        assert!(matches!(
+            effect.as_ref(),
+            crate::primitives::SpellEffectKind::SearchLibrary {
+                who: crate::primitives::PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                filter: Some(actual_filter),
+                selection_constraint: None,
+                slots,
+                zones: crate::primitives::SearchZoneSelection::Fixed(zones),
+                destination: crate::primitives::SearchDestination::Hand,
+                conditional_destination: None,
+                shuffle: true,
+                reveal: true,
+                result_id: None,
+                selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
+                ..
+            } if zones == &[crate::primitives::CardSearchZone::Library]
+                && slots.is_empty()
+                && actual_filter.validate().is_ok()
+        ));
+        assert!(program.slots.is_empty());
+    }
+
+    for (label, filter) in [
+        ("a broad creature filter", "(card_type: Some(Creature))"),
+        (
+            "a compound exact-name filter",
+            "(exact_name: Some(\"Legal Test Commander\"), card_type: Some(Creature))",
+        ),
+        (
+            "an OR filter",
+            "(any_of: [(card_type: Some(BasicLand)), (exact_name: Some(\"Legal Test Commander\"))])",
+        ),
+        ("an empty name", "(exact_name: Some(\"\"))"),
+    ] {
+        let definition = resultless_direct_hand_search_program(filter);
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("direct Hand search must reject filters outside the bounded subset")
+            .to_string();
+        assert!(
+            error.contains("program direct Hand SearchLibrary"),
+            "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
 #[test]
 fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() {
     let definition = program_fixture(
@@ -4577,6 +4683,13 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             definition.replace("Fixed([Library])", "Fixed([Library, Hand])"),
         ),
         (
+            "Battlefield destination remains outside the direct Top search subset",
+            definition.replace(
+                "destination: TopOfLibrary",
+                "destination: Battlefield(tapped: true)",
+            ),
+        ),
+        (
             "conditional destinations are excluded",
             definition.replace(
                 "conditional_destination: None",
@@ -4598,10 +4711,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
         (
             "shuffle remains enabled",
             definition.replace("shuffle: true", "shuffle: false"),
-        ),
-        (
-            "destination remains TopOfLibrary",
-            definition.replace("destination: TopOfLibrary", "destination: Hand"),
         ),
     ] {
         let error = crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[])

@@ -133,6 +133,90 @@ fn environmental_scientist_search_is_optional_private_and_basic_only() {
 }
 
 #[test]
+fn environmental_scientist_trigger_keeps_its_search_after_the_source_leaves() {
+    let decks = Some(vec![
+        deck_with("forest", &["environmental_scientist"]),
+        deck_with("mountain", &["lightning_bolt"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        910_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let forest = inject_library_card(&mut engine, 0, "forest");
+    ensure_in_hand(&mut engine, 0, "environmental_scientist");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let scientist_slot = hand_index_for_card(&engine, 0, "environmental_scientist");
+    engine
+        .apply_scenario_command(0, &cast_spell(scientist_slot, vec![]))
+        .expect("cast Environmental Scientist");
+    pass_both_players(&mut engine);
+    let scientist = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|object_id| engine.state.objects[object_id].card_id == "environmental_scientist")
+        .expect("Environmental Scientist resolved onto the battlefield");
+
+    inject_card_into_hand(&mut engine, 1, "lightning_bolt");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes with the entry trigger on the stack");
+    let bolt_slot = hand_index_for_card(&engine, 1, "lightning_bolt");
+    engine
+        .apply_scenario_command(1, &cast_spell(bolt_slot, target_object(scientist)))
+        .expect("opponent removes the trigger's source");
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.objects[&scientist].zone, Zone::Graveyard);
+
+    let branch_batch = pass_both_players_with_batch(&mut engine);
+    let branch = find_resolution_choice(&branch_batch)
+        .expect("the independent trigger retains its optional search");
+    assert_eq!(branch.deciding_player_id, 0);
+    let search_batch = engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the search after the source leaves");
+    let search = find_resolution_choice(&search_batch).expect("private basic-land search");
+    assert!(search.candidate_object_ids.contains(&forest));
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
+        .expect("choose the exact Forest");
+
+    assert_eq!(engine.state.objects[&forest].zone, Zone::Hand);
+    assert!(engine.state.players[0].hand.contains(&forest));
+    assert!(completion.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::CardsRevealed(reveal)) if reveal.cards.iter().any(|card| card.object_id == forest)
+    )));
+    assert!(completion.events.iter().any(
+        |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library.")
+    ));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
 fn hire_a_crew_pumps_its_token_and_only_controlled_creatures() {
     let decks = Some(vec![
         deck_with("mountain", &["hire_a_crew", "grizzly_bears"]),

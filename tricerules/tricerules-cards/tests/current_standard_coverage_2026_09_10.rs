@@ -4,7 +4,7 @@ use crate::common::draw_discard_program::{
 use tricerules_cards::primitives::{
     CardTypeFilter, CompiledInstructionKind, CompiledProgramCondition,
     CompiledProgramResultCondition, CreatureScopeController, EffectSubject, GraveyardDestination,
-    RelativePlayerSet, SpellEffectKind, TargetController, TargetKind,
+    InstructionKind, RelativePlayerSet, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{Amount, Color, Keyword, SearchDestination, TriggerCondition};
 
@@ -132,12 +132,26 @@ fn environmental_scientist_uses_optional_basic_land_search() {
         .primary_face();
     let ability = &face.triggered_abilities[0];
     assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert!(ability.effect.is_empty());
+    let program = ability
+        .program
+        .as_ref()
+        .expect("typed entry-search program");
+    let [step] = program.body.steps.as_slice() else {
+        panic!("one typed entry-search step");
+    };
     assert!(matches!(
-        ability.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch { optional: true, branches, .. }]
-            if matches!(branches[0].effects.as_slice(),
-                [SpellEffectKind::SearchLibrary { filter: Some(filter), destination: SearchDestination::Hand, shuffle: true, reveal: true, .. }]
-                    if filter.card_type == Some(CardTypeFilter::BasicLand))
+        &step.kind,
+        InstructionKind::Choose { optional: true, branches, otherwise, .. }
+            if branches.len() == 1
+                && otherwise.steps.is_empty()
+                && matches!(branches[0].body.steps.as_slice(),
+                    [step] if matches!(&step.kind,
+                        InstructionKind::Perform(effect)
+                            if matches!(effect.as_ref(), SpellEffectKind::SearchLibrary {
+                                filter: Some(filter), destination: SearchDestination::Hand,
+                                shuffle: true, reveal: true, ..
+                            } if filter.card_type == Some(CardTypeFilter::BasicLand))))
     ));
 }
 

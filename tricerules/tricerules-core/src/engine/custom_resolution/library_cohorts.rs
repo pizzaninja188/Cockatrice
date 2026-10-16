@@ -372,12 +372,71 @@ impl GameEngine {
                 filter,
                 candidate_generations,
                 selection_slot_candidates,
+                commander_choice,
+                shuffle,
                 ..
             } if stack.program.is_some() => {
                 if !self.player_is_live(*searcher) {
                     let stack = stack.clone();
                     let completed =
                         self.complete_departed_program_library_search(stack, *searcher)?;
+                    events.extend(completed.events);
+                    return Ok(());
+                }
+                if let Some(choice) = *commander_choice {
+                    let target_is_current =
+                        self.state.player_idx(choice.owner).is_some_and(|index| {
+                            !self.state.players[index].has_lost
+                                && self.state.players[index]
+                                    .declared_commander_object_ids
+                                    .contains(&choice.object_id)
+                                && self.state.players[index]
+                                    .library
+                                    .contains(&choice.object_id)
+                                && self
+                                    .state
+                                    .zone_change_generation
+                                    .get(&choice.object_id)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == choice.zone_change_generation
+                                && self
+                                    .state
+                                    .objects
+                                    .get(&choice.object_id)
+                                    .is_some_and(|object| {
+                                        object.owner == choice.owner && object.zone == Zone::Library
+                                    })
+                        });
+                    if target_is_current {
+                        // The owner-destination decision is already the active prompt. A source
+                        // departure cannot replace it with the earlier library-search menu.
+                        self.state.pending_resolution = Some(pending);
+                        return Ok(());
+                    }
+                    let stack = stack.clone();
+                    let searcher = *searcher;
+                    let mut completed_events = Vec::new();
+                    if *shuffle {
+                        crate::engine::shuffle_player_library_for_current_command(
+                            &mut self.state,
+                            searcher,
+                        );
+                        completed_events
+                            .push(ev_log(format!("P{searcher} shuffles their library.")));
+                    }
+                    self.fire_triggers(
+                        &[GameEvent::LibrarySearched {
+                            searcher,
+                            library_owner: searcher,
+                        }],
+                        &mut completed_events,
+                    );
+                    let completed = self.complete_parked_stack_with_previous(
+                        stack.clone(),
+                        stack.previous_result.clone(),
+                        completed_events,
+                    )?;
                     events.extend(completed.events);
                     return Ok(());
                 }
@@ -629,14 +688,19 @@ impl GameEngine {
             }],
             &mut events,
         );
-        self.complete_parked_stack_with_previous(
-            stack,
+        let completion_result = if stack
+            .program
+            .as_ref()
+            .is_some_and(|program| program.in_flight.as_ref().is_some_and(Vec::is_empty))
+        {
+            stack.previous_result.clone()
+        } else {
             EffectResult {
                 program_value: Some(ProgramValue::FoundLibraryCohort(Vec::new())),
                 ..Default::default()
-            },
-            events,
-        )
+            }
+        };
+        self.complete_parked_stack_with_previous(stack, completion_result, events)
     }
 }
 

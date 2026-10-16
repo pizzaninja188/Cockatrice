@@ -12,7 +12,7 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, Amount, EffectSubject, ObjectContributionKind,
+    AbilityCost, AbilitySourceZone, Amount, EffectSubject, InstructionKind, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, SpellCostModifier,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
 };
@@ -158,18 +158,23 @@ fn issue_misc13_batch_maps_definitions() {
     let [skycoach_trigger] = skycoach.triggered_abilities.as_slice() else {
         panic!("one trigger");
     };
-    let [SpellEffectKind::ChooseResolutionBranch {
-        optional: true,
-        branches,
-        ..
-    }] = skycoach_trigger.effect.as_slice()
-    else {
-        panic!("{:?}", skycoach_trigger.effect);
+    assert!(skycoach_trigger.effect.is_empty());
+    let program = skycoach_trigger
+        .program
+        .as_ref()
+        .expect("typed search program");
+    let [step] = program.body.steps.as_slice() else {
+        panic!("one entry-search instruction");
     };
     assert!(
-        matches!(branches.as_slice(), [branch]
-            if matches!(branch.effects.as_slice(), [SpellEffectKind::SearchLibrary { .. }])),
-        "{branches:?}"
+        matches!(&step.kind, InstructionKind::Choose { optional: true, branches, otherwise, .. }
+        if branches.len() == 1 && otherwise.steps.is_empty()
+            && matches!(branches[0].body.steps.as_slice(), [search]
+                if matches!(&search.kind, InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::SearchLibrary {
+                        destination: tricerules_cards::SearchDestination::Hand, ..
+                    })))),
+        "{step:?}"
     );
     assert_eq!(
         crew_minimum(&activated(registry, "strixhaven_skycoach", 0).costs),

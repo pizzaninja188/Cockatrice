@@ -608,6 +608,7 @@ impl Compiler {
                             selection_bounds: Some(_),
                             ..
                         } if !is_resultless_direct_top_library_search(effect)
+                            && !is_resultless_direct_hand_library_search(effect)
                     ) || matches!(
                         effect.as_ref(),
                         SpellEffectKind::RevealCohort
@@ -1379,6 +1380,11 @@ fn validate_and_result_types(
         } => validate_resultless_direct_top_library_search(effect, context),
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
+            destination: SearchDestination::Hand,
+            ..
+        } => validate_resultless_direct_hand_library_search(effect, context),
+        SpellEffectKind::SearchLibrary {
+            selection_bounds: Some(_),
             ..
         } => validate_retained_library_search(effect, context),
         SpellEffectKind::SearchLibrary { .. } => {
@@ -1672,6 +1678,87 @@ fn validate_resultless_direct_top_library_search(
 
     // The authored bounds are consumed by this narrow typed operation; the shared direct effect
     // validator still checks its ordinary search recipient, filter, zone, count, and destination.
+    let mut ordinary = effect.clone();
+    if let SpellEffectKind::SearchLibrary {
+        selection_bounds, ..
+    } = &mut ordinary
+    {
+        *selection_bounds = None;
+    }
+    ordinary.validate(context)?;
+    Ok(Vec::new())
+}
+
+fn is_resultless_direct_hand_library_search(effect: &SpellEffectKind) -> bool {
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds,
+    } = effect
+    else {
+        return false;
+    };
+
+    let permitted_filter = filter.as_ref().is_some_and(|filter| {
+        if filter.validate().is_err() {
+            return false;
+        }
+        let basic_land = filter
+            == &ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            };
+        let exact_name_only = filter.exact_name.as_ref().is_some_and(|name| {
+            !name.trim().is_empty()
+                && filter
+                    == &ZoneCardFilter {
+                        exact_name: Some(name.clone()),
+                        ..ZoneCardFilter::default()
+                    }
+        });
+        basic_land || exact_name_only
+    });
+
+    *who == PlayerRecipient::Controller
+        && !*optional
+        && *count == 1
+        && count_by_cast_cost.is_none()
+        && permitted_filter
+        && selection_constraint.is_none()
+        && slots.is_empty()
+        && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+        && *destination == SearchDestination::Hand
+        && conditional_destination.is_none()
+        && *shuffle
+        && *reveal
+        && result_id.is_none()
+        && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
+}
+
+fn validate_resultless_direct_hand_library_search(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
+    if !is_resultless_direct_hand_library_search(effect) {
+        return Err(
+            "program direct Hand SearchLibrary supports only a resultless controller BasicLand or exact-name search with fixed count 1, bounds 0..1, reveal and shuffle"
+                .into(),
+        );
+    }
+
+    // The authored bounds are consumed by this one-card hand movement. The normal direct effect
+    // validator still checks the actor, filter, zone, count, and destination contracts.
     let mut ordinary = effect.clone();
     if let SpellEffectKind::SearchLibrary {
         selection_bounds, ..
