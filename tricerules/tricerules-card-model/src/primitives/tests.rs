@@ -4436,6 +4436,185 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+#[test]
+fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "search_choice", bind: [], input: None, kind: Choose(
+                choice: "search", chooser: Controller, optional: true,
+                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                    cost: None, requirement: Always, body: (steps: [
+                        (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
+                            who: Controller, optional: false, count: 1,
+                            count_by_cast_cost: None,
+                            filter: Some((card_type: Some(BasicLand))),
+                            selection_constraint: None, slots: [],
+                            zones: Fixed([Library]), destination: TopOfLibrary,
+                            conditional_destination: None, shuffle: true, reveal: true,
+                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                        )))
+                    ], yields: []))], otherwise: (steps: [], yields: []))),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the exact resultless direct top-search shape compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact face owns its compiled Choose program");
+    let [choice] = program.body.steps.as_slice() else {
+        panic!("expected one outer optional Choose instruction");
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        choice: choice_id,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choice.kind
+    else {
+        panic!("the search decision must remain a structural Choose");
+    };
+    assert_eq!(choice_id.as_str(), "search");
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(choice.outputs.is_empty());
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("expected one search branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+    assert_eq!(branch.cost, crate::primitives::ResolutionCost::None);
+    assert_eq!(
+        branch.requirement,
+        crate::primitives::CompiledChooseRequirement::Always
+    );
+    let [search] = branch.body.steps.as_slice() else {
+        panic!("expected one direct search operation");
+    };
+    assert!(search.outputs.is_empty(), "the direct search is resultless");
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &search.kind else {
+        panic!("the selected branch must execute the direct search leaf");
+    };
+    let crate::primitives::SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds,
+    } = effect.as_ref()
+    else {
+        panic!("the selected leaf must remain SearchLibrary");
+    };
+    assert_eq!(*who, crate::primitives::PlayerRecipient::Controller);
+    assert!(!optional);
+    assert_eq!(*count, 1);
+    assert!(count_by_cast_cost.is_none());
+    assert_eq!(
+        filter,
+        &Some(crate::primitives::ZoneCardFilter {
+            card_type: Some(crate::primitives::CardTypeFilter::BasicLand),
+            ..Default::default()
+        })
+    );
+    assert!(selection_constraint.is_none());
+    assert!(slots.is_empty());
+    assert_eq!(
+        zones,
+        &crate::primitives::SearchZoneSelection::Fixed(vec![
+            crate::primitives::CardSearchZone::Library
+        ])
+    );
+    assert_eq!(
+        *destination,
+        crate::primitives::SearchDestination::TopOfLibrary
+    );
+    assert!(conditional_destination.is_none());
+    assert!(*shuffle);
+    assert!(*reveal);
+    assert!(result_id.is_none());
+    assert_eq!(
+        *selection_bounds,
+        Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 })
+    );
+    assert!(program.slots.is_empty());
+
+    for (label, malformed) in [
+        (
+            "inner search may not be optional",
+            definition.replace("optional: false", "optional: true"),
+        ),
+        ("count must stay fixed at one", definition.replace("count: 1,", "count: 2,")),
+        (
+            "only BasicLand is supported",
+            definition.replace("card_type: Some(BasicLand)", "card_type: Some(Land)"),
+        ),
+        (
+            "selection constraints are excluded",
+            definition.replace("selection_constraint: None", "selection_constraint: Some(DifferentNames)"),
+        ),
+        (
+            "selection slots are excluded",
+            definition.replace(
+                "slots: [],",
+                "slots: [(slot_id: \"basic\", presentation: Fallback, filter: (card_type: Some(BasicLand)))],",
+            ),
+        ),
+        (
+            "searches only the controller's Library",
+            definition.replace("Fixed([Library])", "Fixed([Library, Hand])"),
+        ),
+        (
+            "conditional destinations are excluded",
+            definition.replace(
+                "conditional_destination: None",
+                "conditional_destination: Some((condition: ControllerLibraryEmpty, destination: Hand))",
+            ),
+        ),
+        (
+            "the operation remains resultless",
+            definition.replace("result_id: None", "result_id: Some(\"found\")"),
+        ),
+        (
+            "bounds stay 0..1",
+            definition.replace("min: 0, max: 1", "min: 1, max: 1"),
+        ),
+        (
+            "reveal remains enabled",
+            definition.replace("reveal: true", "reveal: false"),
+        ),
+        (
+            "shuffle remains enabled",
+            definition.replace("shuffle: true", "shuffle: false"),
+        ),
+        (
+            "destination remains TopOfLibrary",
+            definition.replace("destination: TopOfLibrary", "destination: Hand"),
+        ),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[])
+            .expect_err("the direct Top search extension must fail closed")
+            .to_string();
+        assert!(
+            error.contains("program direct TopOfLibrary SearchLibrary")
+                || error.contains("retained SearchLibrary supports only"),
+            "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
 fn choose_cast_cost_program(group_id: &str, option_id: &str) -> String {
     format!(
         r#"Some((body: (steps: [

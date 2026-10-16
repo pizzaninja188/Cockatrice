@@ -254,6 +254,7 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     quantity: super::DiscardQuantity::AnyNumber,
                 } => "Discard any number of cards.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
+                SpellEffectKind::SearchLibrary { .. } => "Search".into(),
                 SpellEffectKind::ReturnAllToOwnersHand { kind } => {
                     let color = kind.is_color?;
                     let exact = TargetFilter {

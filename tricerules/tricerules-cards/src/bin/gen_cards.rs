@@ -7840,25 +7840,97 @@ mod tests {
             assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
             assert!(!ability.may);
             assert!(ability.targeting.is_none());
-            assert!(matches!(
-                ability.effect.as_slice(),
-                [SpellEffectKind::ChooseResolutionBranch {
-                    optional: true,
-                    branches,
-                    ..
-                }] if branches.len() == 1 && matches!(
-                    branches[0].effects.as_slice(),
-                    [SpellEffectKind::SearchLibrary {
-                        filter: Some(filter),
-                        destination: tricerules_cards::SearchDestination::TopOfLibrary,
-                        shuffle: true,
-                        reveal: true,
-                        optional: false,
-                        count: 1,
-                        ..
-                    }] if filter.card_type == Some(tricerules_cards::primitives::CardTypeFilter::BasicLand)
-                )
-            ));
+            assert!(ability.effect.is_empty());
+            let Some(program) = ability.program.as_ref() else {
+                panic!("{name} must emit a resolution program");
+            };
+            assert!(program.target_bindings.is_empty());
+            let [choose_instruction] = program.body.steps.as_slice() else {
+                panic!("{name} program must contain one Choose instruction");
+            };
+            assert_eq!(choose_instruction.id, "search_choice");
+            assert!(choose_instruction.bind.is_empty());
+            assert!(choose_instruction.input.is_none());
+            let InstructionKind::Choose {
+                choice,
+                chooser,
+                optional,
+                branches,
+                otherwise,
+            } = &choose_instruction.kind
+            else {
+                panic!("{name} program must contain an optional Choose");
+            };
+            assert_eq!(choice.as_str(), "search");
+            assert_eq!(*chooser, PlayerRecipient::Controller);
+            assert!(*optional);
+            assert!(otherwise.steps.is_empty());
+            assert!(otherwise.yields.is_empty());
+            let [branch] = branches.as_slice() else {
+                panic!("{name} Choose must contain one search branch");
+            };
+            assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+            assert_eq!(branch.presentation, AbilityPresentation::Fallback);
+            assert_eq!(branch.cost, ResolutionCost::None);
+            assert_eq!(
+                branch.requirement,
+                tricerules_cards::primitives::ResolutionBranchRequirement::Always
+            );
+            assert!(branch.body.yields.is_empty());
+            let [search_instruction] = branch.body.steps.as_slice() else {
+                panic!("{name} search branch must contain one instruction");
+            };
+            assert_eq!(search_instruction.id, "search_top");
+            assert!(search_instruction.bind.is_empty());
+            assert!(search_instruction.input.is_none());
+            let InstructionKind::Perform(effect) = &search_instruction.kind else {
+                panic!("{name} search instruction must be Perform");
+            };
+            let SpellEffectKind::SearchLibrary {
+                who,
+                optional,
+                count,
+                count_by_cast_cost,
+                filter,
+                selection_constraint,
+                slots,
+                zones,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+                result_id,
+                selection_bounds,
+            } = effect.as_ref()
+            else {
+                panic!("{name} branch must search the library");
+            };
+            assert_eq!(*who, PlayerRecipient::Controller);
+            assert!(!optional);
+            assert_eq!(*count, 1);
+            assert!(count_by_cast_cost.is_none());
+            assert_eq!(
+                filter,
+                &Some(ZoneCardFilter {
+                    card_type: Some(tricerules_cards::primitives::CardTypeFilter::BasicLand),
+                    ..Default::default()
+                })
+            );
+            assert!(selection_constraint.is_none());
+            assert!(slots.is_empty());
+            assert_eq!(zones, &SearchZoneSelection::default());
+            assert_eq!(
+                *destination,
+                tricerules_cards::SearchDestination::TopOfLibrary
+            );
+            assert!(conditional_destination.is_none());
+            assert!(*shuffle);
+            assert!(*reveal);
+            assert!(result_id.is_none());
+            assert_eq!(
+                *selection_bounds,
+                Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 1 })
+            );
         }
 
         for (name, oracle_text) in [

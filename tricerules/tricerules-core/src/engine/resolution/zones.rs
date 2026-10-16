@@ -6942,6 +6942,11 @@ pub(super) fn search_library(
         return Ok(EffectOutcome::Continue);
     };
     let parked_stack = cx.parked_stack();
+    let resultless_program_top_search = destination == SearchDestination::TopOfLibrary
+        && cx
+            .program_state
+            .as_ref()
+            .is_some_and(|program| program.in_flight.as_ref().is_some_and(Vec::is_empty));
     if selection_bounds.is_some()
         && cx
             .engine
@@ -6951,6 +6956,24 @@ pub(super) fn search_library(
     {
         cx.events
             .push(ev_log(format!("P{searcher} finds no card.")));
+        if resultless_program_top_search {
+            if shuffle {
+                crate::engine::shuffle_player_library_for_current_command(
+                    &mut cx.engine.state,
+                    searcher,
+                );
+                cx.events
+                    .push(ev_log(format!("P{searcher} shuffles their library.")));
+            }
+            cx.engine.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher,
+                    library_owner: searcher,
+                }],
+                cx.events,
+            );
+            return Ok(EffectOutcome::Continue);
+        }
         cx.engine.fire_triggers(
             &[GameEvent::LibrarySearched {
                 searcher,

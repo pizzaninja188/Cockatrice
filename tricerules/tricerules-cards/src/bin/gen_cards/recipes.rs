@@ -5321,42 +5321,27 @@ fn match_self_enters_optional_search_basic_land_to_top(
         && text
             == "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("search_for_a_basic_land")
-                            .expect("closed search branch uses a valid choice ID"),
-                        presentation: AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement: Default::default(),
-                        effects: vec![SpellEffectKind::SearchLibrary {
-                            who: PlayerRecipient::Controller,
-                            optional: false,
-                            count: 1,
-                            count_by_cast_cost: None,
-                            selection_bounds: None,
-                            filter: Some(ZoneCardFilter {
-                                card_type: Some(CardTypeFilter::BasicLand),
-                                ..ZoneCardFilter::default()
-                            }),
-                            slots: Vec::new(),
-                            zones: SearchZoneSelection::default(),
-                            destination: SearchDestination::TopOfLibrary,
-                            conditional_destination: None,
-                            shuffle: true,
-                            reveal: true,
-                            selection_constraint: None,
-                            result_id: None,
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                }],
+                authored_program(
+                    r#"(id: "search_choice", kind: Choose(
+                        choice: "search", chooser: Controller, optional: true,
+                        branches: [(branch_id: "search_for_a_basic_land",
+                            presentation: Fallback, cost: None, requirement: Always,
+                            body: (steps: [(id: "search_top", kind: Perform(SearchLibrary(
+                                who: Controller, optional: false, count: 1,
+                                count_by_cast_cost: None,
+                                filter: Some((card_type: Some(BasicLand))),
+                                selection_constraint: None, slots: [],
+                                zones: Fixed([Library]), destination: TopOfLibrary,
+                                conditional_destination: None, shuffle: true, reveal: true,
+                                result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                            )))], yields: []))],
+                        otherwise: (steps: [], yields: []),
+                    ))"#,
+                    "",
+                ),
             )
         })
 }
@@ -29615,23 +29600,29 @@ mod tests {
         assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
         assert!(!ability.may, "optional search is represented by its branch");
         assert!(ability.targeting.is_none());
-        let [SpellEffectKind::ChooseResolutionBranch {
+        assert!(ability.effect.is_empty());
+        let Some(program) = ability.program.as_ref() else {
+            panic!("issue #284 must emit a resolution program");
+        };
+        assert!(program.target_bindings.is_empty());
+        let [choose_instruction] = program.body.steps.as_slice() else {
+            panic!("issue #284 program must contain one Choose instruction");
+        };
+        let tricerules_cards::primitives::InstructionKind::Choose {
+            choice,
             chooser,
             optional,
-            selection,
             branches,
             otherwise,
-        }] = ability.effect.as_slice()
+        } = &choose_instruction.kind
         else {
-            panic!("issue #284 must emit one optional resolution branch");
+            panic!("issue #284 program must contain one optional Choose");
         };
+        assert_eq!(choice.as_str(), "search");
         assert_eq!(*chooser, PlayerRecipient::Controller);
         assert!(*optional);
-        assert_eq!(
-            *selection,
-            tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice
-        );
-        assert!(otherwise.is_empty());
+        assert!(otherwise.steps.is_empty());
+        assert!(otherwise.yields.is_empty());
         let [branch] = branches.as_slice() else {
             panic!("issue #284 must emit one search branch");
         };
@@ -29645,7 +29636,16 @@ mod tests {
             branch.requirement,
             tricerules_cards::primitives::ResolutionBranchRequirement::Always
         );
-        let [SpellEffectKind::SearchLibrary {
+        assert!(branch.body.yields.is_empty());
+        let [search_instruction] = branch.body.steps.as_slice() else {
+            panic!("issue #284 search branch must contain one instruction");
+        };
+        let tricerules_cards::primitives::InstructionKind::Perform(effect) =
+            &search_instruction.kind
+        else {
+            panic!("issue #284 search branch instruction must be Perform");
+        };
+        let SpellEffectKind::SearchLibrary {
             who,
             optional: search_optional,
             count,
@@ -29659,8 +29659,9 @@ mod tests {
             shuffle,
             reveal,
             result_id,
+            selection_bounds,
             ..
-        }] = branch.effects.as_slice()
+        } = effect.as_ref()
         else {
             panic!("issue #284 branch must search the library");
         };
@@ -29682,6 +29683,10 @@ mod tests {
         assert!(*shuffle);
         assert!(*reveal);
         assert!(result_id.is_none());
+        assert_eq!(
+            *selection_bounds,
+            Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 1 })
+        );
 
         for near_miss in [
             "When this creature enters, search your library for a basic land card, reveal it, then shuffle and put that card on top.",

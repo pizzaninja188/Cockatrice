@@ -198,6 +198,13 @@ must be fixed literals.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
+Program `SearchLibrary` has two bounded forms. The retained form uses fixed selection bounds and
+`KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Its only resultless form is a direct
+`TopOfLibrary` search for the controller's BasicLand choice: fixed `Library` zone, count one,
+bounds 0..1, reveal and shuffle, with no slots, selection constraint, cast-cost sizing, conditional
+destination or result ID. Campus Guide and Spider-Bot use this shape. It binds and yields no result;
+finding no card, including when the library is empty, still shuffles and continues the program. No
+other resultless `SearchLibrary` shape is admitted.
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.

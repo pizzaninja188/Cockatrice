@@ -27,6 +27,13 @@ fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>])
     chosen.len() <= slots.len() && assign(0, chosen, slots, &mut vec![false; slots.len()])
 }
 
+fn is_resultless_program_search(stack: &ParkedStackResolution) -> bool {
+    stack
+        .program
+        .as_ref()
+        .is_some_and(|program| program.in_flight.as_ref().is_some_and(Vec::is_empty))
+}
+
 impl GameEngine {
     fn parked_choose_card_stack_is_current(&self, parked: &ParkedStackResolution) -> bool {
         let parked_item = &parked.item;
@@ -1510,6 +1517,13 @@ self.state.pending_resolution = Some(PendingResolution {
                     library_owner: controller,
                 }],
                 &mut ev,
+            );
+        }
+        if is_resultless_program_search(&stack) {
+            return self.complete_parked_stack_with_previous(
+                stack,
+                crate::state::EffectResult::default(),
+                ev,
             );
         }
         self.complete_parked_resolution_with_previous(

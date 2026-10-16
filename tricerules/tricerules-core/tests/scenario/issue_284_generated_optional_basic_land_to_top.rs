@@ -97,6 +97,21 @@ fn has_log(batch: &RuledEventBatch, text: &str) -> bool {
 }
 
 #[test]
+fn issue_284_optional_search_offers_readable_search_label_for_both_cards() {
+    for (seed, card_id) in [(284_000, "campus_guide"), (284_001, "spider-bot")] {
+        let mut engine = issue_284_engine(seed, card_id, "forest");
+        let (_source, choice) = open_branch(&mut engine, card_id);
+
+        assert_eq!(choice.resolution_branches.len(), 1, "{card_id}");
+        assert_eq!(choice.resolution_branches[0].branch_index, 0, "{card_id}");
+        assert_eq!(
+            choice.resolution_branches[0].label, "Search",
+            "{card_id} should offer the readable Search action"
+        );
+    }
+}
+
+#[test]
 fn issue_284_declining_the_etb_branch_does_not_search_or_shuffle() {
     let mut engine = issue_284_engine(284_001, "campus_guide", "forest");
     let source = move_ready_to_battlefield(&mut engine, 0, "campus_guide");

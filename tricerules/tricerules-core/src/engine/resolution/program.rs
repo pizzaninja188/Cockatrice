@@ -2340,6 +2340,136 @@ mod invariant_rollback_tests {
         (engine, top, owners, island_ids)
     }
 
+    fn nested_direct_top_fixture(
+        card: &str,
+        card_id: &str,
+        seed: u64,
+        with_forest: bool,
+        empty_library: bool,
+    ) -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        Option<ObjectId>,
+        ObjectId,
+    ) {
+        assert!(!(with_forest && empty_library));
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    card,
+                    include_str!("../../../../tricerules-cards/data/island.ron"),
+                    include_str!("../../../../tricerules-cards/data/forest.ron"),
+                    include_str!("../../../../tricerules-cards/data/wan_shi_tong,_librarian.ron"),
+                ],
+                &[],
+            )
+            .expect("direct TopOfLibrary fixture registry"),
+        ));
+        let mut controller_deck = vec![card_id.to_string(); 30];
+        if with_forest {
+            controller_deck[0] = "forest".into();
+        }
+        let mut opponent_deck = vec!["wan_shi_tong,_librarian".to_string()];
+        opponent_deck.extend(std::iter::repeat_n("island".to_string(), 29));
+        let decks = Some(vec![controller_deck, opponent_deck]);
+        let mut engine = GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+            .expect("direct TopOfLibrary fixture engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let forest = if with_forest {
+            let object_id = *engine
+                .state
+                .objects
+                .iter()
+                .find_map(|(object_id, object)| (object.card_id == "forest").then_some(object_id))
+                .expect("one fixture Forest exists");
+            if engine.state.objects[&object_id].zone != Zone::Library {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    object_id,
+                    Zone::Library,
+                    Some(0),
+                )
+                .expect("fixture Forest returns to its owner's library");
+            }
+            Some(object_id)
+        } else {
+            None
+        };
+
+        let wan = *engine
+            .state
+            .objects
+            .iter()
+            .find_map(|(object_id, object)| {
+                (object.card_id == "wan_shi_tong,_librarian").then_some(object_id)
+            })
+            .expect("opponent Wan Shi Tong exists");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            wan,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("Wan enters the fixture battlefield without firing its ETB ability");
+
+        let spell = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("fixture spell in controller's hand");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        if empty_library {
+            for object_id in engine.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+            {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    object_id,
+                    Zone::Graveyard,
+                    None,
+                )
+                .expect("empty-library fixture removes each card through a zone move");
+            }
+        }
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&spell)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(spell, 0);
+        top.id = spell;
+        top.controller = 0;
+        top.card_id = card_id.into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.face_index = 0;
+        top.source_owner = Some(0);
+        top.cast_by = Some(0);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(generation),
+        });
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("direct search program owner lookup")
+            .expect("direct search program owner exists");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners, forest, wan)
+    }
+
     fn nested_start(
         engine: &mut GameEngine,
         top: &StackItem,
@@ -2376,7 +2506,7 @@ mod invariant_rollback_tests {
         decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision,
         branch: u32,
         chosen: Vec<ObjectId>,
-    ) {
+    ) -> tricerules_proto::ruled::v1::RuledEventBatch {
         let pending = engine
             .state
             .pending_resolution
@@ -2424,10 +2554,13 @@ mod invariant_rollback_tests {
         };
         engine
             .apply_scenario_command(actor, &answer)
-            .expect("resolution choice accepted");
+            .expect("resolution choice accepted")
     }
 
-    fn nested_select_objects(engine: &mut GameEngine, chosen: Vec<ObjectId>) {
+    fn nested_select_objects(
+        engine: &mut GameEngine,
+        chosen: Vec<ObjectId>,
+    ) -> tricerules_proto::ruled::v1::RuledEventBatch {
         let pending = engine
             .state
             .pending_resolution
@@ -2446,7 +2579,68 @@ mod invariant_rollback_tests {
         };
         engine
             .apply_scenario_command(actor, &answer)
-            .expect("object choice accepted");
+            .expect("object choice accepted")
+    }
+
+    fn nested_log_count(batch: &tricerules_proto::ruled::v1::RuledEventBatch, text: &str) -> usize {
+        batch
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text == text)
+            })
+            .count()
+    }
+
+    fn nested_search_previous_result(
+        engine: &GameEngine,
+        wan: ObjectId,
+    ) -> crate::state::EffectResult {
+        let mut previous = crate::state::EffectResult::default();
+        previous
+            .produced_objects
+            .push(crate::state::TriggerObjectRef {
+                object_id: wan,
+                zone_change_generation: engine.state.zone_change_generation[&wan],
+                controller_at_event: 1,
+            });
+        previous
+    }
+
+    fn finish_one_wan_search_trigger(
+        engine: &mut GameEngine,
+        wan: ObjectId,
+        player_one_hand_before: usize,
+        wan_counters_before: u32,
+    ) {
+        assert_eq!(
+            engine.state.stack.len(),
+            1,
+            "exactly one Wan search trigger is stacked"
+        );
+        assert_eq!(engine.state.stack[0].card_id, "wan_shi_tong,_librarian");
+        assert_eq!(
+            engine.state.stack[0]
+                .triggered_ability
+                .as_ref()
+                .map(|ability| ability.ability_id.as_str()),
+            Some("triggered_02")
+        );
+        engine
+            .apply_scenario_command(0, &pass_priority())
+            .expect("active player passes to Wan's search trigger");
+        engine
+            .apply_scenario_command(1, &pass_priority())
+            .expect("opponent passes to resolve Wan's search trigger");
+        assert_eq!(engine.state.stack.len(), 0);
+        assert_eq!(
+            engine.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne),
+            wan_counters_before + 1
+        );
+        assert_eq!(
+            engine.state.players[1].hand.len(),
+            player_one_hand_before + 1
+        );
     }
 
     fn parked_program(
@@ -2669,6 +2863,345 @@ mod invariant_rollback_tests {
    kind: Perform(SelectHandCards(count: 1, ordered: true,
     prompt: "Choose a card to retain in hand.")))
  ], yields: []), target_bindings: [])))"#;
+
+    const DIRECT_TOP_CHOOSE_DRAW: &str = r#"(id: "direct_top_choose_draw_fixture",
+ name: "Direct Top Choose Draw Fixture", face_id: "direct_top_choose_draw_fixture",
+ mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
+  (id: "search_choice", bind: [], input: None,
+   kind: Choose(choice: "search", chooser: Controller, optional: true,
+    branches: [(branch_id: "search", presentation: Fallback, cost: None,
+     requirement: Always, body: (steps: [
+      (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
+       who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+       filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
+       slots: [], zones: Fixed([Library]), destination: TopOfLibrary,
+       conditional_destination: None, shuffle: true, reveal: true, result_id: None,
+       selection_bounds: Some((min: 0, max: 1)),
+      )))
+     ], yields: []))], otherwise: (steps: [], yields: []))),
+  (id: "draw_top", bind: ["drawn"], input: None,
+   kind: Perform(Draw(who: Controller, count: 1))),
+  (id: "pause_after_draw", bind: [], input: None,
+   kind: Choose(choice: "after_draw", chooser: Controller, optional: false,
+    branches: [(branch_id: "finish", presentation: Fallback, cost: None,
+     requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
+ ], yields: []), target_bindings: [])))"#;
+
+    const DIRECT_TOP_CHOOSE_SAFE_TAIL: &str = r#"(id: "direct_top_choose_safe_tail_fixture",
+ name: "Direct Top Choose Safe Tail Fixture", face_id: "direct_top_choose_safe_tail_fixture",
+ mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
+  (id: "search_choice", bind: [], input: None,
+   kind: Choose(choice: "search", chooser: Controller, optional: true,
+    branches: [(branch_id: "search", presentation: Fallback, cost: None,
+     requirement: Always, body: (steps: [
+      (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
+       who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+       filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
+       slots: [], zones: Fixed([Library]), destination: TopOfLibrary,
+       conditional_destination: None, shuffle: true, reveal: true, result_id: None,
+       selection_bounds: Some((min: 0, max: 1)),
+      )))
+     ], yields: []))], otherwise: (steps: [], yields: []))),
+  (id: "shuffle_tail", bind: [], input: None,
+   kind: Perform(ShuffleLibrary(who: Controller))),
+  (id: "pause_after_tail", bind: [], input: None,
+   kind: Choose(choice: "after_tail", chooser: Controller, optional: false,
+    branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+     requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
+ ], yields: []), target_bindings: [])))"#;
+
+    #[test]
+    fn direct_top_search_parks_program_context_and_draws_the_exact_forest_once() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        let (mut engine, top, owners, forest, wan) = nested_direct_top_fixture(
+            DIRECT_TOP_CHOOSE_DRAW,
+            "direct_top_choose_draw_fixture",
+            91_251,
+            true,
+            false,
+        );
+        let forest = forest.expect("fixture includes one Forest");
+        let forest_generation = engine.state.zone_change_generation[&forest];
+        let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+        let player_one_hand_before = engine.state.players[1].hand.len();
+        let wan_counters_before =
+            engine.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne);
+        let drawn_slot = nested_slot_id(&engine, &owners[0], "drawn");
+        let previous = nested_search_previous_result(&engine, wan);
+        let seeded = previous.produced_objects[0];
+
+        nested_start(&mut engine, &top, owners.clone(), previous);
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::SearchLibrary { .. }
+        ));
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(pending.presentation.candidates, vec![forest]);
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(run.in_flight, Some(Vec::new()));
+        assert_eq!(run.slots.len(), 1);
+        assert!(nested_slot(run, drawn_slot).is_none());
+        assert_eq!(run.frames.len(), 2);
+        assert!(run.frames.iter().flat_map(|frame| &frame.path).any(|path| {
+            path.arm
+                == ProgramArm::ChooseBranch(tricerules_card_model::ChoiceId::new("search").unwrap())
+        }));
+
+        let search_batch = nested_select_objects(&mut engine, vec![forest]);
+        assert_eq!(
+            nested_log_count(&search_batch, "P0 shuffles their library."),
+            1
+        );
+        assert_eq!(nested_log_count(&search_batch, "P0 reveals Forest."), 1);
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose { .. }
+        ));
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert!(matches!(
+            nested_slot(run, drawn_slot),
+            Some(ProgramValue::DrawReceipt(cards))
+                if cards.len() == 1 && cards[0].object_id == forest
+        ));
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before + 1
+        );
+        assert!(engine.state.players[0].hand.contains(&forest));
+        assert_eq!(
+            engine.state.zone_change_generation[&forest],
+            forest_generation + 1
+        );
+        let resumed_choice = match &pending.continuation {
+            ResolutionContinuation::ProgramChoose { choose, .. } => {
+                choose.occurrence.choice_id.as_str()
+            }
+            other => panic!("expected resumed program Choose, got {other:?}"),
+        };
+        assert_eq!(resumed_choice, "after_draw");
+
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before + 1
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&forest],
+            forest_generation + 1
+        );
+        assert!(engine.state.players[0].hand.contains(&forest));
+        finish_one_wan_search_trigger(
+            &mut engine,
+            wan,
+            player_one_hand_before,
+            wan_counters_before,
+        );
+    }
+
+    fn direct_top_search_zero_find_case(seed: u64, empty_library: bool) {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        let (mut engine, top, owners, _, wan) = nested_direct_top_fixture(
+            DIRECT_TOP_CHOOSE_SAFE_TAIL,
+            "direct_top_choose_safe_tail_fixture",
+            seed,
+            false,
+            empty_library,
+        );
+        let library_before = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+        let player_one_hand_before = engine.state.players[1].hand.len();
+        let wan_counters_before =
+            engine.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne);
+        let previous = nested_search_previous_result(&engine, wan);
+        let seeded = previous.produced_objects[0];
+
+        nested_start(&mut engine, &top, owners.clone(), previous);
+        let branch_batch = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let search_batch = if empty_library {
+            branch_batch
+        } else {
+            let (pending, stack, run) = parked_program(&engine);
+            assert!(matches!(
+                &pending.continuation,
+                ResolutionContinuation::SearchLibrary { .. }
+            ));
+            assert_eq!((pending.presentation.min, pending.presentation.max), (0, 0));
+            assert!(pending.presentation.candidates.is_empty());
+            assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+            assert_eq!(run.in_flight, Some(Vec::new()));
+            nested_select_objects(&mut engine, Vec::new())
+        };
+        assert_eq!(nested_log_count(&search_batch, "P0 finds no card."), 1);
+        assert_eq!(
+            nested_log_count(&search_batch, "P0 shuffles their library."),
+            2
+        );
+        assert_eq!(nested_log_count(&search_batch, "P0 reveals Forest."), 0);
+        assert_eq!(
+            engine.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>(),
+            library_before
+        );
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before
+        );
+        let (pending, stack, run) = parked_program(&engine);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose { .. }
+        ));
+        assert_eq!(run.owner, owners[0]);
+        assert_eq!(run.pending_owners, owners[1..]);
+        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(run.in_flight, None);
+
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before
+        );
+        finish_one_wan_search_trigger(
+            &mut engine,
+            wan,
+            player_one_hand_before,
+            wan_counters_before,
+        );
+    }
+
+    #[test]
+    fn direct_top_search_nonempty_zero_find_resumes_into_safe_tail_once() {
+        direct_top_search_zero_find_case(91_252, false);
+    }
+
+    #[test]
+    fn direct_top_search_empty_library_shuffles_and_observes_before_safe_tail_once() {
+        direct_top_search_zero_find_case(91_253, true);
+    }
+
+    #[test]
+    fn declining_direct_top_search_only_runs_the_safe_tail_and_does_not_trigger_wan() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+        let (mut engine, top, owners, _, wan) = nested_direct_top_fixture(
+            DIRECT_TOP_CHOOSE_SAFE_TAIL,
+            "direct_top_choose_safe_tail_fixture",
+            91_254,
+            false,
+            false,
+        );
+        let library_before = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let previous = nested_search_previous_result(&engine, wan);
+        nested_start(&mut engine, &top, owners, previous);
+        let decline_batch = nested_answer(&mut engine, Decision::Decline, 0, Vec::new());
+        assert_eq!(
+            nested_log_count(&decline_batch, "P0 shuffles their library."),
+            1
+        );
+        assert_eq!(nested_log_count(&decline_batch, "P0 finds no card."), 0);
+        assert_eq!(nested_log_count(&decline_batch, "P0 reveals Forest."), 0);
+        assert_eq!(
+            engine.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>(),
+            library_before
+        );
+        assert!(matches!(
+            &engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation,
+            ResolutionContinuation::ProgramChoose { .. }
+        ));
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(
+            engine.state.stack.is_empty(),
+            "declining performs no library search trigger"
+        );
+    }
+
+    #[test]
+    fn stale_direct_top_search_selection_rejects_atomically() {
+        let (mut engine, top, owners, forest, _) = nested_direct_top_fixture(
+            DIRECT_TOP_CHOOSE_DRAW,
+            "direct_top_choose_draw_fixture",
+            91_255,
+            true,
+            false,
+        );
+        let forest = forest.expect("fixture includes one Forest");
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(
+            &mut engine,
+            tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch,
+            0,
+            Vec::new(),
+        );
+        assert!(engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates
+            .contains(&forest));
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            forest,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("stale fixture Forest leaves the offered library incarnation");
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        let answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    chosen_object_ids: vec![forest],
+                    ..Default::default()
+                },
+            )),
+        };
+        let before = command_snapshot(&engine);
+        assert!(matches!(
+            engine.apply_scenario_command(0, &answer),
+            Err(EngineError::Illegal(_))
+        ));
+        assert!(
+            command_snapshot(&engine) == before,
+            "stale result rejection preserves the exact offered continuation and candidate state"
+        );
+    }
 
     #[test]
     fn modal_owner_receipt_slots_survive_choose_payment_and_hand_parking_before_next_mode() {

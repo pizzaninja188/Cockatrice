@@ -1,8 +1,10 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, PlayerRecipient, ResolutionBranchRequirement, ResolutionBranchSelection,
+    CardTypeFilter, CompiledChooseRequirement, CompiledInstructionKind, PlayerRecipient,
     ResolutionCost, SearchDestination, SearchZoneSelection, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, Keyword, TriggerCondition};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityPresentation, Keyword, ProgramOwnerId, TriggerCondition,
+};
 
 fn assert_optional_basic_land_to_top(
     id: &str,
@@ -53,30 +55,55 @@ fn assert_optional_basic_land_to_top(
     assert!(ability.modal.is_none());
     assert!(ability.targeting.is_none());
     assert!(ability.intervening_if.is_none());
-
-    let [SpellEffectKind::ChooseResolutionBranch {
+    assert!(ability.effect.is_empty());
+    assert!(ability.program.is_some());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: id.to_owned(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![ability.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .unwrap_or_else(|| panic!("missing issue #284 program for {id}"));
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [choose_instruction] = program.body.steps.as_slice() else {
+        panic!("issue #284 has one top-level Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
         chooser,
         optional,
-        selection,
         branches,
         otherwise,
-    }] = ability.effect.as_slice()
+    } = &choose_instruction.kind
     else {
-        panic!("issue #284 must use one optional resolution branch");
+        panic!("issue #284 top-level instruction is Choose");
     };
+    assert_eq!(choice.as_str(), "search");
     assert_eq!(*chooser, PlayerRecipient::Controller);
     assert!(*optional);
-    assert_eq!(*selection, ResolutionBranchSelection::PlayerChoice);
-    assert!(otherwise.is_empty());
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
     let [branch] = branches.as_slice() else {
         panic!("issue #284 must have one search branch");
     };
     assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
     assert_eq!(branch.presentation, AbilityPresentation::Fallback);
     assert_eq!(branch.cost, ResolutionCost::None);
-    assert_eq!(branch.requirement, ResolutionBranchRequirement::Always);
-
-    let [SpellEffectKind::SearchLibrary {
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::Always
+    ));
+    assert!(branch.body.yields.is_empty());
+    let [search_instruction] = branch.body.steps.as_slice() else {
+        panic!("issue #284 search branch has one Perform");
+    };
+    let CompiledInstructionKind::Perform(effect) = &search_instruction.kind else {
+        panic!("issue #284 branch leaf is Perform");
+    };
+    let SpellEffectKind::SearchLibrary {
         who,
         optional: search_optional,
         count,
@@ -90,10 +117,10 @@ fn assert_optional_basic_land_to_top(
         shuffle,
         reveal,
         result_id,
-        selection_bounds: None,
-    }] = branch.effects.as_slice()
+        selection_bounds: Some(bounds),
+    } = effect.as_ref()
     else {
-        panic!("issue #284 branch must search the library");
+        panic!("issue #284 program branch must search for an optional top card");
     };
     assert_eq!(*who, PlayerRecipient::Controller);
     assert!(!search_optional);
@@ -108,6 +135,7 @@ fn assert_optional_basic_land_to_top(
     assert!(slots.is_empty());
     assert_eq!(zones, &SearchZoneSelection::default());
     assert_eq!(*destination, SearchDestination::TopOfLibrary);
+    assert_eq!((bounds.min, bounds.max), (0, 1));
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert!(*reveal);

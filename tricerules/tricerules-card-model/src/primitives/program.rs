@@ -15,7 +15,7 @@ use super::{
     EffectSubject, GameCondition, PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
     ResolutionCost, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
     SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
-    TokenCopySource,
+    TokenCopySource, ZoneCardFilter,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -602,14 +602,17 @@ impl Compiler {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let result_types = validate_and_result_types(effect, self.context)?;
-                    if matches!(
+                    if (matches!(
                         effect.as_ref(),
                         SpellEffectKind::SearchLibrary {
                             selection_bounds: Some(_),
                             ..
-                        } | SpellEffectKind::RevealCohort
+                        } if !is_resultless_direct_top_library_search(effect)
+                    ) || matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::RevealCohort
                             | SpellEffectKind::ChooseCohortPartition { .. }
-                    ) && instruction.bind.len() != 1
+                    )) && instruction.bind.len() != 1
                     {
                         return Err(format!(
                             "instruction '{}' must bind its typed cohort result",
@@ -1371,6 +1374,11 @@ fn validate_and_result_types(
         }
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
+            destination: SearchDestination::TopOfLibrary,
+            ..
+        } => validate_resultless_direct_top_library_search(effect, context),
+        SpellEffectKind::SearchLibrary {
+            selection_bounds: Some(_),
             ..
         } => validate_retained_library_search(effect, context),
         SpellEffectKind::SearchLibrary { .. } => {
@@ -1606,6 +1614,73 @@ fn validate_retained_library_search(
     }
     ordinary.validate(context)?;
     Ok(vec![ResultType::FoundLibraryCohort])
+}
+
+fn is_resultless_direct_top_library_search(effect: &SpellEffectKind) -> bool {
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds,
+    } = effect
+    else {
+        return false;
+    };
+
+    *who == PlayerRecipient::Controller
+        && !*optional
+        && *count == 1
+        && count_by_cast_cost.is_none()
+        && filter.as_ref().is_some_and(|filter| {
+            *filter
+                == ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }
+        })
+        && selection_constraint.is_none()
+        && slots.is_empty()
+        && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+        && *destination == SearchDestination::TopOfLibrary
+        && conditional_destination.is_none()
+        && *shuffle
+        && *reveal
+        && result_id.is_none()
+        && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
+}
+
+fn validate_resultless_direct_top_library_search(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
+    if !is_resultless_direct_top_library_search(effect) {
+        return Err(
+            "program direct TopOfLibrary SearchLibrary supports only a resultless controller BasicLand search with fixed count 1, bounds 0..1, reveal and shuffle"
+                .into(),
+        );
+    }
+
+    // The authored bounds are consumed by this narrow typed operation; the shared direct effect
+    // validator still checks its ordinary search recipient, filter, zone, count, and destination.
+    let mut ordinary = effect.clone();
+    if let SpellEffectKind::SearchLibrary {
+        selection_bounds, ..
+    } = &mut ordinary
+    {
+        *selection_bounds = None;
+    }
+    ordinary.validate(context)?;
+    Ok(Vec::new())
 }
 
 fn validate_program_recipient(
