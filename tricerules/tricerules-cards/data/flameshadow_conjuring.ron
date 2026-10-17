@@ -15,34 +15,43 @@
         token: Some(false),
       ),
     ),
-    effect: [ChooseResolutionBranch(
-      chooser: Controller,
-      optional: true,
-      selection: PlayerChoice,
-      branches: [(
-        branch_id: "pay_to_copy",
-        presentation: OracleLines([1]),
-        cost: Mana("{R}"),
-        requirement: Always,
-        effects: [
-          CreateTokenCopies(count: 1, source: TriggerObject),
-          ApplyPermanentModifier(
-            subject: PreviousEffectObjects,
-            modifier: GrantKeywords([Haste]),
-            duration: Indefinite,
-          ),
-          CreateDelayedTrigger(
-            subject: Some(PreviousEffectObjects),
-            ability: (
-              ability_id: "delayed_01",
-              presentation: OracleLines([1]),
-              trigger: AtBeginningOfNextEndStep,
-              effect: [ExileObservedObjects],
-            ),
-          ),
-        ],
-      )],
-      otherwise: [],
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_copy", kind: Choose(
+        choice: "choose_copy",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_to_copy",
+          presentation: OracleLines([1]),
+          cost: Mana("{R}"),
+          requirement: Always,
+          body: (steps: [
+            (id: "copy_entry", bind: ["copies"], kind: Perform(
+              CreateTokenCopies(count: 1, source: TriggerObject),
+            )),
+            (id: "grant_haste", input: Some("copies"), kind: Perform(
+              ApplyPermanentModifier(
+                subject: PreviousEffectObjects,
+                modifier: GrantKeywords([Haste]),
+                duration: Indefinite,
+              ),
+            )),
+            (id: "schedule_exile", input: Some("copies"), kind: Perform(
+              CreateDelayedTrigger(
+                subject: Some(PreviousEffectObjects),
+                ability: (
+                  ability_id: "delayed_01",
+                  presentation: OracleLines([1]),
+                  trigger: AtBeginningOfNextEndStep,
+                  effect: [ExileObservedObjects],
+                ),
+              ),
+            )),
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

@@ -14,7 +14,7 @@ use super::targeting::{
 };
 use super::*;
 use tricerules_card_model::primitives::{
-    ManaRetention, ResolutionBranchRequirement, TargetRole, TargetingDef,
+    ManaRetention, ResolutionBranchRequirement, ResultType, TargetRole, TargetingDef,
 };
 use tricerules_card_model::{AbilityPresentation, ChoiceId};
 
@@ -97,7 +97,26 @@ impl EffectCx<'_> {
         if let Some(previous_result) = self.resume_previous_result {
             stack.previous_result = previous_result.clone();
         }
-        stack.program = self.program_state.clone();
+        let mut program = self.program_state.clone();
+        if let Some(run) = program.as_mut() {
+            let token_batch_in_flight = run.in_flight.as_ref().is_some_and(|outputs| {
+                self.engine
+                    .registry
+                    .compiled_program_for_owner(&run.owner)
+                    .is_some_and(|compiled| {
+                        outputs.iter().any(|slot_id| {
+                            compiled.slot(*slot_id).is_some_and(|slot| {
+                                matches!(slot.result_type, ResultType::TokenCopyBatch)
+                            })
+                        })
+                    })
+            });
+            if token_batch_in_flight {
+                run.in_flight_produced_object_provenance =
+                    self.effect_result.produced_object_provenance;
+            }
+        }
+        stack.program = program;
         stack
     }
 

@@ -896,6 +896,7 @@ mod tests {
             }],
             slots: vec![Some(ProgramValue::FoundLibraryCohort(Vec::new()))],
             in_flight: Some(vec![ResultSlotId(0)]),
+            in_flight_produced_object_provenance: None,
         };
         let mut stack = ParkedStackResolution::new(item.clone());
         stack.program = Some(program);

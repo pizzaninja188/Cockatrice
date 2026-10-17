@@ -264,6 +264,8 @@ pub enum ResultType {
     FoundLibraryCohort,
     RevealedLibraryCohort,
     CardPartition,
+    /// Exact replacement-expanded TriggerObject token cohort from one admitted copy effect.
+    TokenCopyBatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1072,6 +1074,7 @@ fn compile_input(
     names: &HashMap<String, ResultSlotId>,
     slots: &[CompiledSlot],
 ) -> Result<Option<ResultSlotId>, String> {
+    let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
     let expected = match effect {
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
         EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
@@ -1082,6 +1085,7 @@ fn compile_input(
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
+        _ if token_copy_batch_consumer => Some("TokenCopyBatch"),
         _ => None,
     };
     match (expected, input) {
@@ -1115,6 +1119,9 @@ fn compile_input(
                 }
                 EffectOp::MoveCohortPartition { .. } => {
                     matches!(actual.result_type, ResultType::CardPartition)
+                }
+                _ if token_copy_batch_consumer => {
+                    matches!(actual.result_type, ResultType::TokenCopyBatch)
                 }
                 _ => matches!(
                     (&actual.result_type, expected),
@@ -1268,6 +1275,7 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             ResultType::RevealedLibraryCohort
         }
         (ResultType::CardPartition, ResultType::CardPartition) => ResultType::CardPartition,
+        (ResultType::TokenCopyBatch, ResultType::TokenCopyBatch) => ResultType::TokenCopyBatch,
         _ => return None,
     })
 }
@@ -1577,9 +1585,52 @@ fn validate_and_result_types(
                     );
                 }
             }
+            Ok(if matches!(source, TokenCopySource::TriggerObject) {
+                vec![ResultType::TokenCopyBatch]
+            } else {
+                Vec::new()
+            })
+        }
+        SpellEffectKind::ApplyPermanentModifier { .. } if is_token_copy_batch_consumer(effect) => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CreateDelayedTrigger { .. } if is_token_copy_batch_consumer(effect) => {
+            effect.validate(context)?;
             Ok(Vec::new())
         }
         _ => Err("effect is not in the resolution-program operation whitelist".into()),
+    }
+}
+
+/// The only program consumers of a TriggerObject copy batch are the two exact Flameshadow /
+/// Molten Echoes follow-ups. Keeping the input contract on the whole operation shape prevents a
+/// typed slot from silently widening PreviousEffectObjects to arbitrary effect families.
+fn is_token_copy_batch_consumer(effect: &SpellEffectKind) -> bool {
+    match effect {
+        SpellEffectKind::ApplyPermanentModifier {
+            subject: EffectSubject::PreviousEffectObjects,
+            modifier: super::ResolvingPermanentModifier::GrantKeywords(keywords),
+            duration: super::ResolvingEffectDuration::Indefinite,
+        } => keywords.as_slice() == [super::Keyword::Haste],
+        SpellEffectKind::CreateDelayedTrigger {
+            subject: Some(EffectSubject::PreviousEffectObjects),
+            affected_player: None,
+            ability,
+        } => {
+            matches!(
+                ability.trigger,
+                super::TriggerCondition::AtBeginningOfNextEndStep
+            ) && ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects]
+                && ability.program.is_none()
+                && ability.modal.is_none()
+                && ability.targeting.is_none()
+                && !ability.may
+                && ability.intervening_if.is_none()
+                && !ability.triggers_only_once
+                && ability.max_triggers_per_turn.is_none()
+        }
+        _ => false,
     }
 }
 

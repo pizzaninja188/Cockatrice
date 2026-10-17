@@ -7603,6 +7603,7 @@ mod tests {
             }],
             slots: Vec::new(),
             in_flight: None,
+            in_flight_produced_object_provenance: None,
         };
         let previous_result = EffectResult::default();
         let mut effect_result = EffectResult::default();

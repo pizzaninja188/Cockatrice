@@ -1377,6 +1377,9 @@ pub(crate) enum ProgramValue {
     FoundLibraryCohort(Vec<ProgramCardRef>),
     RevealedLibraryCohort(ProgramRevealedLibraryCohort),
     CardPartition(ProgramCardPartition),
+    /// Exact generation-bound tokens created by one copy operation, retained with the
+    /// TokenCreationBatch provenance required by the shared Haste and delayed-exile consumers.
+    TokenCopyBatch(Vec<TriggerObjectRef>),
 }
 
 /// Physical card identity frozen for a typed resolution-program library cohort.
@@ -1450,6 +1453,11 @@ pub(crate) struct ProgramRunState {
     /// Output slots of the operation whose domain transaction is in flight. An empty vector is
     /// still meaningful for a resultless operation; `None` means no operation is awaiting commit.
     pub in_flight: Option<Vec<ResultSlotId>>,
+    /// Provenance emitted by the leaf before an asynchronous domain choice parked it. The
+    /// committed object references are returned with the completion; this marker carries the
+    /// matching token-batch proof across that choice without inferring it from display data.
+    #[serde(default)]
+    pub in_flight_produced_object_provenance: Option<ProducedObjectProvenance>,
 }
 
 /// Stable target slot for one retargeting decision while a spell copy is being assembled.

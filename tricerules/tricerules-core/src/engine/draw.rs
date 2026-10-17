@@ -607,6 +607,7 @@ mod library_replacement_tests {
             }],
             slots: vec![None; compiled.slots.len()],
             in_flight: Some(draw_outputs),
+            in_flight_produced_object_provenance: None,
         };
         let mut stack = ParkedStackResolution::new(top);
         stack.program = Some(program);

@@ -9,11 +9,12 @@
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokenCopies",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ApplyPermanentModifier",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/2/kind/Perform/CreateDelayedTrigger"
       ]
     }
   ],
@@ -27,32 +28,40 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/filter/permanent_type"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
     },
     {
       "symbol": "TokenCopySource::TriggerObject",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/CreateTokenCopies/source"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokenCopies/source"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ApplyPermanentModifier/modifier/GrantKeywords/0"
     },
     {
       "symbol": "ResolvingEffectDuration::Indefinite",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1/ApplyPermanentModifier/duration"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ApplyPermanentModifier/duration"
     },
     {
       "symbol": "EffectSubject::PreviousEffectObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1/ApplyPermanentModifier/subject"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ApplyPermanentModifier/subject"
     },
     {
       "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/trigger"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/trigger"
     },
     {
       "symbol": "EffectSubject::PreviousEffectObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/subject"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/2/kind/Perform/CreateDelayedTrigger/subject"
     },
     {
       "symbol": "SpellEffectKind::ExileObservedObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/effect/0"
     }
   ],
   "tokens": [],

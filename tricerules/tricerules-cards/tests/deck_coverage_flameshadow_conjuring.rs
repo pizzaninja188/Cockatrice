@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{
-    Amount, CastTriggerPlayer, EffectSubject, PermanentTypeFilter, PlayerRecipient, ResolutionCost,
-    ResolvingEffectDuration, ResolvingPermanentModifier, SpellEffectKind, TokenCopySource,
-    TriggerCondition,
+    Amount, CastTriggerPlayer, CompiledChooseRequirement, CompiledInstructionKind, EffectSubject,
+    PermanentTypeFilter, PlayerRecipient, ProgramRequiredInput, ResolutionCost, ResultType,
+    SpellEffectKind, TokenCopySource, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, Layout, ManaCost};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityId, CardFaceId, Layout, ManaCost, ProgramOwnerId,
+};
 
 #[test]
 fn flameshadow_conjuring_is_registered_as_a_complete_card() {
@@ -28,37 +30,84 @@ fn flameshadow_conjuring_is_registered_as_a_complete_card() {
                 && filter.token == Some(false)
                 && !filter.exclude_source
     ));
+    assert!(trigger.effect.is_empty());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "flameshadow_conjuring".into(),
+        face_id: CardFaceId::new("flameshadow_conjuring").unwrap(),
+        ability_path: vec![AbilityId::new("triggered_01").unwrap()],
+    });
+    let program = tricerules_cards::registry::global()
+        .compiled_program_for_owner(&owner)
+        .expect("the exact triggered ability owns its compiled program");
+    assert_eq!(
+        program.required_inputs,
+        [ProgramRequiredInput::TriggerObservedObject]
+    );
+    let [choose] = program.body.steps.as_slice() else {
+        panic!("the program contains one optional copy choice");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choose.kind
+    else {
+        panic!("the triggered program starts with Choose");
+    };
+    assert_eq!(choice.as_str(), "choose_copy");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("the choice has one paid branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "pay_to_copy");
+    assert_eq!(
+        branch.cost,
+        ResolutionCost::Mana(ManaCost::parse("{R}").unwrap())
+    );
+    assert_eq!(branch.requirement, CompiledChooseRequirement::Always);
+    let [copy, haste, delayed] = branch.body.steps.as_slice() else {
+        panic!("the paid branch copies, grants haste, then schedules exile");
+    };
     assert!(matches!(
-        trigger.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch {
-            chooser: PlayerRecipient::Controller,
-            optional: true,
-            branches,
-            otherwise,
-            ..
-        }] if otherwise.is_empty()
-            && matches!(
-                branches.as_slice(),
-                [branch] if branch.branch_id.as_str() == "pay_to_copy"
-                    && matches!(&branch.presentation, AbilityPresentation::OracleLines(lines) if lines == &[1])
-                    && matches!(&branch.cost, ResolutionCost::Mana(cost) if cost == &ManaCost::parse("{R}").unwrap())
-                    && branch.requirement == Default::default()
-                    && matches!(branch.effects.as_slice(), [
-                        SpellEffectKind::CreateTokenCopies { count: Amount::Fixed(1), source: TokenCopySource::TriggerObject },
-                        SpellEffectKind::ApplyPermanentModifier {
-                            subject: EffectSubject::PreviousEffectObjects,
-                            modifier: ResolvingPermanentModifier::GrantKeywords(keywords),
-                            duration: ResolvingEffectDuration::Indefinite,
-                        },
-                        SpellEffectKind::CreateDelayedTrigger {
-                            subject: Some(EffectSubject::PreviousEffectObjects),
-                            ability,
-                            ..
-                        },
-                    ] if keywords == &[tricerules_cards::Keyword::Haste]
-                        && matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
-                        && matches!(ability.effect.as_slice(), [SpellEffectKind::ExileObservedObjects])
-                    )
-            )
+        &copy.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateTokenCopies {
+                count: Amount::Fixed(1), source: TokenCopySource::TriggerObject,
+            })
+    ));
+    let [batch_slot] = copy.outputs.as_slice() else {
+        panic!("the exact copy instruction publishes one typed batch slot");
+    };
+    assert!(matches!(
+        program.slot(*batch_slot).map(|slot| &slot.result_type),
+        Some(ResultType::TokenCopyBatch)
+    ));
+    assert_eq!(haste.input, Some(*batch_slot));
+    assert!(matches!(
+        &haste.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::ApplyPermanentModifier {
+                modifier: tricerules_cards::ResolvingPermanentModifier::GrantKeywords(keywords),
+                duration: tricerules_cards::ResolvingEffectDuration::Indefinite,
+                ..
+            } if keywords == &[tricerules_cards::Keyword::Haste])
+    ));
+    assert_eq!(delayed.input, Some(*batch_slot));
+    assert!(matches!(
+        &delayed.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateDelayedTrigger {
+                subject: Some(EffectSubject::PreviousEffectObjects),
+                affected_player: None,
+                ability,
+            } if matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+                && matches!(ability.effect.as_slice(), [SpellEffectKind::ExileObservedObjects])
+                && ability.modal.is_none()
+                && ability.targeting.is_none()
+                && !ability.may)
     ));
 }

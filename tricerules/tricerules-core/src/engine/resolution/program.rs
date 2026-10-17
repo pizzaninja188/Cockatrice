@@ -360,6 +360,7 @@ impl GameEngine {
             }],
             slots: vec![None; compiled.slots.len()],
             in_flight: None,
+            in_flight_produced_object_provenance: None,
         })
     }
 
@@ -439,6 +440,7 @@ impl GameEngine {
                 &outputs,
                 operation_result,
             )?;
+            program_state.in_flight_produced_object_provenance = None;
             #[cfg(test)]
             if !outputs.is_empty() {
                 trip_program_failpoint(ProgramFailpoint::SlotPublished)?;
@@ -534,6 +536,7 @@ impl GameEngine {
                     }];
                     program_state.slots = vec![None; next.slots.len()];
                     program_state.in_flight = None;
+                    program_state.in_flight_produced_object_provenance = None;
                     continue;
                 }
 
@@ -677,6 +680,7 @@ impl GameEngine {
                         program_target_context(top, compiled, instruction.instruction_address)?;
                     program_state.frames[frame_index].next_instruction += 1;
                     program_state.in_flight = Some(outputs.clone());
+                    program_state.in_flight_produced_object_provenance = None;
 
                     let mut previous = EffectResult::default();
                     if let Some(input) = input {
@@ -695,6 +699,12 @@ impl GameEngine {
                             }
                             ProgramValue::CardResultCohort(cohort) => {
                                 previous.cards = cohort.cards.clone();
+                            }
+                            ProgramValue::TokenCopyBatch(objects) => {
+                                previous.produced_objects = objects.clone();
+                                previous.produced_object_provenance = Some(
+                                    crate::state::ProducedObjectProvenance::TokenCreationBatch,
+                                );
                             }
                             value @ (ProgramValue::FoundLibraryCohort(_)
                             | ProgramValue::RevealedLibraryCohort(_)
@@ -806,6 +816,7 @@ impl GameEngine {
                     trip_program_failpoint(ProgramFailpoint::DomainCommitted)?;
                     capture_program_outputs(compiled, &mut program_state, &outputs, &result)?;
                     program_state.in_flight = None;
+                    program_state.in_flight_produced_object_provenance = None;
                     #[cfg(test)]
                     if !outputs.is_empty() {
                         trip_program_failpoint(ProgramFailpoint::SlotPublished)?;
@@ -1324,6 +1335,16 @@ fn capture_program_outputs(
                     ))
                 }
             },
+            ResultType::TokenCopyBatch => {
+                if result.produced_object_provenance
+                    != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
+                {
+                    return Err(EngineError::ProgramInvariant(
+                        "token-copy instruction did not publish its exact token batch",
+                    ));
+                }
+                ProgramValue::TokenCopyBatch(result.produced_objects.clone())
+            }
         };
         let destination =
             run.slots
@@ -1906,6 +1927,7 @@ mod invariant_rollback_tests {
                 cards: Vec::new(),
             }))],
             in_flight: None,
+            in_flight_produced_object_provenance: None,
         };
 
         assert!(program_result_condition_holds(
@@ -1931,6 +1953,74 @@ mod invariant_rollback_tests {
             },
         )
         .expect("count condition evaluates"));
+    }
+
+    fn token_copy_batch_capture_fixture() -> (CompiledProgram, ProgramRunState) {
+        use tricerules_card_model::primitives::{
+            CompiledSlot, EffectContext, ProgramTargetProjection,
+        };
+
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "token_copy_batch_capture_fixture",
+            tricerules_card_model::CardFaceId::new("front").unwrap(),
+        );
+        let compiled = CompiledProgram {
+            owner: owner.clone(),
+            context: EffectContext::Spell,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "copies".into(),
+                result_type: ResultType::TokenCopyBatch,
+            }],
+        };
+        let run = ProgramRunState {
+            owner,
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![None],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        };
+        (compiled, run)
+    }
+
+    #[test]
+    fn token_copy_batch_capture_rejects_missing_provenance_for_empty_result() {
+        let (compiled, mut run) = token_copy_batch_capture_fixture();
+        let result = crate::state::EffectResult::default();
+
+        assert!(matches!(
+            capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result,),
+            Err(EngineError::ProgramInvariant(
+                "token-copy instruction did not publish its exact token batch"
+            ))
+        ));
+        assert!(run.slots[0].is_none());
+    }
+
+    #[test]
+    fn token_copy_batch_capture_keeps_a_proven_empty_batch_distinct_from_no_result() {
+        let (compiled, mut run) = token_copy_batch_capture_fixture();
+        let result = crate::state::EffectResult {
+            produced_object_provenance: Some(
+                crate::state::ProducedObjectProvenance::TokenCreationBatch,
+            ),
+            ..Default::default()
+        };
+
+        capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
+            .expect("an empty cohort with the executor's explicit batch marker is typed output");
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::TokenCopyBatch(ref objects)) if objects.is_empty()
+        ));
     }
 
     #[test]

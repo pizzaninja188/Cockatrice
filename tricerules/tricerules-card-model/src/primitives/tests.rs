@@ -591,6 +591,168 @@ fn resultless_program_can_copy_its_trigger_observed_object() {
     ));
 }
 
+const FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON: &str = r#"(body: (steps: [
+            (id: "choose_copy", kind: Choose(
+                choice: "copy", chooser: Controller, optional: true,
+                branches: [(branch_id: "pay_to_copy", presentation: OracleLines([1]),
+                    cost: Mana("{R}"), requirement: Always,
+                    body: (steps: [
+                        (id: "copy_entry", bind: ["tokens"], kind: Perform(
+                            CreateTokenCopies(count: 2, source: TriggerObject)
+                        )),
+                        (id: "grant_haste", input: Some("tokens"), kind: Perform(
+                            ApplyPermanentModifier(
+                                subject: PreviousEffectObjects,
+                                modifier: GrantKeywords([Haste]), duration: Indefinite,
+                            )
+                        )),
+                        (id: "schedule_exile", input: Some("tokens"), kind: Perform(
+                            CreateDelayedTrigger(
+                                subject: Some(PreviousEffectObjects),
+                                ability: (
+                                    ability_id: "delayed_01",
+                                    presentation: OracleLines([1]),
+                                    trigger: AtBeginningOfNextEndStep,
+                                    effect: [ExileObservedObjects],
+                                ),
+                            )
+                        )),
+                    ], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))
+        ], yields: []))"#;
+
+fn compile_flameshadow_token_batch_program(
+    ron_source: &str,
+) -> Result<crate::primitives::CompiledProgram, String> {
+    let program: crate::CardProgram =
+        ron::from_str(ron_source).expect("the Flameshadow-like token-batch program fixture parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "flameshadow_batch_fixture".into(),
+        face_id: crate::CardFaceId::new("flameshadow_batch_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+
+    crate::primitives::CompiledProgram::compile(
+        owner,
+        crate::primitives::EffectContext::Ability,
+        &program,
+    )
+}
+
+#[test]
+fn flameshadow_trigger_object_token_batch_program_compiles() {
+    let compiled = compile_flameshadow_token_batch_program(FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON)
+        .expect("a TriggerObject copy batch can feed the matching Haste and delayed-exile steps");
+    assert_eq!(
+        compiled.required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::TriggerObservedObject]
+    );
+    assert_eq!(compiled.slots.len(), 1);
+    let crate::primitives::CompiledInstructionKind::Choose { branches, .. } =
+        &compiled.body.steps[0].kind
+    else {
+        panic!("the paid copy is a Choose branch");
+    };
+    assert_eq!(branches.len(), 1);
+    assert_eq!(branches[0].body.steps.len(), 3);
+    let copy = &branches[0].body.steps[0];
+    assert_eq!(copy.outputs.len(), 1);
+    assert!(matches!(
+        compiled.slot(copy.outputs[0]).map(|slot| &slot.result_type),
+        Some(crate::primitives::ResultType::TokenCopyBatch)
+    ));
+    assert_eq!(
+        branches[0].body.steps[1].input,
+        copy.outputs.first().copied()
+    );
+    assert_eq!(
+        branches[0].body.steps[2].input,
+        copy.outputs.first().copied()
+    );
+}
+
+#[test]
+fn program_compiler_rejects_unapproved_token_copy_batch_shapes() {
+    for (label, old, new, expected_error) in [
+        (
+            "chosen copies stay resultless",
+            "source: TriggerObject",
+            "source: Chosen((kind: Creature))",
+            "binds 1 names for 0 results",
+        ),
+        (
+            "wrong result type",
+            "CreateTokenCopies(count: 2, source: TriggerObject)",
+            "Draw(count: 1)",
+            "wrong type for this instruction",
+        ),
+        (
+            "haste keyword is closed",
+            "modifier: GrantKeywords([Haste])",
+            "modifier: GrantKeywords([Flying])",
+            "does not accept an input result",
+        ),
+        (
+            "haste duration is closed",
+            "duration: Indefinite",
+            "duration: UntilEndOfTurn",
+            "does not accept an input result",
+        ),
+        (
+            "delayed timing is closed",
+            "trigger: AtBeginningOfNextEndStep",
+            "trigger: AtBeginningOfNextTurnUpkeep",
+            "does not accept an input result",
+        ),
+        (
+            "delayed body is closed",
+            "effect: [ExileObservedObjects]",
+            "effect: [ExileWarpedObject]",
+            "does not accept an input result",
+        ),
+        (
+            "delayed affected player is closed",
+            "subject: Some(PreviousEffectObjects),\n                                ability:",
+            "subject: Some(PreviousEffectObjects),\n                                affected_player: Some(Controller),\n                                ability:",
+            "does not accept an input result",
+        ),
+        (
+            "delayed may is closed",
+            "trigger: AtBeginningOfNextEndStep,\n                                    effect:",
+            "trigger: AtBeginningOfNextEndStep,\n                                    may: true,\n                                    effect:",
+            "does not accept an input result",
+        ),
+        (
+            "delayed target is closed",
+            "trigger: AtBeginningOfNextEndStep,\n                                    effect:",
+            "trigger: AtBeginningOfNextEndStep,\n                                    targeting: Some((groups: [])),\n                                    effect:",
+            "does not accept an input result",
+        ),
+    ] {
+        let malformed = FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON.replace(old, new);
+        assert_ne!(malformed, FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON, "{label} fixture changed");
+        let error = compile_flameshadow_token_batch_program(&malformed)
+            .expect_err("unsupported token-batch source, type, or consumer shape must fail closed");
+        assert!(
+            error.contains(expected_error),
+            "{label}: expected {expected_error:?}, got {error:?}"
+        );
+    }
+
+    let unavailable = FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON.replace(
+        "input: Some(\"tokens\"), kind: Perform(\n                            ApplyPermanentModifier",
+        "input: Some(\"missing\"), kind: Perform(\n                            ApplyPermanentModifier",
+    );
+    assert_ne!(unavailable, FLAMESHADOW_TOKEN_BATCH_PROGRAM_RON);
+    let error = compile_flameshadow_token_batch_program(&unavailable)
+        .expect_err("a consumer cannot read a missing batch slot");
+    assert!(
+        error.contains("result 'missing' is not in scope"),
+        "{error}"
+    );
+}
+
 #[test]
 fn trigger_observed_object_program_input_is_ability_only_and_trigger_bound() {
     let program = r#"(body: (steps: [

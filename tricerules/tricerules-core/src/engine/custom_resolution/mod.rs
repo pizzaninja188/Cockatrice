@@ -2778,7 +2778,29 @@ impl GameEngine {
                 ev,
             );
         };
-        let operation_result = program.in_flight.as_ref().map(|_| previous_result);
+        let token_copy_batch_in_flight = program.in_flight.as_ref().is_some_and(|outputs| {
+            self.registry
+                .compiled_program_for_owner(&program.owner)
+                .is_some_and(|compiled| {
+                    outputs.iter().any(|slot_id| {
+                        compiled.slot(*slot_id).is_some_and(|slot| {
+                            matches!(
+                                slot.result_type,
+                                tricerules_card_model::primitives::ResultType::TokenCopyBatch
+                            )
+                        })
+                    })
+                })
+        });
+        let mut operation_result = program.in_flight.as_ref().map(|_| previous_result);
+        if token_copy_batch_in_flight {
+            if let Some(result) = operation_result.as_mut() {
+                // The copy executor's provenance marker was parked by EffectCx before the
+                // replacement/entry choice. Pair it with the committed generation-bound refs;
+                // output capture still rejects a missing marker.
+                result.produced_object_provenance = program.in_flight_produced_object_provenance;
+            }
+        }
         let progress = self.resume_program_with_completion(
             &stack.item,
             program,
