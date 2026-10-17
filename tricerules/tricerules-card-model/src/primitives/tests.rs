@@ -5574,17 +5574,17 @@ fn program_if_keeps_graveyard_condition_admission_narrow() {
         (
             "opponent-owned graveyards",
             "GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))",
-            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
         ),
         (
             "distinct card-type aggregates",
             "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, min: Some(1))",
-            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
         ),
         (
             "nested unsupported owners",
             "AllOf([ControllerLibraryEmpty, GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))])",
-            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
         ),
         (
             "invalid bounds",
@@ -5604,6 +5604,198 @@ fn program_if_keeps_graveyard_condition_admission_narrow() {
         assert!(
             error.contains(expected_error),
             "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
+#[test]
+fn program_if_accepts_controller_battlefield_count_conditions() {
+    let fixture = |condition: &str| {
+        program_fixture(&format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition},
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        ))
+    };
+    let conditions = [
+        (
+            "another Hero",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, required_subtypes: ["Hero"]),
+                aggregate: Count, min: Some(1), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "Land-or-Treefolk union",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, any_of: Some([
+                    (controllers: Controller, card_type: Some(Land)),
+                    (controllers: Controller, required_subtypes: ["Treefolk"]),
+                ])),
+                aggregate: Count, min: Some(7), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "recursive condition composition",
+            r#"AllOf([
+                ControllerLibraryEmpty,
+                BattlefieldAggregate(
+                    filter: (controllers: Controller, any_of: Some([
+                        (controllers: Controller, card_type: Some(Land)),
+                        (controllers: Controller, required_subtypes: ["Treefolk"]),
+                    ])),
+                    aggregate: Count, min: Some(7), max: None,
+                    exclude_observed_object: false,
+                ),
+            ])"#,
+        ),
+    ];
+
+    for (label, condition) in conditions {
+        let definition = fixture(condition);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| {
+                panic!(
+                    "a spell ProgramIf with a Controller battlefield Count for {label} must compile: {error}"
+                )
+            });
+        let owner = crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        );
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the exact fixture face retains its compiled spell program");
+        assert_eq!(
+            compiled.body.steps.len(),
+            1,
+            "{label} remains one ProgramIf"
+        );
+        assert!(matches!(
+            compiled.body.steps[0].kind,
+            crate::primitives::CompiledInstructionKind::If { .. }
+        ));
+    }
+}
+
+#[test]
+fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
+    let fixture = |condition: &str| {
+        program_fixture(&format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition},
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        ))
+    };
+    let unsupported =
+        "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state";
+    let cases = [
+        (
+            "DistinctNames",
+            r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: DistinctNames, min: Some(1))"#,
+            unsupported,
+        ),
+        (
+            "TotalPower",
+            r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: TotalPower, min: Some(1))"#,
+            unsupported,
+        ),
+        (
+            "MaximumPower",
+            r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: MaximumPower, min: Some(1))"#,
+            unsupported,
+        ),
+        (
+            "legacy BattlefieldCreatureCount",
+            r#"BattlefieldCreatureCount(filter: (controllers: Controller, subtype: Some("Hero")), min: Some(1))"#,
+            unsupported,
+        ),
+        (
+            "SourceCounterCount",
+            r#"SourceCounterCount(counter: Quest, min: Some(1))"#,
+            unsupported,
+        ),
+        (
+            "TargetedPlayer at the root",
+            r#"BattlefieldAggregate(
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Hero"]),
+                aggregate: Count, min: Some(1), exclude_observed_object: false,
+            )"#,
+            "ProgramIf battlefield aggregate filters require Controller at every any_of node",
+        ),
+        (
+            "TargetedPlayer inside any_of",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, any_of: Some([
+                    (controllers: Controller, card_type: Some(Land)),
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Treefolk"]),
+                ])),
+                aggregate: Count, min: Some(1), exclude_observed_object: false,
+            )"#,
+            "ProgramIf battlefield aggregate filters require Controller at every any_of node",
+        ),
+        (
+            "observed object at the root",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller), aggregate: Count,
+                min: Some(1), exclude_observed_object: true,
+            )"#,
+            "event-observed condition requires a supplying trigger",
+        ),
+        (
+            "observed object inside condition composition",
+            r#"AnyOf([
+                ControllerLibraryEmpty,
+                BattlefieldAggregate(
+                    filter: (controllers: Controller), aggregate: Count,
+                    min: Some(1), exclude_observed_object: true,
+                ),
+            ])"#,
+            "event-observed condition requires a supplying trigger",
+        ),
+        (
+            "observed object inside AllOf",
+            r#"AllOf([
+                ControllerLibraryEmpty,
+                BattlefieldAggregate(
+                    filter: (controllers: Controller), aggregate: Count,
+                    min: Some(1), exclude_observed_object: true,
+                ),
+            ])"#,
+            "event-observed condition requires a supplying trigger",
+        ),
+        (
+            "invalid bounds",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller), aggregate: Count,
+                min: Some(3), max: Some(2), exclude_observed_object: false,
+            )"#,
+            "BattlefieldAggregate min cannot exceed max",
+        ),
+        (
+            "malformed filter union",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, any_of: Some([
+                    (controllers: Controller, card_type: Some(Land)),
+                ])),
+                aggregate: Count, min: Some(1), exclude_observed_object: false,
+            )"#,
+            "battlefield permanent filter any_of requires at least two branches",
+        ),
+    ];
+
+    for (label, condition, expected_error) in cases {
+        let definition = fixture(condition);
+        let error = invalid_program_reason(&definition);
+        assert!(
+            error.contains(expected_error),
+            "{label}: expected {expected_error:?}, got {error:?}"
         );
     }
 }
@@ -7640,7 +7832,7 @@ fn spell_program_rejects_dynamic_amount_selectors_and_if_contexts() {
         );
         let reason = invalid_program_reason(&program_fixture(&body));
         assert!(
-            reason.contains("If condition uses context outside controller hand, library, or CardCount graveyard state"),
+            reason.contains("If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"),
             "{label}: {reason}"
         );
     }
@@ -7729,7 +7921,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "GameCondition(Void)",
             "None",
-            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
         ),
         (
             "implicit prior-result input",

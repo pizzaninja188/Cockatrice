@@ -6,20 +6,28 @@
   face_id: "tend_the_sprigs",
   mana_cost: "{2}{G}",
   types: ["Sorcery"],
-  spell_effect: [
-    SearchLibrary(
-      filter: Some((card_type: Some(BasicLand))),
-      destination: Battlefield(tapped: true),
-      shuffle: true,
-      reveal: false,
-    ),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "create_a_treefolk", presentation: Fallback,
-          cost: None,
-          requirement: GameCondition(BattlefieldAggregate(
+  spell_program: Some((
+    body: (steps: [
+      (id: "search_basic_land", bind: [], input: None,
+        kind: Perform(SearchLibrary(
+          who: Controller,
+          optional: false,
+          count: 1,
+          count_by_cast_cost: None,
+          filter: Some((card_type: Some(BasicLand))),
+          selection_constraint: None,
+          slots: [],
+          zones: Fixed([Library]),
+          destination: Battlefield(tapped: true),
+          conditional_destination: None,
+          shuffle: true,
+          reveal: false,
+          result_id: None,
+          selection_bounds: Some((min: 0, max: 1)),
+        ))),
+      (id: "seven_land_or_treefolk", bind: [], input: None,
+        kind: If(
+          condition: BattlefieldAggregate(
             filter: (
               controllers: Controller,
               any_of: Some([
@@ -29,11 +37,22 @@
             ),
             aggregate: Count,
             min: Some(7),
-          )),
-          effects: [CreateTokens(token: "treefolk_g_3_4_reach", count: 1)],
-        ),
-        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
-      ],
-    ),
-  ],
+            max: None,
+            exclude_observed_object: false,
+          ),
+          yes: (steps: [
+            (id: "create_treefolk", bind: [], input: None,
+              kind: Perform(CreateTokens(
+                token: "treefolk_g_3_4_reach",
+                count: 1,
+                who: Controller,
+                tapped: false,
+                sacrifice_timing: None,
+              ))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+    ], yields: []),
+    target_bindings: [],
+  )),
 )

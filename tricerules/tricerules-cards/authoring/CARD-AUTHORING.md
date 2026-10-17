@@ -204,6 +204,16 @@ after milling and HYDRA Troopers checks before either its token creation or fall
 608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless only for a fixed amount applied to
 `EachOpponent`; it cannot bind or yield a result. Dawnhand uses this form, which shares the same
 fixed each-opponent loss shape as Acolyte of Aclazotz and Arbiter of Woe.
+`If` may also inspect the current battlefield with `BattlefieldAggregate(Count)`, inclusive count
+bounds, and a validated `BattlefieldPermanentFilter`. This family requires
+`exclude_observed_object: false` and `Controller` at the root filter and every recursively nested
+`any_of` filter node; `AllOf` and `AnyOf` may compose only admitted condition leaves. The count is
+evaluated when its instruction runs, after preceding steps. Hero in Training counts another
+controlled permanent with the Hero subtype, including noncreature Kindred Heroes and a returned
+new generation of the same physical card. Tend the Sprigs counts each controlled permanent once
+when it matches Land or Treefolk after its Basic Land search. These shapes do not admit other
+battlefield aggregates, legacy creature counts, observed-object-dependent counts, or other relative
+player sets.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.

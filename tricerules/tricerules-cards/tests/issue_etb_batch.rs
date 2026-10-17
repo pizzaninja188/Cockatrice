@@ -8,9 +8,8 @@
 //! tokens), 701.18/701.23 (search), and 608.2c (printed instruction order).
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, GameCondition, PlayerRecipient, RelativePlayerSet,
-    ResolutionBranchRequirement, ResolutionBranchSelection, SearchDestination, SpellEffectKind,
-    TargetFilter, TargetKind, TriggerCondition,
+    Amount, EffectSubject, GameCondition, InstructionKind, PlayerRecipient, SearchDestination,
+    SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
 };
 use tricerules_cards::CounterKind;
 
@@ -189,47 +188,78 @@ fn issue_etb_batch_maps_definitions() {
     let [trigger] = f.triggered_abilities.as_slice() else {
         panic!("one trigger");
     };
-    assert_eq!(
-        trigger.effect[0],
-        SpellEffectKind::Draw {
-            who: PlayerRecipient::Controller,
-            count: Amount::Fixed(1),
-        }
+    assert!(
+        trigger.effect.is_empty(),
+        "Hero is fully authored as a program"
     );
-    let SpellEffectKind::ChooseResolutionBranch {
-        selection,
-        optional,
-        branches,
-        ..
-    } = &trigger.effect[1]
-    else {
-        panic!("conditional life gain uses a resolution branch");
+    assert!(trigger.modal.is_none());
+    assert!(trigger.targeting.is_none());
+    assert!(!trigger.may);
+    assert!(trigger.intervening_if.is_none());
+    let program = trigger
+        .program
+        .as_ref()
+        .expect("Hero's trigger owns its ordered resolution program");
+    assert!(program.body.yields.is_empty());
+    assert!(program.target_bindings.is_empty());
+    let [draw, another_hero] = program.body.steps.as_slice() else {
+        panic!("Hero draws, then checks for another Hero");
     };
-    assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-    assert!(!*optional);
-    assert_eq!(branches.len(), 2);
-    match &branches[0].requirement {
-        ResolutionBranchRequirement::GameCondition(GameCondition::BattlefieldCreatureCount {
-            filter,
-            min,
-            max,
-        }) => {
-            assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-            assert_eq!(filter.subtype.as_deref(), Some("Hero"));
-            assert!(filter.exclude_source, "must count another Hero");
-            assert_eq!(*min, Some(1));
-            assert_eq!(*max, None);
-        }
-        other => panic!("expected the another-Hero condition, got {other:?}"),
+    assert_eq!(draw.id, "draw_one");
+    match &draw.kind {
+        InstructionKind::Perform(effect) => assert_eq!(
+            **effect,
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }
+        ),
+        other => panic!("Hero starts with its draw, got {other:?}"),
     }
+    assert_eq!(another_hero.id, "another_hero");
+    let InstructionKind::If { condition, yes, no } = &another_hero.kind else {
+        panic!("Hero checks the battlefield after drawing");
+    };
+    let GameCondition::BattlefieldAggregate {
+        filter,
+        aggregate,
+        min,
+        max,
+        exclude_observed_object,
+    } = condition.as_ref()
+    else {
+        panic!("Hero uses the general battlefield matcher for another Hero");
+    };
+    assert_eq!(*aggregate, tricerules_cards::BattlefieldAggregate::Count);
     assert_eq!(
-        branches[0].effects,
-        [SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
-        }]
+        filter.controllers,
+        tricerules_cards::RelativePlayerSet::Controller
     );
-    assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
-    assert!(branches[1].effects.is_empty());
+    assert!(filter.required_supertypes.is_empty());
+    assert!(filter.token.is_none());
+    assert!(filter.any_of.is_none());
+    assert_eq!(
+        filter.card_type, None,
+        "Kindred Hero need not be a Creature"
+    );
+    assert!(filter.color.is_none());
+    assert!(filter.name.is_none());
+    assert_eq!(filter.required_subtypes, ["Hero"]);
+    assert!(filter.exclude_source, "exclude only the source generation");
+    assert_eq!(*min, Some(1));
+    assert_eq!(*max, None);
+    assert!(!exclude_observed_object);
+    assert_eq!(yes.steps.len(), 1);
+    match &yes.steps[0].kind {
+        InstructionKind::Perform(effect) => assert_eq!(
+            **effect,
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2)
+            }
+        ),
+        other => panic!("Hero gains two life inside the true body, got {other:?}"),
+    }
+    assert!(no.steps.is_empty());
 }
 
 #[test]

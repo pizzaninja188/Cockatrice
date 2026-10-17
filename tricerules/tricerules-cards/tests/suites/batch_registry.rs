@@ -109,3 +109,5 @@ mod issue_misc7_batch;
 mod issue_misc8_batch;
 #[path = "../issue_misc9_batch.rs"]
 mod issue_misc9_batch;
+#[path = "../tend_the_sprigs.rs"]
+mod tend_the_sprigs;

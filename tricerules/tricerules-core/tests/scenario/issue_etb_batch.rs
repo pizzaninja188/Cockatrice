@@ -8,8 +8,17 @@
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::Zone;
+use tricerules_cards::CardRegistry;
+use tricerules_core::{EngineDeck, Zone};
 use tricerules_proto::ruled::v1::{ResolutionChoiceDecision, TargetRefKind};
+
+const TEST_KINDRED_ARTIFACT_HERO: &str = r#"(
+  id: "test_kindred_artifact_hero",
+  name: "Test Kindred Artifact Hero",
+  face_id: "test_kindred_artifact_hero",
+  mana_cost: "{0}",
+  types: ["Kindred", "Artifact", "Hero"],
+)"#;
 
 fn choose_trigger_target(object_id: u32) -> RuledCommand {
     RuledCommand {
@@ -70,6 +79,66 @@ fn etb_engine(seed: u64) -> GameEngine {
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
     e
+}
+
+fn kindred_hero_engine(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/hero_in_training.ron"),
+                TEST_KINDRED_ARTIFACT_HERO,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("the noncreature Kindred Hero registry is valid"),
+    ));
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: vec!["forest".into(); 18],
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: vec!["forest".into(); 18],
+            commanders: vec![],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
+        .expect("two-player Kindred Hero engine");
+    advance_to_main1_from_game_start(&mut engine);
+    grant_pool(&mut engine, 0);
+    grant_pool(&mut engine, 1);
+    engine
+}
+
+fn resolve_entire_stack_two_player_with_batches(
+    e: &mut GameEngine,
+) -> Vec<tricerules_proto::ruled::v1::RuledEventBatch> {
+    let mut batches = Vec::new();
+    loop {
+        answer_simultaneous_entry_order_in_engine_order(e);
+        answer_trigger_order_in_engine_order(e);
+        if e.state.stack.is_empty() {
+            break;
+        }
+        batches.push(pass_both_players_with_batch(e));
+    }
+    batches
+}
+
+fn assert_no_automatic_branch_resolution_line(
+    batches: &[tricerules_proto::ruled::v1::RuledEventBatch],
+) {
+    assert!(
+        batches
+            .iter()
+            .flat_map(|batch| &batch.events)
+            .all(|event| !matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text.starts_with("P0 resolves:")
+            )),
+        "authored Program If does not emit the legacy automatic branch line"
+    );
 }
 
 fn cast_creature(e: &mut GameEngine, card: &str) -> u32 {
@@ -260,9 +329,10 @@ fn issue_etb_hero_in_training() {
     let hand_before = alone.state.players[0].hand.len();
     let life_before = alone.state.players[0].life;
     cast_creature(&mut alone, "hero_in_training");
-    resolve_entire_stack_two_player(&mut alone);
+    let batches = resolve_entire_stack_two_player_with_batches(&mut alone);
     assert_eq!(alone.state.players[0].hand.len(), hand_before + 1);
     assert_eq!(alone.state.players[0].life, life_before);
+    assert_no_automatic_branch_resolution_line(&batches);
 
     // Another Hero: draw a card and gain two life.
     let mut pair = etb_engine(710_009);
@@ -270,7 +340,132 @@ fn issue_etb_hero_in_training() {
     let hand_before = pair.state.players[0].hand.len();
     let life_before = pair.state.players[0].life;
     cast_creature(&mut pair, "hero_in_training");
-    resolve_entire_stack_two_player(&mut pair);
+    let batches = resolve_entire_stack_two_player_with_batches(&mut pair);
     assert_eq!(pair.state.players[0].hand.len(), hand_before + 1);
     assert_eq!(pair.state.players[0].life, life_before + 2);
+    assert_no_automatic_branch_resolution_line(&batches);
+
+    // An opponent's Hero does not satisfy this Controller-relative condition.
+    let mut opponent_hero = etb_engine(710_013);
+    inject_creature_on_battlefield(&mut opponent_hero, 1, "hero_in_training");
+    let hand_before = opponent_hero.state.players[0].hand.len();
+    let life_before = opponent_hero.state.players[0].life;
+    cast_creature(&mut opponent_hero, "hero_in_training");
+    let batches = resolve_entire_stack_two_player_with_batches(&mut opponent_hero);
+    assert_eq!(opponent_hero.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(opponent_hero.state.players[0].life, life_before);
+    assert_no_automatic_branch_resolution_line(&batches);
+}
+
+#[test]
+fn issue_etb_hero_kindred_noncreature_hero_counts() {
+    let mut engine = kindred_hero_engine(710_014);
+    let other_hero = inject_permanent_on_battlefield(&mut engine, 0, "test_kindred_artifact_hero");
+    assert_eq!(
+        engine
+            .characteristics(other_hero)
+            .expect("fixture characteristics")
+            .power,
+        None,
+        "the test Hero is not a creature"
+    );
+    let hand_before = engine.state.players[0].hand.len();
+    let life_before = engine.state.players[0].life;
+
+    cast_creature(&mut engine, "hero_in_training");
+    let batches = resolve_entire_stack_two_player_with_batches(&mut engine);
+
+    assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(engine.state.players[0].life, life_before + 2);
+    assert_no_automatic_branch_resolution_line(&batches);
+}
+
+#[test]
+fn issue_etb_hero_returned_same_object_is_another_for_the_old_trigger() {
+    let mut engine = etb_engine(710_015);
+    let hand_before = engine.state.players[0].hand.len();
+    let life_before = engine.state.players[0].life;
+    let hero = cast_creature(&mut engine, "hero_in_training");
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the first Hero trigger is pending"
+    );
+    let old_generation = engine.state.stack[0].source_zone_change;
+
+    inject_card_into_hand(&mut engine, 0, "abnormal_endurance");
+    let endurance = hand_index_for_card(&engine, 0, "abnormal_endurance");
+    engine
+        .apply_scenario_command(0, &cast_spell(endurance, target_object(hero)))
+        .expect("cast Abnormal Endurance while the Hero trigger is pending");
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the old Hero trigger remains below"
+    );
+    assert_eq!(engine.effective_power(hero), Some(4));
+
+    inject_card_into_hand(&mut engine, 1, "lightning_bolt");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active player passes priority to the opponent");
+    let bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
+    engine
+        .apply_scenario_command(1, &cast_spell(bolt, target_object(hero)))
+        .expect("cast Lightning Bolt at the temporarily larger Hero");
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&hero].zone,
+        Zone::Graveyard,
+        "lethal damage puts the exact physical Hero into its owner's graveyard"
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        2,
+        "dies trigger sits above old ETB"
+    );
+
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.objects[&hero].zone, Zone::Battlefield);
+    let returned_generation = engine
+        .state
+        .zone_change_generation
+        .get(&hero)
+        .copied()
+        .unwrap_or(0);
+    assert_eq!(returned_generation, old_generation + 2);
+    assert_eq!(engine.state.stack.len(), 2, "both ETB triggers are pending");
+    assert_eq!(engine.state.stack[0].source_zone_change, old_generation);
+    assert_eq!(
+        engine.state.stack[1].source_zone_change, returned_generation,
+        "the returned generation owns its separate ETB trigger"
+    );
+
+    let returned_trigger_batch = pass_both_players_with_batch(&mut engine);
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before + 1,
+        "the returned generation's own ETB draws one card"
+    );
+    assert_eq!(
+        engine.state.players[0].life, life_before,
+        "the new ETB excludes its own returned generation"
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the original ETB remains below"
+    );
+
+    let old_trigger_batch = pass_both_players_with_batch(&mut engine);
+    assert_eq!(engine.state.players[0].hand.len(), hand_before + 2);
+    assert_eq!(
+        engine.state.players[0].life,
+        life_before + 2,
+        "the old ETB counts the returned incarnation as another Hero"
+    );
+    let batches = [returned_trigger_batch, old_trigger_batch];
+    assert!(engine.state.stack.is_empty());
+    assert_no_automatic_branch_resolution_line(&batches);
 }

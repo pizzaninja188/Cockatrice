@@ -5,9 +5,9 @@
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals, `If` accepts only controller-scoped hand/library counts and controller graveyard
-//! CardCount filters, and permanent choices cannot use event-bound filters or cross-object
-//! constraints. Widening these rules needs a separately typed context/result contract.
+//! literals, `If` accepts only controller-scoped hand/library counts, graveyard CardCount filters,
+//! and battlefield Count filters, and permanent choices cannot use event-bound filters or
+//! cross-object constraints. Widening these rules needs a separately typed context/result contract.
 
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
@@ -2085,6 +2085,11 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
             aggregate: super::GraveyardAggregate::CardCount,
             ..
         } => {}
+        GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate: super::BattlefieldAggregate::Count,
+            ..
+        } => validate_program_battlefield_filter(filter)?,
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
             for branch in branches {
                 validate_program_condition(branch)?;
@@ -2092,12 +2097,29 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
         }
         _ => {
             return Err(
-                "If condition uses context outside controller hand, library, or CardCount graveyard state supported by spell_program"
+                "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state supported by spell_program"
                     .into(),
             )
         }
     }
     condition.validate_live()
+}
+
+fn validate_program_battlefield_filter(
+    filter: &super::BattlefieldPermanentFilter,
+) -> Result<(), String> {
+    if filter.controllers != RelativePlayerSet::Controller {
+        return Err(
+            "ProgramIf battlefield aggregate filters require Controller at every any_of node"
+                .into(),
+        );
+    }
+    if let Some(branches) = &filter.any_of {
+        for branch in branches {
+            validate_program_battlefield_filter(branch)?;
+        }
+    }
+    Ok(())
 }
 
 fn validate_program_choice_filter(filter: &TargetFilter) -> Result<(), String> {

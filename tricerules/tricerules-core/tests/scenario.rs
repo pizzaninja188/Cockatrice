@@ -1091,6 +1091,8 @@ mod issue_misc43_batch;
 mod issue_misc44_batch;
 #[path = "scenario/issue_misc45_batch.rs"]
 mod issue_misc45_batch;
+#[path = "scenario/tend_the_sprigs.rs"]
+mod tend_the_sprigs;
 
 #[path = "scenario/issue_misc46_batch.rs"]
 mod issue_misc46_batch;
