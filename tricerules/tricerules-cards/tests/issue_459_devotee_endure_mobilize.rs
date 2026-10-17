@@ -21,12 +21,11 @@ use crate::common;
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
     ActivationLimit, CounterKind, DelayedTokenSacrificeTiming, EffectSubject, ManaAmount,
-    PlayerRecipient, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
-    SpellEffectKind,
+    PlayerRecipient, ResolutionBranchRequirement, ResolutionCost, SpellEffectKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardFace,
-    Keyword, ManaCost,
+    InstructionKind, Keyword, ManaCost,
 };
 
 fn face(id: &str) -> &'static CardFace {
@@ -158,82 +157,153 @@ fn issue_459_abzan_devotee_owns_the_tri_color_mana_and_graveyard_abilities_in_or
 }
 
 #[test]
-fn issue_459_fortress_kin_guard_endures_one_with_the_exact_branch_shape() {
-    let face = face("fortress_kin-guard");
-    assert!(
-        face.spell_effect.is_empty()
-            && face.activated_abilities.is_empty()
-            && face.static_abilities.is_empty()
-    );
-    let [ability] = face.triggered_abilities.as_slice() else {
-        panic!("Fortress Kin-Guard must own exactly one triggered ability");
-    };
-    assert_eq!(ability.ability_id.as_str(), "triggered_01");
-    assert_eq!(
-        ability.presentation,
-        AbilityPresentation::OracleLines(vec![1])
-    );
-    assert_eq!(
-        ability.trigger,
-        tricerules_cards::TriggerCondition::WhenSelfEntersBattlefield
-    );
-    assert!(!ability.may && ability.intervening_if.is_none() && !ability.triggers_only_once);
-    assert!(ability.targeting.is_none());
-    let [SpellEffectKind::ChooseResolutionBranch {
-        chooser,
-        optional,
-        selection,
-        branches,
-        otherwise,
-    }] = ability.effect.as_slice()
-    else {
-        panic!("Fortress Kin-Guard must emit exactly one resolution-branch instruction");
-    };
-    assert_eq!(*chooser, PlayerRecipient::SourceController);
-    assert!(!*optional);
-    assert_eq!(*selection, ResolutionBranchSelection::PlayerChoice);
-    assert!(otherwise.is_empty());
-    let [counters, spirit] = branches.as_slice() else {
-        panic!("endure must offer exactly the counter and Spirit branches");
-    };
-    assert_eq!(counters.branch_id.as_str(), "put_a_1_1_counter_on_source");
-    assert_eq!(
-        counters.presentation,
-        AbilityPresentation::OracleLines(vec![1])
-    );
-    assert_eq!(counters.cost, ResolutionCost::None);
-    assert_eq!(
-        counters.requirement,
-        ResolutionBranchRequirement::EffectsApplicable
-    );
-    assert_eq!(
-        counters.effects,
-        [SpellEffectKind::PutCounters {
-            counter: CounterKind::PlusOnePlusOne,
-            count: Amount::Fixed(1),
-            subject: EffectSubject::Source,
-        }]
-    );
-    assert_eq!(
-        spirit.branch_id.as_str(),
-        "create_a_1_1_white_spirit_creature_token"
-    );
-    assert_eq!(
-        spirit.presentation,
-        AbilityPresentation::OracleLines(vec![1])
-    );
-    assert_eq!(spirit.cost, ResolutionCost::None);
-    assert_eq!(spirit.requirement, ResolutionBranchRequirement::Always);
-    assert_eq!(
-        spirit.effects,
-        [SpellEffectKind::CreateTokens {
-            token: "spirit_w_1_1".into(),
-            count: Amount::Fixed(1),
-            who: PlayerRecipient::SourceController,
-            tapped: false,
-            sacrifice_timing: None,
-        }]
-    );
+fn issue_459_all_four_fixed_endure_owners_use_the_ordered_program_contract() {
+    for (id, line, count, counter_branch, token_branch, token_id, branch_presentation) in [
+        (
+            "kin-tree_nurturer",
+            2,
+            1,
+            "put_a_1_1_counter_on_kin_tree_nurturer",
+            "create_a_1_1_white_spirit_creature_token",
+            "spirit_w_1_1",
+            AbilityPresentation::Fallback,
+        ),
+        (
+            "sandskitter_outrider",
+            2,
+            2,
+            "put_two_1_1_counters_on_sandskitter_outrider",
+            "create_a_2_2_white_spirit_creature_token",
+            "spirit_w_2_2",
+            AbilityPresentation::Fallback,
+        ),
+        (
+            "dusyut_earthcarver",
+            2,
+            3,
+            "put_three_1_1_counters_on_dusyut_earthcarver",
+            "create_a_3_3_white_spirit_creature_token",
+            "spirit_w_3_3",
+            AbilityPresentation::Fallback,
+        ),
+        (
+            "fortress_kin-guard",
+            1,
+            1,
+            "put_a_1_1_counter_on_source",
+            "create_a_1_1_white_spirit_creature_token",
+            "spirit_w_1_1",
+            AbilityPresentation::OracleLines(vec![1]),
+        ),
+    ] {
+        let face = face(id);
+        let [ability] = face.triggered_abilities.as_slice() else {
+            panic!("{id} must retain its one Endure entry ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01", "{id}");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![line]),
+            "{id}"
+        );
+        assert_eq!(
+            ability.trigger,
+            tricerules_cards::TriggerCondition::WhenSelfEntersBattlefield,
+            "{id}"
+        );
+        assert!(
+            ability.effect.is_empty(),
+            "{id} must move to its Program body"
+        );
+        let program = ability
+            .program
+            .as_ref()
+            .unwrap_or_else(|| panic!("{id} must use the ordered Endure program"));
+        assert!(program.target_bindings.is_empty(), "{id}");
+        assert!(program.body.yields.is_empty(), "{id}");
+        let [choose] = program.body.steps.as_slice() else {
+            panic!("{id} must have one top-level choice");
+        };
+        assert!(choose.bind.is_empty() && choose.input.is_none(), "{id}");
+        let InstructionKind::Choose {
+            choice,
+            chooser,
+            optional,
+            branches,
+            otherwise,
+        } = &choose.kind
+        else {
+            panic!("{id} must use Program Choose");
+        };
+        assert_eq!(choice.as_str(), "endure", "{id}");
+        assert_eq!(*chooser, PlayerRecipient::SourceController, "{id}");
+        assert!(!optional, "{id}");
+        assert!(
+            otherwise.steps.is_empty() && otherwise.yields.is_empty(),
+            "{id}"
+        );
+        let [counters, spirit] = branches.as_slice() else {
+            panic!("{id} must retain exactly its counter and token branches");
+        };
+        assert_eq!(counters.branch_id.as_str(), counter_branch, "{id}");
+        assert_eq!(spirit.branch_id.as_str(), token_branch, "{id}");
+        assert_eq!(counters.presentation, branch_presentation, "{id}");
+        assert_eq!(spirit.presentation, branch_presentation, "{id}");
+        assert_eq!(counters.cost, ResolutionCost::None, "{id}");
+        assert_eq!(spirit.cost, ResolutionCost::None, "{id}");
+        assert_eq!(
+            counters.requirement,
+            ResolutionBranchRequirement::EffectsApplicable,
+            "{id}"
+        );
+        assert_eq!(
+            spirit.requirement,
+            ResolutionBranchRequirement::Always,
+            "{id}"
+        );
+        let [counter_step] = counters.body.steps.as_slice() else {
+            panic!("{id} counter branch must remain one leaf");
+        };
+        assert!(
+            counter_step.bind.is_empty() && counter_step.input.is_none(),
+            "{id}"
+        );
+        assert!(counters.body.yields.is_empty(), "{id}");
+        let InstructionKind::Perform(effect) = &counter_step.kind else {
+            panic!("{id} counter branch must be a resultless PutCounters leaf");
+        };
+        assert_eq!(
+            effect.as_ref(),
+            &SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(count),
+                subject: EffectSubject::Source,
+            },
+            "{id}"
+        );
+        let [token_step] = spirit.body.steps.as_slice() else {
+            panic!("{id} token branch must remain one leaf");
+        };
+        assert!(
+            token_step.bind.is_empty() && token_step.input.is_none(),
+            "{id}"
+        );
+        assert!(spirit.body.yields.is_empty(), "{id}");
+        let InstructionKind::Perform(effect) = &token_step.kind else {
+            panic!("{id} token branch must be a resultless CreateTokens leaf");
+        };
+        assert_eq!(
+            effect.as_ref(),
+            &SpellEffectKind::CreateTokens {
+                token: token_id.into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::SourceController,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+            "{id}"
+        );
+    }
 }
 
 #[test]
@@ -332,69 +402,6 @@ fn issue_459_handwritten_devotee_anchors_keep_the_recipe_shapes() {
         assert_eq!(
             ability.activation_limit,
             Some(ActivationLimit::PerTurn { max_activations: 1 }),
-            "{id}"
-        );
-    }
-}
-
-#[test]
-fn issue_459_handwritten_endure_anchors_keep_the_recipe_shapes() {
-    for (id, count, token) in [
-        ("kin-tree_nurturer", 1, "spirit_w_1_1"),
-        ("sandskitter_outrider", 2, "spirit_w_2_2"),
-        ("dusyut_earthcarver", 3, "spirit_w_3_3"),
-    ] {
-        let face = face(id);
-        let [ability] = face.triggered_abilities.as_slice() else {
-            panic!("{id} must own exactly one triggered ability");
-        };
-        assert_eq!(
-            ability.trigger,
-            tricerules_cards::TriggerCondition::WhenSelfEntersBattlefield,
-            "{id}"
-        );
-        let [SpellEffectKind::ChooseResolutionBranch {
-            chooser,
-            optional,
-            branches,
-            ..
-        }] = ability.effect.as_slice()
-        else {
-            panic!("{id} must emit one resolution-branch instruction");
-        };
-        assert_eq!(*chooser, PlayerRecipient::SourceController, "{id}");
-        assert!(!*optional, "{id}");
-        let [counters, spirit] = branches.as_slice() else {
-            panic!("{id} must offer the counter and Spirit branches");
-        };
-        assert_eq!(
-            counters.requirement,
-            ResolutionBranchRequirement::EffectsApplicable,
-            "{id}"
-        );
-        assert_eq!(
-            counters.effects,
-            [SpellEffectKind::PutCounters {
-                counter: CounterKind::PlusOnePlusOne,
-                count: Amount::Fixed(count),
-                subject: EffectSubject::Source,
-            }],
-            "{id}"
-        );
-        assert_eq!(
-            spirit.requirement,
-            ResolutionBranchRequirement::Always,
-            "{id}"
-        );
-        assert_eq!(
-            spirit.effects,
-            [SpellEffectKind::CreateTokens {
-                token: token.into(),
-                count: Amount::Fixed(1),
-                who: PlayerRecipient::SourceController,
-                tapped: false,
-                sacrifice_timing: None,
-            }],
             "{id}"
         );
     }

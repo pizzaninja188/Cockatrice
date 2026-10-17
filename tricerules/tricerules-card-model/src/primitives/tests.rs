@@ -7889,7 +7889,15 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "Always",
             "None",
-            "supports only the controller as chooser",
+            "supports Controller, or SourceController on an ability program, as chooser",
+        ),
+        (
+            "SourceController chooser on Spell",
+            "SourceController",
+            "None",
+            "Always",
+            "None",
+            "supports Controller, or SourceController on an ability program, as chooser",
         ),
         (
             "object-payment cost",
@@ -7905,7 +7913,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "EffectsApplicable",
             "None",
-            "does not support EffectsApplicable requirements",
+            "supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction",
         ),
         (
             "implicit card-result requirement",
@@ -7935,6 +7943,305 @@ fn program_choose_rejects_unsupported_admission_shapes() {
         let error = invalid_program_reason(&definition(chooser, cost, requirement, input));
         assert!(error.contains(expected), "{label}: {error}");
     }
+}
+
+#[test]
+fn endure_program_constituent_contracts_fail_independently_before_admission() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile_ability = |card_id: &str, body: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: crate::CardFaceId::new(card_id).unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        CompiledProgram::compile(owner, EffectContext::Ability, &program)
+    };
+
+    let shapes = [
+        (
+            "endure_source_counters",
+            "positive fixed source +1/+1 counters",
+            r#"(steps: [(id: "put", kind: Perform(PutCounters(
+                counter: PlusOnePlusOne, count: 1, subject: Source,
+            )))], yields: [])"#,
+        ),
+        (
+            "endure_source_controller_tokens",
+            "ordinary source-controller token creation",
+            r#"(steps: [(id: "token", kind: Perform(CreateTokens(
+                token: "spirit_w_1_1", count: 1, who: SourceController,
+                tapped: false, sacrifice_timing: None,
+            )))], yields: [])"#,
+        ),
+        (
+            "endure_effects_applicable_counter_guard",
+            "exact single-counter EffectsApplicable branch",
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "endure", chooser: Controller, optional: false,
+                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                    requirement: EffectsApplicable,
+                    body: (steps: [(id: "put", kind: Perform(PutCounters(
+                        counter: PlusOnePlusOne, count: 1, subject: Source,
+                    )))], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#,
+        ),
+    ];
+    let rejected = shapes
+        .iter()
+        .filter_map(|(card_id, label, body)| {
+            compile_ability(card_id, body)
+                .err()
+                .map(|error| format!("{label}: {error}"))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        rejected.is_empty(),
+        "each reviewed constituent needs its own Ability-program admission; current rejections: {}",
+        rejected.join("; ")
+    );
+}
+
+#[test]
+fn endure_program_admits_only_the_source_counter_choice_composition() {
+    use crate::primitives::{
+        CompiledInstructionKind, CompiledProgram, EffectContext, PlayerRecipient, SpellEffectKind,
+    };
+
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "endure_program_fixture".into(),
+        face_id: crate::CardFaceId::new("endure_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let ability_program = |body: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        CompiledProgram::compile(ability_owner.clone(), EffectContext::Ability, &program)
+    };
+    let source = r#"(steps: [(id: "choose", kind: Choose(
+        choice: "endure", chooser: SourceController, optional: false,
+        branches: [
+            (branch_id: "counters", presentation: Fallback, cost: None,
+                requirement: EffectsApplicable,
+                body: (steps: [(id: "counters", kind: Perform(PutCounters(
+                    counter: PlusOnePlusOne, count: 1, subject: Source,
+                )))], yields: [])),
+            (branch_id: "spirit", presentation: Fallback, cost: None,
+                requirement: Always,
+                body: (steps: [(id: "spirit", kind: Perform(CreateTokens(
+                    token: "spirit_w_1_1", count: 1, who: SourceController,
+                    tapped: false, sacrifice_timing: None,
+                )))], yields: [])),
+        ], otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let compiled = ability_program(source).expect(
+        "the reviewed ability owner accepts source-counter eligibility and source-owned tokens",
+    );
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("expected one authored Endure choice");
+    };
+    let CompiledInstructionKind::Choose {
+        chooser, branches, ..
+    } = &choose.kind
+    else {
+        panic!("Endure is represented by the existing Choose instruction");
+    };
+    assert_eq!(*chooser, PlayerRecipient::SourceController);
+    let [counters, spirit] = branches.as_slice() else {
+        panic!("expected the two Endure alternatives");
+    };
+    assert!(matches!(
+        counters.body.steps.as_slice(),
+        [step]
+            if matches!(
+                &step.kind,
+                CompiledInstructionKind::Perform(effect)
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::PutCounters {
+                            counter: crate::primitives::CounterKind::PlusOnePlusOne,
+                            count: crate::primitives::Amount::Fixed(1),
+                            subject: crate::primitives::EffectSubject::Source,
+                        }
+                    )
+            ) && step.outputs.is_empty() && step.input.is_none()
+    ));
+    assert!(matches!(
+        &spirit.body.steps[0].kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::CreateTokens {
+                    who: PlayerRecipient::SourceController,
+                    count: crate::primitives::Amount::Fixed(1),
+                    sacrifice_timing: None,
+                    ..
+                }
+            )
+    ));
+
+    for (label, invalid_body) in [
+        (
+            "extra leaf",
+            r#"(steps: [
+                (id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source))),
+                (id: "extra", kind: Perform(GainLife(amount: 1))),
+            ], yields: [])"#,
+        ),
+        (
+            "nested branch",
+            r#"(steps: [(id: "nested", kind: If(
+                condition: ControllerLibraryEmpty,
+                yes: (steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)))], yields: []),
+                no: (steps: [], yields: [])))], yields: [])"#,
+        ),
+        (
+            "result binding",
+            r#"(steps: [(id: "counters", bind: ["out"], kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)))], yields: [])"#,
+        ),
+        (
+            "zero amount",
+            r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 0, subject: Source)))], yields: [])"#,
+        ),
+        (
+            "dynamic amount",
+            r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)))], yields: [])"#,
+        ),
+        (
+            "wrong counter",
+            r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: Charge, count: 1, subject: Source)))], yields: [])"#,
+        ),
+        (
+            "wrong subject",
+            r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))))], yields: [])"#,
+        ),
+    ] {
+        let body = format!(
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "endure", chooser: SourceController, optional: false,
+                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                    requirement: EffectsApplicable, body: {invalid_body})],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        assert!(
+            ability_program(&body).is_err(),
+            "accepted invalid guard body: {label}"
+        );
+    }
+
+    for (label, invalid_body) in [
+        (
+            "counter leaf input",
+            r#"(steps: [(id: "counters", input: Some("prior"), kind: Perform(PutCounters(
+                counter: PlusOnePlusOne, count: 1, subject: Source,
+            )))], yields: [])"#,
+        ),
+        (
+            "counter body yield",
+            r#"(steps: [(id: "counters", kind: Perform(PutCounters(
+                counter: PlusOnePlusOne, count: 1, subject: Source,
+            )))], yields: ["counter_result"])"#,
+        ),
+    ] {
+        let body = format!(
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "endure", chooser: SourceController, optional: false,
+                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                    requirement: EffectsApplicable, body: {invalid_body})],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        let error = ability_program(&body).expect_err("the EffectsApplicable leaf shape is exact");
+        assert!(
+            error.contains("supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction"),
+            "{label}: {error}"
+        );
+    }
+
+    let source_controller_token = r#"(steps: [(id: "token", kind: Perform(CreateTokens(
+        token: "spirit_w_1_1", count: 1, who: SourceController,
+        tapped: false, sacrifice_timing: None,
+    )))], yields: [])"#;
+    let token_program: crate::CardProgram =
+        ron::from_str(&format!("(body: {source_controller_token})")).unwrap();
+    let spell_error = CompiledProgram::compile(
+        crate::ProgramOwnerId::face(
+            "endure_spell_fixture",
+            crate::CardFaceId::new("endure_spell_fixture").unwrap(),
+        ),
+        EffectContext::Spell,
+        &token_program,
+    )
+    .expect_err("source-controller token creation stays unavailable to spell programs");
+    assert!(spell_error.contains("SourceController"), "{spell_error}");
+}
+
+#[test]
+fn endure_rejects_unsupported_direct_counter_leaf_shapes_and_spell_context() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "endure_direct_counter_fixture".into(),
+        face_id: crate::CardFaceId::new("endure_direct_counter_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compile_ability = |leaf: &str| {
+        let program: crate::CardProgram = ron::from_str(&format!(
+            r#"(body: (steps: [(id: "counter", kind: Perform({leaf}))], yields: []))"#
+        ))
+        .expect("direct counter fixture parses");
+        CompiledProgram::compile(ability_owner.clone(), EffectContext::Ability, &program)
+    };
+
+    for (label, leaf) in [
+        (
+            "zero amount",
+            "PutCounters(counter: PlusOnePlusOne, count: 0, subject: Source)",
+        ),
+        (
+            "dynamic amount",
+            "PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)",
+        ),
+        (
+            "wrong counter",
+            "PutCounters(counter: Charge, count: 1, subject: Source)",
+        ),
+        (
+            "wrong subject",
+            "PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))",
+        ),
+    ] {
+        let error =
+            compile_ability(leaf).expect_err("only the fixed Source +1/+1 leaf is admitted");
+        assert!(
+            error.contains("effect is not in the resolution-program operation whitelist"),
+            "{label}: {error}"
+        );
+    }
+
+    let spell_program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "counter", kind: Perform(PutCounters(
+            counter: PlusOnePlusOne, count: 1, subject: Source,
+        )))], yields: []))"#,
+    )
+    .expect("spell counter fixture parses");
+    let spell_error = CompiledProgram::compile(
+        crate::ProgramOwnerId::face(
+            "endure_direct_counter_spell_fixture",
+            crate::CardFaceId::new("endure_direct_counter_spell_fixture").unwrap(),
+        ),
+        EffectContext::Spell,
+        &spell_program,
+    )
+    .expect_err("Endure's Source counter leaf remains ability-only");
+    assert!(
+        spell_error.contains("effect is not in the resolution-program operation whitelist"),
+        "{spell_error}"
+    );
 }
 
 #[test]

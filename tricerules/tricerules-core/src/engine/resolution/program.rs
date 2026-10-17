@@ -586,6 +586,7 @@ impl GameEngine {
                 }
                 CompiledInstructionKind::Choose {
                     choice,
+                    chooser,
                     optional,
                     branches,
                     otherwise,
@@ -596,9 +597,24 @@ impl GameEngine {
                         instruction_index: instruction_index as u32,
                         choice_id: choice.clone(),
                     };
+                    let chooser_player = match chooser {
+                        tricerules_card_model::primitives::PlayerRecipient::Controller => {
+                            top.controller
+                        }
+                        tricerules_card_model::primitives::PlayerRecipient::SourceController => {
+                            super::source_controller(self, top).ok_or(EngineError::Illegal(
+                                "source-controller Choose has no current or last-known source controller",
+                            ))?
+                        }
+                        _ => {
+                            return Err(EngineError::ProgramInvariant(
+                                "compiled Choose has an unsupported chooser",
+                            ));
+                        }
+                    };
                     let choose_controller_live = self
                         .state
-                        .player_idx(top.controller)
+                        .player_idx(chooser_player)
                         .is_some_and(|idx| !self.state.players[idx].has_lost);
                     let live_branches = branches
                         .iter()
@@ -634,10 +650,34 @@ impl GameEngine {
                     } else {
                         "Choose a resolution option.".to_string()
                     };
+                    if !*optional && live_branches.len() == 1 {
+                        let branch_index = live_branches[0];
+                        if let Some(branch) = branches
+                            .get(branch_index)
+                            .filter(|branch| branch.cost == ResolutionCost::None)
+                        {
+                            events.push(ev_log(format!(
+                                "P{} chooses: {}.",
+                                chooser_player,
+                                branch.fallback_label()
+                            )));
+                            let mut child_path = path;
+                            child_path.push(ProgramPathStep {
+                                instruction_index: instruction_index as u32,
+                                arm: ProgramArm::ChooseBranch(branch.branch_id.clone()),
+                            });
+                            program_state.frames.push(ProgramFrame {
+                                path: child_path,
+                                next_instruction: 0,
+                                yield_to: instruction.outputs.clone(),
+                            });
+                            continue;
+                        }
+                    }
                     self.state.pending_resolution = Some(crate::state::PendingResolution {
                         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                         resolution_prompt_semantics: None,
-                        deciding_player: top.controller,
+                        deciding_player: chooser_player,
                         presentation: crate::state::PendingResolutionPresentation {
                             source_object_id: top.id,
                             candidates: Vec::new(),
@@ -657,7 +697,7 @@ impl GameEngine {
                             },
                             choose: crate::state::PendingProgramChoose {
                                 occurrence,
-                                original_chooser: top.controller,
+                                original_chooser: chooser_player,
                                 optional: *optional,
                                 delegate_selected: false,
                                 stage: crate::state::PendingProgramChooseStage::Selecting,
@@ -846,6 +886,14 @@ impl GameEngine {
             }
             CompiledChooseRequirement::CastCostReceipt(condition) => {
                 top.cast_cost_condition_matches(condition)
+            }
+            CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters => {
+                super::pump_counters::can_put_counters(
+                    self,
+                    top,
+                    &[],
+                    &tricerules_card_model::primitives::EffectSubject::Source,
+                )
             }
         }
     }
@@ -2398,6 +2446,408 @@ mod invariant_rollback_tests {
         assert_eq!(engine.program_choose_choice_event(), Some(published));
     }
 
+    #[test]
+    fn mandatory_choose_with_one_free_live_branch_enters_it_and_runs_the_tail_once() {
+        let card = r#"(id: "program_single_free_fixture", name: "Program Single Free Fixture",
+            face_id: "program_single_free_fixture", mana_cost: "{0}", types: ["Instant"],
+            spell_program: Some((body: (steps: [
+                (id: "choose", kind: Choose(
+                    choice: "only_free", chooser: Controller, optional: false,
+                    branches: [(branch_id: "gain_one", presentation: Fallback,
+                        cost: None, requirement: Always,
+                        body: (steps: [(id: "branch", kind: Perform(GainLife(amount: 1)))], yields: []))],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "tail", kind: Perform(GainLife(amount: 2))),
+            ], yields: []))))"#;
+        let card_id = "program_single_free_fixture";
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("single-free program fixture compiles"),
+        ));
+        let decks = Some(vec![
+            vec![card_id.to_string(); 30],
+            vec![card_id.to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, 91_206, &[0, 1], 20, decks, true)
+            .expect("two-player program fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let spell = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture deck dealt a card");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&spell)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(spell, 0);
+        top.id = spell;
+        top.controller = 0;
+        top.card_id = card_id.into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.cast_by = Some(0);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(generation),
+        });
+        engine.state.stack.push(top.clone());
+
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("program owner lookup")
+            .expect("fixture spell has a program owner");
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("fixture program starts");
+        let mut events = Vec::new();
+        let progress = engine
+            .run_program_with_previous(
+                &top,
+                run,
+                crate::state::EffectResult::default(),
+                &mut events,
+            )
+            .expect("single live free branch resolves without a prompt");
+
+        assert_eq!(progress, ResolutionProgress::Completed);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.players[0].life, 23,
+            "branch and tail each resolve once"
+        );
+        assert!(!events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log))
+                        if log.text.starts_with("P0 chooses: ")
+                ))
+                .count(),
+            1,
+            "the mandatory one-live-branch selection is logged once"
+        );
+    }
+
+    #[test]
+    fn mandatory_choose_auto_entry_joins_child_yield_for_parent_and_tail_once() {
+        const CARD: &str = r#"(id: "mandatory_joined_yield_fixture",
+            name: "Mandatory Joined Yield Fixture",
+            face_id: "mandatory_joined_yield_fixture", mana_cost: "{0}", types: ["Instant"],
+            spell_program: Some((body: (steps: [
+                (id: "choose", bind: ["joined"], kind: Choose(
+                    choice: "only_free", chooser: Controller, optional: false,
+                    branches: [(branch_id: "only", presentation: Fallback, cost: None,
+                        requirement: Always,
+                        body: (steps: [(id: "pick", bind: ["picked"], kind:
+                            Perform(ChoosePermanents(
+                                chooser: Controller,
+                                filter: (kind: AnyPermanent, permanent_types: [Land]),
+                                min: 1, max: 1,
+                            )))], yields: ["picked"]))],
+                    otherwise: (steps: [(id: "otherwise_pick", bind: ["otherwise_picked"], kind:
+                        Perform(ChoosePermanents(
+                            chooser: Controller,
+                            filter: (kind: AnyPermanent, permanent_types: [Land]),
+                            min: 1, max: 1,
+                        )))], yields: ["otherwise_picked"],
+                    ),
+                )),
+                (id: "untap", input: Some("joined"), kind: Perform(UntapChosenPermanents)),
+                (id: "tail", kind: Perform(GainLife(amount: 2))),
+            ], yields: []), target_bindings: [])))"#;
+        let (mut engine, top, owners, islands) =
+            nested_choose_fixture(CARD, "mandatory_joined_yield_fixture", 91_208, 2, &[]);
+        let before_life = engine.state.players[0].life;
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("the mandatory joined-yield program starts");
+        let mut first_offer = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut first_offer,
+                )
+                .expect("the single free branch auto-enters and parks at its child selection"),
+            ResolutionProgress::Parked
+        ));
+        engine
+            .publish_resolution_prompt_ids(&mut first_offer)
+            .expect("the child permanent choice gets its prompt ID");
+
+        let offers = first_offer
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(offers.len(), 1, "only the child selection is offered");
+        assert_eq!(
+            offers[0].choice_kind,
+            rv1::ChoiceKind::PermanentObjects as i32,
+            "mandatory auto-entry must not publish a branch-choice prompt"
+        );
+        assert_eq!(offers[0].candidate_object_ids, islands);
+        assert_eq!(
+            first_offer
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log))
+                        if log.text.starts_with("P0 chooses: ")
+                ))
+                .count(),
+            1,
+            "the mandatory branch is logged once before the nested choice"
+        );
+        let (pending, _, program) = parked_program(&engine);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::PermanentObjects
+        );
+        assert!(program
+            .frames
+            .iter()
+            .flat_map(|frame| &frame.path)
+            .any(|path| matches!(path.arm, ProgramArm::ChooseBranch(_))));
+
+        let completed = nested_select_objects(&mut engine, vec![islands[0]]);
+        assert!(
+            !completed.events.iter().any(|event| matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+            )),
+            "the joined result reaches the parent without another prompt"
+        );
+        assert!(!engine.state.objects[&islands[0]].tapped);
+        assert!(engine.state.objects[&islands[1]].tapped);
+        assert_eq!(
+            engine.state.players[0].life,
+            before_life + 2,
+            "the parent consumes the joined selection and the tail runs exactly once"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    fn source_controller_paid_choose_fixture() -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+    ) {
+        use crate::state::{TriggerAbilityOrigin, TriggerUseKey};
+
+        let card = r#"(
+            id: "source_controller_paid_fixture",
+            name: "Source Controller Paid Fixture",
+            face_id: "source_controller_paid_fixture",
+            types: ["Creature"], power: 2, toughness: 2,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "choose", kind: Choose(
+                        choice: "paid", chooser: SourceController, optional: false,
+                        branches: [
+                            (branch_id: "mana", presentation: Fallback, cost: Mana("{1}"),
+                                requirement: Always,
+                                body: (steps: [(id: "mana_gain", kind: Perform(GainLife(amount: 1)))], yields: [])),
+                            (branch_id: "waterbend", presentation: Fallback, cost: Waterbend("{1}"),
+                                requirement: Always,
+                                body: (steps: [(id: "waterbend_gain", kind: Perform(GainLife(amount: 2)))], yields: [])),
+                        ],
+                        otherwise: (steps: [(id: "otherwise_gain", kind: Perform(GainLife(amount: 3)))], yields: []),
+                    ))
+                ], yields: []), target_bindings: [])),
+            )],
+        )"#;
+        let card_id = "source_controller_paid_fixture";
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("SourceController paid Choose fixture compiles"),
+        ));
+        let decks = Some((0..3).map(|_| vec![card_id.to_string(); 30]).collect());
+        let mut engine = GameEngine::new(registry, 91_207, &[0, 1, 2], 20, decks, true)
+            .expect("three-player SourceController fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let source = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("fixture source is in player zero's hand");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("source is controlled by player one when the trigger resolves");
+
+        let face = registry
+            .get(card_id)
+            .and_then(|definition| definition.face(0))
+            .expect("fixture face");
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("fixture triggered ability")
+            .clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let generation = engine.state.zone_change_generation[&source];
+        let mut top = engine.observer_return_item(source, 0);
+        top.id = engine.state.next_object_id.saturating_add(1);
+        top.controller = 0;
+        top.card_id = card_id.into();
+        top.ability_text = Some("Source Controller Paid Fixture trigger".into());
+        top.source_permanent_id = Some(source);
+        top.source_owner = Some(0);
+        top.source_zone_change = generation;
+        top.ability_index = Some(0);
+        top.triggered_ability = Some(ability);
+        top.trigger_use_key = Some(TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::Printed(definition),
+        });
+        top.is_triggered = true;
+        top.is_copy = false;
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("trigger program owner lookup")
+            .expect("fixture ability has a compiled program");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners)
+    }
+
+    #[test]
+    fn source_controller_paid_choose_uses_source_controller_for_mana_and_waterbend() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        for (branch, waterbend, expected_life) in [(0, false, 21), (1, true, 22)] {
+            let (mut engine, top, owners) = source_controller_paid_choose_fixture();
+            engine.state.players[0].mana_pool.colorless = 1;
+            engine.state.players[1].mana_pool.colorless = 1;
+
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            let (pending, _, _) = parked_program(&engine);
+            assert_eq!(top.controller, 0);
+            assert_eq!(
+                pending.deciding_player, 1,
+                "current source controller chooses"
+            );
+            let choice = nested_answer(&mut engine, Decision::SelectBranch, branch, Vec::new());
+            assert_eq!(
+                nested_log_count(&choice, "P1 chooses: Pay {1}."),
+                usize::from(branch == 0)
+            );
+            assert_eq!(
+                nested_log_count(&choice, "P1 chooses: Waterbend {1}."),
+                usize::from(branch == 1)
+            );
+
+            let pending = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("payment is pending");
+            assert_eq!(pending.deciding_player, 1, "the chooser remains the payer");
+            let ResolutionContinuation::ProgramChoose { choose, .. } = &pending.continuation else {
+                panic!("paid SourceController Choose remains parked");
+            };
+            assert_eq!(choose.original_chooser, 1);
+            let payment = pending
+                .continuation
+                .mana_payment()
+                .expect("selected branch has a payment");
+            assert_eq!(payment.waterbend, waterbend);
+
+            let paid = nested_answer(&mut engine, Decision::PayMana, 0, Vec::new());
+            assert_eq!(nested_log_count(&paid, "P1 pays {1} during resolution."), 1);
+            assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+            assert_eq!(engine.state.players[1].mana_pool.colorless, 0);
+            assert_eq!(engine.state.players[0].life, expected_life);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+        }
+    }
+
+    #[test]
+    fn source_controller_departure_during_paid_choose_uses_captured_original_chooser() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners) = source_controller_paid_choose_fixture();
+        engine.state.players[0].mana_pool.colorless = 1;
+        engine.state.players[1].mana_pool.colorless = 1;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("payment is pending");
+        assert_eq!(pending.deciding_player, 1);
+        let ResolutionContinuation::ProgramChoose { choose, .. } = &pending.continuation else {
+            panic!("paid SourceController Choose remains parked");
+        };
+        assert_eq!(choose.original_chooser, 1);
+
+        engine.state.players[1].has_lost = true;
+        let mut departure_events = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut departure_events)
+            .expect("departed payer resolves Otherwise");
+
+        assert!(departure_events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::Log(log))
+                if log.text == "The departed payer cannot complete the program Choose payment; Otherwise resolves."
+        )));
+        assert_eq!(
+            engine.state.players[0].life, 23,
+            "only Otherwise resolves for the live stack controller"
+        );
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+        assert_eq!(engine.state.players[1].mana_pool.colorless, 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
     fn nested_choose_fixture(
         card: &str,
         card_id: &str,
@@ -2902,7 +3352,7 @@ mod invariant_rollback_tests {
      permanent_types: [Land]), min: 1, max: 1)))], yields: ["otherwise_pick"]))),
   (id: "untap", bind: [], input: Some("picked"), kind: Perform(UntapChosenPermanents)),
   (id: "pause_after_yield", bind: [], input: None, kind: Choose(choice: "after", chooser: Controller,
-   optional: false, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+   optional: true, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
     requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;
 
@@ -2990,7 +3440,7 @@ mod invariant_rollback_tests {
        kind: Perform(SelectHandCards(count: 1, ordered: true, prompt: "Choose the card to put back."))),
       (id: "put_back", bind: [], input: Some("selected"), kind: Perform(PutSelectedHandCardsOnLibraryTop)),
       (id: "pause", bind: [], input: None, kind: Choose(choice: "after_put_back", chooser: Controller,
-       optional: false, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+       optional: true, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
         requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
      ], yields: []))], otherwise: (steps: [], yields: [])))
   ], yields: []), target_bindings: []))),
@@ -3033,7 +3483,7 @@ mod invariant_rollback_tests {
   (id: "draw_top", bind: ["drawn"], input: None,
    kind: Perform(Draw(who: Controller, count: 1))),
   (id: "pause_after_draw", bind: [], input: None,
-   kind: Choose(choice: "after_draw", chooser: Controller, optional: false,
+   kind: Choose(choice: "after_draw", chooser: Controller, optional: true,
     branches: [(branch_id: "finish", presentation: Fallback, cost: None,
      requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;
@@ -3056,7 +3506,7 @@ mod invariant_rollback_tests {
   (id: "shuffle_tail", bind: [], input: None,
    kind: Perform(ShuffleLibrary(who: Controller))),
   (id: "pause_after_tail", bind: [], input: None,
-   kind: Choose(choice: "after_tail", chooser: Controller, optional: false,
+   kind: Choose(choice: "after_tail", chooser: Controller, optional: true,
     branches: [(branch_id: "continue", presentation: Fallback, cost: None,
      requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;

@@ -16720,45 +16720,32 @@ fn match_etb_endure_fixed(text: &str, context: &RecipeContext) -> Option<RecipeE
         return None;
     }
     let (counters_id, token_id) = issue_459_endure_branch_ids(count);
-    Some(triggered_ability_with(
+    let branch_presentation = format!("{:?}", context.presentation);
+    let program = authored_program(
+        &format!(
+            "(id: \"choose_endure\", kind: Choose(\
+                choice: \"endure\", chooser: SourceController, optional: false,\
+                branches: [\
+                    (branch_id: \"{counters_id}\", presentation: {branch_presentation}, cost: None,\
+                        requirement: EffectsApplicable,\
+                        body: (steps: [(id: \"put_counters\", kind: Perform(PutCounters(\
+                            counter: PlusOnePlusOne, count: {count}, subject: Source,\
+                        )))], yields: [])),\
+                    (branch_id: \"{token_id}\", presentation: {branch_presentation}, cost: None,\
+                        requirement: Always,\
+                        body: (steps: [(id: \"create_spirit\", kind: Perform(CreateTokens(\
+                            token: \"spirit_w_{count}_{count}\", count: 1, who: SourceController,\
+                            tapped: false, sacrifice_timing: None,\
+                        )))], yields: [])),\
+                ], otherwise: (steps: [], yields: []),\
+            ))"
+        ),
+        "",
+    );
+    Some(triggered_program_ability(
         context,
         TriggerCondition::WhenSelfEntersBattlefield,
-        vec![SpellEffectKind::ChooseResolutionBranch {
-            chooser: PlayerRecipient::SourceController,
-            optional: false,
-            selection: ResolutionBranchSelection::PlayerChoice,
-            branches: vec![
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new(counters_id)
-                        .expect("closed endure branch uses a valid choice ID"),
-                    presentation: context.presentation.clone(),
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::EffectsApplicable,
-                    effects: vec![SpellEffectKind::PutCounters {
-                        counter: CounterKind::PlusOnePlusOne,
-                        count: Amount::Fixed(count),
-                        subject: EffectSubject::Source,
-                    }],
-                },
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new(token_id)
-                        .expect("closed endure branch uses a valid choice ID"),
-                    presentation: context.presentation.clone(),
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::Always,
-                    effects: vec![SpellEffectKind::CreateTokens {
-                        token: format!("spirit_w_{count}_{count}"),
-                        count: Amount::Fixed(1),
-                        who: PlayerRecipient::SourceController,
-                        tapped: false,
-                        sacrifice_timing: None,
-                    }],
-                },
-            ],
-            otherwise: Vec::new(),
-        }],
+        program,
     ))
 }
 
@@ -28474,6 +28461,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_cards::primitives::InstructionKind;
 
     fn context() -> RecipeContext {
         RecipeContext {
@@ -53548,24 +53536,34 @@ mod tests {
                 AbilityPresentation::OracleLines(vec![1]),
                 "{name}"
             );
-            let [SpellEffectKind::ChooseResolutionBranch {
+            assert!(ability.effect.is_empty(), "{name}");
+            let program = ability
+                .program
+                .as_ref()
+                .unwrap_or_else(|| panic!("{name} must emit an ordered program"));
+            assert!(program.target_bindings.is_empty(), "{name}");
+            assert!(program.body.yields.is_empty(), "{name}");
+            let [choose] = program.body.steps.as_slice() else {
+                panic!("{name} must emit one top-level Endure choice");
+            };
+            assert!(choose.bind.is_empty() && choose.input.is_none(), "{name}");
+            let InstructionKind::Choose {
+                choice,
                 chooser,
                 optional,
-                selection,
                 branches,
                 otherwise,
-            }] = ability.effect.as_slice()
+            } = &choose.kind
             else {
-                panic!("{name} must emit exactly one resolution-branch instruction");
+                panic!("{name} must emit the finite Choose instruction");
             };
+            assert_eq!(choice.as_str(), "endure", "{name}");
             assert_eq!(*chooser, PlayerRecipient::SourceController, "{name}");
             assert!(!*optional, "{name}");
-            assert_eq!(
-                *selection,
-                ResolutionBranchSelection::PlayerChoice,
+            assert!(
+                otherwise.steps.is_empty() && otherwise.yields.is_empty(),
                 "{name}"
             );
-            assert!(otherwise.is_empty(), "{name}");
             let (counters_id, token_id) = issue_459_endure_branch_ids(count);
             let [counters, token] = branches.as_slice() else {
                 panic!("{name} must offer exactly the counter and token branches");
@@ -53582,13 +53580,24 @@ mod tests {
                 "{name}"
             );
             assert_eq!(counters.cost, ResolutionCost::None, "{name}");
+            let [counter_step] = counters.body.steps.as_slice() else {
+                panic!("{name} counter branch must contain one leaf");
+            };
+            assert!(
+                counter_step.bind.is_empty() && counter_step.input.is_none(),
+                "{name}"
+            );
+            assert!(counters.body.yields.is_empty(), "{name}");
+            let InstructionKind::Perform(counter_effect) = &counter_step.kind else {
+                panic!("{name} counter branch must perform PutCounters");
+            };
             assert_eq!(
-                counters.effects,
-                [SpellEffectKind::PutCounters {
+                counter_effect.as_ref(),
+                &SpellEffectKind::PutCounters {
                     counter: CounterKind::PlusOnePlusOne,
                     count: Amount::Fixed(count),
                     subject: EffectSubject::Source,
-                }],
+                },
                 "{name}"
             );
             assert_eq!(token.branch_id.as_str(), token_id, "{name}");
@@ -53603,15 +53612,26 @@ mod tests {
                 "{name}"
             );
             assert_eq!(token.cost, ResolutionCost::None, "{name}");
+            let [token_step] = token.body.steps.as_slice() else {
+                panic!("{name} token branch must contain one leaf");
+            };
+            assert!(
+                token_step.bind.is_empty() && token_step.input.is_none(),
+                "{name}"
+            );
+            assert!(token.body.yields.is_empty(), "{name}");
+            let InstructionKind::Perform(token_effect) = &token_step.kind else {
+                panic!("{name} token branch must perform CreateTokens");
+            };
             assert_eq!(
-                token.effects,
-                [SpellEffectKind::CreateTokens {
+                token_effect.as_ref(),
+                &SpellEffectKind::CreateTokens {
                     token: format!("spirit_w_{count}_{count}"),
                     count: Amount::Fixed(1),
                     who: PlayerRecipient::SourceController,
                     tapped: false,
                     sacrifice_timing: None,
-                }],
+                },
                 "{name}"
             );
         }

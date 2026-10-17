@@ -177,8 +177,9 @@ declare one; otherwise their effects stay on ordinary effect-list dispatch. Each
 its own targeting groups and group indices. Do not add a face-level `spell_program` to a modal spell.
 
 The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
-authored functions. `Choose` is controller-only, consumes no prior result, and requires at least
-one branch. Its branches must be either all free or all paid; supported costs are `None`, fixed
+authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
+is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
+either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, and fixed nonempty `Waterbend` without X. `Always`, supported
 controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
 are admitted; flat-list applicability and card-result requirements are rejected. Branch and
@@ -196,6 +197,18 @@ programs limit draw/discard recipients to `Controller`; triggered ability progra
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
 not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
+Ability-program `Choose` may also use `SourceController`. The chooser is captured from the exact
+current source incarnation, or its last-known controller after it leaves, when the offer is made;
+that captured player remains the original chooser through delegation or a pending branch payment.
+The ordinary `CreateTokens(..., who: SourceController)` leaf instead chooses its recipient when the
+effect resolves, so a later source control change can make that recipient differ from the earlier
+chooser. `EffectsApplicable` is admitted only on an ability `Choose` branch whose complete body is
+one resultless, fixed positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine checks
+whether that exact source incarnation can receive the counters both when the menu is offered and
+when a branch answer is validated. A mandatory choice with exactly one live cost-free branch enters
+it automatically and logs the selection; optional choices and paid branches still receive prompts.
+If the original chooser leaves during a paid-branch payment, the branch is not transferred and the
+`Otherwise` block resolves.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
 recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test

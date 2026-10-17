@@ -269,7 +269,7 @@ const SOURCE_DEPARTURE_TAIL_SPELL: &str = r#"(
     (id: "choose_blue", kind: Choose(
       choice: "choose_blue",
       chooser: Controller,
-      optional: false,
+      optional: true,
       branches: [
         (branch_id: "blue", presentation: Fallback, cost: None, requirement: Always,
          body: (steps: [

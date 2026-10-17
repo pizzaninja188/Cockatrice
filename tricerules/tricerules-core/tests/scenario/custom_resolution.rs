@@ -3568,10 +3568,7 @@ fn cast_cost_mode_choose_registry() -> &'static tricerules_card_model::CardRegis
 
 #[test]
 fn program_choose_modal_mode_reads_its_exact_cast_cost_receipt() {
-    use tricerules_proto::ruled::v1::{
-        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
-        SubmitResolutionChoice,
-    };
+    use tricerules_proto::ruled::v1::{ruled_command::Cmd, CastCostGroupSelection};
 
     let mut engine = GameEngine::new(
         cast_cost_mode_choose_registry(),
@@ -3590,33 +3587,18 @@ fn program_choose_modal_mode_reads_its_exact_cast_cost_receipt() {
     engine
         .apply_scenario_command(0, &cast_modal_spell(unselected_slot, vec![(0, vec![])]))
         .expect("cast the selected face mode without the optional kicker");
-    let unselected_menu = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
-        .expect("the selected mode reads the captured unselected receipt");
-    assert_eq!(
-        unselected_menu
-            .resolution_branches
-            .iter()
-            .map(|branch| (branch.branch_index, branch.selectable))
-            .collect::<Vec<_>>(),
-        vec![(1, true)]
+    let unselected_resolution = pass_both_players_with_batch(&mut engine);
+    assert!(
+        find_resolution_choice(&unselected_resolution).is_none(),
+        "the mandatory Choose auto-enters its sole free unselected-receipt branch"
     );
-    engine
-        .apply_scenario_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: unselected_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 1,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("select the exact unselected receipt branch");
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
-        before_unselected + 2
+        before_unselected + 2,
+        "the exact unselected receipt still routes to Draw two"
     );
+    assert!(engine.state.stack.is_empty());
 
     inject_card_into_hand(&mut engine, 0, "choose_mode_cast_receipt_fixture");
     let selected_slot = hand_index_for_card(&engine, 0, "choose_mode_cast_receipt_fixture");
@@ -3641,33 +3623,26 @@ fn program_choose_modal_mode_reads_its_exact_cast_cost_receipt() {
             .map(|id| id.as_str()),
         Some("kicker_group")
     );
-    let selected_menu = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
-        .expect("the selected mode reads the captured selected receipt");
     assert_eq!(
-        selected_menu
-            .resolution_branches
-            .iter()
-            .map(|branch| (branch.branch_index, branch.selectable))
-            .collect::<Vec<_>>(),
-        vec![(0, true)]
+        engine.state.stack.last().unwrap().cast_cost_receipts[0]
+            .option_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("kicker_option")
     );
-    engine
-        .apply_scenario_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: selected_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 0,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("select the exact selected receipt branch");
+    let selected_resolution = pass_both_players_with_batch(&mut engine);
+    assert_eq!(
+        find_resolution_choice(&selected_resolution),
+        None,
+        "the mandatory Choose auto-enters its sole free selected-receipt branch"
+    );
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
-        before_selected + 1
+        before_selected + 1,
+        "the exact selected receipt still routes to Draw one"
     );
+    assert!(engine.state.stack.is_empty());
 }
 
 fn draw_limit_choose_registry() -> &'static tricerules_card_model::CardRegistry {
@@ -3794,10 +3769,7 @@ fn program_choose_suppresses_impossible_free_draw_but_keeps_paid_draw_offer() {
 
 #[test]
 fn program_choose_cast_cost_receipt_routes_selected_and_unselected_casts() {
-    use tricerules_proto::ruled::v1::{
-        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
-        SubmitResolutionChoice,
-    };
+    use tricerules_proto::ruled::v1::CastCostGroupSelection;
 
     let mut engine = GameEngine::new(
         cast_cost_choose_registry(false),
@@ -3824,33 +3796,17 @@ fn program_choose_cast_cost_receipt_routes_selected_and_unselected_casts() {
         .cast_cost_receipts
         .is_empty());
     let unselected_resolved = pass_both_players_with_batch(&mut engine);
-    let unselected_menu = find_resolution_choice(&unselected_resolved)
-        .expect("the not-selected receipt branch is the only applicable option");
-    assert_eq!(
-        unselected_menu
-            .resolution_branches
-            .iter()
-            .map(|branch| (branch.branch_index, branch.selectable))
-            .collect::<Vec<_>>(),
-        vec![(1, true)]
+    assert!(
+        find_resolution_choice(&unselected_resolved).is_none(),
+        "the mandatory Choose auto-enters its sole free unselected-receipt branch"
     );
-    engine
-        .apply_scenario_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: unselected_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 1,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("select the captured un-kicked branch");
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
-        draws_before_unselected + 2
+        draws_before_unselected + 2,
+        "the captured unselected kicker receipt routes to Draw two"
     );
+    assert!(engine.state.stack.is_empty());
 
     inject_card_into_hand(&mut engine, 0, "choose_cast_receipt_fixture");
     let selected_slot = hand_index_for_card(&engine, 0, "choose_cast_receipt_fixture");
@@ -3885,41 +3841,22 @@ fn program_choose_cast_cost_receipt_routes_selected_and_unselected_casts() {
         Some("kicker_option")
     );
     let selected_resolved = pass_both_players_with_batch(&mut engine);
-    let selected_menu = find_resolution_choice(&selected_resolved)
-        .expect("the selected receipt branch is the only applicable option");
-    assert_eq!(
-        selected_menu
-            .resolution_branches
-            .iter()
-            .map(|branch| (branch.branch_index, branch.selectable))
-            .collect::<Vec<_>>(),
-        vec![(0, true)]
+    assert!(
+        find_resolution_choice(&selected_resolved).is_none(),
+        "the mandatory Choose auto-enters its sole free selected-receipt branch"
     );
-    engine
-        .apply_scenario_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: selected_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 0,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("select the captured kicked branch");
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
-        draws_before_selected + 1
+        draws_before_selected + 1,
+        "the captured selected kicker receipt routes to Draw one"
     );
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]
 fn program_choose_cast_cost_receipt_survives_spell_copy() {
-    use tricerules_proto::ruled::v1::{
-        ruled_command::Cmd, CastCostGroupSelection, ResolutionChoiceDecision,
-        SubmitResolutionChoice,
-    };
+    use tricerules_proto::ruled::v1::CastCostGroupSelection;
 
     let mut engine = GameEngine::new(
         cast_cost_choose_registry(true),
@@ -3976,63 +3913,48 @@ fn program_choose_cast_cost_receipt_survives_spell_copy() {
         .find(|item| item.is_copy)
         .expect("Twincast puts a copy on the stack");
     assert_eq!(copy.cast_cost_receipts, original.cast_cost_receipts);
+    let p1_draws_before_copy = engine.state.turn_history.current.player(1).cards_drawn;
+    let p0_draws_before_copy = engine.state.turn_history.current.player(0).cards_drawn;
     let copy_resolution = pass_both_players_with_batch(&mut engine);
-    let copy_menu = find_resolution_choice(&copy_resolution)
-        .expect("the copy retains and evaluates its exact captured kicker receipt");
-    assert_eq!(copy_menu.deciding_player_id, 1);
-    assert_eq!(
-        copy_menu
-            .resolution_branches
-            .iter()
-            .map(|branch| (branch.branch_index, branch.selectable))
-            .collect::<Vec<_>>(),
-        vec![(0, true)]
+    assert!(
+        find_resolution_choice(&copy_resolution).is_none(),
+        "the copy's mandatory Choose auto-enters its sole free receipt branch"
     );
-    let p1_draws = engine.state.turn_history.current.player(1).cards_drawn;
-    engine
-        .apply_scenario_command(
-            1,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: copy_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 0,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("P1 selects the kicked branch on the copy");
     assert_eq!(
         engine.state.turn_history.current.player(1).cards_drawn,
-        p1_draws + 1
+        p1_draws_before_copy + 1,
+        "the copied spell's exact kicker receipt draws one card for P1"
     );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        p0_draws_before_copy,
+        "the copy does not draw for the original spell's controller"
+    );
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.stack.len(),
         1,
         "the original remains on the stack"
     );
+    assert_eq!(engine.state.stack[0].id, original.id);
 
+    let p0_draws_before_original = engine.state.turn_history.current.player(0).cards_drawn;
+    let p1_draws_before_original = engine.state.turn_history.current.player(1).cards_drawn;
     let original_resolution = pass_both_players_with_batch(&mut engine);
-    let original_menu = find_resolution_choice(&original_resolution)
-        .expect("the original retains its own exact receipt and parked program");
-    assert_eq!(original_menu.deciding_player_id, 0);
-    let p0_draws = engine.state.turn_history.current.player(0).cards_drawn;
-    engine
-        .apply_scenario_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    resolution_prompt_id: original_menu.resolution_prompt_id,
-                    decision: ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 0,
-                    ..Default::default()
-                })),
-            },
-        )
-        .expect("P0 selects the kicked branch on the original spell");
+    assert!(
+        find_resolution_choice(&original_resolution).is_none(),
+        "the original's mandatory Choose auto-enters its sole free receipt branch"
+    );
+    assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
-        p0_draws + 1
+        p0_draws_before_original + 1,
+        "the original spell's exact kicker receipt draws one card for P0"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        p1_draws_before_original,
+        "the original spell does not draw for the copy's controller"
     );
     assert!(engine.state.stack.is_empty());
 }

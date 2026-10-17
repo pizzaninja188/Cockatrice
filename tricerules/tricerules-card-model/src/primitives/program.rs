@@ -363,6 +363,8 @@ pub enum CompiledChooseRequirement {
     Always,
     GameCondition(GameCondition),
     CastCostReceipt(CastCostReceiptCondition),
+    /// The exact source object can receive one +1/+1 counter at this resolution point.
+    SourceCanReceivePlusOnePlusOneCounters,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -759,9 +761,12 @@ impl Compiler {
                             choice
                         ));
                     }
-                    if *chooser != PlayerRecipient::Controller {
+                    let chooser_supported = *chooser == PlayerRecipient::Controller
+                        || (*chooser == PlayerRecipient::SourceController
+                            && self.context == EffectContext::Ability);
+                    if !chooser_supported {
                         return Err(format!(
-                            "Choose instruction '{}' supports only the controller as chooser",
+                            "Choose instruction '{}' supports Controller, or SourceController on an ability program, as chooser",
                             instruction.id
                         ));
                     }
@@ -863,10 +868,15 @@ impl Compiler {
                                 CompiledChooseRequirement::CastCostReceipt(condition.clone())
                             }
                             ResolutionBranchRequirement::EffectsApplicable => {
-                                return Err(format!(
-                                    "Choose instruction '{}' does not support EffectsApplicable requirements",
-                                    instruction.id
-                                ));
+                                if self.context != EffectContext::Ability
+                                    || !exact_source_plus_one_counter_body(&branch.body)
+                                {
+                                    return Err(format!(
+                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction",
+                                        instruction.id
+                                    ));
+                                }
+                                CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters
                             }
                             ResolutionBranchRequirement::CardResultCount { .. } => {
                                 return Err(format!(
@@ -1584,9 +1594,11 @@ fn validate_and_result_types(
             ..
         } => {
             effect.validate(context)?;
-            if *who != PlayerRecipient::Controller || sacrifice_timing.is_some() {
+            let supported_recipient = *who == PlayerRecipient::Controller
+                || (*who == PlayerRecipient::SourceController && context == EffectContext::Ability);
+            if !supported_recipient || sacrifice_timing.is_some() {
                 return Err(
-                    "CreateTokens supports controller-owned ordinary tokens without delayed sacrifice"
+                    "CreateTokens supports controller-owned ordinary tokens, or SourceController tokens on an ability program, without delayed sacrifice"
                         .into(),
                 );
             }
@@ -1619,6 +1631,18 @@ fn validate_and_result_types(
             } else {
                 Vec::new()
             })
+        }
+        SpellEffectKind::PutCounters {
+            counter,
+            count,
+            subject,
+        } if *counter == super::CounterKind::PlusOnePlusOne
+            && matches!(count, Amount::Fixed(amount) if *amount > 0)
+            && *subject == EffectSubject::Source
+            && context == EffectContext::Ability =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
         }
         SpellEffectKind::ReturnTriggeredCard {
             reference: super::TriggeredCardReference::ExactTriggerObject,
@@ -2071,6 +2095,29 @@ fn validate_program_recipient(
             "{role} uses a recipient outside the finite resolution-program input contract"
         )),
     }
+}
+
+fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {
+    if !body.yields.is_empty() {
+        return false;
+    }
+    let [instruction] = body.steps.as_slice() else {
+        return false;
+    };
+    if !instruction.bind.is_empty() || instruction.input.is_some() {
+        return false;
+    }
+    let InstructionKind::Perform(effect) = &instruction.kind else {
+        return false;
+    };
+    matches!(
+        effect.as_ref(),
+        SpellEffectKind::PutCounters {
+            counter: super::CounterKind::PlusOnePlusOne,
+            count: Amount::Fixed(count),
+            subject: EffectSubject::Source,
+        } if *count > 0
+    )
 }
 
 fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
