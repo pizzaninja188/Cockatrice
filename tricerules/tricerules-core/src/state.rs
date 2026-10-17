@@ -343,7 +343,12 @@ pub enum TriggerAbilityOrigin {
     /// A spell keyword instance belongs to the cast spell, while this nested value records which
     /// printed or granting occurrence supplied that instance at the cast boundary.
     SpellKeyword(SpellKeywordOrigin),
-    ResolvingGrant(u64),
+    ResolvingGrant {
+        occurrence: u64,
+        /// Optional immutable definition for an authored delayed child. The occurrence remains
+        /// the identity; this definition only binds program compilation and presentation.
+        definition: Option<AbilityDefinitionId>,
+    },
 }
 
 /// Provenance for one spell-keyword trigger instance captured when a spell becomes cast.
@@ -3091,9 +3096,14 @@ impl StackItem {
             match &self.trigger_use_key.as_ref()?.ability_origin {
                 TriggerAbilityOrigin::Printed(definition)
                 | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition,
-                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
-                    return None;
-                }
+                TriggerAbilityOrigin::ResolvingGrant {
+                    definition: Some(definition),
+                    ..
+                } => definition,
+                TriggerAbilityOrigin::SpellKeyword(_)
+                | TriggerAbilityOrigin::ResolvingGrant {
+                    definition: None, ..
+                } => return None,
             }
         } else {
             match self.activated_ability_occurrence.as_ref()? {
@@ -3230,6 +3240,8 @@ pub struct DelayedTriggerPayload {
     pub source_face_index: usize,
     /// Stable display identity captured while the creating stack item still exists.
     pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
+    /// Exact authored child definition when this delayed trigger has a compiled program.
+    pub program_definition: Option<AbilityDefinitionId>,
     pub ability: TriggeredAbilityDef,
 }
 
@@ -3849,7 +3861,17 @@ impl GameState {
     }
 
     pub(crate) fn allocate_trigger_grant_origin(&mut self) -> TriggerAbilityOrigin {
-        let origin = TriggerAbilityOrigin::ResolvingGrant(self.next_trigger_grant_id);
+        self.allocate_trigger_grant_origin_with_definition(None)
+    }
+
+    pub(crate) fn allocate_trigger_grant_origin_with_definition(
+        &mut self,
+        definition: Option<AbilityDefinitionId>,
+    ) -> TriggerAbilityOrigin {
+        let origin = TriggerAbilityOrigin::ResolvingGrant {
+            occurrence: self.next_trigger_grant_id,
+            definition,
+        };
         self.next_trigger_grant_id += 1;
         origin
     }
@@ -3880,7 +3902,8 @@ impl GameState {
         assert!(matches!(
             effect.trigger_grant_origin,
             Some(
-                TriggerAbilityOrigin::StaticGrant { .. } | TriggerAbilityOrigin::ResolvingGrant(_)
+                TriggerAbilityOrigin::StaticGrant { .. }
+                    | TriggerAbilityOrigin::ResolvingGrant { .. }
             )
         ));
         self.continuous_effects.push(effect);
@@ -4140,6 +4163,9 @@ impl GameState {
                 let object_id = self.next_object_id;
                 self.next_object_id += 1;
                 let ability_text = delayed.ability.fallback_text(&delayed.card_name);
+                let ability_origin = delayed.program_definition.clone().map(|definition| {
+                    self.allocate_trigger_grant_origin_with_definition(Some(definition))
+                });
                 StagedTrigger {
                     object_id,
                     source_permanent_id: delayed.source.object_id,
@@ -4155,7 +4181,9 @@ impl GameState {
                     card_name: delayed.card_name,
                     controller: delayed.controller,
                     ability_index: 0,
-                    ability_origin: None,
+                    // Legacy delayed abilities keep no authored origin. An authored child
+                    // program receives a fresh occurrence while preserving its exact definition.
+                    ability_origin,
                     ability_text,
                     presentation: delayed.presentation,
                     trigger_context: TriggerContext {

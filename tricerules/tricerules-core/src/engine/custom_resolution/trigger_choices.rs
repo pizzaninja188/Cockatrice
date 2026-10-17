@@ -70,9 +70,8 @@ impl GameEngine {
             .and_then(|origin| match origin {
                 TriggerAbilityOrigin::Printed(definition)
                 | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
-                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
-                    None
-                }
+                TriggerAbilityOrigin::ResolvingGrant { definition, .. } => definition.as_ref(),
+                TriggerAbilityOrigin::SpellKeyword(_) => None,
             });
         let ability_program =
             authored_definition.and_then(|definition| ability_program(self, definition));

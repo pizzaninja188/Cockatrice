@@ -3433,6 +3433,11 @@ impl GameEngine {
             BattlefieldEntryCompletion::TokenBatch(batch) => {
                 self.reconcile_departed_token_entry_members(batch, departed_objects, spell_label);
             }
+            BattlefieldEntryCompletion::ResolutionEffect { .. }
+                if pending
+                    .continuation
+                    .stack()
+                    .is_some_and(|stack| stack.program.is_some()) => {}
             _ => return Ok(()),
         }
         let stack = pending
@@ -3711,6 +3716,13 @@ impl GameEngine {
                         stack.previous_result,
                         Vec::new(),
                     )?,
+                BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
+                    self.complete_parked_stack_with_previous(
+                        stack,
+                        EffectResult::default(),
+                        Vec::new(),
+                    )?
+                }
                 BattlefieldEntryCompletion::ResolutionEffect { .. }
                 | BattlefieldEntryCompletion::Ninjutsu { .. } => self
                     .complete_parked_resolution_with_previous(
@@ -3854,6 +3866,8 @@ impl GameEngine {
                     stack.previous_result,
                     Vec::new(),
                 )?,
+            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => self
+                .complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?,
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => self
                 .complete_parked_resolution_with_previous(
@@ -5058,6 +5072,9 @@ impl GameEngine {
                     None,
                 )?;
                 self.complete_parked_resolution(stack.item, Some(0), events)
+            }
+            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
+                self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => self
@@ -6456,6 +6473,7 @@ impl GameEngine {
                             card_name,
                             source_face_index: item.face_index,
                             presentation,
+                            program_definition: None,
                             ability,
                         },
                     )),
@@ -6580,7 +6598,11 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                if stack.program.is_some() {
+                    self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+                } else {
+                    self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                }
             }
             BattlefieldEntryCompletion::Ninjutsu {
                 owner,

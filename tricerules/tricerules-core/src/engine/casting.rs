@@ -6900,7 +6900,9 @@ mod mana_payment_tests {
             .find(|ability| {
                 matches!(
                     ability.occurrence,
-                    ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::ResolvingGrant(_))
+                    ActivatedAbilityOccurrence::Granted(
+                        TriggerAbilityOrigin::ResolvingGrant { .. },
+                    )
                 )
             })
             .expect("resolving grants remain live legacy activated abilities");

@@ -6183,7 +6183,16 @@ impl SpellEffectKind {
                 if !ability.trigger.is_delayed_only() {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
                 }
-                ability.reject_unowned_authored_program()?;
+                if ability.program.is_some() {
+                    if !matches!(subject, Some(EffectSubject::PreviousEffectObject)) {
+                        return Err(
+                            "authored delayed programs require the exact PreviousEffectObject capture"
+                                .into(),
+                        );
+                    }
+                } else {
+                    ability.reject_unowned_authored_program()?;
+                }
                 if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
                     ability.validate_token_copy_cohort_shape()
                 } else {

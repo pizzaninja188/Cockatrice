@@ -677,6 +677,19 @@ pub(super) fn create_delayed_trigger(
         ));
     };
     let card_name = cx.spell_label.to_owned();
+    let program_definition = if ability.program.is_some() {
+        let Some(tricerules_card_model::ProgramOwnerId::Ability(mut definition)) =
+            cx.top.ability_program_owner()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "authored delayed child has no immutable parent ability definition",
+            ));
+        };
+        definition.ability_path.push(ability.ability_id.clone());
+        Some(definition)
+    } else {
+        None
+    };
     let matcher = match ability.trigger {
         TriggerCondition::AtBeginningOfNextEndStep => {
             EventObserverMatcher::AtBeginningOfNextEndStep
@@ -755,6 +768,7 @@ pub(super) fn create_delayed_trigger(
                 card_name,
                 source_face_index: cx.top.face_index,
                 presentation,
+                program_definition,
                 ability: *ability,
             })),
         });

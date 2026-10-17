@@ -72,6 +72,7 @@ impl GameEngine {
                 card_name: label.into(),
                 source_face_index: top.face_index,
                 presentation,
+                program_definition: None,
                 ability,
             })),
         });

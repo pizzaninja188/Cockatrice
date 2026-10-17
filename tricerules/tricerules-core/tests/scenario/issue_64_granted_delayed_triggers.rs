@@ -489,6 +489,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
             card_name: "Grizzly Bears".into(),
             source_face_index: 0,
             presentation: Some(delayed_presentation.clone()),
+            program_definition: None,
             ability: TriggeredAbilityDef {
                 ability_id: AbilityId::new("delayed_tap").unwrap(),
                 presentation: AbilityPresentation::Fallback,

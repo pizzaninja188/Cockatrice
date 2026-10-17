@@ -902,7 +902,10 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
         .continuous_effects
         .last_mut()
         .unwrap()
-        .trigger_grant_origin = Some(TriggerAbilityOrigin::ResolvingGrant(305_028));
+        .trigger_grant_origin = Some(TriggerAbilityOrigin::ResolvingGrant {
+        occurrence: 305_028,
+        definition: None,
+    });
     let collected = engine.matching_triggered_abilities("sol_ring", source, 0, 0, |_| true);
     assert_eq!(collected.len(), 1);
     assert_eq!(collected[0].source_label, "Face-down permanent");
@@ -1113,7 +1116,10 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
                 .last()
                 .unwrap()
                 .trigger_grant_origin,
-            Some(TriggerAbilityOrigin::ResolvingGrant(occurrence))
+            Some(TriggerAbilityOrigin::ResolvingGrant {
+                occurrence,
+                definition: None,
+            })
         );
     }
     let pass = rv1::RuledCommand {
@@ -1130,7 +1136,11 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
     assert_eq!(grants.len(), 2);
     let stale = activate(&engine, recipient, grants[0], 0);
     engine.state.continuous_effects.retain(|effect| {
-        effect.trigger_grant_origin != Some(TriggerAbilityOrigin::ResolvingGrant(0))
+        effect.trigger_grant_origin
+            != Some(TriggerAbilityOrigin::ResolvingGrant {
+                occurrence: 0,
+                definition: None,
+            })
     });
     engine.apply_scenario_command(0, &pass).unwrap();
     engine.apply_scenario_command(1, &pass).unwrap();

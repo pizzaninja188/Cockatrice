@@ -58,7 +58,14 @@ fn trigger_ability_path(
     match origin {
         TriggerAbilityOrigin::Printed(definition)
         | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition.ability_path.clone(),
-        TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
+        TriggerAbilityOrigin::ResolvingGrant {
+            definition: Some(definition),
+            ..
+        } => definition.ability_path.clone(),
+        TriggerAbilityOrigin::SpellKeyword(_)
+        | TriggerAbilityOrigin::ResolvingGrant {
+            definition: None, ..
+        } => {
             vec![ability.ability_id.clone()]
         }
     }
@@ -81,9 +88,14 @@ impl GameEngine {
             .and_then(|origin| match origin {
                 TriggerAbilityOrigin::Printed(definition)
                 | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition.clone()),
-                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
-                    None
-                }
+                TriggerAbilityOrigin::ResolvingGrant {
+                    definition: Some(definition),
+                    ..
+                } => Some(definition.clone()),
+                TriggerAbilityOrigin::SpellKeyword(_)
+                | TriggerAbilityOrigin::ResolvingGrant {
+                    definition: None, ..
+                } => None,
             })
             .unwrap_or_else(|| {
                 self.ability_definition(source_id, face_index, vec![ability.ability_id.clone()])
@@ -484,6 +496,10 @@ impl GameEngine {
         let mut collected = self.collect_event_triggers(events);
         collected.extend(delayed.into_iter().map(|(watched, delayed)| {
             let ability_text = delayed.ability.fallback_text(&delayed.card_name);
+            let ability_origin = delayed.program_definition.clone().map(|definition| {
+                self.state
+                    .allocate_trigger_grant_origin_with_definition(Some(definition))
+            });
             CollectedTrigger {
                 captured_spell: None,
                 source_label: delayed.card_name.clone(),
@@ -496,7 +512,7 @@ impl GameEngine {
                 additional_instances: 0,
                 controller: delayed.controller,
                 ability_index: 0,
-                ability_origin: None,
+                ability_origin,
                 presentation: delayed.presentation,
                 ability_text,
                 trigger_context: TriggerContext {
@@ -3065,7 +3081,8 @@ impl GameEngine {
         let authored_definition = ability_origin.as_ref().and_then(|origin| match origin {
             TriggerAbilityOrigin::Printed(definition)
             | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
-            TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => None,
+            TriggerAbilityOrigin::ResolvingGrant { definition, .. } => definition.as_ref(),
+            TriggerAbilityOrigin::SpellKeyword(_) => None,
         });
         let ability_program =
             authored_definition.and_then(|definition| ability_program(self, definition));

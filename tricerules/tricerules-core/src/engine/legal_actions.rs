@@ -549,11 +549,11 @@ fn trigger_origin_definition(origin: &TriggerAbilityOrigin) -> Option<&AbilityDe
             definition,
             ..
         }) => Some(definition),
+        TriggerAbilityOrigin::ResolvingGrant { definition, .. } => definition.as_ref(),
         TriggerAbilityOrigin::SpellKeyword(
             crate::state::SpellKeywordOrigin::Printed { .. }
             | crate::state::SpellKeywordOrigin::StaticEmblemGrant { .. },
-        )
-        | TriggerAbilityOrigin::ResolvingGrant(_) => None,
+        ) => None,
     }
 }
 

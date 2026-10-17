@@ -1386,6 +1386,15 @@ fn validate_program_unit_inputs(
             ));
         }
     }
+    if compiled
+        .required_inputs
+        .contains(&ProgramRequiredInput::CapturedTriggerObjectRef)
+        && top.trigger_context.observed_object.is_none()
+    {
+        return Err(EngineError::ProgramInvariant(
+            "resolution program is missing its captured delayed-object reference",
+        ));
+    }
     Ok(())
 }
 
@@ -1627,6 +1636,42 @@ mod invariant_rollback_tests {
             .expect("first player passes");
         assert_eq!(engine.state.priority_player_id(), 1);
         engine
+    }
+
+    #[test]
+    fn captured_delayed_object_input_requires_presence_but_not_current_object() {
+        let engine = program_resolution_fixture();
+        let mut top = engine.state.stack.last().expect("resolving spell").clone();
+        let compiled = CompiledProgram {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "captured_delayed_object_fixture",
+                tricerules_card_model::CardFaceId::new("front").unwrap(),
+            ),
+            context: tricerules_card_model::primitives::EffectContext::Ability,
+            target_projection:
+                tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal,
+            required_inputs: vec![ProgramRequiredInput::CapturedTriggerObjectRef],
+            target_bindings: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: Vec::new(),
+        };
+
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "resolution program is missing its captured delayed-object reference"
+            ))
+        ));
+
+        top.trigger_context.observed_object = Some(crate::state::TriggerObjectRef {
+            object_id: u32::MAX,
+            zone_change_generation: u64::MAX,
+            controller_at_event: 1,
+        });
+        assert!(validate_program_unit_inputs(&engine, &top, &compiled).is_ok());
     }
 
     fn static_grant_modal_program_fixture() -> (

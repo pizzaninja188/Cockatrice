@@ -166,6 +166,7 @@ fn validate_compiled_program_admission(
 struct ProgramOwnerInputs<'a> {
     targeting: Option<&'a TargetingDef>,
     cast_cost_groups: &'a [CastCostGroupDef],
+    captured_trigger_object_ref: bool,
 }
 
 fn compile_authored_program_owner(
@@ -223,6 +224,7 @@ fn compile_authored_program_owner(
             ProgramRequiredInput::TriggerObservedObject => {
                 trigger.is_some_and(TriggerCondition::observes_permanent_entry)
             }
+            ProgramRequiredInput::CapturedTriggerObjectRef => inputs.captured_trigger_object_ref,
         };
         if !supplied {
             return Err(RegistryError::InvalidCard {
@@ -276,6 +278,7 @@ fn compile_authored_face_programs(
                     ProgramOwnerInputs {
                         targeting: mode.targeting.as_ref(),
                         cast_cost_groups: &face.cast_cost_groups,
+                        captured_trigger_object_ref: false,
                     },
                     &format!("modal_spell.mode_id={}", mode.mode_id),
                     None,
@@ -402,6 +405,7 @@ fn compile_authored_ability_program(
         ProgramOwnerInputs {
             targeting: ability.targeting.as_ref(),
             cast_cost_groups: &face.cast_cost_groups,
+            captured_trigger_object_ref: false,
         },
         source_path,
         None,
@@ -456,6 +460,7 @@ fn compile_authored_triggered_program(
                     ProgramOwnerInputs {
                         targeting: mode.targeting.as_ref(),
                         cast_cost_groups: &face.cast_cost_groups,
+                        captured_trigger_object_ref: false,
                     },
                     &format!("{source_path}.modal.mode_id={}", mode.mode_id),
                     Some(&ability.trigger),
@@ -476,9 +481,61 @@ fn compile_authored_triggered_program(
             ProgramOwnerInputs {
                 targeting: ability.targeting.as_ref(),
                 cast_cost_groups: &face.cast_cost_groups,
+                captured_trigger_object_ref: false,
             },
             source_path,
             Some(&ability.trigger),
+        )?;
+    }
+    for (index, effect) in ability.effect.iter().enumerate() {
+        let SpellEffectKind::CreateDelayedTrigger {
+            subject: Some(crate::primitives::EffectSubject::PreviousEffectObject),
+            ability: delayed,
+            ..
+        } = effect
+        else {
+            continue;
+        };
+        let Some(program) = &delayed.program else {
+            continue;
+        };
+        if index == 0
+            || !matches!(
+                &ability.effect[index - 1],
+                SpellEffectKind::Exile {
+                    subject: crate::primitives::EffectSubject::Chosen(_),
+                    ..
+                }
+            )
+            || !matches!(delayed.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+            || delayed.modal.is_some()
+        {
+            return Err(RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason: format!(
+                    "nested delayed program at {source_path}.effect[{index}] has no admitted exact-object owner"
+                ),
+            });
+        }
+        let mut child_path = ability_path.to_vec();
+        child_path.push(delayed.ability_id.clone());
+        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: card.id.clone(),
+            face_id: face.face_id.clone(),
+            ability_path: child_path,
+        });
+        compile_authored_program_owner(
+            registry,
+            &card.id,
+            owner,
+            program,
+            ProgramOwnerInputs {
+                targeting: delayed.targeting.as_ref(),
+                cast_cost_groups: &face.cast_cost_groups,
+                captured_trigger_object_ref: true,
+            },
+            &format!("{source_path}.effect[{index}].ability"),
+            Some(&delayed.trigger),
         )?;
     }
     Ok(())
@@ -2130,6 +2187,13 @@ fn insert_ability_id(ids: &mut HashSet<String>, id: &crate::AbilityId) -> Result
 }
 
 fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), String> {
+    validate_nested_effect_metadata_with_delayed_child_program(effect, false)
+}
+
+fn validate_nested_effect_metadata_with_delayed_child_program(
+    effect: &SpellEffectKind,
+    allow_delayed_child_program: bool,
+) -> Result<(), String> {
     match effect {
         SpellEffectKind::SetClassLevel { .. } => {
             Err("SetClassLevel may only be the sole effect of a Class level-up ability".into())
@@ -2151,7 +2215,13 @@ fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), Strin
         SpellEffectKind::CreateDelayedTrigger {
             subject, ability, ..
         } => {
-            ability.reject_unowned_authored_program()?;
+            if allow_delayed_child_program {
+                if ability.modal.is_some() {
+                    return Err("delayed child programs cannot use modal owners".into());
+                }
+            } else {
+                ability.reject_unowned_authored_program()?;
+            }
             if matches!(
                 subject,
                 Some(crate::primitives::EffectSubject::PreviousEffectObjects)
@@ -2191,6 +2261,63 @@ fn validate_triggered_ability_effect_tree(
     if let Some(modal) = &ability.modal {
         for mode in &modal.modes {
             validate_effect_list_metadata(&mode.effects)?;
+        }
+    }
+    Ok(())
+}
+
+/// Authored programs inside a delayed ability have an immutable owner only when the delayed
+/// observer is created immediately after the exact one-object Exile(Chosen) result it captures.
+/// The target group belongs to the parent ability and must prove the captured object count is at
+/// most one. Other resolving-created abilities continue to reject authored programs.
+fn validate_triggered_effect_list_metadata(
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> Result<(), String> {
+    for (index, effect) in effects.iter().enumerate() {
+        let is_program_delayed_child = matches!(
+            effect,
+            SpellEffectKind::CreateDelayedTrigger { ability, .. }
+                if ability.program.is_some()
+        );
+        if is_program_delayed_child {
+            let supported_source = index > 0
+                && matches!(
+                    &effects[index - 1],
+                    SpellEffectKind::Exile {
+                        subject: crate::primitives::EffectSubject::Chosen(_),
+                        ..
+                    }
+                )
+                && matches!(
+                    effect,
+                    SpellEffectKind::CreateDelayedTrigger {
+                        subject: Some(crate::primitives::EffectSubject::PreviousEffectObject),
+                        ability,
+                        ..
+                    } if matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+                        && ability.modal.is_none()
+                        && ability.targeting.is_none()
+                        && !ability.may
+                        && ability.intervening_if.is_none()
+                        && !ability.triggers_only_once
+                        && ability.max_triggers_per_turn.is_none()
+                )
+                && targeting.is_some_and(|targeting| {
+                    let index = u32::try_from(index - 1).ok();
+                    targeting.groups.iter().any(|group| {
+                        group.max == 1
+                            && index.is_some_and(|index| group.effect_indices.contains(&index))
+                    })
+                });
+            if !supported_source {
+                return Err(
+                    "authored delayed child programs require an immediately preceding targeted Exile(Chosen) with an owner-local maximum-one group and PreviousEffectObject capture".into(),
+                );
+            }
+            validate_nested_effect_metadata_with_delayed_child_program(effect, true)?;
+        } else {
+            validate_nested_effect_metadata(effect)?;
         }
     }
     Ok(())
@@ -3074,7 +3201,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                 "Class-level transition triggers must appear in their matching level bar".into(),
             );
         }
-        validate_effect_list_metadata(&ability.effect)?;
+        validate_triggered_effect_list_metadata(&ability.effect, ability.targeting.as_ref())?;
     }
     validate_class_level_bars(face, &mut siblings)?;
     for ability in face.static_abilities.iter().chain(

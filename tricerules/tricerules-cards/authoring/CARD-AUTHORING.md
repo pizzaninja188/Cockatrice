@@ -188,13 +188,14 @@ paid branch follows Otherwise. A cost-free branch whose sole instruction is a `D
 when the current draw limit prevents that draw in full; paid branches remain selectable and the
 draw operation still applies normal draw limits when it resolves. Targetless leaves accepted are
 `Draw`, `Discard`, `Blight`, `ChoosePermanents`,
-`UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop`, `Mill`, `ChooseCard`
-and ordinary
+`UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop`, `Mill`, `ChooseCard`,
+and `GainLife`,
+plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
 not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
-must be fixed literals.
+and `GainLife` amounts must be fixed literals.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
@@ -244,6 +245,26 @@ Icewrought Sentry pays before creating its reflexive tap trigger; and Sparktongu
 creating its reflexive damage trigger. Keep each real card's ordered actions and fallback in its
 source-backed program; do not flatten the payment into a legacy branch effect.
 
+One bounded nested-child case is admitted for Koya, Death from Above: the triggered parent immediately
+exiles its chosen object, then creates an `AtBeginningOfNextEndStep` delayed trigger for
+`PreviousEffectObject`. The parent's `TargetingDef` must bind that immediately preceding
+`Exile(Chosen)` instruction to a group with `max: 1`. The child is compiled under the full
+parent-and-child ability identity. Its
+exact exiled object is an inferred `CapturedTriggerObjectRef` input, distinct from the
+current/last-known copy snapshot used by `CreateTokenCopies(TriggerObject)`; authors do not declare
+this input. The admitted child leaf is exactly
+`ReturnTriggeredCard(ExactTriggerObject, from: [Exile], destination: Battlefield, controller: Owner)`
+with the default untapped entry behavior and no entry counters or type-setting replacement. Ordinary
+supported program instructions may compose before, inside, or after that return; a registry-backed
+`Return`→`GainLife` fixture verifies that a following instruction resumes. The child program retains
+its cursor across Clone's entry-copy choice. `ReturnTriggeredCard`
+also serves Abnormal Endurance's legacy graveyard return, but that different operation shape remains
+on its existing legacy path. Other effect-created abilities remain unsupported as program owners.
+This exception fails closed for a non-adjacent producer, other delayed timings, plural or other
+previous-effect subjects, modal or targetful child bodies, `may`, `once`, and maximum-use metadata;
+do not generalize it to arbitrary effect-created or activated abilities. Koya's exact trigger,
+target filters, and target bounds remain in its card definition and ordinary targeting validation.
+
 `Blight` is resultless in a program. It may suspend for its normal controller creature choice and
 for applicable counter-replacement choices, but it cannot bind or yield an output. Once those
 choices finish, execution continues at the next instruction in the same program block. If the
@@ -258,9 +279,9 @@ accepted in authored programs. A copied permanent source requires exactly one ta
 Ability programs use the ability context. A triggered program may use `AffectedPlayer` only when its
 trigger supplies that event-time player; registry validation checks this captured input. Activated
 programs have no trigger input and cannot use `AffectedPlayer`. Effect-created activated or triggered
-abilities also cannot own authored programs (including modal program bodies): their resolving
-occurrences have no stable registry definition identity. Do not author targetful activated abilities
-with `ChosenOpponent` target groups from Hand or Graveyard: the opponent-choice activation path is
+abilities cannot own authored programs (including modal program bodies) except for the Koya child
+shape specified above. Do not author targetful activated abilities with `ChosenOpponent` target
+groups from Hand or Graveyard: the opponent-choice activation path is
 available only for battlefield sources, and model/registry validation rejects this authored shape.
 This boundary is specific to opponent-selected groups; direct controller-chosen target groups are
 not rejected solely because an activated ability's source zone is Hand or Graveyard. Legacy

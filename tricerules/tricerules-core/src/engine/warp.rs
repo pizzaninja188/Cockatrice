@@ -72,6 +72,7 @@ impl GameEngine {
                 card_name,
                 source_face_index: item.face_index,
                 presentation,
+                program_definition: None,
                 ability,
             })),
         });

@@ -372,6 +372,7 @@ fn aligned_hedron_network_owner_concession_returns_survivors_before_publication(
                     fallback_text: "At the beginning of the next end step, do nothing.".into(),
                     ..Default::default()
                 }),
+                program_definition: None,
                 ability: TriggeredAbilityDef {
                     ability_id: AbilityId::new("unrelated_departure_probe")
                         .expect("valid test ability id"),

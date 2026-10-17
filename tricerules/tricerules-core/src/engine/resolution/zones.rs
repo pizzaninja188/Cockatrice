@@ -4336,6 +4336,7 @@ pub(super) fn return_triggered_card(
             .into_iter()
             .map(|placement| (placement.counter, placement.count)),
     );
+    let program_stack = cx.program_state.as_ref().map(|_| cx.parked_stack());
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
@@ -4380,7 +4381,15 @@ pub(super) fn return_triggered_card(
         },
         cx.events,
     )? {
-        super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Parked => {
+            if let Some(stack) = program_stack.as_ref() {
+                // Entry choices are initially created from the stack item alone. Restore the
+                // exact authored cursor and previous result into that continuation before the
+                // copy/replacement choice can be answered.
+                cx.engine.transfer_entry_choice_resume(stack);
+            }
+            Ok(EffectOutcome::Suspended)
+        }
         super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
             cx.engine.restore_skipped_battlefield_entry(&entry)?;
             Ok(EffectOutcome::Continue)

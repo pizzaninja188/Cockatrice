@@ -5683,6 +5683,183 @@ fn choose_cast_cost_receipts_reject_unknown_group_option_and_sibling_face() {
 }
 
 #[test]
+fn registry_compiles_nested_delayed_program_under_its_exact_child_owner() {
+    let fixture = r#"(id: "delayed_program_owner_fixture", name: "Delayed Program Owner Fixture",
+        face_id: "delayed_program_owner_fixture", mana_cost: "{2}{W}",
+        types: ["Legendary", "Creature"], power: 2, toughness: 1,
+        triggered_abilities: [(
+            ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            targeting: Some((groups: [(
+                min: 0, max: 1, prompt: "Choose up to one target creature",
+                effect_indices: [0],
+            )])),
+            effect: [
+                Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),
+                CreateDelayedTrigger(subject: Some(PreviousEffectObject), ability: (
+                    ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextEndStep,
+                    program: Some((body: (steps: [
+                        (id: "choose_return", kind: Choose(
+                            choice: "pay_or_return", chooser: Controller, optional: true,
+                            branches: [(branch_id: "pay", presentation: Fallback,
+                                cost: Mana("{3}{B}"), requirement: Always,
+                                body: (steps: [], yields: []))],
+                            otherwise: (steps: [
+                                (id: "return", kind: Perform(ReturnTriggeredCard(
+                                    reference: ExactTriggerObject, from: [Exile],
+                                    destination: Battlefield, controller: Owner,
+                                )))
+                            ], yields: []),
+                        )),
+                        (id: "gain_life", kind: Perform(GainLife(amount: 1)))
+                    ], yields: []))),
+                )),
+            ],
+        )])"#
+        .to_owned();
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
+        .expect("a delayed ability with an immutable nested definition ID compiles");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_program_owner_fixture".into(),
+        face_id: crate::CardFaceId::new("delayed_program_owner_fixture").unwrap(),
+        ability_path: vec![
+            crate::AbilityId::new("triggered_01").unwrap(),
+            crate::AbilityId::new("delayed_01").unwrap(),
+        ],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the child definition owns the nested compiled program");
+    assert_eq!(compiled.owner, owner);
+    assert_eq!(compiled.body.steps.len(), 2);
+    assert_eq!(
+        compiled.required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::CapturedTriggerObjectRef]
+    );
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Choose { otherwise, .. }
+            if matches!(
+                otherwise.steps[0].kind,
+                crate::primitives::CompiledInstructionKind::Perform(ref effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ReturnTriggeredCard {
+                        reference: crate::primitives::TriggeredCardReference::ExactTriggerObject,
+                        ..
+                    })
+            )
+    ));
+
+    for (label, invalid) in [
+        (
+            "another delayed-only timing",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextTurnUpkeep,\n                    program",
+            ),
+        ),
+        (
+            "a maximum-two parent target group",
+            fixture.replace(
+                "min: 0, max: 1, prompt: \"Choose up to one target creature\"",
+                "min: 0, max: 2, prompt: \"Choose up to two target creatures\"",
+            ),
+        ),
+        (
+            "a may delayed child",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextEndStep, may: true,\n                    program",
+            ),
+        ),
+        (
+            "a once-only delayed child",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextEndStep, triggers_only_once: true,\n                    program",
+            ),
+        ),
+        (
+            "a capped delayed child",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextEndStep, max_triggers_per_turn: Some(1),\n                    program",
+            ),
+        ),
+        (
+            "an intervening-if delayed child",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextEndStep, intervening_if: Some(ControllerLibraryEmpty),\n                    program",
+            ),
+        ),
+        (
+            "a targeted delayed child",
+            fixture.replace(
+                "trigger: AtBeginningOfNextEndStep,\n                    program",
+                "trigger: AtBeginningOfNextEndStep, targeting: Some((groups: [])),\n                    program",
+            ),
+        ),
+        (
+            "a non-adjacent Exile producer",
+            fixture.replace(
+                "Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),\n                CreateDelayedTrigger",
+                "Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),\n                Draw(count: 1),\n                CreateDelayedTrigger",
+            ),
+        ),
+        (
+            "a plural previous-effect subject",
+            fixture.replace(
+                "subject: Some(PreviousEffectObject), ability:",
+                "subject: Some(PreviousEffectObjects), ability:",
+            ),
+        ),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[])
+            .expect_err(&format!("{label} is outside this exact delayed-owner contract"))
+            .to_string();
+        let expected = match label {
+            "a non-adjacent Exile producer" => {
+                "PreviousEffectObject requires an immediately preceding compatible single-object producer"
+            }
+            "a plural previous-effect subject" => {
+                "PreviousEffectObjects delayed triggers require one next-end-step ExileObservedObjects effect"
+            }
+            _ => "authored delayed child programs require",
+        };
+        assert!(error.contains(expected), "{label}: {error}");
+    }
+
+    let return_leaf = "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner,";
+    for (label, replacement) in [
+        ("wrong reference", "reference: TriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner,"),
+        ("wrong source zone", "reference: ExactTriggerObject, from: [Graveyard],\n                                    destination: Battlefield, controller: Owner,"),
+        ("wrong destination", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Hand, controller: Owner,"),
+        ("wrong controller", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: AbilityController,"),
+        ("tapped entry", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, tapped: true,"),
+        (
+            "entry counters",
+            "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, entry_counters: [(counter: PlusOnePlusOne, count: 1)],",
+        ),
+        (
+            "type-setting replacement",
+            "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, set_types: Some((card_types: [Creature])),",
+        ),
+    ] {
+        let invalid = fixture.replace(return_leaf, replacement);
+        assert_ne!(invalid, fixture, "{label} mutation reaches the return leaf");
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[])
+            .expect_err(&format!("{label} is outside the exact ReturnTriggeredCard leaf"))
+            .to_string();
+        assert!(
+            error.contains("effect is not in the resolution-program operation whitelist"),
+            "{label}: {error}"
+        );
+    }
+}
+
+#[test]
 fn program_compiler_resolves_only_dominating_discard_result_conditions() {
     let definition = program_fixture(
         r#"(steps: [

@@ -69,6 +69,10 @@ pub enum ProgramTargetProjection {
 pub enum ProgramRequiredInput {
     TriggerAffectedPlayer,
     TriggerObservedObject,
+    /// Exact object reference captured by the structurally admitted delayed observer. Unlike an
+    /// observed-object snapshot, this reference may be stale or absent from its former zone when
+    /// the delayed ability resolves; only the captured identity must have been supplied.
+    CapturedTriggerObjectRef,
 }
 
 impl ProgramOwnerId {
@@ -614,6 +618,16 @@ impl Compiler {
                     ) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerObservedObject);
+                    }
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::ReturnTriggeredCard {
+                            reference: super::TriggeredCardReference::ExactTriggerObject,
+                            ..
+                        }
+                    ) {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::CapturedTriggerObjectRef);
                     }
                     if (matches!(
                         effect.as_ref(),
@@ -1317,6 +1331,12 @@ fn validate_and_result_types(
                 cardinality: Cardinality { min: 0, max: None },
             }])
         }
+        SpellEffectKind::GainLife { amount } => {
+            effect.validate(context)?;
+            validate_program_amount(amount)?;
+            validate_fixed_program_amount("GainLife amount", amount)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::Blight { .. } => {
             effect.validate(context)?;
             Ok(Vec::new())
@@ -1590,6 +1610,22 @@ fn validate_and_result_types(
             } else {
                 Vec::new()
             })
+        }
+        SpellEffectKind::ReturnTriggeredCard {
+            reference: super::TriggeredCardReference::ExactTriggerObject,
+            from,
+            destination: super::TriggeredCardDestination::Battlefield,
+            tapped: false,
+            controller: super::ReturnController::Owner,
+            entry_counters,
+            set_types: None,
+        } if context == EffectContext::Ability
+            && !from.is_empty()
+            && from.as_slice() == [super::EventZone::Exile]
+            && entry_counters.is_empty() =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
         }
         SpellEffectKind::ApplyPermanentModifier { .. } if is_token_copy_batch_consumer(effect) => {
             effect.validate(context)?;
