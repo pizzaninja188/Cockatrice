@@ -17,18 +17,24 @@
         token: Some(false),
       ),
     ),
-    effect: [ChooseResolutionBranch(
-      chooser: Controller,
-      optional: true,
-      selection: PlayerChoice,
-      branches: [(
-        branch_id: "pay_to_copy",
-        presentation: OracleLines([1]),
-        cost: Mana("{2}"),
-        requirement: Always,
-        effects: [CreateTokenCopies(count: 1, source: TriggerObject)],
-      )],
-      otherwise: [],
-    )],
+    program: Some((body: (steps: [
+      (id: "copy_or_pass", kind: Choose(
+        choice: "pay_to_copy",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_to_copy",
+          presentation: OracleLines([1]),
+          cost: Mana("{2}"),
+          requirement: Always,
+          body: (steps: [
+            (id: "copy_entering_artifact", kind: Perform(CreateTokenCopies(
+              count: 1, source: TriggerObject,
+            ))),
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

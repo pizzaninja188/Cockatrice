@@ -220,6 +220,9 @@ fn compile_authored_program_owner(
             ProgramRequiredInput::TriggerAffectedPlayer => {
                 trigger.is_some_and(TriggerCondition::supplies_program_affected_player)
             }
+            ProgramRequiredInput::TriggerObservedObject => {
+                trigger.is_some_and(TriggerCondition::observes_permanent_entry)
+            }
         };
         if !supplied {
             return Err(RegistryError::InvalidCard {

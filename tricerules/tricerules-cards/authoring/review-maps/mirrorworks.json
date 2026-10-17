@@ -9,8 +9,9 @@
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokenCopies"
       ]
     }
   ],
@@ -24,20 +25,20 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/filter/permanent_type"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "ResolutionCost::Mana",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/cost"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
     },
     {
       "symbol": "SpellEffectKind::CreateTokenCopies",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokenCopies"
     },
     {
       "symbol": "TokenCopySource::TriggerObject",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/CreateTokenCopies/source"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/CreateTokenCopies/source"
     }
   ],
   "tokens": [],

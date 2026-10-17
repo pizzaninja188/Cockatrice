@@ -266,6 +266,12 @@ This boundary is specific to opponent-selected groups; direct controller-chosen 
 not rejected solely because an activated ability's source zone is Hand or Graveyard. Legacy
 abilities retain their existing validation path.
 
+`CreateTokenCopies(source: TriggerObject)` is the one program consumer of the captured
+`TriggerObservedObject` input. Registry admission requires its exact triggered ability owner to
+observe a permanent entry; runtime checks the captured reference and its matching current or
+last-known copy snapshot before instruction zero and each program-unit resume. Non-entry triggers and
+activated ability owners do not supply this input.
+
 Declare each target role in `CardProgram.target_bindings` by its stable instruction `id`, role and
 zero-based `target_group_index`. Target groups remain in the owner's `TargetingDef`; use an empty
 `effect_indices` list for program groups. Every targeted instruction role must bind exactly once,
@@ -1517,6 +1523,8 @@ uses one chosen permanent target (Cackling Counterpart). `source: Source` is unt
 and requires a battlefield ability source (Colorstorm Stallion). It uses the current
 source generation or its last battlefield copy values after departure. Populate uses
 the same owned snapshot and token-entry pipeline with a resolution-time choice.
+`source: TriggerObject` is also untargeted; Mirrorworks uses the exact permanent observed by its
+entry trigger, including that generation's last-known copy values if it has left the battlefield.
 Actual Transform and ModalDfc sources produce tokens owning both faces and retaining
 the active face. Copy provenance cannot turn a single-faced Clone into a double-faced
 object. New copy-with-modification effects still require explicit implementation.

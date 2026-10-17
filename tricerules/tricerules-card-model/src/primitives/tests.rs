@@ -553,6 +553,129 @@ fn registry_requires_a_draw_step_producer_for_affected_player_program_input() {
 }
 
 #[test]
+fn resultless_program_can_copy_its_trigger_observed_object() {
+    let program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "copy_observed", kind: Perform(CreateTokenCopies(
+                count: 1, source: TriggerObject,
+            )))
+        ], yields: []))"#,
+    )
+    .expect("the observed-object program fixture parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "observed_copy_fixture".into(),
+        face_id: crate::CardFaceId::new("observed_copy_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+
+    let compiled = crate::primitives::CompiledProgram::compile(
+        owner,
+        crate::primitives::EffectContext::Ability,
+        &program,
+    )
+    .expect("an ability program may consume its captured entering-object snapshot");
+    assert_eq!(
+        compiled.required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::TriggerObservedObject]
+    );
+    assert!(compiled.target_bindings.is_empty());
+    assert!(compiled.slots.is_empty());
+    assert!(compiled.body.steps[0].outputs.is_empty());
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokenCopies {
+                count: crate::primitives::Amount::Fixed(1),
+                source: crate::primitives::TokenCopySource::TriggerObject,
+            })
+    ));
+}
+
+#[test]
+fn trigger_observed_object_program_input_is_ability_only_and_trigger_bound() {
+    let program = r#"(body: (steps: [
+        (id: "copy_observed", kind: Perform(CreateTokenCopies(
+            count: 1, source: TriggerObject,
+        )))
+    ], yields: []))"#;
+    let spell_program: crate::CardProgram = ron::from_str(program).unwrap();
+    let spell_error = crate::primitives::CompiledProgram::compile(
+        crate::ProgramOwnerId::face(
+            "observed_spell",
+            crate::CardFaceId::new("observed_spell").unwrap(),
+        ),
+        crate::primitives::EffectContext::Spell,
+        &spell_program,
+    )
+    .expect_err("a spell cannot read a trigger event object");
+    assert!(
+        spell_error.contains("spells cannot reference a trigger object"),
+        "{spell_error}"
+    );
+
+    let triggered = format!(
+        r#"(id: "observed_trigger", name: "Observed Trigger", face_id: "observed_trigger",
+            types: ["Artifact"], triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WheneverYouProliferate, effect: [], program: Some({program}),
+            )])"#
+    );
+    let trigger_error = crate::CardRegistry::from_chunks_and_tokens(&[&triggered], &[])
+        .expect_err("a non-entry trigger does not supply a captured observed permanent")
+        .to_string();
+    assert!(
+        trigger_error.contains("TriggerObservedObject"),
+        "{trigger_error}"
+    );
+    assert!(
+        trigger_error.contains("trigger does not supply"),
+        "{trigger_error}"
+    );
+
+    let activated = format!(
+        r#"(id: "observed_activated", name: "Observed Activated", face_id: "observed_activated",
+            types: ["Artifact"], activated_abilities: [(
+                ability_id: "activated_01", presentation: Fallback,
+                costs: [], effect: [], program: Some({program}),
+            )])"#
+    );
+    let activation_error = crate::CardRegistry::from_chunks_and_tokens(&[&activated], &[])
+        .expect_err("an activated ability has no observed trigger object")
+        .to_string();
+    assert!(
+        activation_error.contains("TriggerObservedObject"),
+        "{activation_error}"
+    );
+    assert!(
+        activation_error.contains("trigger does not supply"),
+        "{activation_error}"
+    );
+
+    for source in [
+        "Source",
+        "LinkedExile(producer_ability_id: \"producer\", linked_exile_id: \"linked\")",
+    ] {
+        let unsupported: crate::CardProgram = ron::from_str(&format!(
+            r#"(body: (steps: [
+                (id: "copy", kind: Perform(CreateTokenCopies(count: 1, source: {source})))
+            ], yields: []))"#
+        ))
+        .expect("unsupported source fixture parses");
+        let error = crate::primitives::CompiledProgram::compile(
+            crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                card_id: "unsupported_copy".into(),
+                face_id: crate::CardFaceId::new("unsupported_copy").unwrap(),
+                ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+            }),
+            crate::primitives::EffectContext::Ability,
+            &unsupported,
+        )
+        .expect_err("unapproved token-copy sources remain outside program scope");
+        assert!(error.contains("source is not supported"), "{error}");
+    }
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(
@@ -5822,7 +5945,7 @@ fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
         (
             "CreateTokenCopies(count: 1, source: Source)",
             super::EffectContext::Ability,
-            "owner-local chosen target",
+            "CreateTokenCopies source is not supported in a resolution program",
         ),
         (
             "DamageTarget(amount: 1, target: (kind: Creature, controller: DefendingPlayer))",

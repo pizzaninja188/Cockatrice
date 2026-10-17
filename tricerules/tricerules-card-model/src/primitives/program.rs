@@ -68,6 +68,7 @@ pub enum ProgramTargetProjection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ProgramRequiredInput {
     TriggerAffectedPlayer,
+    TriggerObservedObject,
 }
 
 impl ProgramOwnerId {
@@ -602,6 +603,16 @@ impl Compiler {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let result_types = validate_and_result_types(effect, self.context)?;
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CreateTokenCopies {
+                            source: TokenCopySource::TriggerObject,
+                            ..
+                        }
+                    ) {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerObservedObject);
+                    }
                     if (matches!(
                         effect.as_ref(),
                         SpellEffectKind::SearchLibrary {
@@ -1548,15 +1559,24 @@ fn validate_and_result_types(
         }
         SpellEffectKind::CreateTokenCopies { count, source } => {
             effect.validate(context)?;
-            let super::TokenCopySource::Chosen(filter) = source else {
-                return Err(
-                    "CreateTokenCopies requires an owner-local chosen target in a resolution program"
-                        .into(),
-                );
-            };
             validate_program_amount(count)?;
             validate_fixed_program_amount("CreateTokenCopies count", count)?;
-            validate_program_target_filter(filter, "CreateTokenCopies target")?;
+            match source {
+                super::TokenCopySource::Chosen(filter) => {
+                    validate_program_target_filter(filter, "CreateTokenCopies target")?;
+                }
+                super::TokenCopySource::TriggerObject if context == EffectContext::Ability => {}
+                super::TokenCopySource::TriggerObject => {
+                    return Err(
+                        "TriggerObject token copies require an ability program owner".into(),
+                    );
+                }
+                super::TokenCopySource::Source | super::TokenCopySource::LinkedExile { .. } => {
+                    return Err(
+                        "CreateTokenCopies source is not supported in a resolution program".into(),
+                    );
+                }
+            }
             Ok(Vec::new())
         }
         _ => Err("effect is not in the resolution-program operation whitelist".into()),

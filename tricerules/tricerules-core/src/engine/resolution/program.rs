@@ -348,7 +348,7 @@ impl GameEngine {
         let compiled = self.registry.compiled_program_for_owner(&owner).ok_or(
             EngineError::ProgramInvariant("selected resolution program owner was not compiled"),
         )?;
-        validate_program_unit_inputs(top, compiled)?;
+        validate_program_unit_inputs(self, top, compiled)?;
         owners.remove(0);
         Ok(ProgramRunState {
             owner,
@@ -415,7 +415,7 @@ impl GameEngine {
                 "resolution program context or target projection changed",
             ));
         }
-        validate_program_unit_inputs(top, active_compiled)?;
+        validate_program_unit_inputs(self, top, active_compiled)?;
         if program_state.slots.len() != active_compiled.slots.len()
             || program_state.frames.is_empty()
         {
@@ -474,7 +474,7 @@ impl GameEngine {
                     "resolution program context or target projection changed",
                 ));
             }
-            validate_program_unit_inputs(top, compiled)?;
+            validate_program_unit_inputs(self, top, compiled)?;
             if program_state.slots.len() != compiled.slots.len() || program_state.frames.is_empty()
             {
                 return Err(EngineError::ProgramInvariant(
@@ -524,7 +524,7 @@ impl GameEngine {
                     let next = registry.compiled_program_for_owner(&next_owner).ok_or(
                         EngineError::ProgramInvariant("selected modal sibling program disappeared"),
                     )?;
-                    validate_program_unit_inputs(top, next)?;
+                    validate_program_unit_inputs(self, top, next)?;
                     program_state.pending_owners.remove(0);
                     program_state.owner = next_owner;
                     program_state.frames = vec![ProgramFrame {
@@ -1337,6 +1337,7 @@ fn capture_program_outputs(
 }
 
 fn validate_program_unit_inputs(
+    engine: &GameEngine,
     top: &StackItem,
     compiled: &CompiledProgram,
 ) -> Result<(), EngineError> {
@@ -1348,6 +1349,21 @@ fn validate_program_unit_inputs(
         return Err(EngineError::ProgramInvariant(
             "resolution program is missing its captured affected player",
         ));
+    }
+    if compiled
+        .required_inputs
+        .contains(&ProgramRequiredInput::TriggerObservedObject)
+    {
+        if top.trigger_context.observed_object.is_none() {
+            return Err(EngineError::ProgramInvariant(
+                "resolution program is missing its captured observed-object reference",
+            ));
+        }
+        if engine.trigger_object_token_copy_snapshot(top).is_none() {
+            return Err(EngineError::ProgramInvariant(
+                "resolution program cannot resolve its captured observed-object copy snapshot",
+            ));
+        }
     }
     Ok(())
 }
@@ -1951,14 +1967,14 @@ mod invariant_rollback_tests {
             .expect("fixture stack item")
             .clone();
         assert!(matches!(
-            validate_program_unit_inputs(&top, compiled),
+            validate_program_unit_inputs(&engine, &top, compiled),
             Err(EngineError::ProgramInvariant(
                 "resolution program is missing its captured affected player"
             ))
         ));
 
         top.trigger_context.affected_player = Some(1);
-        validate_program_unit_inputs(&top, compiled)
+        validate_program_unit_inputs(&engine, &top, compiled)
             .expect("the captured draw-step actor satisfies the input guard");
     }
 

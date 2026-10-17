@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    Amount, CastTriggerPlayer, PermanentTypeFilter, PlayerRecipient, ResolutionCost,
-    SpellEffectKind, TokenCopySource, TriggerCondition,
+    CastTriggerPlayer, CompiledInstructionKind, InstructionKind, PermanentTypeFilter,
+    PlayerRecipient, ProgramRequiredInput, ResolutionCost, TokenCopySource, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, Layout, ManaCost};
 
@@ -41,28 +41,90 @@ fn mirrorworks_is_registered_as_a_complete_card() {
         }
         other => panic!("unexpected Mirrorworks trigger: {other:?}"),
     }
+    assert!(trigger.effect.is_empty());
+    let program = trigger
+        .program
+        .as_ref()
+        .expect("the exact entry ability owns the authored copy program");
+    assert!(program.target_bindings.is_empty());
+    let [choose] = program.body.steps.as_slice() else {
+        panic!("the one optional choice is the complete Mirrorworks program");
+    };
+    let InstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choose.kind
+    else {
+        panic!("Mirrorworks begins with its optional payment choice");
+    };
+    assert_eq!(choice.as_str(), "pay_to_copy");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Mirrorworks has one paid copy branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "pay_to_copy");
     assert!(matches!(
-        trigger.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch {
-            chooser: PlayerRecipient::Controller,
-            optional: true,
-            branches,
-            otherwise,
-            ..
-        }] if otherwise.is_empty()
-            && matches!(
-                branches.as_slice(),
-                [branch] if branch.branch_id.as_str() == "pay_to_copy"
-                    && matches!(&branch.presentation, AbilityPresentation::OracleLines(lines) if lines == &[1])
-                    && matches!(&branch.cost, ResolutionCost::Mana(cost) if cost == &ManaCost::parse("{2}").unwrap())
-                    && branch.requirement == Default::default()
-                    && matches!(
-                        branch.effects.as_slice(),
-                        [SpellEffectKind::CreateTokenCopies {
-                            count: Amount::Fixed(1),
-                            source: TokenCopySource::TriggerObject,
-                        }]
+        &branch.presentation,
+        AbilityPresentation::OracleLines(lines) if lines == &[1]
+    ));
+    assert!(matches!(
+        &branch.cost,
+        ResolutionCost::Mana(cost) if cost == &ManaCost::parse("{2}").unwrap()
+    ));
+    assert_eq!(branch.requirement, Default::default());
+    assert!(matches!(
+        branch.body.steps.as_slice(),
+        [step] if matches!(
+            &step.kind,
+            InstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), tricerules_cards::SpellEffectKind::CreateTokenCopies {
+                    count: tricerules_cards::Amount::Fixed(1),
+                    source: TokenCopySource::TriggerObject,
+                })
+        )
+    ));
+    assert!(branch.body.yields.is_empty());
+}
+
+#[test]
+fn mirrorworks_trigger_program_registers_its_exact_observed_object_input() {
+    let owner = tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+        card_id: "mirrorworks".into(),
+        face_id: tricerules_cards::CardFaceId::new("mirrorworks").unwrap(),
+        ability_path: vec![tricerules_cards::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = tricerules_cards::registry::global()
+        .compiled_program_for_owner(&owner)
+        .expect("Mirrorworks triggered_01 compiles its authored observed-object program");
+    assert_eq!(
+        compiled.required_inputs,
+        vec![ProgramRequiredInput::TriggerObservedObject]
+    );
+    assert!(compiled.target_bindings.is_empty());
+    assert!(compiled.slots.is_empty());
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        CompiledInstructionKind::Choose { branches, otherwise, .. }
+            if otherwise.steps.is_empty()
+                && matches!(
+                    branches.as_slice(),
+                    [branch] if matches!(
+                        branch.body.steps.as_slice(),
+                        [instruction] if instruction.outputs.is_empty()
+                            && matches!(
+                                &instruction.kind,
+                                CompiledInstructionKind::Perform(effect)
+                                    if matches!(effect.as_ref(), tricerules_cards::SpellEffectKind::CreateTokenCopies {
+                                        source: TokenCopySource::TriggerObject,
+                                        ..
+                                    })
+                            )
                     )
-            )
+                )
     ));
 }

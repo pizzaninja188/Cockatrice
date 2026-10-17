@@ -3,7 +3,7 @@ use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::state::CopiableValues;
-use tricerules_core::Zone;
+use tricerules_core::{EngineError, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command::Dev, ruled_command::Cmd, ChoiceKind, DevCommand, DevMoveCard, DevZone,
     ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -91,6 +91,97 @@ fn pass_until_resolution_choice(engine: &mut GameEngine) {
         pass_priority_round(engine);
     }
     panic!("Mirrorworks must offer its optional copy branch");
+}
+
+fn pending_mirrorworks_trigger_engine(seed: u64) -> GameEngine {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[4, 9, 27],
+        20,
+        None,
+        true,
+    )
+    .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "mirrorworks");
+    enter_sol_ring_and_put_mirrorworks_trigger_on_stack(&mut engine);
+    assert!(engine.state.pending_resolution.is_none());
+    engine
+}
+
+fn expect_observed_input_failure_without_mutation(engine: &mut GameEngine, expected: &'static str) {
+    let live_players = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count();
+    engine.state.passes_since_stack_change = (live_players - 1) as u32;
+    let actor = engine.state.priority_player_id();
+    let before = format!("{:?}", engine.state);
+
+    let error = engine
+        .apply_scenario_command(actor, &pass())
+        .expect_err("required observed-object input must fail before publishing Choose");
+    assert!(
+        matches!(error, EngineError::ProgramInvariant(reason) if reason == expected),
+        "expected the distinct invariant {expected:?}, got {error:?}"
+    );
+    assert_eq!(
+        format!("{:?}", engine.state),
+        before,
+        "missing event input leaves game state and the stack occurrence unchanged"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn mirrorworks_missing_observed_reference_fails_before_its_first_choice() {
+    let mut engine = pending_mirrorworks_trigger_engine(202_610_702);
+    engine
+        .state
+        .stack
+        .last_mut()
+        .expect("Mirrorworks trigger is pending")
+        .trigger_context
+        .observed_object = None;
+
+    expect_observed_input_failure_without_mutation(
+        &mut engine,
+        "resolution program is missing its captured observed-object reference",
+    );
+}
+
+#[test]
+fn mirrorworks_missing_exact_observed_snapshot_fails_before_its_first_choice() {
+    let mut engine = pending_mirrorworks_trigger_engine(202_610_703);
+    let observed = engine
+        .state
+        .stack
+        .last()
+        .expect("Mirrorworks trigger is pending")
+        .trigger_context
+        .observed_object
+        .expect("the entry collector captured its event object");
+    let missing_generation = observed.zone_change_generation + 1;
+    // This event-time object has not entered that future generation; there can be no exact LKI
+    // snapshot for it either.
+    engine
+        .state
+        .stack
+        .last_mut()
+        .unwrap()
+        .trigger_context
+        .observed_object = Some(tricerules_core::state::TriggerObjectRef {
+        zone_change_generation: missing_generation,
+        ..observed
+    });
+
+    expect_observed_input_failure_without_mutation(
+        &mut engine,
+        "resolution program cannot resolve its captured observed-object copy snapshot",
+    );
 }
 
 #[test]
