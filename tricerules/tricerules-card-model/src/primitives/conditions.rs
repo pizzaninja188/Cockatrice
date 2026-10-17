@@ -554,7 +554,12 @@ impl GameCondition {
             GameCondition::UnlockedRoomDoorCount { min, max, .. } => {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "UnlockedRoomDoorCount")
             }
-            GameCondition::GraveyardAggregate { min, max, .. } => {
+            GameCondition::GraveyardAggregate {
+                filter, min, max, ..
+            } => {
+                if let Some(filter) = filter {
+                    filter.validate()?;
+                }
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "GraveyardAggregate")
             }
         }

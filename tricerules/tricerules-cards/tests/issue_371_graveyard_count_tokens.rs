@@ -11,8 +11,8 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    CardProgram, CardTypeFilter, PlayerRecipient, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ResolutionCost, ZoneCardFilter,
+    CardProgram, CardTypeFilter, InstructionKind, PlayerRecipient, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CastTriggerPlayer, Color,
@@ -283,51 +283,53 @@ fn issue_371_hydra_troopers_branches_villain_or_mill() {
     );
     assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
     assert!(!ability.may);
-    let [SpellEffectKind::ChooseResolutionBranch {
-        chooser,
-        optional,
-        selection,
-        branches,
-        otherwise,
-    }] = ability.effect.as_slice()
-    else {
-        panic!("HYDRA Troopers must emit one mandatory first-applicable branch");
+    assert!(ability.effect.is_empty(), "HYDRA has no legacy effect list");
+    let program = ability
+        .program
+        .as_ref()
+        .expect("HYDRA owns its authored program");
+    assert!(program.target_bindings.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("HYDRA has exactly one graveyard-check instruction")
     };
-    assert_eq!(*chooser, PlayerRecipient::Controller);
-    assert!(!optional);
-    assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-    assert!(otherwise.is_empty());
-    assert_eq!(branches.len(), 2);
-
-    assert_eq!(branches[0].branch_id.as_str(), "villain");
-    assert_eq!(branches[0].cost, ResolutionCost::None);
+    let InstructionKind::If { condition, yes, no } = &instruction.kind else {
+        panic!("HYDRA's controller condition is an automatic ProgramIf")
+    };
     assert_eq!(
-        branches[0].requirement,
-        ResolutionBranchRequirement::GameCondition(graveyard_gate(
-            GraveyardAggregate::CardCount,
-            Some(creature_filter()),
-            2,
-        ))
+        condition.as_ref(),
+        &GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate: GraveyardAggregate::CardCount,
+            filter: Some(creature_filter()),
+            min: Some(2),
+            max: None,
+        }
     );
-    assert_eq!(
-        branches[0].effects,
-        [create_tokens(
-            "villain_b_2_1_menace",
-            Amount::Fixed(1),
-            true
-        )]
-    );
-
-    assert_eq!(branches[1].branch_id.as_str(), "otherwise");
-    assert_eq!(branches[1].cost, ResolutionCost::None);
-    assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
-    assert_eq!(
-        branches[1].effects,
-        [SpellEffectKind::Mill {
-            count: Amount::Fixed(2),
-            who: PlayerRecipient::Controller,
-        }]
-    );
+    assert!(yes.yields.is_empty() && no.yields.is_empty());
+    let [create] = yes.steps.as_slice() else {
+        panic!("meeting the threshold creates exactly one token")
+    };
+    assert!(matches!(
+        &create.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateTokens {
+                token,
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: true,
+                sacrifice_timing: None,
+            } if token == "villain_b_2_1_menace")
+    ));
+    let [mill] = no.steps.as_slice() else {
+        panic!("falling below the threshold mills exactly two")
+    };
+    assert!(matches!(
+        &mill.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Mill {
+                count: Amount::Fixed(2), who: PlayerRecipient::Controller,
+            })
+    ));
 }
 
 #[test]

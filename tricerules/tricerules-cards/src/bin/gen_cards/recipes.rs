@@ -16059,56 +16059,36 @@ fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
     })
 }
 
-/// 3. HYDRA Troopers' mandatory ETB uses the shipped `FirstApplicable` branch shape: the gate is
-///    the same two-plus creature-card condition as recipe 2, and the otherwise clause mills two
-///    (CR 701.17). Optional branches, other thresholds, and other mill counts stay unsupported.
+/// 3. HYDRA Troopers' mandatory ETB checks the controller's current graveyard at resolution,
+///    creates the tapped Villain token at two creature cards, and otherwise mills two (CR 608.2h,
+///    701.17). The same count condition is also used by recipe 2.
 fn match_triggered_etb_create_villain_menace_or_mill_two(
     text: &str,
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_371_HYDRA_ETB_CLAUSE).then(|| {
-        triggered_ability_with(
+        triggered_program_ability(
             context,
             TriggerCondition::WhenSelfEntersBattlefield,
-            vec![SpellEffectKind::ChooseResolutionBranch {
-                chooser: PlayerRecipient::Controller,
-                optional: false,
-                selection: ResolutionBranchSelection::FirstApplicable,
-                branches: vec![
-                    ResolutionBranchDef {
-                        branch_id: ChoiceId::new("villain")
-                            .expect("closed HYDRA branch uses a valid choice ID"),
-                        presentation: AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement: ResolutionBranchRequirement::GameCondition(
-                            issue_373_graveyard_threshold(
-                                GraveyardAggregate::CardCount,
-                                Some(issue_371_creature_card_filter()),
-                                2,
-                            ),
-                        ),
-                        effects: vec![issue_371_create_tokens(
-                            "villain_b_2_1_menace",
-                            Amount::Fixed(1),
-                            true,
-                        )],
-                    },
-                    ResolutionBranchDef {
-                        branch_id: ChoiceId::new("otherwise")
-                            .expect("closed HYDRA fallback uses a valid choice ID"),
-                        presentation: AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::Mill {
-                            count: Amount::Fixed(2),
-                            who: PlayerRecipient::Controller,
-                        }],
-                    },
-                ],
-                otherwise: Vec::new(),
-            }],
+            authored_program(
+                r#"(id: "if_graveyard_has_two_creatures", kind: If(
+                    condition: GraveyardAggregate(
+                        owners: Controller, aggregate: CardCount,
+                        filter: Some((card_type: Some(Creature))),
+                        min: Some(2), max: None,
+                    ),
+                    yes: (steps: [
+                        (id: "create_tapped_menace_villain", kind: Perform(CreateTokens(
+                            token: "villain_b_2_1_menace", count: 1, who: Controller,
+                            tapped: true, sacrifice_timing: None,
+                        )))
+                    ], yields: []),
+                    no: (steps: [
+                        (id: "mill_two", kind: Perform(Mill(count: 2, who: Controller)))
+                    ], yields: []),
+                ))"#,
+                "",
+            ),
         )
     })
 }
@@ -17244,10 +17224,9 @@ fn match_triggered_end_step_elf_card_graveyard_and_source_minus_one_counter(
         })
 }
 
-/// CR 603.6a / 404.2 / 608.2c: Dawnhand Eulogist's entry trigger mills three first, then the
-/// mandatory `FirstApplicable` branch drains each opponent 2 and gains 2 only when the mill left
-/// an Elf card in the controller's graveyard. The empty unconditional fallback matches the shipped
-/// Long Lake Nuisance / Patient Instructor shape; the printed order and mill count are exact.
+/// CR 603.6a / 404.2 / 608.2c/h / 701.17: Dawnhand Eulogist's entry trigger mills three first,
+/// then checks the controller's current graveyard for any Elf card (including noncreature Kindred
+/// cards). It drains each opponent 2 and gains 2 only when that predicate holds.
 fn match_etb_mill_three_then_elf_card_graveyard_drain(
     text: &str,
     context: &RecipeContext,
@@ -17256,55 +17235,27 @@ fn match_etb_mill_three_then_elf_card_graveyard_drain(
         && issue_374_context_is_reviewed(context)
         && text == ISSUE_374_DAWNHAND_ETB_CLAUSE)
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![
-                    SpellEffectKind::Mill {
-                        count: Amount::Fixed(3),
-                        who: PlayerRecipient::Controller,
-                    },
-                    SpellEffectKind::ChooseResolutionBranch {
-                        chooser: PlayerRecipient::Controller,
-                        optional: false,
-                        selection: ResolutionBranchSelection::FirstApplicable,
-                        branches: vec![
-                            ResolutionBranchDef {
-                                branch_id: ChoiceId::new("elf_in_graveyard")
-                                    .expect("closed Dawnhand branch uses a valid choice ID"),
-                                presentation: AbilityPresentation::Fallback,
-                                runtime_fallback: None,
-                                cost: ResolutionCost::None,
-                                requirement: ResolutionBranchRequirement::GameCondition(
-                                    issue_373_graveyard_threshold(
-                                        GraveyardAggregate::CardCount,
-                                        Some(issue_371_elf_card_filter()),
-                                        1,
-                                    ),
-                                ),
-                                effects: vec![
-                                    SpellEffectKind::LoseLife {
-                                        amount: LifeAmount::Fixed(2),
-                                        who: PlayerRecipient::EachOpponent,
-                                    },
-                                    SpellEffectKind::GainLife {
-                                        amount: Amount::Fixed(2),
-                                    },
-                                ],
-                            },
-                            ResolutionBranchDef {
-                                branch_id: ChoiceId::new("otherwise")
-                                    .expect("closed Dawnhand fallback uses a valid choice ID"),
-                                presentation: AbilityPresentation::Fallback,
-                                runtime_fallback: None,
-                                cost: ResolutionCost::None,
-                                requirement: ResolutionBranchRequirement::Always,
-                                effects: Vec::new(),
-                            },
-                        ],
-                        otherwise: Vec::new(),
-                    },
-                ],
+                authored_program(
+                    r#"(id: "mill_three", kind: Perform(Mill(count: 3, who: Controller))),
+                    (id: "if_elf_card_in_graveyard", kind: If(
+                        condition: GraveyardAggregate(
+                            owners: Controller, aggregate: CardCount,
+                            filter: Some((required_subtypes: ["Elf"])),
+                            min: Some(1), max: None,
+                        ),
+                        yes: (steps: [
+                            (id: "each_opponent_loses_two", kind: Perform(LoseLife(
+                                amount: Fixed(2), who: EachOpponent,
+                            ))),
+                            (id: "gain_two", kind: Perform(GainLife(amount: 2))),
+                        ], yields: []),
+                        no: (steps: [], yields: []),
+                    ))"#,
+                    "",
+                ),
             )
         })
 }
@@ -27166,9 +27117,8 @@ pub(super) static CATALOG: &[Recipe] = &[
         label: "ETB Villain at two creature cards otherwise mill two",
         surface: RecipeSurface::EtbAbility,
         matcher: match_triggered_etb_create_villain_menace_or_mill_two,
-        // HYDRA Troopers is the only exact full-corpus printing. The mandatory FirstApplicable
-        // branch and its single unconditional fallback ship today; the Villain token and gate are
-        // shared with recipe 2.
+        // HYDRA Troopers is the only exact full-corpus printing. Its controller-owned CardCount
+        // ProgramIf is evaluated at resolution; the token and graveyard gate are shared with recipe 2.
         calibration: singleton_calibrations!(
             "HYDRA Troopers" => "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.";
             "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard.",
@@ -44506,45 +44456,38 @@ mod tests {
                 if token == "villain_b_2_1_menace"
         ));
 
-        // 3. HYDRA Troopers: mandatory FirstApplicable villain gate with a mill-two fallback.
+        // 3. HYDRA Troopers: automatically check the current graveyard, then create or mill.
         let RecipeEmission::TriggeredAbility(hydra) =
             issue_371_emission("HYDRA Troopers", ISSUE_371_HYDRA_ETB_CLAUSE, false)
         else {
             panic!("HYDRA Troopers must emit one triggered ability");
         };
-        let [SpellEffectKind::ChooseResolutionBranch {
-            optional,
-            selection,
-            branches,
-            otherwise,
-            ..
-        }] = hydra.effect.as_slice()
-        else {
-            panic!("unexpected HYDRA payload: {:?}", hydra.effect);
-        };
-        assert!(!optional);
-        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-        assert!(otherwise.is_empty());
-        assert!(matches!(
-            &branches[0].requirement,
-            ResolutionBranchRequirement::GameCondition(GameCondition::GraveyardAggregate {
-                aggregate: GraveyardAggregate::CardCount,
-                min: Some(2),
-                ..
-            })
-        ));
-        assert!(matches!(
-            branches[0].effects.as_slice(),
-            [SpellEffectKind::CreateTokens { token, tapped: true, .. }]
-                if token == "villain_b_2_1_menace"
-        ));
-        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
+        assert!(hydra.effect.is_empty());
         assert_eq!(
-            branches[1].effects,
-            [SpellEffectKind::Mill {
-                count: Amount::Fixed(2),
-                who: PlayerRecipient::Controller,
-            }]
+            hydra.program,
+            Some(
+                ron::from_str::<CardProgram>(
+                    r#"(body: (steps: [
+                        (id: "if_graveyard_has_two_creatures", kind: If(
+                            condition: GraveyardAggregate(
+                                owners: Controller, aggregate: CardCount,
+                                filter: Some((card_type: Some(Creature))),
+                                min: Some(2), max: None,
+                            ),
+                            yes: (steps: [
+                                (id: "create_tapped_menace_villain", kind: Perform(CreateTokens(
+                                    token: "villain_b_2_1_menace", count: 1, who: Controller,
+                                    tapped: true, sacrifice_timing: None,
+                                )))
+                            ], yields: []),
+                            no: (steps: [
+                                (id: "mill_two", kind: Perform(Mill(count: 2, who: Controller)))
+                            ], yields: []),
+                        ))
+                    ], yields: []), target_bindings: [])"#,
+                )
+                .expect("the HYDRA program expectation is valid RON")
+            )
         );
 
         // 4. Lluwen's activation uses the typed filtered discard cost and land count.
@@ -45842,8 +45785,8 @@ mod tests {
             }]
         );
 
-        // 2. Dawnhand Eulogist's entry trigger mills first, then runs the mandatory
-        // `FirstApplicable` Elf-card branch.
+        // 2. Dawnhand Eulogist's entry trigger mills first, then automatically evaluates the
+        // current controller graveyard and drains only when the Elf-card predicate holds.
         let dawnhand =
             issue_374_triggered_emission(ISSUE_374_DAWNHAND_ID, ISSUE_374_DAWNHAND_CLAUSE);
         assert_eq!(
@@ -45851,52 +45794,31 @@ mod tests {
             TriggerCondition::WhenSelfEntersBattlefield
         );
         assert_eq!(dawnhand.intervening_if, None);
+        assert!(dawnhand.effect.is_empty());
         assert_eq!(
-            dawnhand.effect,
-            vec![
-                SpellEffectKind::Mill {
-                    count: Amount::Fixed(3),
-                    who: PlayerRecipient::Controller,
-                },
-                SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: false,
-                    selection: ResolutionBranchSelection::FirstApplicable,
-                    branches: vec![
-                        ResolutionBranchDef {
-                            branch_id: ChoiceId::new("elf_in_graveyard").unwrap(),
-                            presentation: AbilityPresentation::Fallback,
-                            runtime_fallback: None,
-                            cost: ResolutionCost::None,
-                            requirement: ResolutionBranchRequirement::GameCondition(
-                                issue_374_graveyard_gate(
-                                    GraveyardAggregate::CardCount,
-                                    Some(issue_374_elf_card_filter()),
-                                    1,
-                                ),
+            dawnhand.program,
+            Some(
+                ron::from_str::<CardProgram>(
+                    r#"(body: (steps: [
+                        (id: "mill_three", kind: Perform(Mill(count: 3, who: Controller))),
+                        (id: "if_elf_card_in_graveyard", kind: If(
+                            condition: GraveyardAggregate(
+                                owners: Controller, aggregate: CardCount,
+                                filter: Some((required_subtypes: ["Elf"])),
+                                min: Some(1), max: None,
                             ),
-                            effects: vec![
-                                SpellEffectKind::LoseLife {
-                                    amount: LifeAmount::Fixed(2),
-                                    who: PlayerRecipient::EachOpponent,
-                                },
-                                SpellEffectKind::GainLife {
-                                    amount: Amount::Fixed(2),
-                                },
-                            ],
-                        },
-                        ResolutionBranchDef {
-                            branch_id: ChoiceId::new("otherwise").unwrap(),
-                            presentation: AbilityPresentation::Fallback,
-                            runtime_fallback: None,
-                            cost: ResolutionCost::None,
-                            requirement: ResolutionBranchRequirement::Always,
-                            effects: Vec::new(),
-                        },
-                    ],
-                    otherwise: Vec::new(),
-                },
-            ]
+                            yes: (steps: [
+                                (id: "each_opponent_loses_two", kind: Perform(LoseLife(
+                                    amount: Fixed(2), who: EachOpponent,
+                                ))),
+                                (id: "gain_two", kind: Perform(GainLife(amount: 2))),
+                            ], yields: []),
+                            no: (steps: [], yields: []),
+                        ))
+                    ], yields: []), target_bindings: [])"#,
+                )
+                .expect("the Dawnhand program expectation is valid RON")
+            )
         );
 
         // 3. Hand That Feeds' Delirium attack pump: distinct card types gate a self +2/+0 and
@@ -46047,9 +45969,41 @@ mod tests {
                     "identical text must stay unsupported for an unreviewed Oracle identity"
                 );
             }
-            assert!(!issue_374_triggered_emission(reviewed_id, clause)
-                .effect
-                .is_empty());
+            let reviewed = issue_374_triggered_emission(reviewed_id, clause);
+            if reviewed_id == ISSUE_374_DAWNHAND_ID {
+                assert!(reviewed.effect.is_empty());
+                assert_eq!(
+                    reviewed.program,
+                    Some(
+                        ron::from_str::<CardProgram>(
+                            r#"(body: (steps: [
+                                (id: "mill_three", kind: Perform(Mill(count: 3, who: Controller))),
+                                (id: "if_elf_card_in_graveyard", kind: If(
+                                    condition: GraveyardAggregate(
+                                        owners: Controller, aggregate: CardCount,
+                                        filter: Some((required_subtypes: ["Elf"])),
+                                        min: Some(1), max: None,
+                                    ),
+                                    yes: (steps: [
+                                        (id: "each_opponent_loses_two", kind: Perform(LoseLife(
+                                            amount: Fixed(2), who: EachOpponent,
+                                        ))),
+                                        (id: "gain_two", kind: Perform(GainLife(amount: 2))),
+                                    ], yields: []),
+                                    no: (steps: [], yields: []),
+                                ))
+                            ], yields: []), target_bindings: [])"#,
+                        )
+                        .expect("Dawnhand's approved ProgramIf expectation is valid RON")
+                    ),
+                    "the reviewed Dawnhand identity emits the exact ordered ProgramIf shape"
+                );
+            } else {
+                assert!(
+                    !reviewed.effect.is_empty(),
+                    "other retained identities preserve their effect-list contracts"
+                );
+            }
         }
 
         for negative in [

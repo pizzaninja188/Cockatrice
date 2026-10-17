@@ -5,17 +5,17 @@
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals, `If` accepts only controller-library/hand-count conditions, and permanent choices
-//! cannot use event-bound filters or cross-object constraints. Widening these rules needs a
-//! separately typed context/result contract.
+//! literals, `If` accepts only controller-scoped hand/library counts and controller graveyard
+//! CardCount filters, and permanent choices cannot use event-bound filters or cross-object
+//! constraints. Widening these rules needs a separately typed context/result contract.
 
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
     CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
-    EffectSubject, GameCondition, PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
-    ResolutionCost, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
-    SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
-    TokenCopySource, ZoneCardFilter,
+    EffectSubject, GameCondition, LifeAmount, PlayerRecipient, RelativePlayerSet,
+    ResolutionBranchRequirement, ResolutionCost, SearchDestination, SearchSelectionBounds,
+    SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind,
+    TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -1337,6 +1337,15 @@ fn validate_and_result_types(
             validate_fixed_program_amount("GainLife amount", amount)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::LoseLife { amount, who }
+            if *who == PlayerRecipient::EachOpponent && matches!(amount, LifeAmount::Fixed(_)) =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::LoseLife { .. } => Err(
+            "LoseLife in a resolution program supports only a fixed amount for EachOpponent".into(),
+        ),
         SpellEffectKind::Blight { .. } => {
             effect.validate(context)?;
             Ok(Vec::new())
@@ -2071,6 +2080,11 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
             players: super::ConditionPlayerSet::Relative(super::RelativePlayerSet::Controller),
             ..
         } => {}
+        GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate: super::GraveyardAggregate::CardCount,
+            ..
+        } => {}
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
             for branch in branches {
                 validate_program_condition(branch)?;
@@ -2078,7 +2092,7 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
         }
         _ => {
             return Err(
-                "If condition uses context outside controller hand and library state supported by spell_program"
+                "If condition uses context outside controller hand, library, or CardCount graveyard state supported by spell_program"
                     .into(),
             )
         }

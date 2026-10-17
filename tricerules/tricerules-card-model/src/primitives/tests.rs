@@ -3383,6 +3383,33 @@ fn graveyard_aggregate_condition_requires_valid_bounds_and_round_trips() {
 }
 
 #[test]
+fn graveyard_aggregate_condition_validates_its_optional_filter() {
+    let malformed = GameCondition::GraveyardAggregate {
+        owners: RelativePlayerSet::Controller,
+        aggregate: GraveyardAggregate::CardCount,
+        filter: Some(ZoneCardFilter {
+            any_of: Some(Vec::new()),
+            ..ZoneCardFilter::default()
+        }),
+        min: Some(1),
+        max: None,
+    };
+    assert!(
+        malformed.validate().is_err(),
+        "a graveyard condition must validate its optional ZoneCardFilter"
+    );
+    GameCondition::GraveyardAggregate {
+        owners: RelativePlayerSet::Controller,
+        aggregate: GraveyardAggregate::CardCount,
+        filter: None,
+        min: Some(1),
+        max: None,
+    }
+    .validate()
+    .expect("an omitted graveyard filter means any card");
+}
+
+#[test]
 fn activation_conditions_require_valid_count_bounds() {
     let condition = |min, max| GameCondition::BattlefieldCreatureCount {
         filter: BattlefieldCreatureCountFilter {
@@ -5488,6 +5515,169 @@ fn program_choose_raw_ron_compiles_nested_paid_and_otherwise_blocks() {
 }
 
 #[test]
+fn program_if_accepts_controller_card_count_graveyard_condition() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "mill_then_check", kind: If(
+                condition: GraveyardAggregate(
+                    owners: Controller, aggregate: CardCount,
+                    filter: Some((required_subtypes: ["Elf"])),
+                    min: Some(1), max: None,
+                ),
+                yes: (steps: [(id: "gain", kind: Perform(GainLife(amount: 2)))], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("controller CardCount graveyard conditions compile in ProgramIf");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner retains its compiled program");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("the graveyard condition remains one typed If instruction")
+    };
+    let crate::primitives::CompiledInstructionKind::If { condition, yes, no } = &instruction.kind
+    else {
+        panic!("graveyard condition compiles to ProgramIf")
+    };
+    let crate::primitives::CompiledProgramCondition::Game(GameCondition::GraveyardAggregate {
+        owners,
+        aggregate,
+        filter,
+        min,
+        max,
+    }) = condition.as_ref()
+    else {
+        panic!("ProgramIf preserves the exact game condition")
+    };
+    assert_eq!(*owners, RelativePlayerSet::Controller);
+    assert_eq!(*aggregate, GraveyardAggregate::CardCount);
+    assert_eq!(*min, Some(1));
+    assert_eq!(*max, None);
+    assert_eq!(
+        filter.as_ref().unwrap().required_subtypes,
+        ["Elf"],
+        "Elf card filtering has no creature restriction"
+    );
+    assert_eq!(yes.steps.len(), 1);
+    assert!(no.steps.is_empty());
+}
+
+#[test]
+fn program_if_keeps_graveyard_condition_admission_narrow() {
+    for (label, condition, expected_error) in [
+        (
+            "opponent-owned graveyards",
+            "GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))",
+            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+        ),
+        (
+            "distinct card-type aggregates",
+            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, min: Some(1))",
+            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+        ),
+        (
+            "nested unsupported owners",
+            "AllOf([ControllerLibraryEmpty, GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))])",
+            "If condition uses context outside controller hand, library, or CardCount graveyard state",
+        ),
+        (
+            "invalid bounds",
+            "GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(3), max: Some(2))",
+            "GraveyardAggregate min cannot exceed max",
+        ),
+        (
+            "malformed optional filter",
+            "GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((any_of: Some([]))), min: Some(1))",
+            "zone card filter any_of requires at least two branches",
+        ),
+    ] {
+        let body = format!(
+            "(steps: [(id: \"if\", kind: If(condition: {condition}, yes: (steps: [], yields: []), no: (steps: [], yields: [])))], yields: [])"
+        );
+        let error = invalid_program_reason(&program_fixture(&body));
+        assert!(
+            error.contains(expected_error),
+            "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
+#[test]
+fn program_accepts_resultless_each_opponent_fixed_life_loss() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "lose_life", kind: Perform(LoseLife(
+                amount: Fixed(3), who: EachOpponent,
+            ))),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("fixed EachOpponent life loss is an admitted resultless program leaf");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner retains its compiled program");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("the fixed loss remains one typed instruction")
+    };
+    assert!(matches!(
+        &instruction.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(3),
+                who: PlayerRecipient::EachOpponent,
+            })
+    ));
+    assert!(
+        instruction.outputs.is_empty(),
+        "life loss has no typed result"
+    );
+}
+
+#[test]
+fn program_each_opponent_life_loss_rejects_unsupported_shapes_and_results() {
+    let valid = program_fixture(
+        r#"(steps: [
+            (id: "lose_life", kind: Perform(LoseLife(
+                amount: Fixed(3), who: EachOpponent,
+            ))),
+        ], yields: [])"#,
+    );
+    for (label, malformed) in [
+        (
+            "controller-only loss",
+            valid.replace("who: EachOpponent", "who: Controller"),
+        ),
+        (
+            "target-dependent amount",
+            valid.replace("amount: Fixed(3)", "amount: TargetManaValue"),
+        ),
+        (
+            "attempted result binding",
+            valid.replace(
+                "id: \"lose_life\", kind:",
+                "id: \"lose_life\", bind: [\"life_loss\"], kind:",
+            ),
+        ),
+    ] {
+        let error = invalid_program_reason(&malformed);
+        assert!(
+            error.contains("LoseLife") || error.contains("binds 1 names for 0 results"),
+            "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
+#[test]
 fn program_accepts_resultless_proliferate_leaf() {
     let definition = program_fixture(
         r#"(steps: [
@@ -7450,7 +7640,7 @@ fn spell_program_rejects_dynamic_amount_selectors_and_if_contexts() {
         );
         let reason = invalid_program_reason(&program_fixture(&body));
         assert!(
-            reason.contains("If condition uses context outside controller hand and library state"),
+            reason.contains("If condition uses context outside controller hand, library, or CardCount graveyard state"),
             "{label}: {reason}"
         );
     }
@@ -7539,7 +7729,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "GameCondition(Void)",
             "None",
-            "If condition uses context outside controller hand and library state",
+            "If condition uses context outside controller hand, library, or CardCount graveyard state",
         ),
         (
             "implicit prior-result input",

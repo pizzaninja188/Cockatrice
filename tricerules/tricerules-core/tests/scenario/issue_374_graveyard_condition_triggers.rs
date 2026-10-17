@@ -5,7 +5,7 @@
 //! it resolves. The scenarios drive the generated definitions through the authoritative command
 //! path and pin the `0↔1` Elf/Lesson boundaries, the four-distinct-card-type Delirium boundary,
 //! the four-permanent-card Descend boundary, the controller-owner scope, and the printed order of
-//! Dawnhand Eulogist's mill-then-branch instruction.
+//! Dawnhand Eulogist's mill-then-If instruction.
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
@@ -37,6 +37,34 @@ fn stats(engine: &GameEngine, oid: u32) -> (u32, u32) {
 
 fn counters(engine: &GameEngine, oid: u32) -> u32 {
     engine.state.objects[&oid].counter_count(CounterKind::MinusOneMinusOne)
+}
+
+fn assert_no_legacy_automatic_branch_log(batch: &RuledEventBatch, chooser: i32) {
+    let legacy_prefix = format!("P{chooser} resolves: ");
+    assert!(
+        batch.events.iter().all(|event| match &event.ev {
+            Some(Ev::Log(log)) => !log.text.starts_with(&legacy_prefix),
+            _ => true,
+        }),
+        "the migrated ProgramIf path does not emit the legacy public automatic branch-resolution log"
+    );
+}
+
+fn resolve_entire_stack_two_player_with_events(engine: &mut GameEngine) -> RuledEventBatch {
+    let mut batch = RuledEventBatch::default();
+    loop {
+        for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
+            batch.events.extend(order_batch.events);
+        }
+        answer_trigger_order_in_engine_order(engine);
+        if engine.state.stack.is_empty() {
+            break;
+        }
+        batch
+            .events
+            .extend(pass_both_players_with_batch(engine).events);
+    }
+    batch
 }
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
@@ -208,7 +236,12 @@ fn issue_374_dawnhand_mills_first_then_drains_when_the_mill_leaves_an_elf_card()
     let before = engine.state.players[0].life;
     let opponent_before = engine.state.players[1].life;
     move_ready_to_battlefield(&mut engine, 0, "dawnhand_eulogist");
-    resolve_entire_stack_two_player(&mut engine);
+    let resolution = resolve_entire_stack_two_player_with_events(&mut engine);
+    assert_no_legacy_automatic_branch_log(&resolution, 0);
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "the graveyard condition resolves without a player choice"
+    );
     assert_eq!(
         count_card_id_in_graveyard(&engine, 0, "llanowar_visionary"),
         1,
@@ -246,6 +279,71 @@ fn issue_374_dawnhand_mills_first_then_drains_when_the_mill_leaves_an_elf_card()
     resolve_entire_stack_two_player(&mut foreign);
     assert_eq!(foreign.state.players[0].life, before);
     assert_eq!(foreign.state.players[1].life, opponent_before);
+}
+
+#[test]
+fn issue_374_dawnhand_checks_all_current_elf_cards_and_each_live_opponent() {
+    // An Elf that was already in the graveyard also satisfies the check after the preceding mill.
+    let mut existing = engine_with(374_023, &["dawnhand_eulogist"]);
+    inject_graveyard_card(&mut existing, 0, "llanowar_visionary");
+    for _ in 0..3 {
+        seat_on_top(&mut existing, 0, "forest");
+    }
+    let before = existing.state.players[0].life;
+    let opponent_before = existing.state.players[1].life;
+    move_ready_to_battlefield(&mut existing, 0, "dawnhand_eulogist");
+    resolve_entire_stack_two_player(&mut existing);
+    assert_eq!(existing.state.players[0].life, before + 2);
+    assert_eq!(existing.state.players[1].life, opponent_before - 2);
+
+    // Eyeblight's Ending is a noncreature Kindred Elf card, so no Creature predicate applies.
+    let mut kindred = engine_with(374_024, &["dawnhand_eulogist"]);
+    inject_graveyard_card(&mut kindred, 0, "eyeblights_ending");
+    for _ in 0..3 {
+        seat_on_top(&mut kindred, 0, "forest");
+    }
+    let before = kindred.state.players[0].life;
+    let opponent_before = kindred.state.players[1].life;
+    move_ready_to_battlefield(&mut kindred, 0, "dawnhand_eulogist");
+    resolve_entire_stack_two_player(&mut kindred);
+    assert_eq!(kindred.state.players[0].life, before + 2);
+    assert_eq!(kindred.state.players[1].life, opponent_before - 2);
+
+    // The controller gains two life and each of three opponents independently loses two.
+    let decks = Some(vec![
+        deck_with("forest", &["dawnhand_eulogist"]),
+        deck_with("forest", &[]),
+        deck_with("forest", &[]),
+        deck_with("forest", &[]),
+    ]);
+    let mut four_player = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_025,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("four-player Dawnhand game");
+    advance_to_main1_from_game_start(&mut four_player);
+    inject_graveyard_card(&mut four_player, 0, "eyeblights_ending");
+    for _ in 0..3 {
+        seat_on_top(&mut four_player, 0, "forest");
+    }
+    let before = four_player
+        .state
+        .players
+        .iter()
+        .map(|player| player.life)
+        .collect::<Vec<_>>();
+    move_ready_to_battlefield(&mut four_player, 0, "dawnhand_eulogist");
+    while !four_player.state.stack.is_empty() {
+        pass_priority_round(&mut four_player);
+    }
+    assert_eq!(four_player.state.players[0].life, before[0] + 2);
+    for (index, player) in four_player.state.players.iter().enumerate().skip(1) {
+        assert_eq!(player.life, before[index] - 2);
+    }
 }
 
 #[test]

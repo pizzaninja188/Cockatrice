@@ -45,6 +45,17 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     batch
 }
 
+fn assert_no_legacy_automatic_branch_log(batch: &RuledEventBatch, chooser: i32) {
+    let legacy_prefix = format!("P{chooser} resolves: ");
+    assert!(
+        batch.events.iter().all(|event| match &event.ev {
+            Some(Ev::Log(log)) => !log.text.starts_with(&legacy_prefix),
+            _ => true,
+        }),
+        "the migrated ProgramIf path does not emit the legacy public automatic branch-resolution log"
+    );
+}
+
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
@@ -227,7 +238,9 @@ fn issue_371_hydra_troopers_branches_villain_or_mill_two() {
     inject_graveyard_card(&mut villain, 0, "grizzly_bears");
     move_ready_to_battlefield(&mut villain, 0, "hydra_troopers");
     let library_before = villain.state.players[0].library.len();
-    resolve_entire_stack_two_player(&mut villain);
+    let resolution = resolve_top_stack(&mut villain);
+    assert_no_legacy_automatic_branch_log(&resolution, 0);
+    assert!(villain.state.pending_resolution.is_none());
     assert_eq!(
         battlefield_token_oids(&villain, 0, "villain_b_2_1_menace").len(),
         1
@@ -241,9 +254,13 @@ fn issue_371_hydra_troopers_branches_villain_or_mill_two() {
     // One creature card: the otherwise branch mills exactly two.
     let mut mill = engine_with(371_021, &["hydra_troopers"]);
     inject_graveyard_card(&mut mill, 0, "grizzly_bears");
+    // These creature cards are milled only after the If already chose its `no` block.
+    seat_on_top(&mut mill, 0, &["grizzly_bears", "grizzly_bears"]);
     move_ready_to_battlefield(&mut mill, 0, "hydra_troopers");
     let library_before = mill.state.players[0].library.len();
-    resolve_entire_stack_two_player(&mut mill);
+    let resolution = resolve_top_stack(&mut mill);
+    assert_no_legacy_automatic_branch_log(&resolution, 0);
+    assert!(mill.state.pending_resolution.is_none());
     assert!(battlefield_token_oids(&mill, 0, "villain_b_2_1_menace").is_empty());
     assert_eq!(
         mill.state.players[0].library.len(),
@@ -254,6 +271,36 @@ fn issue_371_hydra_troopers_branches_villain_or_mill_two() {
         mill.state.players[0].graveyard.len(),
         3,
         "one injected creature card plus two milled cards"
+    );
+    assert_eq!(
+        count_card_id_in_graveyard(&mill, 0, "grizzly_bears"),
+        3,
+        "the mill can make the threshold true but does not re-run the If"
+    );
+    assert!(
+        battlefield_token_oids(&mill, 0, "villain_b_2_1_menace").is_empty(),
+        "the token branch was evaluated before the two creature cards were milled"
+    );
+
+    // The condition is read when the If executes, after the trigger has been placed.
+    let mut rechecked = engine_with(371_022, &["hydra_troopers"]);
+    inject_graveyard_card(&mut rechecked, 0, "grizzly_bears");
+    move_ready_to_battlefield(&mut rechecked, 0, "hydra_troopers");
+    assert_eq!(rechecked.state.stack.len(), 1, "the ETB trigger is waiting");
+    inject_graveyard_card(&mut rechecked, 0, "grizzly_bears");
+    let library_before = rechecked.state.players[0].library.len();
+    let resolution = resolve_top_stack(&mut rechecked);
+    assert_no_legacy_automatic_branch_log(&resolution, 0);
+    assert!(rechecked.state.pending_resolution.is_none());
+    assert_eq!(
+        battlefield_token_oids(&rechecked, 0, "villain_b_2_1_menace").len(),
+        1,
+        "the graveyard update before resolution meets the threshold"
+    );
+    assert_eq!(
+        rechecked.state.players[0].library.len(),
+        library_before,
+        "the false branch does not mill"
     );
 }
 

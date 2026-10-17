@@ -196,6 +196,14 @@ programs limit draw/discard recipients to `Controller`; triggered ability progra
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
 not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
+`If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
+validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
+recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test
+runs when the instruction resolves, after preceding steps, so Dawnhand Eulogist checks its graveyard
+after milling and HYDRA Troopers checks before either its token creation or fallback mill (CR
+608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless only for a fixed amount applied to
+`EachOpponent`; it cannot bind or yield a result. Dawnhand uses this form, which shares the same
+fixed each-opponent loss shape as Acolyte of Aclazotz and Arbiter of Woe.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.

@@ -14598,9 +14598,8 @@ mod tests {
     #[test]
     fn issue_374_retained_cards_generate_exact_typed_definitions() {
         use tricerules_cards::primitives::{
-            EffectSubject, EntersWithCountersAffected, GraveyardAggregate, LifeAmount,
-            PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
-            ResolutionBranchSelection, StaticAbilityDef, ZoneCardFilter,
+            EffectSubject, EntersWithCountersAffected, GraveyardAggregate, InstructionKind,
+            LifeAmount, PlayerRecipient, RelativePlayerSet, StaticAbilityDef, ZoneCardFilter,
         };
 
         let elf_filter = ZoneCardFilter {
@@ -14684,48 +14683,51 @@ mod tests {
         let [etb] = raw.triggered_abilities.as_slice() else {
             panic!("Dawnhand must emit one entry trigger");
         };
-        let [mill, branch] = etb.effect.as_slice() else {
-            panic!("unexpected Dawnhand payload: {:?}", etb.effect);
+        assert!(etb.effect.is_empty(), "Dawnhand has no legacy effect list");
+        let program = etb
+            .program
+            .as_ref()
+            .expect("Dawnhand emits its ordered resolution program");
+        assert!(program.target_bindings.is_empty());
+        assert!(program.body.yields.is_empty());
+        let [mill, conditional] = program.body.steps.as_slice() else {
+            panic!("Dawnhand mills before exactly one graveyard check")
+        };
+        assert!(matches!(
+            &mill.kind,
+            InstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::Mill {
+                    count: Amount::Fixed(3),
+                    who: PlayerRecipient::Controller,
+                })
+        ));
+        let InstructionKind::If { condition, yes, no } = &conditional.kind else {
+            panic!("Dawnhand's graveyard gate compiles as ProgramIf")
         };
         assert_eq!(
-            *mill,
-            SpellEffectKind::Mill {
-                count: Amount::Fixed(3),
-                who: PlayerRecipient::Controller,
-            }
+            condition.as_ref(),
+            &graveyard_gate(GraveyardAggregate::CardCount, Some(elf_filter), 1,)
         );
-        let SpellEffectKind::ChooseResolutionBranch {
-            selection,
-            branches,
-            ..
-        } = branch
-        else {
-            panic!("Dawnhand must author the Elf-card branch: {branch:?}");
+        assert!(yes.yields.is_empty() && no.yields.is_empty());
+        let [lose_life, gain_life] = yes.steps.as_slice() else {
+            panic!("the Elf condition loses then gains life in printed order")
         };
-        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-        assert_eq!(branches.len(), 2);
-        assert_eq!(
-            branches[0].requirement,
-            ResolutionBranchRequirement::GameCondition(graveyard_gate(
-                GraveyardAggregate::CardCount,
-                Some(elf_filter),
-                1,
-            ))
-        );
-        assert_eq!(
-            branches[0].effects,
-            [
-                SpellEffectKind::LoseLife {
+        assert!(matches!(
+            &lose_life.kind,
+            InstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
                     amount: LifeAmount::Fixed(2),
                     who: PlayerRecipient::EachOpponent,
-                },
-                SpellEffectKind::GainLife {
+                })
+        ));
+        assert!(matches!(
+            &gain_life.kind,
+            InstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
-                },
-            ]
-        );
-        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
-        assert!(branches[1].effects.is_empty());
+                })
+        ));
+        assert!(no.steps.is_empty(), "the false branch has no effects");
 
         let hand = normal_card_with_oracle_id(
             "6b348051-3ba8-4aa0-b337-b42d8ef8cbba",

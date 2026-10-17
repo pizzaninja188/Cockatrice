@@ -9,13 +9,12 @@
 //! land.
 
 use tricerules_cards::primitives::{
-    CardTypeFilter, EffectSubject, EntersWithCountersAffected, LifeAmount, PlayerRecipient,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
-    StaticAbilityDef, ZoneCardFilter,
+    CardTypeFilter, EffectSubject, EntersWithCountersAffected, InstructionKind, LifeAmount,
+    PlayerRecipient, StaticAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CastTriggerPlayer, ChoiceId, CounterKind, GameCondition,
-    GraveyardAggregate, Keyword, Layout, RelativePlayerSet, SpellEffectKind, TriggerCondition,
+    AbilityPresentation, Amount, CastTriggerPlayer, CounterKind, GameCondition, GraveyardAggregate,
+    Keyword, Layout, RelativePlayerSet, SpellEffectKind, TriggerCondition,
 };
 
 fn graveyard_gate(
@@ -177,9 +176,8 @@ fn issue_374_trigger_payloads_are_exact() {
         }]
     );
 
-    // Dawnhand Eulogist: the entry trigger mills exactly three, then the mandatory
-    // `FirstApplicable` branch drains each opponent and gains life only with an Elf card in the
-    // graveyard. The fallback branch is empty and unconditional.
+    // Dawnhand Eulogist: the entry trigger mills exactly three, then automatically checks the
+    // current controller graveyard for an Elf card before draining and gaining life.
     let dawnhand = registry
         .get("dawnhand_eulogist")
         .expect("Dawnhand Eulogist");
@@ -189,51 +187,48 @@ fn issue_374_trigger_payloads_are_exact() {
     assert_eq!(etb.presentation, AbilityPresentation::OracleLines(vec![2]));
     assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
     assert_eq!(etb.intervening_if, None);
+    assert!(etb.effect.is_empty());
+    let program = etb
+        .program
+        .as_ref()
+        .expect("Dawnhand owns its authored ordered program");
+    assert!(program.target_bindings.is_empty());
+    let [mill, conditional] = program.body.steps.as_slice() else {
+        panic!("Dawnhand mills before exactly one graveyard check")
+    };
+    assert!(matches!(
+        &mill.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Mill {
+                count: Amount::Fixed(3), who: PlayerRecipient::Controller,
+            })
+    ));
+    let InstructionKind::If { condition, yes, no } = &conditional.kind else {
+        panic!("Dawnhand's graveyard gate compiles as ProgramIf")
+    };
     assert_eq!(
-        etb.effect,
-        [
-            SpellEffectKind::Mill {
-                count: Amount::Fixed(3),
-                who: PlayerRecipient::Controller,
-            },
-            SpellEffectKind::ChooseResolutionBranch {
-                chooser: PlayerRecipient::Controller,
-                optional: false,
-                selection: ResolutionBranchSelection::FirstApplicable,
-                branches: vec![
-                    ResolutionBranchDef {
-                        branch_id: ChoiceId::new("elf_in_graveyard").unwrap(),
-                        presentation: AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement: ResolutionBranchRequirement::GameCondition(graveyard_gate(
-                            GraveyardAggregate::CardCount,
-                            Some(elf_card_filter()),
-                            1,
-                        )),
-                        effects: vec![
-                            SpellEffectKind::LoseLife {
-                                amount: LifeAmount::Fixed(2),
-                                who: PlayerRecipient::EachOpponent,
-                            },
-                            SpellEffectKind::GainLife {
-                                amount: Amount::Fixed(2),
-                            },
-                        ],
-                    },
-                    ResolutionBranchDef {
-                        branch_id: ChoiceId::new("otherwise").unwrap(),
-                        presentation: AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: Vec::new(),
-                    },
-                ],
-                otherwise: Vec::new(),
-            },
-        ]
+        condition.as_ref(),
+        &graveyard_gate(GraveyardAggregate::CardCount, Some(elf_card_filter()), 1,)
     );
+    assert!(yes.yields.is_empty() && no.yields.is_empty());
+    let [lose_life, gain_life] = yes.steps.as_slice() else {
+        panic!("an Elf card triggers loss then gain life in printed order")
+    };
+    assert!(matches!(
+        &lose_life.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(2), who: PlayerRecipient::EachOpponent,
+            })
+    ));
+    assert!(matches!(
+        &gain_life.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            })
+    ));
+    assert!(no.steps.is_empty(), "without an Elf card the trigger ends");
 
     // Hand That Feeds: the Delirium attack trigger pumps +2/+0 and grants menace in printed order.
     let hand = registry.get("hand_that_feeds").expect("Hand That Feeds");
