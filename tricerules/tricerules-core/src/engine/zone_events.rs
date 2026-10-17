@@ -3,6 +3,13 @@
 use super::*;
 use tricerules_card_model::primitives::{EventZone, ZoneEventCardinality, ZoneEventDestination};
 
+pub(super) struct CompletedZoneEntryBatch {
+    pub(super) stack: ParkedStackResolution,
+    /// Captured before the batch consumes its completion metadata. This only controls where a
+    /// validated resultless program operation resumes; it does not admit program shapes.
+    pub(super) resume_program: bool,
+}
+
 #[derive(Clone)]
 pub(super) struct ZoneEventSnapshot {
     sources: Vec<TriggerSourceSnapshot>,
@@ -46,7 +53,104 @@ pub(super) struct ZoneEventBatch {
 }
 
 impl GameEngine {
+    /// Identify a typed, resultless library-search entry boundary from both the in-flight program
+    /// operation and the exact Library-origin completion transaction. This deliberately checks
+    /// the transaction rather than reimplementing any card/model admission policy.
+    pub(super) fn is_typed_resultless_library_search_entry(
+        &self,
+        stack: &ParkedStackResolution,
+        completion: &BattlefieldEntryCompletion,
+    ) -> bool {
+        let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = completion else {
+            return false;
+        };
+        self.is_typed_resultless_library_search_completion(
+            stack,
+            batch.origin,
+            batch.completion.as_ref(),
+        )
+    }
+
+    fn is_typed_resultless_library_search_completion(
+        &self,
+        stack: &ParkedStackResolution,
+        origin: Zone,
+        completion: Option<&crate::state::ZoneEntryCompletion>,
+    ) -> bool {
+        let Some(program) = stack.program.as_ref() else {
+            return false;
+        };
+        if !program.in_flight.as_ref().is_some_and(Vec::is_empty)
+            || !self.current_program_perform(program).is_ok_and(|effect| {
+                matches!(
+                    effect,
+                    SpellEffectKind::SearchLibrary {
+                        result_id: None,
+                        ..
+                    }
+                )
+            })
+        {
+            return false;
+        }
+        let Some(crate::state::ZoneEntryCompletion::LibrarySearch(search)) = completion else {
+            return false;
+        };
+        origin == Zone::Library
+            && search.result_id.is_none()
+            && search.searcher == stack.item.controller
+    }
+
+    /// Complete the exact ZoneEntryBatch boundary, preserving the typed resultless
+    /// Battlefield-search cursor when its validated SearchLibrary operation is in flight.
+    /// Other entry batches keep their existing legacy fallback semantics.
+    pub(super) fn complete_parked_zone_entry_batch(
+        &mut self,
+        completion: CompletedZoneEntryBatch,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let CompletedZoneEntryBatch {
+            stack,
+            resume_program,
+        } = completion;
+        if resume_program {
+            return self.complete_parked_stack_with_previous(
+                stack,
+                EffectResult::default(),
+                events,
+            );
+        }
+
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            stack.previous_result,
+            events,
+        )
+    }
+
     pub(super) fn begin_zone_entry_batch(
+        &mut self,
+        stack: ParkedStackResolution,
+        entries: Vec<BattlefieldEntryEvent>,
+        origin: Zone,
+        spell_label: &str,
+        completion: Option<crate::state::ZoneEntryCompletion>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<ParkedStackResolution>, EngineError> {
+        Ok(self
+            .begin_zone_entry_batch_with_resume(
+                stack,
+                entries,
+                origin,
+                spell_label,
+                completion,
+                events,
+            )?
+            .map(|completed| completed.stack))
+    }
+
+    pub(super) fn begin_zone_entry_batch_with_resume(
         &mut self,
         stack: ParkedStackResolution,
         mut entries: Vec<BattlefieldEntryEvent>,
@@ -54,7 +158,7 @@ impl GameEngine {
         spell_label: &str,
         completion: Option<crate::state::ZoneEntryCompletion>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<Option<ParkedStackResolution>, EngineError> {
+    ) -> Result<Option<CompletedZoneEntryBatch>, EngineError> {
         entries.sort_by_key(|entry| self.state.apnap_rank(entry.deciding_player));
         let generations: Vec<_> = entries
             .iter()
@@ -76,7 +180,7 @@ impl GameEngine {
                     .map(|characteristics| (*oid, *generation, characteristics.mana_value))
             })
             .collect();
-        self.continue_zone_entry_batch(
+        self.continue_zone_entry_batch_with_resume(
             stack,
             crate::state::PendingZoneEntryBatch {
                 ready: vec![],
@@ -220,12 +324,12 @@ impl GameEngine {
         })
     }
 
-    pub(super) fn continue_zone_entry_batch(
+    pub(super) fn continue_zone_entry_batch_with_resume(
         &mut self,
         stack: ParkedStackResolution,
         mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<Option<ParkedStackResolution>, EngineError> {
+    ) -> Result<Option<CompletedZoneEntryBatch>, EngineError> {
         if !self.zone_entry_batch_current(&batch) {
             return Err(EngineError::Illegal("zone entry cohort became stale"));
         }
@@ -266,16 +370,27 @@ impl GameEngine {
         let SimultaneousEntryBatch::Zone(batch) = batch else {
             return Err(EngineError::Illegal("zone entry batch changed type"));
         };
-        self.commit_zone_entry_batch_ready(stack, batch, events)
+        self.commit_zone_entry_batch_ready_with_resume(stack, batch, events)
             .map(Some)
     }
 
     pub(super) fn commit_zone_entry_batch_ready(
         &mut self,
+        stack: ParkedStackResolution,
+        batch: crate::state::PendingZoneEntryBatch,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<ParkedStackResolution, EngineError> {
+        Ok(self
+            .commit_zone_entry_batch_ready_with_resume(stack, batch, events)?
+            .stack)
+    }
+
+    pub(super) fn commit_zone_entry_batch_ready_with_resume(
+        &mut self,
         mut stack: ParkedStackResolution,
         mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<ParkedStackResolution, EngineError> {
+    ) -> Result<CompletedZoneEntryBatch, EngineError> {
         // A looked remainder is frozen too: reject before committing even the first entrant.
         if !self.zone_entry_batch_current(&batch) {
             return Err(EngineError::Illegal("zone entry cohort became stale"));
@@ -287,6 +402,13 @@ impl GameEngine {
                 "zone-entry counters were not processed by the replacement planner",
             ));
         }
+        // The typed completion fact must be captured while the validated LibrarySearch
+        // transaction is still present; the loop below consumes its result metadata.
+        let resume_program = self.is_typed_resultless_library_search_completion(
+            &stack,
+            batch.origin,
+            batch.completion.as_ref(),
+        );
         self.prune_invalid_zone_entry_auras(&mut batch)?;
         let mut completion = batch.completion;
         let mut committed = HashSet::new();
@@ -459,7 +581,10 @@ impl GameEngine {
                 events,
             )?;
         }
-        Ok(stack)
+        Ok(CompletedZoneEntryBatch {
+            stack,
+            resume_program,
+        })
     }
 
     /// Randomize the still-current revealed objects to the bottom and renew their object

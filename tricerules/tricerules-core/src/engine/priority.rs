@@ -228,6 +228,23 @@ impl GameEngine {
         };
         let synthetic = observer_entry
             .map(|(oid, owner)| ParkedStackResolution::new(self.observer_return_item(oid, owner)));
+        let resultless_battlefield_search_entry = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                let stack = match &pending.continuation {
+                    ResolutionContinuation::EntryChooseOpponent { stack, .. }
+                    | ResolutionContinuation::EntryChooseCreatureType { stack, .. } => stack,
+                    _ => return false,
+                };
+                let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
+                    self.state.pending_replacement_event.as_ref()
+                else {
+                    return false;
+                };
+                self.is_typed_resultless_library_search_entry(stack, &entry.completion)
+            });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -266,6 +283,15 @@ impl GameEngine {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
                     // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
+                ResolutionContinuation::EntryChooseOpponent { .. }
+                | ResolutionContinuation::EntryChooseCreatureType { .. }
+                    if resultless_battlefield_search_entry =>
+                {
+                    // A typed resultless LibrarySearch ZoneEntryBatch has already begun. Preserve
+                    // that exact cursor until departure reconciliation retires the departed
+                    // entrant/chooser and completes the search boundary.
                     preserve = true;
                 }
                 ResolutionContinuation::BattlefieldReturn { .. } => {

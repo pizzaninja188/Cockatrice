@@ -50,6 +50,14 @@ The 2026-10-15 Wash Out port uses an all-free color `Choose` and the resultless
 replacement handler, which parks the exact resolving operation through APNAP ordering and
 destination choices. Library-return cohort consolidation remains deferred; its existing path is
 still separate, and this port adds no card admission.
+The 2026-10-16 Battlefield-search increment adds one closed resultless `SearchLibrary` form:
+controller's fixed Library, one Basic Land, bounds 0..1, Battlefield tapped, shuffle, no reveal or
+result. Lumbering Worldwagon's ETB and actual-attack triggers and Solemn Simulacrum's ETB use it;
+Worldwagon's Crew and Solemn's death-draw program remain unchanged. The existing Library-to-
+Battlefield entry batch preserves replacement choices and resumes the parked cursor after the
+entry pipeline. A zero-card result still shuffles and fires the search event (CR 701.23b, 701.24e);
+entry choices and a begun ability remain governed by CR 614.12, 616.1, 113.7a and 608.2m. This
+increment adds no card admissions or protocol/client changes.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

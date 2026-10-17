@@ -1,6 +1,7 @@
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, CompiledChooseRequirement, CompiledInstructionKind, PlayerRecipient,
-    ResolutionCost, SearchDestination, SpellEffectKind, TriggerCondition, ZoneCardFilter,
+    Amount, CardSearchZone, CardTypeFilter, CompiledChooseRequirement, CompiledInstructionKind,
+    PlayerRecipient, ResolutionCost, SearchDestination, SearchSelectionBounds, SearchZoneSelection,
+    SpellEffectKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, AbilityPresentation, Layout, ProgramOwnerId};
 
@@ -36,29 +37,80 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
         AbilityPresentation::OracleLines(vec![1])
     );
     assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert!(entry.effect.is_empty());
+    assert!(entry.program.is_some());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "solemn_simulacrum".to_owned(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![entry.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Solemn ETB-search trigger compiled program");
+    assert_eq!(program.owner, owner);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Solemn ETB-search trigger has one top-level Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &instruction.kind
+    else {
+        panic!("Solemn ETB-search trigger compiles as Choose");
+    };
+    assert_eq!(choice.as_str(), "solemn_etb_search");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Solemn ETB-search trigger has one search branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+    assert_eq!(branch.cost, ResolutionCost::None);
+    assert_eq!(
+        branch.presentation,
+        AbilityPresentation::OracleLines(vec![1])
+    );
     assert!(matches!(
-        entry.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch {
-            optional: true,
-            branches,
-            ..
-        }] if branches.len() == 1
-            && branches[0].branch_id.as_str() == "search_for_a_basic_land"
-            && branches[0].presentation == AbilityPresentation::OracleLines(vec![1])
-            && matches!(
-                branches[0].effects.as_slice(),
-                [SpellEffectKind::SearchLibrary {
-                    filter: Some(ZoneCardFilter {
-                        card_type: Some(CardTypeFilter::BasicLand),
-                        ..
-                    }),
-                    destination: SearchDestination::Battlefield { tapped: true },
-                    shuffle: true,
-                    reveal: false,
-                    ..
-                }]
-            )
+        &branch.requirement,
+        CompiledChooseRequirement::Always
     ));
+    assert!(branch.body.yields.is_empty());
+    let [leaf] = branch.body.steps.as_slice() else {
+        panic!("Solemn ETB-search branch has one SearchLibrary leaf");
+    };
+    let CompiledInstructionKind::Perform(effect) = &leaf.kind else {
+        panic!("Solemn ETB-search leaf is Perform");
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            }),
+            selection_constraint: None,
+            slots: Vec::new(),
+            zones: SearchZoneSelection::Fixed(vec![CardSearchZone::Library]),
+            destination: SearchDestination::Battlefield { tapped: true },
+            conditional_destination: None,
+            shuffle: true,
+            reveal: false,
+            result_id: None,
+            selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
+        }
+    );
 
     let death = &face.triggered_abilities[1];
     assert_eq!(death.ability_id.as_str(), "triggered_02");

@@ -4718,8 +4718,169 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             .to_string();
         assert!(
             error.contains("program direct TopOfLibrary SearchLibrary")
+                || error.contains("program direct Battlefield SearchLibrary supports only")
                 || error.contains("retained SearchLibrary supports only"),
             "{label}: unexpected diagnostic: {error}"
+        );
+    }
+}
+
+fn resultless_direct_battlefield_search_program() -> String {
+    program_fixture(
+        r#"(steps: [
+            (id: "search_choice", bind: [], input: None, kind: Choose(
+                choice: "search", chooser: Controller, optional: true,
+                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                    cost: None, requirement: Always, body: (steps: [
+                        (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
+                            who: Controller, optional: false, count: 1,
+                            count_by_cast_cost: None,
+                            filter: Some((card_type: Some(BasicLand))),
+                            selection_constraint: None, slots: [],
+                            zones: Fixed([Library]),
+                            destination: Battlefield(tapped: true),
+                            conditional_destination: None, shuffle: true, reveal: false,
+                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                        )))
+                    ], yields: []))], otherwise: (steps: [], yields: [])))
+        ], yields: [])"#,
+    )
+}
+
+#[test]
+fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_tapped() {
+    let definition = resultless_direct_battlefield_search_program();
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the exact resultless tapped Battlefield BasicLand search shape compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the fixture face owns its compiled Choose program");
+    let [choice] = program.body.steps.as_slice() else {
+        panic!("expected one outer optional Choose instruction");
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choice.kind
+    else {
+        panic!("the optionality must remain on the outer Choose");
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    assert!(choice.outputs.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("expected one BasicLand search branch");
+    };
+    let [search] = branch.body.steps.as_slice() else {
+        panic!("expected one Battlefield search operation");
+    };
+    assert!(search.outputs.is_empty(), "the direct search is resultless");
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &search.kind else {
+        panic!("the selected branch must execute the direct search leaf");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        crate::primitives::SpellEffectKind::SearchLibrary {
+            who: crate::primitives::PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(filter),
+            selection_constraint: None,
+            slots,
+            zones: crate::primitives::SearchZoneSelection::Fixed(zones),
+            destination: crate::primitives::SearchDestination::Battlefield { tapped: true },
+            conditional_destination: None,
+            shuffle: true,
+            reveal: false,
+            result_id: None,
+            selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
+        } if filter == &crate::primitives::ZoneCardFilter {
+            card_type: Some(crate::primitives::CardTypeFilter::BasicLand),
+            ..Default::default()
+        } && zones == &[crate::primitives::CardSearchZone::Library]
+            && slots.is_empty()
+            && filter.validate().is_ok()
+    ));
+    assert!(program.slots.is_empty());
+
+    for (label, malformed) in [
+        (
+            "the search remains mandatory once selected",
+            definition.replace("optional: false", "optional: true"),
+        ),
+        (
+            "the search count is fixed at one",
+            definition.replace("count: 1,", "count: 2,"),
+        ),
+        (
+            "only BasicLand is supported",
+            definition.replace("card_type: Some(BasicLand)", "card_type: Some(Land)"),
+        ),
+        (
+            "the search remains limited to the controller's Library",
+            definition.replace("Fixed([Library])", "Fixed([Library, Hand])"),
+        ),
+        (
+            "the entrant remains tapped",
+            definition.replace(
+                "destination: Battlefield(tapped: true)",
+                "destination: Battlefield(tapped: false)",
+            ),
+        ),
+        (
+            "Battlefield entry search does not reveal",
+            definition.replace("reveal: false", "reveal: true"),
+        ),
+        (
+            "the search has no selection constraint",
+            definition.replace("selection_constraint: None", "selection_constraint: Some(DifferentNames)"),
+        ),
+        (
+            "the search has no slot definitions",
+            definition.replace(
+                "slots: [],",
+                "slots: [(slot_id: \"basic\", presentation: Fallback, filter: (card_type: Some(BasicLand)))],",
+            ),
+        ),
+        (
+            "the destination is not conditional",
+            definition.replace(
+                "conditional_destination: None",
+                "conditional_destination: Some((condition: ControllerLibraryEmpty, destination: Hand))",
+            ),
+        ),
+        (
+            "the operation has no SearchResultId",
+            definition.replace("result_id: None", "result_id: Some(\"found\")"),
+        ),
+        (
+            "the operation is shuffled",
+            definition.replace("shuffle: true", "shuffle: false"),
+        ),
+        (
+            "the selection bounds remain 0..1",
+            definition.replace("min: 0, max: 1", "min: 1, max: 1"),
+        ),
+        (
+            "the resultless instruction cannot bind a cohort",
+            definition.replace(
+                "id: \"search_battlefield\", bind: [],",
+                "id: \"search_battlefield\", bind: [\"found\"],",
+            ),
+        ),
+    ] {
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[]).is_err(),
+            "{label} must be rejected"
         );
     }
 }

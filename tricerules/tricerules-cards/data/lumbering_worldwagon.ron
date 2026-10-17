@@ -22,39 +22,55 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "search_for_a_basic_land",
-          presentation: Fallback,
-          cost: None,
-          effects: [SearchLibrary(
-            filter: Some((card_type: Some(BasicLand))),
-            destination: Battlefield(tapped: true),
-            shuffle: true,
-            reveal: false,
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_worldwagon_entry_search", kind: Choose(
+          choice: "worldwagon_entry_search",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "search_for_a_basic_land",
+            presentation: Fallback,
+            cost: None,
+            requirement: Always,
+            body: (steps: [(id: "search_basic_land", kind: Perform(SearchLibrary(
+              who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+              filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
+              zones: Fixed([Library]), destination: Battlefield(tapped: true),
+              conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))], yields: []),
           )],
-        )],
-      )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "search_for_a_basic_land",
-          presentation: Fallback,
-          cost: None,
-          effects: [SearchLibrary(
-            filter: Some((card_type: Some(BasicLand))),
-            destination: Battlefield(tapped: true),
-            shuffle: true,
-            reveal: false,
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_worldwagon_attack_search", kind: Choose(
+          choice: "worldwagon_attack_search",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "search_for_a_basic_land",
+            presentation: Fallback,
+            cost: None,
+            requirement: Always,
+            body: (steps: [(id: "search_basic_land", kind: Perform(SearchLibrary(
+              who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+              filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
+              zones: Fixed([Library]), destination: Battlefield(tapped: true),
+              conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))], yields: []),
           )],
-        )],
-      )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
   ],
   activated_abilities: [(

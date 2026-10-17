@@ -1,6 +1,8 @@
+use tricerules_cards::primitives::CardTypeFilter;
 use tricerules_cards::primitives::{
-    Amount, CastTriggerPlayer, CompiledChooseBranch, CompiledInstructionKind, CompiledProgram,
-    PlayerRecipient, ResolutionCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    Amount, CardSearchZone, CastTriggerPlayer, CompiledChooseBranch, CompiledInstructionKind,
+    CompiledProgram, PlayerRecipient, ResolutionCost, SearchDestination, SearchSelectionBounds,
+    SearchZoneSelection, SpellEffectKind, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityDefinitionId, AbilityPresentation, CardFace, CardRegistry, ManaCost, ProgramOwnerId,
@@ -69,6 +71,77 @@ fn assert_single_perform(branch: &CompiledChooseBranch, expected: SpellEffectKin
         panic!("each branch leaf is a Perform instruction");
     };
     assert_eq!(**effect, expected);
+}
+
+fn assert_worldwagon_battlefield_search(branch: &CompiledChooseBranch) {
+    assert_eq!(branch.cost, ResolutionCost::None);
+    assert_eq!(branch.presentation, AbilityPresentation::Fallback);
+    let [instruction] = branch.body.steps.as_slice() else {
+        panic!("a Worldwagon search branch has one SearchLibrary operation");
+    };
+    let CompiledInstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("the Worldwagon search leaf is a Perform");
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            }),
+            selection_constraint: None,
+            slots: Vec::new(),
+            zones: SearchZoneSelection::Fixed(vec![CardSearchZone::Library]),
+            destination: SearchDestination::Battlefield { tapped: true },
+            conditional_destination: None,
+            shuffle: true,
+            reveal: false,
+            result_id: None,
+            selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
+        }
+    );
+}
+
+#[test]
+fn lumbering_worldwagon_registry_programs_both_optional_search_owners() {
+    let registry = tricerules_cards::registry::global();
+    let face = registry
+        .get("lumbering_worldwagon")
+        .expect("Lumbering Worldwagon")
+        .primary_face();
+    let [entry, attack] = face.triggered_abilities.as_slice() else {
+        panic!("Lumbering Worldwagon keeps its ETB and attack trigger owners");
+    };
+    assert_eq!(entry.ability_id.as_str(), "triggered_01");
+    assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert!(entry.effect.is_empty());
+    let entry_branches = choose_branches(
+        program_for_ability(registry, "lumbering_worldwagon", face, entry),
+        "worldwagon_entry_search",
+        true,
+        &["search_for_a_basic_land"],
+    );
+    assert_worldwagon_battlefield_search(&entry_branches[0]);
+
+    assert_eq!(attack.ability_id.as_str(), "triggered_02");
+    assert_eq!(
+        attack.trigger,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
+    );
+    assert!(attack.effect.is_empty());
+    let attack_branches = choose_branches(
+        program_for_ability(registry, "lumbering_worldwagon", face, attack),
+        "worldwagon_attack_search",
+        true,
+        &["search_for_a_basic_land"],
+    );
+    assert_worldwagon_battlefield_search(&attack_branches[0]);
 }
 
 #[test]
@@ -252,7 +325,7 @@ fn minds_eye_registry_keeps_the_optional_paid_draw_and_oracle_presentation() {
 }
 
 #[test]
-fn solemn_simulacrum_registry_programs_only_the_death_draw_owner() {
+fn solemn_simulacrum_registry_programs_the_search_and_death_draw_owners() {
     let registry = tricerules_cards::registry::global();
     let face = registry
         .get("solemn_simulacrum")
@@ -263,12 +336,46 @@ fn solemn_simulacrum_registry_programs_only_the_death_draw_owner() {
     };
     assert_eq!(entry.ability_id.as_str(), "triggered_01");
     assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-    assert!(entry.program.is_none());
+    assert!(entry.effect.is_empty());
+    let [search_branch] = choose_branches(
+        program_for_ability(registry, "solemn_simulacrum", face, entry),
+        "solemn_etb_search",
+        true,
+        &["search_for_a_basic_land"],
+    ) else {
+        panic!("Solemn Simulacrum keeps one optional ETB-search branch");
+    };
+    let [search_instruction] = search_branch.body.steps.as_slice() else {
+        panic!("the Solemn ETB-search branch has one search operation");
+    };
+    let CompiledInstructionKind::Perform(search) = &search_instruction.kind else {
+        panic!("the Solemn ETB-search leaf is a Perform");
+    };
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        filter,
+        destination,
+        shuffle,
+        reveal,
+        result_id,
+        ..
+    } = &**search
+    else {
+        panic!("the Solemn ETB-search leaf is SearchLibrary");
+    };
+    assert_eq!(*who, PlayerRecipient::Controller);
+    assert!(!optional);
     assert!(matches!(
-        entry.effect.as_slice(),
-        [SpellEffectKind::ChooseResolutionBranch { branches, .. }]
-            if branches.len() == 1 && branches[0].branch_id.as_str() == "search_for_a_basic_land"
+        filter,
+        Some(filter)
+            if filter.card_type == Some(tricerules_cards::primitives::CardTypeFilter::BasicLand)
     ));
+    assert!(matches!(
+        destination,
+        tricerules_cards::primitives::SearchDestination::Battlefield { tapped: true }
+    ));
+    assert!(*shuffle && !*reveal && result_id.is_none());
 
     assert_eq!(death.ability_id.as_str(), "triggered_02");
     assert_eq!(death.trigger, TriggerCondition::WhenSelfDies);

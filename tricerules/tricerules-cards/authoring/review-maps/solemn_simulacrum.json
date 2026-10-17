@@ -6,7 +6,12 @@
       "face_id": "solemn_simulacrum",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/triggered_abilities/0"]
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+      ]
     },
     {
       "face_id": "solemn_simulacrum",
@@ -26,20 +31,20 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "SpellEffectKind::SearchLibrary",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
     },
     {
       "symbol": "CardTypeFilter::BasicLand",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/SearchLibrary/filter/card_type"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary/filter/card_type"
     },
     {
       "symbol": "SearchDestination::Battlefield",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/SearchLibrary/destination"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary/destination"
     },
     {
       "symbol": "TriggerCondition::WhenSelfDies",
@@ -66,11 +71,11 @@
     },
     {
       "test": "deck_registry::deck_coverage_solemn_simulacrum::solemn_simulacrum_registers_both_optional_triggered_abilities",
-      "covers": "exact identity and characteristics; the ETB search remains its legacy optional branch with a basic-land filter, tapped destination, and shuffle, while the death owner compiles as a controller-only optional Choose that draws one card"
+      "covers": "exact identity and characteristics; the ETB owner compiles as a controller-only optional Choose with a resultless basic-land search, tapped Battlefield destination, no reveal, and shuffle, while the death owner remains a controller-only optional Choose that draws one card"
     },
     {
-      "test": "deck_registry::structural_choose_later_ports::solemn_simulacrum_registry_programs_only_the_death_draw_owner",
-      "covers": "the existing triggered_01 ETB search owner remains legacy while triggered_02 alone is the new Choose program"
+      "test": "deck_registry::structural_choose_later_ports::solemn_simulacrum_registry_programs_the_search_and_death_draw_owners",
+      "covers": "triggered_01 owns the optional resultless BasicLand search into the Battlefield tapped, while triggered_02 remains the controller-only optional death-draw Choose"
     }
   ],
   "complete_definition_review_confirmed": true

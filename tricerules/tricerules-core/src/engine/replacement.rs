@@ -3243,6 +3243,23 @@ impl GameEngine {
             .stack()
             .cloned()
             .ok_or(EngineError::Illegal("entry continuation missing"))?;
+        if self.is_typed_resultless_library_search_entry(&stack, &entry.completion) {
+            if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &mut entry.completion {
+                if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(search)) =
+                    batch.completion.as_mut()
+                {
+                    if self
+                        .state
+                        .player_idx(search.searcher)
+                        .is_none_or(|index| self.state.players[index].has_lost)
+                    {
+                        // The search has already begun, so its LibrarySearched event remains
+                        // owed; a player who has left cannot perform the pending shuffle.
+                        search.shuffle = false;
+                    }
+                }
+            }
+        }
         if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &entry.completion {
             if !self.zone_entry_batch_current(batch) {
                 self.restore_abandoned_battlefield_entry(&entry.event)?;
@@ -3508,15 +3525,12 @@ impl GameEngine {
                 BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                     self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                     let mut resumed_events = Vec::new();
-                    if let Some(stack) =
-                        self.continue_zone_entry_batch(stack, *batch, &mut resumed_events)?
-                    {
-                        self.complete_parked_resolution_with_previous(
-                            stack.item,
-                            stack.resume_effect_index,
-                            stack.previous_result,
-                            resumed_events,
-                        )?
+                    if let Some(completion) = self.continue_zone_entry_batch_with_resume(
+                        stack,
+                        *batch,
+                        &mut resumed_events,
+                    )? {
+                        self.complete_parked_zone_entry_batch(completion, resumed_events)?
                     } else {
                         finish_with_events(self, resumed_events)
                     }
@@ -3654,15 +3668,10 @@ impl GameEngine {
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                 let mut resumed_events = Vec::new();
-                if let Some(stack) =
-                    self.continue_zone_entry_batch(stack, *batch, &mut resumed_events)?
+                if let Some(completion) =
+                    self.continue_zone_entry_batch_with_resume(stack, *batch, &mut resumed_events)?
                 {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        resumed_events,
-                    )?
+                    self.complete_parked_zone_entry_batch(completion, resumed_events)?
                 } else {
                     finish_with_events(self, resumed_events)
                 }
@@ -4865,13 +4874,10 @@ impl GameEngine {
                 self.continue_library_search_battlefield_entries(stack, progress, events)
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
-                if let Some(stack) = self.continue_zone_entry_batch(stack, *batch, &mut events)? {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        events,
-                    )
+                if let Some(completion) =
+                    self.continue_zone_entry_batch_with_resume(stack, *batch, &mut events)?
+                {
+                    self.complete_parked_zone_entry_batch(completion, events)
                 } else {
                     Ok(finish_with_events(self, events))
                 }
@@ -6548,16 +6554,12 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);
-                let Some(stack) = self.continue_zone_entry_batch(stack, *batch, &mut events)?
+                let Some(completion) =
+                    self.continue_zone_entry_batch_with_resume(stack, *batch, &mut events)?
                 else {
                     return Ok(finish_with_events(self, events));
                 };
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    events,
-                )
+                self.complete_parked_zone_entry_batch(completion, events)
             }
             BattlefieldEntryCompletion::DevPlacement {
                 target,

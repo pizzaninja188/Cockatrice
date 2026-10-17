@@ -62,6 +62,14 @@ fn solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_
 
     let entry_batch = pass_both_and_capture(&mut engine);
     let branch = find_resolution_choice(&entry_batch).expect("optional ETB search branch");
+    assert!(matches!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation),
+        Some(ResolutionContinuation::ProgramChoose { .. })
+    ));
     assert_eq!(branch.deciding_player_id, 0);
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
@@ -140,6 +148,14 @@ fn solemn_simulacrum_can_decline_both_optional_abilities() {
 
     let entry_batch = pass_both_and_capture(&mut engine);
     let branch = find_resolution_choice(&entry_batch).expect("optional ETB search branch");
+    assert!(matches!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation),
+        Some(ResolutionContinuation::ProgramChoose { .. })
+    ));
     assert_eq!(branch.deciding_player_id, 0);
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert!(engine

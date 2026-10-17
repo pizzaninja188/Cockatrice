@@ -1495,7 +1495,7 @@ self.state.pending_resolution = Some(PendingResolution {
                             })
                             .collect();
                         let label = object_display_name(&self.state, self.registry, stack.item.id);
-                        let Some(stack) = self.begin_zone_entry_batch(
+                        let Some(completion) = self.begin_zone_entry_batch_with_resume(
                             stack,
                             entries,
                             Zone::Library,
@@ -1513,12 +1513,7 @@ self.state.pending_resolution = Some(PendingResolution {
                         else {
                             return Ok(finish_with_events(self, ev));
                         };
-                        return self.complete_parked_resolution_with_previous(
-                            stack.item,
-                            stack.resume_effect_index,
-                            stack.previous_result,
-                            ev,
-                        );
+                        return self.complete_parked_zone_entry_batch(completion, ev);
                     }
                     return self.continue_library_search_battlefield_entries(
                         stack,

@@ -421,12 +421,23 @@ fn a_copy_keeps_worldwagons_cda_but_not_its_resolved_crew_effect() {
 }
 
 #[test]
-fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
+fn worldwagon_entry_and_actual_attack_use_optional_basic_search_programs() {
     let mut engine = engine_with_worldwagon(215_003);
     let wagon = move_ready_to_battlefield(&mut engine, 0, "lumbering_worldwagon");
 
     let optional = resolve_top_to_choice(&mut engine);
     let branch = find_resolution_choice(&optional).expect("optional entry search");
+    assert!(
+        matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::ProgramChoose { .. })
+        ),
+        "the ETB search is owned by its compiled Choose program"
+    );
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
     let search = engine
@@ -460,11 +471,23 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
         .apply_scenario_command(0, &declare_attackers(vec![wagon]))
         .expect("attack with the crewed Vehicle");
 
+    let library_before_declining_attack_search = engine.state.players[0].library.clone();
     let optional = resolve_top_to_choice(&mut engine);
     let branch = find_resolution_choice(&optional).expect("optional attack search");
+    assert!(
+        matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::ProgramChoose { .. })
+        ),
+        "the actual WheneverSelfAttacks trigger resolves its compiled Choose program"
+    );
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
-    engine
+    let declined = engine
         .apply_scenario_command(
             0,
             &RuledCommand {
@@ -476,5 +499,17 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
             },
         )
         .expect("decline the attack search");
+    assert_eq!(
+        engine.state.players[0].library, library_before_declining_attack_search,
+        "declining the outer Choose performs no search or shuffle"
+    );
+    assert!(declined.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+    )));
+    assert!(declined
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
     assert!(engine.state.pending_resolution.is_none());
 }
