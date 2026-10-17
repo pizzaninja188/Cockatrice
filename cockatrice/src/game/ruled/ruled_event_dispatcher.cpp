@@ -24,6 +24,8 @@ std::string resolutionChoiceSemantics(const ruled::v1::ResolutionChoiceRequired 
 {
     ruled::v1::ResolutionChoiceRequired semantic = choice;
     semantic.set_resolution_prompt_id(0);
+    if (semantic.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT)
+        semantic.set_payment_currently_legal(false);
     semantic.clear_prompt_text();
     semantic.clear_candidate_server_card_ids();
     semantic.clear_public_reveal();

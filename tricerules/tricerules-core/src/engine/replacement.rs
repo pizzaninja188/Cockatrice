@@ -2129,6 +2129,191 @@ impl GameEngine {
         Ok(receipts)
     }
 
+    /// Recompute only a typed Proliferate replacement-order offer after player departure.
+    /// The effect controller and the CR 616.1 chooser are independent: a begun program must
+    /// retain its cursor, while a changed recipient controller receives a fresh order prompt.
+    pub(super) fn refresh_program_proliferate_replacement_departure(
+        &mut self,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(original_pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        let Some(original_replacement) = self.state.pending_replacement_event.clone() else {
+            return Ok(());
+        };
+        let (stack, completion) = match &original_pending.continuation {
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::Proliferate { .. },
+            } if stack.program.is_some() => (stack.clone(), completion.clone()),
+            _ => return Ok(()),
+        };
+        let PendingReplacementEvent::Counters(batch) = &original_replacement else {
+            return Ok(());
+        };
+        let mut batch = (**batch).clone();
+        let old_decider = original_pending.deciding_player;
+        let old_event_index = batch.event_index;
+
+        let recipient_is_current =
+            |engine: &Self, event: &ProposedCounterPlacement| match &event.recipient {
+                CounterPlacementRecipient::Object {
+                    object_id,
+                    zone_change_generation,
+                } => {
+                    engine
+                        .state
+                        .objects
+                        .get(object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield)
+                        && engine
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *zone_change_generation
+                        && engine.can_receive_counters(*object_id)
+                }
+                CounterPlacementRecipient::Player { player_id } => engine
+                    .state
+                    .player_idx(*player_id)
+                    .is_some_and(|index| !engine.state.players[index].has_lost),
+                CounterPlacementRecipient::EnteringObject { .. } => false,
+            };
+        let batch_had_stale_recipient = batch
+            .events
+            .iter()
+            .any(|event| !recipient_is_current(self, event));
+        let current_event = batch.events.get(batch.event_index);
+        let new_decider = current_event.and_then(|event| match &event.recipient {
+            CounterPlacementRecipient::Object { object_id, .. } => self.controller_of(*object_id),
+            CounterPlacementRecipient::EnteringObject { .. } => event
+                .entry_context
+                .as_ref()
+                .map(|context| context.destination_controller),
+            CounterPlacementRecipient::Player { player_id } => Some(*player_id),
+        });
+        let existing_candidates = if let Some(event) = current_event {
+            self.counter_replacement_candidates(event)
+        } else {
+            Vec::new()
+        };
+        let old_candidates = batch
+            .applications
+            .iter()
+            .filter(|application| application.event_index == old_event_index)
+            .map(|application| application.replacement.clone())
+            .collect::<Vec<_>>();
+        let new_candidates = existing_candidates
+            .iter()
+            .map(|(candidate, _)| candidate.clone())
+            .collect::<Vec<_>>();
+        let decider_is_live = self
+            .state
+            .player_idx(old_decider)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if !batch_had_stale_recipient
+            && decider_is_live
+            && new_decider == Some(old_decider)
+            && old_candidates == new_candidates
+        {
+            // A source/controller departure unrelated to this recipient does not change the
+            // answer semantics. Keep the existing actor-scoped prompt ID and menu.
+            return Ok(());
+        }
+
+        let completed_count = batch
+            .events
+            .iter()
+            .take(old_event_index)
+            .filter(|event| recipient_is_current(self, event))
+            .count();
+        batch
+            .events
+            .retain(|event| recipient_is_current(self, event));
+        batch.event_index = completed_count.min(batch.events.len());
+        batch.applications.clear();
+
+        if let Some(candidates) = self.advance_counter_placement_batch(&mut batch)? {
+            let event = batch
+                .events
+                .get(batch.event_index)
+                .ok_or(EngineError::Illegal(
+                    "proliferate replacement event disappeared while refreshing",
+                ))?;
+            let event_decider = match &event.recipient {
+                CounterPlacementRecipient::Object { object_id, .. } => {
+                    self.controller_of(*object_id)
+                }
+                CounterPlacementRecipient::EnteringObject { .. } => event
+                    .entry_context
+                    .as_ref()
+                    .map(|context| context.destination_controller),
+                CounterPlacementRecipient::Player { player_id } => Some(*player_id),
+            };
+            let live_decider = event_decider
+                .filter(|player| {
+                    self.state
+                        .player_idx(*player)
+                        .is_some_and(|index| !self.state.players[index].has_lost)
+                })
+                .or_else(|| {
+                    self.state
+                        .player_idx(old_decider)
+                        .filter(|&index| !self.state.players[index].has_lost)
+                        .map(|index| self.state.players[index].id)
+                })
+                .or_else(|| {
+                    self.state
+                        .player_idx(old_decider)
+                        .and_then(|index| self.state.next_in_game_player_idx(index))
+                        .map(|index| self.state.players[index].id)
+                })
+                .ok_or(EngineError::Illegal(
+                    "no live player can order proliferate counter replacements",
+                ))?;
+            self.park_counter_placement_choice(batch, candidates, Some(stack), completion, out);
+            if let Some(pending) = self.state.pending_resolution.as_mut() {
+                pending.deciding_player = live_decider;
+            }
+            if live_decider != event_decider.unwrap_or(live_decider) {
+                if let Some(choice) =
+                    out.iter_mut()
+                        .rev()
+                        .find_map(|event| match event.ev.as_mut() {
+                            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                                Some(choice)
+                            }
+                            _ => None,
+                        })
+                {
+                    choice.deciding_player_id = live_decider;
+                }
+            }
+            return Ok(());
+        }
+
+        let original_event_count = out.len();
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        if let Err(error) = self.commit_counter_placement_batch(&batch.events, &completion, out) {
+            out.truncate(original_event_count);
+            self.state.pending_resolution = Some(original_pending);
+            self.state.pending_replacement_event = Some(original_replacement);
+            return Err(error);
+        }
+        let completion_events = self.complete_parked_stack_with_previous(
+            stack,
+            crate::state::EffectResult::default(),
+            Vec::new(),
+        )?;
+        out.extend(completion_events.events);
+        Ok(())
+    }
+
     pub(super) fn finish_counter_replacement_choice(
         &mut self,
         pending: PendingResolution,
@@ -2409,6 +2594,18 @@ impl GameEngine {
                 stack.item,
                 stack.resume_effect_index,
                 previous_result,
+                events,
+            );
+        }
+        if stack.program.is_some()
+            && matches!(
+                &completion,
+                crate::state::CounterPlacementCompletion::Proliferate { .. }
+            )
+        {
+            return self.complete_parked_stack_with_previous(
+                stack,
+                crate::state::EffectResult::default(),
                 events,
             );
         }

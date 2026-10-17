@@ -861,24 +861,29 @@ void RuledPaymentUi::clear()
 
 void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
 {
-    if (!applicable())
+    // Capture the live parent before moving its model. activeContext is reset while suspended,
+    // but context() still identifies the engine's ResolutionPayment offer.
+    const Context parentContext = context();
+    if (parentContext == Context::None)
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto ability = state->activatedAbilityForOid(oid, abilityIndex);
     if (!ability || !ability->isManaAbility())
         return;
     SuspendedPayment frame;
-    frame.payment = state->payment.suspend();
-    frame.context = activeContext;
-    if (context() == Context::Spell) {
+    frame.context = parentContext;
+    if (parentContext == Context::Resolution) {
+        frame.resolutionParent.promptId = state->resolutionPromptId;
+        frame.resolutionParent.answerSemantics = state->resolutionPromptSemantics;
+    }
+    if (parentContext == Context::Spell) {
         frame.spell = actions->pendingRuledSpellCast;
         actions->pendingRuledSpellCast.valid = false;
-    } else if (context() == Context::Ability) {
+    } else if (parentContext == Context::Ability) {
         frame.ability = actions->pendingActivatedAbility;
         actions->pendingActivatedAbility.valid = false;
-    } else if (context() != Context::Resolution && context() != Context::Attack) {
-        return;
     }
+    frame.payment = state->payment.suspend();
     suspendedPayments.append(std::move(frame));
     activeContext = Context::None;
 }
@@ -888,9 +893,59 @@ void RuledPaymentUi::resumeAfterManaAbility()
     if (suspendedPayments.isEmpty())
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    if (ruledActivationNestedChoice(*state) || state->isEngineCommandPending() ||
-        actions->pendingActivatedAbility.valid)
+    auto &top = suspendedPayments.last();
+    if (top.context == Context::Resolution) {
+        const auto decision = ruledResolutionPaymentResumeDecision(
+            *state, top.resolutionParent, actions->pendingActivatedAbility.valid, top.payment.submitting);
+        if (decision == RuledPaymentResumeDecision::Wait)
+            return;
+        if (decision == RuledPaymentResumeDecision::Discard) {
+            const auto staleParent = top.resolutionParent;
+            QVector<int> staleCounterIds;
+            const auto hasSameReceipt = [&staleParent](const SuspendedPayment &frame) {
+                return frame.context == Context::Resolution &&
+                       frame.resolutionParent.promptId == staleParent.promptId &&
+                       frame.resolutionParent.answerSemantics == staleParent.answerSemantics;
+            };
+            while (!suspendedPayments.isEmpty() && hasSameReceipt(suspendedPayments.last())) {
+                auto stale = std::move(suspendedPayments.last());
+                suspendedPayments.removeLast();
+                staleCounterIds.append(stale.payment.takeAllOptimisticManaCounterIds());
+                if (suspendedPayments.isEmpty() || !hasSameReceipt(suspendedPayments.last()))
+                    break;
+                const auto nextDecision = ruledResolutionPaymentResumeDecision(
+                    *state, suspendedPayments.last().resolutionParent, actions->pendingActivatedAbility.valid,
+                    suspendedPayments.last().payment.submitting);
+                if (nextDecision != RuledPaymentResumeDecision::Discard)
+                    break;
+            }
+
+            // Remove stale frames before recalculating optimistic debits. This preserves foreign
+            // frames and prevents stale mana from being applied to the next payment offer.
+            clear();
+            restoreOptimisticManaCounters(staleCounterIds);
+            if (suspendedPayments.isEmpty()) {
+                startOrRefresh();
+                changed();
+                return;
+            }
+
+            const auto &remaining = suspendedPayments.last();
+            if (remaining.context != Context::Resolution ||
+                ruledResolutionPaymentResumeDecision(
+                    *state, remaining.resolutionParent, actions->pendingActivatedAbility.valid,
+                    remaining.payment.submitting) != RuledPaymentResumeDecision::Resume) {
+                changed();
+                return;
+            }
+            resumeAfterManaAbility();
+            return;
+        }
+    } else if (ruledActivationNestedChoice(*state) || state->isEngineCommandPending() || state->payment.submitting ||
+               actions->pendingActivatedAbility.valid) {
+        // Preserve the existing suspension rules for spell, ability, and attack frames.
         return;
+    }
     // Retire only the inner model's unpaid counter debits while the outer frame is still
     // present in the optimistic-spend accounting. Then restore that exact parked selection.
     clear();

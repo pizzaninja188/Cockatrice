@@ -1,3 +1,7 @@
+// Exact Oracle card and rulings refreshed 2026-10-16:
+// https://scryfall.com/card/cmr/202/sparktongue-dragon
+// https://api.scryfall.com/cards/289a3c60-c740-4e2e-a622-a749ed230c5b/rulings
+// CR 603.12 and 603.3d: payment creates the reflexive trigger, which is targeted as it is put on the stack.
 (
   id: "sparktongue_dragon",
   name: "Sparktongue Dragon",
@@ -12,20 +16,24 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [
-          (
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "pay_2_r", bind: [], input: None, kind: Choose(
+          choice: "sparktongue_pay_to_damage", chooser: Controller, optional: true,
+          branches: [(
             branch_id: "pay_2_r", presentation: Fallback,
-            cost: Mana("{2}{R}"),
-            effects: [CreateReflexiveTrigger(ability: (
-              ability_id: "reflexive_01",
-              presentation: Fallback,
-              effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
-            ))],
-          ),
-        ],
-      )],
+            cost: Mana("{2}{R}"), requirement: Always,
+            body: (steps: [
+              (id: "create_reflexive_damage", bind: [], input: None,
+               kind: Perform(CreateReflexiveTrigger(ability: (
+                 ability_id: "reflexive_01", presentation: Fallback,
+                 effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+               )))),
+            ], yields: []),
+          )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
   ],
 )

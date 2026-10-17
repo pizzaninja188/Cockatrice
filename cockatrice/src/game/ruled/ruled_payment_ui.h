@@ -2,6 +2,7 @@
 #define RULED_PAYMENT_UI_H
 
 #include "ruled_payment.h"
+#include "ruled_payment_resume_policy.h"
 #include "ruled_pending_cast.h"
 
 #include <QPair>
@@ -124,6 +125,7 @@ private:
         std::optional<PendingActivatedAbility> ability;
         RuledPayment payment;
         Context context = Context::None;
+        RuledResolutionPaymentIdentity resolutionParent;
     };
     Context context() const;
     Context activeContext = Context::None;

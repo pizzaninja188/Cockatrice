@@ -466,9 +466,13 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
         .clone();
     apply_ability(&mut engine, 0, first_mountain, 0, vec![])
         .expect("float the first mana while the Choose payment is open");
-    apply_ability(&mut engine, 0, second_mountain, 0, vec![])
+    let newly_payable = apply_ability(&mut engine, 0, second_mountain, 0, vec![])
         .expect("float the second mana while the Choose payment is open");
     assert_eq!(engine.state.players[0].mana_pool.red, 2);
+    let newly_payable_offer = find_resolution_choice(&newly_payable)
+        .expect("the second mana republishes the same payment with current readiness");
+    assert_eq!(newly_payable_offer.resolution_prompt_id, prompt_id);
+    assert!(newly_payable_offer.payment_currently_legal);
     let rewound = engine
         .apply_scenario_command(0, &undo_mana_ability())
         .expect("Undo rewinds the last float without closing the payment offer");
@@ -481,9 +485,9 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
         .as_ref()
         .expect("Undo preserves the unresolved Choose payment");
     let refreshed_prompt_id = pending.resolution_prompt_id.get();
-    assert_ne!(
+    assert_eq!(
         refreshed_prompt_id, prompt_id,
-        "changing the available mana refreshes the prompt identity"
+        "Undo changes readiness without replacing the logical payment occurrence"
     );
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::ManaPayment);
     assert_eq!(pending.deciding_player, 0);
@@ -491,11 +495,10 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
         format!("{:?}", pending.presentation),
         format!("{:?}", pending_presentation)
     );
-    assert_eq!(
-        find_resolution_choice(&rewound).map(|choice| choice.resolution_prompt_id),
-        Some(refreshed_prompt_id),
-        "the payment offer is republished with its refreshed prompt ID after Undo"
-    );
+    let republished_payment = find_resolution_choice(&rewound)
+        .expect("Undo republishes the same pending ManaPayment offer");
+    assert_eq!(republished_payment.resolution_prompt_id, prompt_id);
+    assert!(!republished_payment.payment_currently_legal);
     let declined =
         submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::Decline).unwrap();
     let blight =

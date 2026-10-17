@@ -325,6 +325,94 @@ fn minds_eye_registry_keeps_the_optional_paid_draw_and_oracle_presentation() {
 }
 
 #[test]
+fn icewrought_sentry_and_sparktongue_compile_their_paid_reflexive_programs() {
+    let registry = tricerules_cards::registry::global();
+
+    let sentry = registry
+        .get("icewrought_sentry")
+        .expect("Icewrought Sentry")
+        .primary_face();
+    let [attack, tap] = sentry.triggered_abilities.as_slice() else {
+        panic!("Icewrought Sentry keeps its attack and tap triggers");
+    };
+    assert_eq!(attack.ability_id.as_str(), "triggered_01");
+    assert_eq!(
+        attack.trigger,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
+    );
+    assert_eq!(
+        attack.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
+    assert!(attack.effect.is_empty());
+    let [sentry_branch] = choose_branches(
+        program_for_ability(registry, "icewrought_sentry", sentry, attack),
+        "icewrought_pay_to_tap",
+        true,
+        &["pay_1_u"],
+    ) else {
+        panic!("Icewrought Sentry has one optional paid branch");
+    };
+    assert_eq!(
+        sentry_branch.cost,
+        ResolutionCost::Mana(ManaCost::parse("{1}{U}").unwrap())
+    );
+    assert_eq!(sentry_branch.presentation, AbilityPresentation::Fallback);
+    assert_single_perform(
+        sentry_branch,
+        ron::from_str::<SpellEffectKind>(
+            r#"CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive_01", presentation: Fallback,
+                effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
+            ))"#,
+        )
+        .expect("the Sentry's resultless reflexive tap shape parses"),
+    );
+    assert_eq!(tap.ability_id.as_str(), "triggered_02");
+    assert!(!tap.effect.is_empty());
+
+    let dragon = registry
+        .get("sparktongue_dragon")
+        .expect("Sparktongue Dragon")
+        .primary_face();
+    let [entry] = dragon.triggered_abilities.as_slice() else {
+        panic!("Sparktongue Dragon keeps one entry trigger");
+    };
+    assert_eq!(entry.ability_id.as_str(), "triggered_01");
+    assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert_eq!(
+        entry.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
+    assert!(entry.effect.is_empty());
+    let [dragon_branch] = choose_branches(
+        program_for_ability(registry, "sparktongue_dragon", dragon, entry),
+        "sparktongue_pay_to_damage",
+        true,
+        &["pay_2_r"],
+    ) else {
+        panic!("Sparktongue Dragon has one optional paid branch");
+    };
+    assert_eq!(
+        dragon_branch.cost,
+        ResolutionCost::Mana(ManaCost::parse("{2}{R}").unwrap())
+    );
+    assert_eq!(dragon_branch.presentation, AbilityPresentation::Fallback);
+    assert_single_perform(
+        dragon_branch,
+        ron::from_str::<SpellEffectKind>(
+            r#"CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive_01", presentation: Fallback,
+                effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+            ))"#,
+        )
+        .expect("the Dragon's resultless reflexive damage shape parses"),
+    );
+}
+
+#[test]
 fn solemn_simulacrum_registry_programs_the_search_and_death_draw_owners() {
     let registry = tricerules_cards::registry::global();
     let face = registry

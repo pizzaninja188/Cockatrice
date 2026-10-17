@@ -10944,6 +10944,99 @@ mod attached_subject_tests {
         }
 
         #[test]
+        fn restored_cached_mana_payment_offer_refreshes_readiness_from_current_pool() {
+            let mut engine = engine_with_pending_choice(vec![branch(
+                "costed_mana",
+                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
+                10,
+            )]);
+            let initial = engine
+                .submit_resolution_choice(
+                    1,
+                    &rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 0,
+                        ..Default::default()
+                    },
+                )
+                .expect("the live chooser selects the costed branch");
+            let mut initial_events = initial.events;
+            engine
+                .publish_resolution_prompt_ids(&mut initial_events)
+                .expect("the initial payment offer is published");
+            let initial_offer = initial_events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                        Some(choice.clone())
+                    }
+                    _ => None,
+                })
+                .expect("the selected branch waits for its {1} payment");
+            assert_eq!(
+                initial_offer.choice_kind,
+                rv1::ChoiceKind::ManaPayment as i32
+            );
+            assert!(!initial_offer.payment_currently_legal);
+            assert_eq!(initial_offer.generic_mana_cost, 1);
+
+            // An observer can temporarily own this pending resolution. Mana may change before
+            // the saved payment offer is restored, so its cached readiness bit is stale.
+            let suspended_resolution = engine.state.pending_resolution.take();
+            engine.state.players[1].mana_pool.colorless = 1;
+            let mut restored_events = Vec::new();
+            assert!(engine
+                .restore_suspended_observer_resolution(
+                    suspended_resolution,
+                    None,
+                    &mut restored_events,
+                )
+                .expect("the saved payment is restored"));
+
+            let restored_offer = restored_events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                        Some(choice.clone())
+                    }
+                    _ => None,
+                })
+                .expect("the cached ManaPayment projection is republished");
+            assert!(
+                restored_offer.payment_currently_legal,
+                "restored readiness comes from the current authoritative mana pool"
+            );
+            assert_eq!(
+                restored_offer.generic_mana_cost,
+                initial_offer.generic_mana_cost
+            );
+            assert_eq!(restored_offer.mana_cost, initial_offer.mana_cost);
+            assert_eq!(
+                restored_offer.deciding_player_id,
+                initial_offer.deciding_player_id
+            );
+            assert_eq!(
+                restored_offer.source_object_id,
+                initial_offer.source_object_id
+            );
+
+            engine
+                .publish_resolution_prompt_ids(&mut restored_events)
+                .expect("the fresh restored payment offer is published");
+            let published_offer = restored_events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                    _ => None,
+                })
+                .expect("the restored payment keeps an actionable prompt");
+            assert_ne!(
+                published_offer.resolution_prompt_id,
+                initial_offer.resolution_prompt_id
+            );
+        }
+
+        #[test]
         fn departing_chooser_abandons_an_unpaid_mana_branch_and_resumes_otherwise_and_tail() {
             let mut engine = engine_with_pending_choice(vec![branch(
                 "costed_mana",

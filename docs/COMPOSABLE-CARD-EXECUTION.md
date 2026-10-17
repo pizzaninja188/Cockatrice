@@ -294,11 +294,14 @@ different identity problem.
   allocator state in engine state/checkpoints. Never wrap/reuse an actor's ID. Reconnect and identical
   active-offer republication retain the logical ID.
 - Every replacement/new prompt receives a fresh ID, even when actor, kind and candidates are equal.
-  Any answer-semantic change (candidate identity/generation, bounds, allowed decisions, source,
-  chooser, ordering or legality) replaces the offer. If another logical prompt supersedes a parent
-  offer, retire the parent's old ID. Saved parent operations retain their state; restoring a parent
-  offer revalidates it and allocates a fresh ID. Repainting/reconnecting to an unchanged active offer
-  is not replacement.
+  Any answer-semantic change (candidate identity/generation, bounds, allowed decisions, cost, source,
+  chooser or ordering) replaces the offer. For `ManaPayment`, `payment_currently_legal` is readiness
+  derived from the live mana pool, not answer identity: when only readiness changes for the same
+  pending payment, republish under the same ID and refresh its enabled state. A changed cost, source,
+  actor or logical payment occurrence receives a fresh ID. If another logical prompt supersedes a
+  parent offer, retire the parent's old ID. Saved parent operations retain their state; restoring a
+  parent offer revalidates it and allocates a fresh ID. Repainting/reconnecting to an unchanged active
+  offer is not replacement.
 - Check actor, active ID, payload shape, candidates/generations, bounds and decision legality before
   taking pending state or committing any mutation. A duplicate or late answer is an unchanged-state
   rejection, including unchanged choice-ID allocators. Rejected commands do not enter accepted replay

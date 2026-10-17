@@ -1,4 +1,4 @@
-// Exact Oracle card and rulings fetched 2026-09-28:
+// Exact Oracle card and rulings refreshed 2026-10-16:
 // https://scryfall.com/card/one/201/ezuri-stalker-of-spheres
 // https://api.scryfall.com/cards/d38961ce-0257-412f-acec-c5c9886061f8/rulings
 // CR 701.34 / 603.2: two consecutive proliferations allow separate choices and each triggers once,
@@ -17,15 +17,23 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "pay_3",
-          presentation: OracleLines([1]),
-          cost: Mana("{3}"),
-          effects: [Proliferate, Proliferate],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "pay_3", bind: [], input: None, kind: Choose(
+          choice: "pay_3", chooser: Controller, optional: true,
+          branches: [(
+            branch_id: "pay_3", presentation: OracleLines([1]),
+            cost: Mana("{3}"), requirement: Always,
+            body: (steps: [
+              (id: "proliferate_01", bind: [], input: None,
+               kind: Perform(Proliferate)),
+              (id: "proliferate_02", bind: [], input: None,
+               kind: Perform(Proliferate)),
+            ], yields: []),
+          )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
     (
       ability_id: "triggered_02",

@@ -442,6 +442,119 @@ fn sentry_can_decline_payment_and_illegal_reflexive_targets_do_not_tap() {
 }
 
 #[test]
+fn sentry_can_decline_the_selected_mana_offer_without_creating_a_reflexive_trigger() {
+    let mut engine = setup();
+    let sentry = inject_creature_on_battlefield(&mut engine, 0, "icewrought_sentry");
+    let enemy = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine
+        .state
+        .objects
+        .get_mut(&sentry)
+        .unwrap()
+        .summoning_sick = false;
+    while engine.state.turn_step != tricerules_core::TurnStep::DeclareAttackers {
+        pass_both_players(&mut engine);
+    }
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![sentry]))
+        .expect("attack with the vigilance Sentry");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("select the {1}{U} reflexive tap branch");
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::Decline)
+        .expect("decline the selected mana offer");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+    assert!(!engine.state.objects[&enemy].tapped);
+    assert_eq!(engine.characteristics(sentry).unwrap().power, Some(2));
+}
+
+#[test]
+fn sentry_tapping_an_already_tapped_opponent_creature_does_not_trigger_again() {
+    let mut engine = setup();
+    let sentry = inject_creature_with_stats(&mut engine, 0, "icewrought_sentry", 2, 3);
+    let enemy = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine.state.objects.get_mut(&enemy).unwrap().tapped = true;
+    engine
+        .state
+        .objects
+        .get_mut(&sentry)
+        .unwrap()
+        .summoning_sick = false;
+
+    while engine.state.turn_step != tricerules_core::TurnStep::DeclareAttackers {
+        pass_both_players(&mut engine);
+    }
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![sentry]))
+        .expect("attack with the vigilance Sentry");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("choose the {1}{U} reflexive tap branch");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay the reflexive tap cost");
+    let next_tap_action_id = engine.state.next_tap_action_id;
+    engine
+        .apply_scenario_command(0, &choose_target(enemy))
+        .expect("target the already-tapped opponent creature");
+    assert_eq!(
+        engine.state.next_tap_action_id, next_tap_action_id,
+        "targeting an already-tapped creature emits no new tap action"
+    );
+    assert!(
+        engine.state.pending_triggers.is_empty(),
+        "the no-op tap does not fire the Sentry's opponent-tap trigger"
+    );
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert!(engine.state.objects[&enemy].tapped);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        engine.state.pending_triggers.is_empty(),
+        "a no-op tap event does not trigger Icewrought Sentry's triggered_02"
+    );
+    assert!(
+        engine.state.stack.is_empty(),
+        "no +2/+1 reflexive pump remains on the stack"
+    );
+    let characteristics = engine.characteristics(sentry).unwrap();
+    assert_eq!(characteristics.power, Some(2));
+    assert_eq!(characteristics.toughness, Some(3));
+}
+
+#[test]
 fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_action_ids() {
     use tricerules_proto::ruled::v1::{
         dev_command::Dev, DevAddMana, DevCommand, DevPutCardInZone, DevZone,

@@ -274,18 +274,23 @@ impl GameEngine {
         let Some(snapshot) = pending.resolution_prompt_semantics.as_ref() else {
             return Ok(false);
         };
+        let cached_is_mana_payment =
+            snapshot.published_choice.choice_kind == rv1::ChoiceKind::ManaPayment as i32;
         let last_choice = events
             .iter()
             .rev()
             .find_map(|event| match event.ev.as_ref() {
-                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                    Some(choice.clone())
+                }
                 _ => None,
             });
-        if last_choice.is_some_and(|choice| {
+        let last_choice_matches_pending = last_choice.as_ref().is_some_and(|choice| {
             choice.deciding_player_id == pending.deciding_player
                 && choice.source_object_id == pending.presentation.source_object_id
                 && choice.choice_kind == pending.presentation.choice_kind as i32
-        }) {
+        });
+        if last_choice_matches_pending && !cached_is_mana_payment {
             return Ok(false);
         }
 
@@ -302,14 +307,36 @@ impl GameEngine {
             return Ok(false);
         }
 
-        let current_semantics =
-            self.resolution_prompt_semantics(pending, &snapshot.published_choice)?;
+        let current_choice = if cached_is_mana_payment {
+            let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = self
+                .resolution_payment_choice_event()
+                .and_then(|event| event.ev)
+            else {
+                return Ok(false);
+            };
+            if choice.choice_kind != rv1::ChoiceKind::ManaPayment as i32 {
+                return Ok(false);
+            }
+            choice
+        } else {
+            snapshot.published_choice.clone()
+        };
+        let current_semantics = self.resolution_prompt_semantics(pending, &current_choice)?;
         if current_semantics != snapshot.answer_semantics {
             return Ok(false);
         }
+        if last_choice_matches_pending {
+            let mut previous = last_choice.expect("matching prior choice exists");
+            previous.resolution_prompt_id = 0;
+            let mut current = current_choice.clone();
+            current.resolution_prompt_id = 0;
+            if previous == current {
+                return Ok(false);
+            }
+        }
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                snapshot.published_choice.clone(),
+                current_choice,
             )),
         });
         Ok(true)
@@ -344,6 +371,11 @@ impl GameEngine {
     ) -> Result<Vec<u8>, EngineError> {
         let mut normalized = choice.clone();
         normalized.resolution_prompt_id = 0;
+        if normalized.choice_kind == rv1::ChoiceKind::ManaPayment as i32 {
+            // Whether a fixed payment is currently affordable depends on the live mana pool.
+            // It refreshes the offer's enabled state but does not change the answer being made.
+            normalized.payment_currently_legal = false;
+        }
         normalized.prompt_text.clear();
         normalized.candidate_server_card_ids.clear();
         normalized.public_reveal = None;
@@ -1074,6 +1106,7 @@ impl GameEngine {
         if matches!(
             pending.continuation,
             ResolutionContinuation::Proliferate { .. }
+                | ResolutionContinuation::ProgramProliferate { .. }
         ) {
             return self.finish_proliferate_choice(pending, answer, decision);
         }
@@ -1260,6 +1293,9 @@ impl GameEngine {
             }
             ResolutionContinuation::Proliferate { .. } => {
                 unreachable!("Proliferate branch handled before object-choice validation")
+            }
+            ResolutionContinuation::ProgramProliferate { .. } => {
+                unreachable!("Program Proliferate branch handled before object-choice validation")
             }
             ResolutionContinuation::AmassChoice { .. } => {
                 self.finish_amass_choice(pending, chosen[0])

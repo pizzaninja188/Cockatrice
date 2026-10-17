@@ -1,8 +1,8 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_proto::ruled::v1::{
-    ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SelectedSpellMode,
-    SubmitResolutionChoice,
+    dev_command::Dev, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone,
+    ResolutionChoiceDecision, RuledCommand, SelectedSpellMode, SubmitResolutionChoice,
 };
 
 fn engine() -> GameEngine {
@@ -544,21 +544,20 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
     engine
         .apply_scenario_command(0, &select_branch(0))
         .expect("choose mana branch");
+    let continuation = &engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("mana payment")
+        .continuation;
     assert!(matches!(
-        &engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .expect("mana payment")
-            .continuation,
-        ResolutionContinuation::AuthoredBranch {
-            branch: tricerules_core::state::PendingResolutionBranch {
-                stage: PendingResolutionBranchStage::PayingMana { .. },
-                ..
-            },
-            ..
-        }
+        continuation,
+        ResolutionContinuation::ProgramChoose { .. }
     ));
+    assert!(
+        continuation.mana_payment().is_some(),
+        "the Program Choose continuation is parked in its mana-payment stage"
+    );
     give_mana(
         &mut engine,
         0,
@@ -585,4 +584,148 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
         .expect("target opponent with reflexive trigger");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.players[1].life, 17);
+}
+
+#[test]
+fn sparktongue_reflexive_damage_can_target_an_opposing_permanent() {
+    let mut engine = engine();
+    let target = inject_creature_with_stats(&mut engine, 1, "wall_of_omens", 0, 4);
+    inject_card_into_hand(&mut engine, 0, "sparktongue_dragon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 2,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let index = hand_index_for_card(&engine, 0, "sparktongue_dragon");
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Sparktongue Dragon");
+    pass_both_players(&mut engine);
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the {2}{R} branch");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay {2}{R}");
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_object(target),
+                })),
+            },
+        )
+        .expect("target the opposing Wall of Omens with the reflexive trigger");
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&target].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(engine.state.objects[&target].damage, 3);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn sparktongue_reflexive_damage_does_not_follow_a_same_object_reentry() {
+    let mut engine = engine();
+    engine.enable_dev_commands();
+    let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "sparktongue_dragon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 2,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let index = hand_index_for_card(&engine, 0, "sparktongue_dragon");
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Sparktongue Dragon");
+    pass_both_players(&mut engine);
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose mana branch");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay {2}{R}");
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_object(target),
+                })),
+            },
+        )
+        .expect("target the opposing Bear with the reflexive trigger");
+    let original_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+    let move_target = |zone: DevZone| RuledCommand {
+        cmd: Some(Cmd::DevCommand(DevCommand {
+            target_player_id: 1,
+            dev: Some(Dev::MoveCard(DevMoveCard {
+                card_name: "Grizzly Bears".into(),
+                zone: zone as i32,
+                ready: false,
+            })),
+        })),
+    };
+    engine
+        .apply_scenario_command(0, &move_target(DevZone::Hand))
+        .expect("move the targeted Bear away");
+    engine
+        .apply_scenario_command(0, &move_target(DevZone::Battlefield))
+        .expect("return the same physical Bear as a new object");
+    let returned_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+    assert!(returned_generation > original_generation);
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&target].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(engine.state.objects[&target].damage, 0);
+    assert_eq!(engine.state.players[1].life, 20);
+    assert!(engine.state.stack.is_empty());
 }

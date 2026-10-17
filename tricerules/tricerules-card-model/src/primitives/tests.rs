@@ -5203,6 +5203,99 @@ fn program_choose_raw_ron_compiles_nested_paid_and_otherwise_blocks() {
 }
 
 #[test]
+fn program_accepts_resultless_proliferate_leaf() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "first_proliferate", bind: [], input: None,
+             kind: Perform(Proliferate)),
+            (id: "second_proliferate", bind: [], input: None,
+             kind: Perform(Proliferate)),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("Proliferate is a resultless effect leaf in a typed resolution program");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner keeps its compiled program");
+    assert_eq!(compiled.body.steps.len(), 2);
+    assert!(compiled.body.steps.iter().all(|step| {
+        matches!(
+            &step.kind,
+            crate::primitives::CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Proliferate)
+        )
+    }));
+}
+
+#[test]
+fn program_accepts_only_supported_resultless_reflexive_trigger_shapes() {
+    let definition = |effect: &str| {
+        program_fixture(&format!(
+            r#"(steps: [
+                (id: "create_reflexive", bind: [], input: None,
+                 kind: Perform({effect})),
+            ], yields: [])"#
+        ))
+    };
+    let sentry = definition(
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
+        ))"#,
+    );
+    let sparktongue = definition(
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+        ))"#,
+    );
+    for card in [&sentry, &sparktongue] {
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
+            .expect("the two reviewed resultless reflexive target shapes compile");
+        let owner = crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        );
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the exact fixture owner keeps its compiled program");
+        assert!(matches!(
+            &compiled.body.steps[0].kind,
+            crate::primitives::CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateReflexiveTrigger { .. })
+        ));
+    }
+
+    for unsupported in [
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [Draw(count: 1)],
+        ))"#,
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [Tap(subject: Chosen((kind: Creature, controller: You)))],
+        ))"#,
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [DamageTarget(amount: 3, target: (kind: Creature))],
+        ))"#,
+    ] {
+        let invalid = definition(unsupported);
+        let error = invalid_program_reason(&invalid);
+        assert!(
+            error.contains(
+                "CreateReflexiveTrigger supports only the approved resultless target shapes"
+            ),
+            "unexpected reflexive admission error: {error}"
+        );
+    }
+}
+
+#[test]
 fn choose_cast_cost_receipts_compile_for_exact_face_and_selected_mode_owners() {
     let face_program = choose_cast_cost_program("kicker_group", "kicker_option");
     let face_definition = format!(

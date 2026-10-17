@@ -18,6 +18,7 @@
 #include "game/ruled/ruled_dev_command_parser.h"
 #include "game/ruled/ruled_event_dispatcher.h"
 #include "game/ruled/ruled_mana_pool_tracker.h"
+#include "game/ruled/ruled_payment_resume_policy.h"
 #include "game/ruled/ruled_pending_cast.h"
 #include "game/ruled/ruled_presentation_resolver.h"
 #include "game/ruled/ruled_public_zone_order_plan.h"
@@ -1129,6 +1130,95 @@ TEST_F(RuledClientTest, PurePaymentPreviewPreservesResolutionPromptAndStaging)
     EXPECT_EQ(state->resolutionPromptId, promptId);
     EXPECT_EQ(state->pendingChoice->resolutionPromptId, promptId);
     EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({8002}));
+}
+
+TEST_F(RuledClientTest, SuspendedResolutionPaymentResumeMatchesPromptAndIgnoresReadiness)
+{
+    constexpr quint64 promptId = 8301;
+    const std::string semantics = "normalized-answer-semantics";
+    const RuledResolutionPaymentIdentity parent{promptId, semantics};
+    const auto setOffer = [&](bool paymentCurrentlyLegal) {
+        state->resolutionPromptSnapshotValid = true;
+        state->resolutionPromptActive = true;
+        state->resolutionPromptDeciderPlayerId = kLocalPlayer;
+        state->resolutionPromptId = promptId;
+        state->resolutionPromptSemantics = semantics;
+        RuledClientState::RuledPendingChoice choice;
+        choice.kind = RuledClientState::ChoiceKind::ResolutionPayment;
+        choice.resolutionPromptId = promptId;
+        choice.resolutionPromptSemantics = semantics;
+        choice.paymentCurrentlyLegal = paymentCurrentlyLegal;
+        state->pendingChoice = std::move(choice);
+    };
+
+    state->payment.begin();
+    ASSERT_TRUE(state->payment.stageMana('R', 0, 17));
+    const quint64 transaction = state->payment.transaction();
+    const std::string stagedSelection = state->payment.selection.SerializeAsString();
+    ASSERT_EQ(state->payment.optimisticManaCounterSpendCount(17), 1);
+
+    setOffer(false);
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false),
+              RuledPaymentResumeDecision::Resume);
+    setOffer(true);
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false),
+              RuledPaymentResumeDecision::Resume);
+    EXPECT_EQ(state->payment.transaction(), transaction);
+    EXPECT_EQ(state->payment.selection.SerializeAsString(), stagedSelection);
+    EXPECT_EQ(state->payment.optimisticManaCounterSpendCount(17), 1);
+}
+
+TEST_F(RuledClientTest, SuspendedResolutionPaymentResumeWaitsForNestedWorkAndDiscardsStaleReceipts)
+{
+    constexpr quint64 parentPromptId = 8302;
+    const std::string parentSemantics = "parent-answer-semantics";
+    const RuledResolutionPaymentIdentity parent{parentPromptId, parentSemantics};
+    const auto setOffer = [&](quint64 promptId, const std::string &semantics,
+                              RuledClientState::ChoiceKind kind = RuledClientState::ChoiceKind::ResolutionPayment) {
+        state->resolutionPromptSnapshotValid = true;
+        state->resolutionPromptActive = true;
+        state->resolutionPromptDeciderPlayerId = kLocalPlayer;
+        state->resolutionPromptId = promptId;
+        state->resolutionPromptSemantics = semantics;
+        state->choiceWaitingPlayerId = -1;
+        RuledClientState::RuledPendingChoice choice;
+        choice.kind = kind;
+        choice.resolutionPromptId = promptId;
+        choice.resolutionPromptSemantics = semantics;
+        state->pendingChoice = std::move(choice);
+    };
+
+    setOffer(parentPromptId + 1, parentSemantics);
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Discard);
+
+    setOffer(parentPromptId, "changed-answer-semantics");
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Discard);
+
+    setOffer(parentPromptId + 1, "nested-payment-semantics");
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Wait);
+
+    setOffer(parentPromptId + 1, "foreign-choice-semantics", RuledClientState::ChoiceKind::ResolutionBranch);
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Wait);
+
+    state->pendingChoice.reset();
+    state->resolutionPromptSnapshotValid = false;
+    state->resolutionPromptActive = false;
+    state->resolutionPromptId = 0;
+    state->resolutionPromptSemantics.clear();
+    state->choiceWaitingPlayerId = -1;
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Discard);
+
+    state->choiceWaitingPlayerId = 1;
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Wait);
+    state->choiceWaitingPlayerId = -1;
+
+    ASSERT_TRUE(state->beginEngineCommand());
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Wait);
+    state->finishEngineCommand();
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, true, false), RuledPaymentResumeDecision::Wait);
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, true), RuledPaymentResumeDecision::Wait);
+    state->payment.submitting = true;
+    EXPECT_EQ(ruledResolutionPaymentResumeDecision(*state, parent, false, false), RuledPaymentResumeDecision::Wait);
 }
 
 TEST_F(RuledClientTest, MixedPaymentPreviewDoesNotBypassMissingPromptSnapshotValidation)
@@ -6994,8 +7084,9 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
     apply(previewBatch);
     EXPECT_EQ(state->resolutionPaymentRemainingCost(), QStringLiteral("{3}"));
 
-    // Affordability is part of the engine's prompt fingerprint, so a changed answer-semantic
-    // offer arrives under a fresh ID and retires the previous prompt's payment state.
+    // This is a new logical payment occurrence: its fresh ID retires the previous prompt's
+    // staging even though source and cost match. Readiness-only changes for the same occurrence
+    // keep the ID and payment staging, as covered by the same-ID refresh regression.
     apply(paymentBatch(true, 9402));
     ASSERT_GE(paymentUiSpy.count(), 2);
     EXPECT_TRUE(paymentUiSpy.last().at(0).toBool());
@@ -7020,6 +7111,105 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
     ASSERT_TRUE(state->pendingChoice.has_value());
     EXPECT_EQ(state->pendingChoice->resolutionPromptId, 9403u);
     EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+}
+
+TEST_F(RuledClientTest, SameManaPaymentReadinessRefreshRetainsQueuedManaAndPreviewProgression)
+{
+    constexpr quint64 promptId = 9410;
+    constexpr quint32 sourceObjectId = 442;
+    auto paymentBatch = [=](bool legal) {
+        ruled::v1::RuledEventBatch batch;
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(true);
+        snapshot->set_deciding_player_id(kLocalPlayer);
+        snapshot->set_resolution_prompt_id(promptId);
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_resolution_prompt_id(promptId);
+        rcr->set_source_object_id(sourceObjectId);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+        rcr->set_prompt_text("Pay {3} or decline.");
+        rcr->set_generic_mana_cost(3);
+        rcr->set_payment_currently_legal(legal);
+        return batch;
+    };
+    apply(paymentBatch(false));
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+
+    state->payment.begin(true);
+    ASSERT_TRUE(state->payment.stageMana('R', 0, 17));
+    ruled::v1::RuledCommand payCommand;
+    auto *pay = payCommand.mutable_submit_resolution_choice();
+    pay->set_resolution_prompt_id(promptId);
+    pay->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    const auto firstRequest = state->payment.requestAction(payCommand);
+    ASSERT_EQ(firstRequest.resolution_choice().payment().mana().r(), 1u);
+    ASSERT_TRUE(state->payment.stageMana('R', 0, 18));
+    ASSERT_EQ(state->payment.queuedMana.size(), 1);
+    const auto transaction = state->payment.transaction();
+
+    const auto previewBatchFor = [sourceObjectId](const ruled::v1::PreviewPayment &request,
+                                                  quint32 selectedRed, bool complete,
+                                                  const std::string &remainingCost) {
+        ruled::v1::RuledEventBatch batch;
+        auto *preview = batch.mutable_payment_preview();
+        preview->set_transaction_id(request.transaction_id());
+        preview->set_revision(request.revision());
+        preview->set_valid(true);
+        preview->set_complete(complete);
+        preview->set_total_cost("{3}");
+        preview->set_remaining_cost(remainingCost);
+        *preview->mutable_selection() = request.resolution_choice().payment();
+        preview->mutable_selection()->set_expected_state_revision(request.revision());
+        preview->mutable_selection()->mutable_source()->set_object_id(sourceObjectId);
+        preview->mutable_selection()->mutable_source()->set_zone_change_generation(2);
+        preview->mutable_selection()->mutable_mana()->set_r(selectedRed);
+        return batch;
+    };
+
+    apply(previewBatchFor(firstRequest, 1, false, "{2}"));
+    ASSERT_EQ(state->payment.selection.mana().r(), 1u);
+    ASSERT_EQ(state->payment.nextPreviewAction(false), RuledPayment::PreviewAction::DrainQueuedMana);
+    const auto secondMana = state->payment.queuedMana.takeFirst();
+    ASSERT_TRUE(state->payment.payMana(secondMana.symbol, secondMana.groupId, secondMana.counterId));
+    const auto secondRequest = state->payment.requestAction(payCommand);
+    ASSERT_EQ(secondRequest.transaction_id(), transaction);
+    ASSERT_EQ(secondRequest.resolution_choice().payment().mana().r(), 2u);
+
+    // The third Mountain activation arrives while the second preview is still in flight.
+    ASSERT_TRUE(state->payment.stageMana('R', 0, 19));
+    ASSERT_EQ(state->payment.queuedMana.size(), 1);
+    apply(paymentBatch(true));
+    EXPECT_TRUE(state->resolutionPaymentCurrentlyLegal());
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_TRUE(state->pendingChoice->paymentCurrentlyLegal);
+    EXPECT_EQ(state->resolutionPromptId, promptId);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_TRUE(state->payment.pending);
+    EXPECT_EQ(state->payment.transaction(), transaction);
+    EXPECT_EQ(state->payment.selection.mana().r(), 2u);
+    ASSERT_EQ(state->payment.queuedMana.size(), 1);
+
+    apply(previewBatchFor(secondRequest, 2, false, "{1}"));
+    ASSERT_EQ(state->payment.selection.mana().r(), 2u);
+    ASSERT_EQ(state->payment.nextPreviewAction(false), RuledPayment::PreviewAction::DrainQueuedMana);
+    const auto thirdMana = state->payment.queuedMana.takeFirst();
+    ASSERT_TRUE(state->payment.payMana(thirdMana.symbol, thirdMana.groupId, thirdMana.counterId));
+    const auto thirdRequest = state->payment.requestAction(payCommand);
+    ASSERT_EQ(thirdRequest.transaction_id(), transaction);
+    ASSERT_EQ(thirdRequest.resolution_choice().payment().mana().r(), 3u);
+
+    apply(previewBatchFor(thirdRequest, 3, true, "{0}"));
+    EXPECT_EQ(state->payment.nextPreviewAction(false), RuledPayment::PreviewAction::None);
+    state->payResolutionMana();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands.last().submit_resolution_choice();
+    EXPECT_EQ(submitted.resolution_prompt_id(), promptId);
+    EXPECT_EQ(submitted.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    EXPECT_EQ(submitted.payment().source().object_id(), sourceObjectId);
+    EXPECT_EQ(submitted.payment().mana().r(), 3u);
+    EXPECT_EQ(state->payment.transaction(), transaction);
 }
 
 TEST_F(RuledClientTest, VariableManaContributionWaitsForPreviewAndCanExplicitlyPayZero)

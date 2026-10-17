@@ -1347,6 +1347,16 @@ pub(crate) struct PendingProgramChoose {
     pub stage: PendingProgramChooseStage,
 }
 
+/// The resultless Proliferate instruction in a typed program can keep resolving after its
+/// controller leaves (CR 608.2m). The next live player chooses a delegate; the delegate then
+/// receives the original Proliferate recipient menu. `None` slots preserve branch indices if a
+/// delegate candidate leaves while that selector prompt is parked.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum PendingProgramProliferateStage {
+    SelectingRecipients,
+    ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct ProgramFrame {
     pub path: Vec<ProgramPathStep>,
@@ -1666,6 +1676,14 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
         candidate_player_ids: Vec<PlayerId>,
+    },
+    /// Program Proliferate is separate from the legacy flat-effect continuation so its complete
+    /// typed cursor and private delegation stage survive chooser departure.
+    ProgramProliferate {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        candidate_player_ids: Vec<PlayerId>,
+        stage: PendingProgramProliferateStage,
     },
     AmassChoice {
         stack: ParkedStackResolution,
@@ -2074,6 +2092,7 @@ impl ResolutionContinuation {
             | Self::ProgramPartitionMove { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
+            | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
@@ -2142,6 +2161,7 @@ impl ResolutionContinuation {
             | Self::ProgramPartitionMove { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
+            | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }

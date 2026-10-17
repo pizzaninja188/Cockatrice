@@ -1,4 +1,7 @@
-// Oracle and rulings fetched 2026-08-27. CR 603.12: target the reflexive trigger after payment.
+// Exact Oracle card and rulings refreshed 2026-10-16:
+// https://scryfall.com/card/woe/55/icewrought-sentry
+// https://api.scryfall.com/cards/859419d3-cd15-4362-98b3-a7ff98e29692/rulings
+// CR 603.12 and 603.3d: payment creates the reflexive trigger, which is targeted as it is put on the stack.
 (
   id: "icewrought_sentry",
   name: "Icewrought Sentry",
@@ -12,18 +15,24 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [ChooseResolutionBranch(
-      optional: true,
-      branches: [(
-        branch_id: "pay_1_u", presentation: Fallback,
-        cost: Mana("{1}{U}"),
-        effects: [CreateReflexiveTrigger(ability: (
-          ability_id: "reflexive_01",
-          presentation: Fallback,
-          effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
-        ))],
-      )],
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "pay_1_u", bind: [], input: None, kind: Choose(
+        choice: "icewrought_pay_to_tap", chooser: Controller, optional: true,
+        branches: [(
+          branch_id: "pay_1_u", presentation: Fallback,
+          cost: Mana("{1}{U}"), requirement: Always,
+          body: (steps: [
+            (id: "create_reflexive_tap", bind: [], input: None,
+             kind: Perform(CreateReflexiveTrigger(ability: (
+               ability_id: "reflexive_01", presentation: Fallback,
+               effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
+             )))),
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   ), (
     ability_id: "triggered_02",
     presentation: OracleLines([3]),

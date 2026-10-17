@@ -10,6 +10,22 @@
       "test": "scenario issue_500_proliferate_cohort::ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero"
     },
     {
+      "covers": "a departed controller selects a delegate for each Proliferate choice while preserving the original controller as event actor",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_program_proliferate_delegates_after_controller_leaves_and_keeps_each_choice_fresh"
+    },
+    {
+      "covers": "zero-recipient Proliferate instructions complete without a menu and fire their own events",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_program_proliferate_no_candidate_fast_paths_still_fire_both_events"
+    },
+    {
+      "covers": "a 616.1 decider departure refreshes the replacement menu and rejects stale actor-scoped prompts",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_program_counter_replacement_reoffers_after_616_1_decider_leaves"
+    },
+    {
+      "covers": "the pending replacement event survives the original controller departure and resumes the program once",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_program_counter_replacement_survives_original_controller_departure"
+    },
+    {
       "covers": "replacement-aware permanent counter addition and poison state-based loss",
       "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
     }
@@ -20,7 +36,10 @@
       "end_line": 1,
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform"
       ],
       "face_id": "ezuri_stalker_of_spheres",
       "start_line": 1

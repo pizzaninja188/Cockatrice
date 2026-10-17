@@ -285,6 +285,20 @@ impl GameEngine {
                     // can route the occurrence to a legal delegate or its Otherwise block.
                     preserve = true;
                 }
+                ResolutionContinuation::ProgramProliferate { .. } => {
+                    // CR 608.2m preserves the started typed instruction and its exact parent
+                    // cursor. Its departed controller receives a delegated recipient choice.
+                    preserve = true;
+                }
+                ResolutionContinuation::CounterReplacement {
+                    stack: Some(stack),
+                    completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
+                } if stack.program.is_some() => {
+                    // Proliferate has already selected its recipients. A recipient's independent
+                    // CR 616.1 replacement-order choice can finish even if the original effect
+                    // controller or physical source leaves (CR 608.2m).
+                    preserve = true;
+                }
                 ResolutionContinuation::EntryChooseOpponent { .. }
                 | ResolutionContinuation::EntryChooseCreatureType { .. }
                     if resultless_battlefield_search_entry =>
@@ -873,6 +887,8 @@ impl GameEngine {
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_program_choose_departure(events)?;
+        self.refresh_program_proliferate_departure(events)?;
+        self.refresh_program_proliferate_replacement_departure(events)?;
         self.refresh_owner_hand_return_departure(&departed_objects, &stranded_objects, events)?;
         self.refresh_blight_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;

@@ -661,9 +661,9 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
         .apply_scenario_command(0, &activate_ability(second_island, 0, Vec::new()))
         .expect("second mana ability during Ward");
     let changed_offer = find_resolution_choice(&changed_refresh)
-        .expect("the newly payable Ward offer is republished");
+        .expect("the same Ward payment offer is republished with refreshed readiness");
     let current_offer_id = changed_offer.resolution_prompt_id;
-    assert_ne!(current_offer_id, original_offer_id);
+    assert_eq!(current_offer_id, original_offer_id);
     assert!(changed_offer.payment_currently_legal);
     assert_eq!(
         engine
@@ -674,19 +674,6 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
             .resolution_prompt_id
             .get(),
         current_offer_id
-    );
-
-    let mut stale_answer = submit_resolution_decision(ResolutionChoiceDecision::Decline);
-    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_answer.cmd.as_mut() else {
-        unreachable!()
-    };
-    answer.resolution_prompt_id = original_offer_id;
-    let unchanged_state = format!("{:?}", engine.state);
-    assert!(engine.apply_command(0, &stale_answer).is_err());
-    assert_eq!(
-        format!("{:?}", engine.state),
-        unchanged_state,
-        "a stale offer cannot mutate the continuation, prompt allocator, or command-visible state"
     );
 
     submit_mana_resolution(
@@ -700,6 +687,19 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
     )
     .expect("pay Ward with mana produced during the prompt");
     assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
+
+    let mut stale_answer = submit_resolution_decision(ResolutionChoiceDecision::Decline);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = original_offer_id;
+    let unchanged_state = format!("{:?}", engine.state);
+    assert!(engine.apply_command(0, &stale_answer).is_err());
+    assert_eq!(
+        format!("{:?}", engine.state),
+        unchanged_state,
+        "the completed Ward payment ID cannot mutate the resumed resolution"
+    );
 }
 
 #[test]

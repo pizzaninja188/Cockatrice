@@ -198,6 +198,13 @@ must be fixed literals.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
+`Proliferate` is an accepted resultless leaf: Ezuri, Stalker of Spheres uses it twice in one
+paid branch, with each instruction retaining its own recipient choice and trigger event.
+`CreateReflexiveTrigger` is accepted as a resultless leaf only in two closed shapes: one `Tap` of a
+chosen opposing creature (Icewrought Sentry) or one fixed-three `DamageTarget` with the default
+`AnyTarget` filter (Sparktongue Dragon). The inner ability cannot add a separate `when`, targeting
+definition, or intervening condition. These are operation-shape admissions; the compiler does not
+bind either shape to a particular card or ability owner.
 Program `SearchLibrary` has bounded forms. The retained form uses fixed selection bounds and
 `KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Ordinary resultless forms use fixed
 `Library` zone, count one, bounds 0..1, shuffle, and no slots, selection constraint, cast-cost
@@ -231,9 +238,11 @@ Use `Choose` for a resolution-time branch whose cost and body belong together. G
 program-unique `choice` ID, give each branch a stable ID local to that choice, and put the branch
 instructions in its nested `body`. The `otherwise` block runs after an optional decline or a
 declined paid branch. All sibling branches must use costs of the same free/paid class. This covers
-two distinct Oracle patterns: Waterbending Lesson offers Waterbend `{2}` before its discard
-consequence, while Chaos Spewer offers `{2}` before Blight 2. Keep each real card's ordered actions
-and fallback in its source-backed program; do not flatten the payment into a legacy branch effect.
+several Oracle patterns: Waterbending Lesson offers Waterbend `{2}` before its discard consequence;
+Chaos Spewer offers `{2}` before Blight 2; Ezuri pays once before two Proliferate instructions;
+Icewrought Sentry pays before creating its reflexive tap trigger; and Sparktongue Dragon pays before
+creating its reflexive damage trigger. Keep each real card's ordered actions and fallback in its
+source-backed program; do not flatten the payment into a legacy branch effect.
 
 `Blight` is resultless in a program. It may suspend for its normal controller creature choice and
 for applicable counter-replacement choices, but it cannot bind or yield an output. Once those

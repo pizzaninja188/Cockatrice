@@ -1302,6 +1302,15 @@ fn validate_and_result_types(
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::Proliferate => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CreateReflexiveTrigger { .. } => {
+            effect.validate(context)?;
+            validate_resultless_program_reflexive_trigger(effect)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::Discard { who, quantity } => {
             effect.validate(context)?;
             validate_program_recipient(*who, context, "Discard recipient")?;
@@ -1552,6 +1561,43 @@ fn validate_and_result_types(
         }
         _ => Err("effect is not in the resolution-program operation whitelist".into()),
     }
+}
+
+fn validate_resultless_program_reflexive_trigger(effect: &SpellEffectKind) -> Result<(), String> {
+    let SpellEffectKind::CreateReflexiveTrigger { when, ability } = effect else {
+        return Err("expected a CreateReflexiveTrigger program leaf".into());
+    };
+    if when.is_some() || ability.targeting.is_some() || ability.intervening_if.is_some() {
+        return Err(
+            "CreateReflexiveTrigger supports only the approved resultless target shapes".into(),
+        );
+    }
+
+    let sentry_filter = TargetFilter {
+        kind: TargetKind::Creature,
+        controller: super::TargetController::Opponent,
+        ..TargetFilter::default()
+    };
+    if let [SpellEffectKind::Tap {
+        subject: EffectSubject::Chosen(filter),
+    }] = ability.effect.as_slice()
+    {
+        if filter.as_ref() == &sentry_filter {
+            return Ok(());
+        }
+    }
+
+    if let [SpellEffectKind::DamageTarget {
+        amount: Amount::Fixed(3),
+        target,
+    }] = ability.effect.as_slice()
+    {
+        if target == &TargetFilter::default() {
+            return Ok(());
+        }
+    }
+
+    Err("CreateReflexiveTrigger supports only the approved resultless target shapes".into())
 }
 
 fn validate_program_controller(recipient: PlayerRecipient, role: &str) -> Result<(), String> {
