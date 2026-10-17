@@ -7946,6 +7946,111 @@ fn program_choose_rejects_unsupported_admission_shapes() {
 }
 
 #[test]
+fn program_choose_admits_controller_spell_hand_bottom_cost() {
+    let body = r#"(steps: [
+            (id: "choose", bind: [], input: None, kind: Choose(
+                choice: "choice_01", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "bottom_and_draw", presentation: Fallback,
+                    cost: PutHandCardOnLibraryBottom, requirement: Always,
+                    body: (steps: [
+                        (id: "draw", bind: [], input: None,
+                            kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: [])"#;
+    let definition = program_fixture(body);
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the fixed controller spell cost is admitted");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact spell face owns its compiled Choose program");
+    let [choose] = program.body.steps.as_slice() else {
+        panic!("expected one structural Choose instruction");
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("the hand-bottom cost remains a Choose branch cost");
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("expected one paid branch");
+    };
+    assert_eq!(
+        branch.cost,
+        crate::primitives::ResolutionCost::PutHandCardOnLibraryBottom
+    );
+    let [draw] = branch.body.steps.as_slice() else {
+        panic!("the paid child draws exactly once");
+    };
+    assert!(matches!(
+        &draw.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw {
+                who: crate::primitives::PlayerRecipient::Controller,
+                count: crate::primitives::Amount::Fixed(1),
+            })
+    ));
+
+    let source_controller_definition =
+        program_fixture(&body.replace("chooser: Controller", "chooser: SourceController"));
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&source_controller_definition], &[]).is_err(),
+        "the hand-bottom cost does not admit SourceController as a spell chooser"
+    );
+
+    let legacy_effect: SpellEffectKind = ron::from_str(
+        r#"ChooseResolutionBranch(optional: true, branches: [(
+            branch_id: "bottom",
+            presentation: Fallback,
+            cost: PutHandCardOnLibraryBottom,
+            requirement: Always,
+            effects: [Draw(who: Controller, count: 1)],
+        )], otherwise: [])"#,
+    )
+    .expect("legacy Choose syntax remains readable for an explicit rejection diagnostic");
+    let legacy_error = legacy_effect
+        .validate(crate::primitives::EffectContext::Spell)
+        .expect_err("flat legacy resolution branches no longer admit hand-bottom costs");
+    assert!(
+        legacy_error.contains("typed Program Choose"),
+        "the rejection identifies the supported authored contract: {legacy_error}"
+    );
+
+    let ability_program: crate::CardProgram =
+        ron::from_str(&format!("(body: {body})")).expect("ability fixture parses");
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "program_fixture".into(),
+        face_id: crate::CardFaceId::new("program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let ability_error = crate::primitives::CompiledProgram::compile(
+        ability_owner,
+        crate::primitives::EffectContext::Ability,
+        &ability_program,
+    )
+    .expect_err("the fixed hand-bottom spell cost is unavailable to abilities");
+    assert!(
+        ability_error.contains("does not support resolution cost"),
+        "the failure is from the hand-bottom cost admission rule: {ability_error}"
+    );
+}
+
+#[test]
 fn endure_program_constituent_contracts_fail_independently_before_admission() {
     use crate::primitives::{CompiledProgram, EffectContext};
 

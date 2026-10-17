@@ -1354,6 +1354,14 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
     let ResolutionContinuation::AuthoredBranch { stack, branch } = &pending.continuation else {
         return None;
     };
+    if matches!(branch.stage, PendingResolutionBranchStage::Selecting)
+        && branch
+            .branches
+            .iter()
+            .any(|option| option.cost == ResolutionCost::PutHandCardOnLibraryBottom)
+    {
+        return None;
+    }
     let options = match &branch.stage {
         PendingResolutionBranchStage::ChoosingDelegate { candidates } => {
             let eligible = resolution_choice_delegate_candidates(
@@ -1426,13 +1434,12 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                         rv1::ResolutionBranchCostKind::DiscardCard,
                         "discard a matching card".into(),
                     ),
+                    ResolutionCost::PutHandCardOnLibraryBottom => {
+                        unreachable!("flat authored branches reject hand-bottom costs")
+                    }
                     ResolutionCost::ExileGraveyardCard { .. } => (
                         rv1::ResolutionBranchCostKind::ExileGraveyardCard,
                         "exile a matching card from your graveyard".into(),
-                    ),
-                    ResolutionCost::PutHandCardOnLibraryBottom => (
-                        rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
-                        "put a card from your hand on the bottom of your library".into(),
                     ),
                     ResolutionCost::SacrificePermanent { .. } => (
                         rv1::ResolutionBranchCostKind::SacrificePermanent,

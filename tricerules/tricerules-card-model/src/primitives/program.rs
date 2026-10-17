@@ -814,6 +814,12 @@ impl Compiler {
                                     ));
                                 }
                             }
+                            ResolutionCost::PutHandCardOnLibraryBottom
+                                if *chooser == PlayerRecipient::Controller
+                                    && self.context == EffectContext::Spell =>
+                            {
+                                has_paid_branch = true;
+                            }
                             unsupported => {
                                 return Err(format!(
                                     "Choose instruction '{}' does not support resolution cost {unsupported:?}",

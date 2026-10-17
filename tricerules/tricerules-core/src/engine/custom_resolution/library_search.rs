@@ -35,7 +35,10 @@ fn is_resultless_program_search(stack: &ParkedStackResolution) -> bool {
 }
 
 impl GameEngine {
-    fn parked_choose_card_stack_is_current(&self, parked: &ParkedStackResolution) -> bool {
+    pub(super) fn parked_choose_card_stack_is_current(
+        &self,
+        parked: &ParkedStackResolution,
+    ) -> bool {
         let parked_item = &parked.item;
         match parked_item.cast_occurrence {
             Some(reference) if reference.object_id == parked_item.id => {

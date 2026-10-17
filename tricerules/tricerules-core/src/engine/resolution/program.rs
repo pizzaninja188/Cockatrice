@@ -621,6 +621,11 @@ impl GameEngine {
                         .enumerate()
                         .filter(|(_, branch)| {
                             (choose_controller_live || branch.cost == ResolutionCost::None)
+                                && self.program_choose_cost_is_selectable(
+                                    top,
+                                    chooser_player,
+                                    &branch.cost,
+                                )
                                 && self.program_choose_requirement_holds(top, &branch.requirement)
                                 && self.program_choose_draw_is_selectable(
                                     top,
@@ -1032,6 +1037,7 @@ impl GameEngine {
         if (!original_chooser_live && branch.cost != ResolutionCost::None)
             || !self.program_choose_requirement_holds(&stack.item, &branch.requirement)
             || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
+            || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
         {
             return Err(EngineError::Illegal(
                 "that program Choose branch is no longer legal",
@@ -1105,6 +1111,11 @@ impl GameEngine {
                     .enumerate()
                     .filter(|(_, branch)| {
                         (original_chooser_live || branch.cost == ResolutionCost::None)
+                            && self.program_choose_cost_is_selectable(
+                                &stack.item,
+                                choose.original_chooser,
+                                &branch.cost,
+                            )
                             && self
                                 .program_choose_requirement_holds(&stack.item, &branch.requirement)
                             && self.program_choose_draw_is_selectable(
@@ -1124,6 +1135,10 @@ impl GameEngine {
                             ResolutionCost::Waterbend(cost) => (
                                 rv1::ResolutionBranchCostKind::Waterbend,
                                 format!("Waterbend {cost}"),
+                            ),
+                            ResolutionCost::PutHandCardOnLibraryBottom => (
+                                rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
+                                "Put a card on the bottom of your library".to_string(),
                             ),
                             _ => return None,
                         };
@@ -1155,6 +1170,10 @@ impl GameEngine {
                     .collect::<Option<Vec<_>>>()?
             }
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
+            crate::state::PendingProgramChooseStage::PayingHandCard { .. }
+            | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
+                return None
+            }
         };
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(

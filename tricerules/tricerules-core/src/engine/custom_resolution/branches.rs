@@ -434,6 +434,413 @@ impl GameEngine {
         .map_or_else(Vec::new, |component| component.candidates(self, player))
     }
 
+    pub(in crate::engine) fn program_choose_cost_is_selectable(
+        &self,
+        stack: &StackItem,
+        payer: PlayerId,
+        cost: &ResolutionCost,
+    ) -> bool {
+        if !matches!(cost, ResolutionCost::PutHandCardOnLibraryBottom) {
+            return true;
+        }
+        !self
+            .resolution_cost_candidates(
+                payer,
+                stack.source_permanent_id.unwrap_or(stack.id),
+                stack.source_zone_change,
+                cost,
+            )
+            .is_empty()
+    }
+
+    fn hand_bottom_candidate_generations(&self, candidates: &[ObjectId]) -> Vec<(ObjectId, u64)> {
+        candidates
+            .iter()
+            .map(|object_id| {
+                (
+                    *object_id,
+                    self.state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect()
+    }
+
+    fn hand_bottom_cost_choice_event(
+        &self,
+        pending: &PendingResolution,
+        candidates: &[ObjectId],
+    ) -> rv1::RuledEvent {
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::HandCards as i32,
+                    candidate_object_ids: candidates.to_vec(),
+                    candidate_card_ids: candidates
+                        .iter()
+                        .map(|object_id| {
+                            self.state
+                                .objects
+                                .get(object_id)
+                                .map(|object| object.card_id.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect(),
+                    candidate_names: self.object_names(candidates),
+                    min: pending.presentation.min,
+                    max: 1,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn hand_bottom_commander_choice_event(&self, pending: &PendingResolution) -> rv1::RuledEvent {
+        let prompt = format!(
+            "P{}: put your commander into the command zone or on the bottom of your library?",
+            pending.deciding_player
+        );
+        let resolution_branches = ["Command zone", "Bottom of library"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: label.into(),
+                selectable: true,
+                ..Default::default()
+            })
+            .collect();
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: prompt,
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 1,
+                    max: 1,
+                    resolution_branches,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn hand_bottom_commander_is_current(
+        &self,
+        owner: PlayerId,
+        object_id: ObjectId,
+        generation: u64,
+    ) -> bool {
+        self.state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Hand && object.owner == owner)
+            && self.state.player_idx(owner).is_some_and(|index| {
+                !self.state.players[index].has_lost
+                    && self.state.players[index].hand.contains(&object_id)
+                    && self.state.players[index]
+                        .declared_commander_object_ids
+                        .contains(&object_id)
+            })
+            && self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0)
+                == generation
+    }
+
+    fn commit_hand_bottom_payment(
+        &mut self,
+        payer: PlayerId,
+        selected: rv1::CostObjectRef,
+        destination: Zone,
+    ) -> Result<super::super::payment::transaction::CostPaymentReceipt, EngineError> {
+        let plan = self.plan_resolution_hand_bottom_cost(payer, selected, destination)?;
+        self.commit_cost_transaction(plan)
+    }
+
+    fn hand_bottom_payment_log(payer: PlayerId, destination: Zone) -> rv1::RuledEvent {
+        let action = match destination {
+            Zone::Library => "putting a card on the bottom of their library",
+            Zone::Command => "putting their commander into the command zone",
+            _ => unreachable!("hand-bottom payment destination was validated"),
+        };
+        ev_log(format!("P{payer} pays by {action}."))
+    }
+
+    fn finish_program_choose_hand_bottom_payment(
+        &mut self,
+        pending: PendingResolution,
+        mut stack: ParkedStackResolution,
+        choose: PendingProgramChoose,
+        branch_id: tricerules_card_model::ChoiceId,
+        selected: rv1::CostObjectRef,
+        destination: Zone,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let receipt =
+            match self.commit_hand_bottom_payment(pending.deciding_player, selected, destination) {
+                Ok(receipt) => receipt,
+                Err(error) => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            };
+        let mut events = receipt.move_events;
+        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed, &mut events);
+        events.push(Self::hand_bottom_payment_log(
+            pending.deciding_player,
+            destination,
+        ));
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
+    }
+
+    pub(super) fn finish_program_choose_hand_bottom_object(
+        &mut self,
+        mut pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, choose, selected_branch, branch_id, candidate_generations) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
+                    PendingProgramChooseStage::PayingHandCard {
+                        selected_branch,
+                        branch_id,
+                        candidate_generations,
+                    } => (
+                        stack.clone(),
+                        choose.clone(),
+                        *selected_branch,
+                        branch_id.clone(),
+                        candidate_generations.clone(),
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "program Choose is not awaiting a hand-card payment",
+                        ));
+                    }
+                },
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "program Choose hand-card continuation missing",
+                    ));
+                }
+            };
+        if chosen.is_empty() {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "program Choose hand-card payment is required",
+                ));
+            }
+            let payer = pending.deciding_player;
+            return self.complete_program_choose_otherwise(
+                pending,
+                format!("P{payer} declines the optional hand-card payment."),
+            );
+        }
+        if chosen.len() != 1 {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "hand-bottom payment requires one hand card",
+            ));
+        }
+        let object_id = chosen[0];
+        let generation = match candidate_generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation))
+        {
+            Some(generation) => generation,
+            None => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("resolution payment choice is stale"));
+            }
+        };
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        ) {
+            Ok(branch) if branch.branch_id == branch_id => branch,
+            Ok(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose branch became stale"));
+            }
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        if branch.cost != ResolutionCost::PutHandCardOnLibraryBottom
+            || !self
+                .resolution_cost_candidates(
+                    pending.deciding_player,
+                    stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    stack.item.source_zone_change,
+                    &ResolutionCost::PutHandCardOnLibraryBottom,
+                )
+                .contains(&object_id)
+            || self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0)
+                != generation
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "resolution payment choice became stale",
+            ));
+        }
+        let selected = rv1::CostObjectRef {
+            object_id,
+            zone_change_generation: generation,
+        };
+        if self.hand_bottom_commander_is_current(pending.deciding_player, object_id, generation) {
+            pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+            pending.presentation.candidates = vec![object_id];
+            pending.presentation.min = 1;
+            pending.presentation.max = 1;
+            pending.presentation.prompt = format!(
+                "P{}: put this commander into the command zone or on the bottom of your library?",
+                pending.deciding_player
+            );
+            let ResolutionContinuation::ProgramChoose { choose, .. } = &mut pending.continuation
+            else {
+                unreachable!("validated ProgramChoose continuation")
+            };
+            choose.stage = PendingProgramChooseStage::ChoosingCommanderDestination {
+                selected_branch,
+                branch_id,
+                object_id,
+                zone_change_generation: generation,
+            };
+            let event = self.hand_bottom_commander_choice_event(&pending);
+            self.state.pending_resolution = Some(pending);
+            return Ok(finish_with_events(self, vec![event]));
+        }
+        self.finish_program_choose_hand_bottom_payment(
+            pending,
+            stack,
+            choose,
+            branch_id,
+            selected,
+            Zone::Library,
+        )
+    }
+
+    pub(super) fn finish_program_choose_hand_bottom_commander(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, choose, selected_branch, branch_id, object_id, generation) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
+                    PendingProgramChooseStage::ChoosingCommanderDestination {
+                        selected_branch,
+                        branch_id,
+                        object_id,
+                        zone_change_generation,
+                    } => (
+                        stack.clone(),
+                        choose.clone(),
+                        *selected_branch,
+                        branch_id.clone(),
+                        *object_id,
+                        *zone_change_generation,
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "program Choose is not awaiting a Commander destination",
+                        ));
+                    }
+                },
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "program Choose Commander continuation missing",
+                    ));
+                }
+            };
+        let correct_shape = decision == rv1::ResolutionChoiceDecision::SelectBranch
+            && answer.selected_branch_index <= 1
+            && answer.chosen_object_ids.is_empty()
+            && answer.chosen_player_ids.is_empty()
+            && answer.payment.is_none()
+            && answer.restricted_mana.is_empty()
+            && answer.cast_spell.is_none()
+            && answer.spell_cast_announcement.is_none()
+            && answer.chosen_combat_defender.is_none();
+        if !correct_shape
+            || !self.hand_bottom_commander_is_current(
+                pending.deciding_player,
+                object_id,
+                generation,
+            )
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "invalid or stale hand-bottom Commander choice",
+            ));
+        }
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        ) {
+            Ok(branch)
+                if branch.branch_id == branch_id
+                    && branch.cost == ResolutionCost::PutHandCardOnLibraryBottom =>
+            {
+                branch
+            }
+            Ok(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose branch became stale"));
+            }
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let _ = branch;
+        self.finish_program_choose_hand_bottom_payment(
+            pending,
+            stack,
+            choose,
+            branch_id,
+            rv1::CostObjectRef {
+                object_id,
+                zone_change_generation: generation,
+            },
+            if answer.selected_branch_index == 0 {
+                Zone::Command
+            } else {
+                Zone::Library
+            },
+        )
+    }
+
     pub(super) fn select_program_choose(
         &mut self,
         mut pending: PendingResolution,
@@ -464,6 +871,18 @@ impl GameEngine {
             }
         ) {
             return self.select_program_choose_delegate(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingCommanderDestination { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.finish_program_choose_hand_bottom_commander(pending, answer, decision);
         }
         let (stack, choose_state) = match &pending.continuation {
             ResolutionContinuation::ProgramChoose { stack, choose }
@@ -557,6 +976,43 @@ impl GameEngine {
                     self.resolution_payment_choice_event()
                         .expect("program Choose payment remains parked"),
                 );
+                Ok(finish_with_events(self, events))
+            }
+            ResolutionCost::PutHandCardOnLibraryBottom => {
+                let payer = choose_state.original_chooser;
+                let candidates = self.resolution_cost_candidates(
+                    payer,
+                    stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    stack.item.source_zone_change,
+                    &branch.cost,
+                );
+                if candidates.is_empty() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "that program Choose branch no longer has a hand card to pay with",
+                    ));
+                }
+                pending.deciding_player = payer;
+                pending.presentation.choice_kind = rv1::ChoiceKind::HandCards;
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.min = 0;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    "Choose a card to put on the bottom of your library, or decline.".into();
+                let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated program Choose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::PayingHandCard {
+                    selected_branch: branch_index,
+                    branch_id: branch.branch_id,
+                    candidate_generations,
+                };
+                let event = self.hand_bottom_cost_choice_event(&pending, &candidates);
+                self.state.pending_resolution = Some(pending);
+                events.push(event);
                 Ok(finish_with_events(self, events))
             }
             _ => {
@@ -844,20 +1300,20 @@ impl GameEngine {
                         .expect("resolution branch payment remains parked"),
                 );
             }
+            ResolutionCost::PutHandCardOnLibraryBottom => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "hand-bottom costs require a typed Program Choose branch",
+                ));
+            }
             ResolutionCost::DiscardCard { .. }
             | ResolutionCost::ExileGraveyardCard { .. }
-            | ResolutionCost::PutHandCardOnLibraryBottom
             | ResolutionCost::SacrificePermanent { .. }
             | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
-                let is_hand_card = matches!(
-                    branch.cost,
-                    ResolutionCost::DiscardCard { .. } | ResolutionCost::PutHandCardOnLibraryBottom
-                );
+                let is_hand_card = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
                 let is_graveyard_exile =
                     matches!(branch.cost, ResolutionCost::ExileGraveyardCard { .. });
-                let is_hand_bottom =
-                    matches!(branch.cost, ResolutionCost::PutHandCardOnLibraryBottom);
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
                 let count = match branch.cost {
                     ResolutionCost::TapPermanents { count, .. } => count,
@@ -892,8 +1348,6 @@ impl GameEngine {
                     )
                 } else if matches!(branch.cost, ResolutionCost::DiscardCard { .. }) {
                     "Choose a card to discard, or decline.".into()
-                } else if is_hand_bottom {
-                    "Choose a card to put on the bottom of your library, or decline.".into()
                 } else if is_graveyard_exile {
                     "Choose a card from your graveyard to exile, or decline.".into()
                 } else if is_tap {
@@ -1164,7 +1618,12 @@ impl GameEngine {
             choose.stage,
             PendingProgramChooseStage::ChoosingDelegate { .. }
         );
-        let payment_prompt = matches!(choose.stage, PendingProgramChooseStage::PayingMana { .. });
+        let payment_prompt = matches!(
+            choose.stage,
+            PendingProgramChooseStage::PayingMana { .. }
+                | PendingProgramChooseStage::PayingHandCard { .. }
+                | PendingProgramChooseStage::ChoosingCommanderDestination { .. }
+        );
 
         if payment_prompt && original_chooser_live && current_chooser_live {
             self.state.pending_resolution = Some(pending);
@@ -1533,6 +1992,7 @@ impl GameEngine {
         let branch = branch_state
             .branches
             .get(branch_index)
+            .cloned()
             .ok_or(EngineError::Illegal("resolution branch became stale"))?;
         let effect_index = stack
             .resume_effect_index

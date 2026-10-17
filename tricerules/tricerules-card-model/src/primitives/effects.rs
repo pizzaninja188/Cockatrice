@@ -5525,8 +5525,12 @@ impl SpellEffectKind {
                                 );
                             }
                         }
-                        ResolutionCost::DiscardCard { .. }
-                        | ResolutionCost::PutHandCardOnLibraryBottom => {}
+                        ResolutionCost::DiscardCard { .. } => {}
+                        ResolutionCost::PutHandCardOnLibraryBottom => {
+                            return Err(
+                                "hand-bottom costs require a typed Program Choose branch".into()
+                            );
+                        }
                         ResolutionCost::ExileGraveyardCard { filter } => {
                             if let Some(filter) = filter {
                                 filter.validate()?;

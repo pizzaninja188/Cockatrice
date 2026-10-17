@@ -1,6 +1,6 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
-use tricerules_cards::Keyword;
+use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
@@ -28,6 +28,40 @@ fn select_branch(index: u32) -> RuledCommand {
     }
 }
 
+fn setup_hand_bottom_spell(card_id: &str, seed: u64) -> GameEngine {
+    let decks = Some(vec![deck_with("mountain", &[card_id]), forest_only_deck()]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("registered hand-bottom spell fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, card_id);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+}
+
+fn resolve_top_spell(engine: &mut GameEngine) {
+    for _ in 0..engine.state.players.len() {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(player, &pass())
+            .expect("pass priority to resolve the spell");
+    }
+}
+
 #[test]
 fn heated_argument_is_registered_in_the_current_standard_audit() {
     let definition = tricerules_cards::registry::global()
@@ -48,29 +82,239 @@ fn hand_bottom_damage_spells_share_the_resolution_cost_primitive() {
             .get(card_id)
             .unwrap_or_else(|| panic!("{card_id} is registered"));
         let face = definition.primary_face();
-        assert_eq!(face.spell_effect.len(), 2);
-        let tricerules_cards::primitives::SpellEffectKind::DamageTarget { target, .. } =
-            &face.spell_effect[0]
+        assert!(
+            face.spell_effect.is_empty(),
+            "{card_id} moved to its Program body"
+        );
+        let owner = tricerules_cards::ProgramOwnerId::face(
+            card_id,
+            tricerules_cards::CardFaceId::new(card_id).unwrap(),
+        );
+        let program = tricerules_cards::registry::global()
+            .compiled_program_for_owner(&owner)
+            .unwrap_or_else(|| panic!("{card_id} has its owner-local Program"));
+        assert_eq!(
+            program.target_bindings.len(),
+            1,
+            "{card_id} binds its damage target"
+        );
+        assert_eq!(program.target_bindings[0].target_group_index, 0);
+        assert_eq!(program.target_bindings[0].role_index, 0);
+        let [damage, choose] = program.body.steps.as_slice() else {
+            panic!("{card_id} retains damage followed by the optional payment");
+        };
+        let tricerules_cards::primitives::CompiledInstructionKind::Perform(damage) = &damage.kind
         else {
             panic!("{card_id} starts with targeted damage");
         };
-        let leaves = if target.any_of.is_some() { 3 } else { 1 };
+        let tricerules_cards::primitives::SpellEffectKind::DamageTarget { amount, target } =
+            damage.as_ref()
+        else {
+            panic!("{card_id} starts with targeted damage");
+        };
+        assert_eq!(*amount, tricerules_cards::primitives::Amount::Fixed(3));
+        let leaves = target.any_of.as_ref().map_or(1, Vec::len);
         assert_eq!(leaves, target_kind_count);
-        let tricerules_cards::primitives::SpellEffectKind::ChooseResolutionBranch {
+        let tricerules_cards::primitives::CompiledInstructionKind::Choose {
+            chooser,
             optional,
             branches,
+            otherwise,
             ..
-        } = &face.spell_effect[1]
+        } = &choose.kind
         else {
             panic!("{card_id} ends with an optional paid branch");
         };
+        assert_eq!(
+            *chooser,
+            tricerules_cards::primitives::PlayerRecipient::Controller
+        );
         assert!(*optional);
+        assert!(otherwise.steps.is_empty());
         assert_eq!(branches.len(), 1);
         assert_eq!(
             branches[0].cost,
             tricerules_cards::primitives::ResolutionCost::PutHandCardOnLibraryBottom
         );
+        assert!(matches!(
+            branches[0].body.steps.as_slice(),
+            [draw] if matches!(
+                &draw.kind,
+                tricerules_cards::primitives::CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), tricerules_cards::primitives::SpellEffectKind::Draw {
+                        who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                        count: tricerules_cards::primitives::Amount::Fixed(1),
+                    })
+            )
+        ));
     }
+}
+
+#[test]
+fn fire_prophecy_runs_its_paid_branch_and_rejects_noncreature_targets() {
+    let mut engine = setup_hand_bottom_spell("fire_prophecy", 910_101);
+    let creature = inject_creature_with_stats(&mut engine, 1, "indomitable_ancients", 2, 10);
+    let spell_slot = hand_index_for_card(&engine, 0, "fire_prophecy");
+    engine
+        .apply_scenario_command(0, &cast_spell(spell_slot, target_object(creature)))
+        .expect("Fire Prophecy legally targets a creature");
+    resolve_top_spell(&mut engine);
+    assert_eq!(engine.state.objects[&creature].damage, 3);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::ResolutionBranch
+    );
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose Fire Prophecy's optional payment");
+    let card = *engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .presentation
+        .candidates
+        .iter()
+        .find(|oid| engine.state.objects[oid].card_id == "mountain")
+        .expect("a Mountain is available as the exact hand-card payment");
+    let drawn = *engine.state.players[0]
+        .library
+        .front()
+        .expect("Fire Prophecy can draw from the library");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![card]))
+        .expect("pay Fire Prophecy's hand-bottom cost");
+    assert_eq!(engine.state.objects[&card].zone, Zone::Library);
+    assert_eq!(engine.state.players[0].library.back(), Some(&card));
+    assert!(engine.state.players[0].hand.contains(&drawn));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+
+    for (seed, target_id) in [
+        (910_102, "jace_beleren"),
+        (910_103, "invasion_of_ulgrotha_grandmother_ravi_sengir"),
+    ] {
+        let mut invalid = setup_hand_bottom_spell("fire_prophecy", seed);
+        let target = inject_permanent_on_battlefield(&mut invalid, 1, target_id);
+        let spell_slot = hand_index_for_card(&invalid, 0, "fire_prophecy");
+        let before = serde_json::to_value(&invalid.state).unwrap();
+        assert!(
+            invalid
+                .apply_scenario_command(0, &cast_spell(spell_slot, target_object(target)))
+                .is_err(),
+            "Fire Prophecy must reject {target_id}"
+        );
+        assert_eq!(serde_json::to_value(&invalid.state).unwrap(), before);
+    }
+}
+
+#[test]
+fn volcanic_spite_accepts_each_oracle_target_type_and_fizzle_skips_payment() {
+    for (seed, target_kind, target_id) in [
+        (910_111, "creature", "indomitable_ancients"),
+        (910_112, "planeswalker", "jace_beleren"),
+        (
+            910_113,
+            "battle",
+            "invasion_of_ulgrotha_grandmother_ravi_sengir",
+        ),
+    ] {
+        let mut engine = setup_hand_bottom_spell("volcanic_spite", seed);
+        let target = if target_kind == "creature" {
+            inject_creature_with_stats(&mut engine, 1, target_id, 2, 10)
+        } else {
+            inject_permanent_on_battlefield(&mut engine, 1, target_id)
+        };
+        if target_kind == "planeswalker" {
+            engine
+                .state
+                .objects
+                .get_mut(&target)
+                .unwrap()
+                .set_counter(CounterKind::Loyalty, 5);
+        } else if target_kind == "battle" {
+            engine
+                .state
+                .objects
+                .get_mut(&target)
+                .unwrap()
+                .set_counter(CounterKind::Defense, 5);
+        }
+        let spell_slot = hand_index_for_card(&engine, 0, "volcanic_spite");
+        engine
+            .apply_scenario_command(0, &cast_spell(spell_slot, target_object(target)))
+            .unwrap_or_else(|_| panic!("Volcanic Spite legally targets a {target_kind}"));
+        resolve_top_spell(&mut engine);
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| pending.presentation.choice_kind),
+            Some(tricerules_proto::ruled::v1::ChoiceKind::ResolutionBranch),
+            "the {target_kind} target resolves through damage before its optional branch; stack={:?}",
+            engine.state.stack
+        );
+        if target_kind == "creature" {
+            assert_eq!(engine.state.objects[&target].damage, 3);
+            engine
+                .apply_scenario_command(0, &select_branch(0))
+                .expect("choose the optional branch for the creature target");
+            let card = *engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates
+                .iter()
+                .find(|oid| engine.state.objects[oid].card_id == "mountain")
+                .expect("a Mountain is available for payment");
+            engine
+                .apply_scenario_command(0, &submit_resolution_choice(vec![card]))
+                .expect("pay Volcanic Spite's hand-bottom cost");
+            assert_eq!(engine.state.objects[&card].zone, Zone::Library);
+        } else {
+            engine
+                .apply_scenario_command(
+                    0,
+                    &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+                )
+                .expect("decline the optional branch");
+        }
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    let mut fizzled = setup_hand_bottom_spell("volcanic_spite", 910_114);
+    let target = inject_creature_with_stats(&mut fizzled, 1, "indomitable_ancients", 2, 10);
+    let slot = hand_index_for_card(&fizzled, 0, "volcanic_spite");
+    fizzled
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
+        .expect("cast Volcanic Spite at the creature");
+    fizzled.state.players[1]
+        .battlefield
+        .retain(|object_id| *object_id != target);
+    fizzled.state.players[1].graveyard.push(target);
+    fizzled.state.objects.get_mut(&target).unwrap().zone = Zone::Graveyard;
+    *fizzled
+        .state
+        .zone_change_generation
+        .entry(target)
+        .or_default() += 1;
+    let hand_before = fizzled.state.players[0].hand.clone();
+    let library_before = fizzled.state.players[0].library.clone();
+    resolve_top_spell(&mut fizzled);
+    assert!(fizzled.state.pending_resolution.is_none());
+    assert_eq!(fizzled.state.players[0].hand, hand_before);
+    assert_eq!(fizzled.state.players[0].library, library_before);
+    assert!(fizzled.state.stack.is_empty());
 }
 
 #[test]

@@ -180,7 +180,9 @@ The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks;
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
 is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
 either all free or all paid; supported costs are `None`, fixed
-nonempty `Mana` without X, and fixed nonempty `Waterbend` without X. `Always`, supported
+nonempty `Mana` without X, fixed nonempty `Waterbend` without X, and the fixed one-card
+`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch. That hand-bottom cost is
+not admitted for ability programs or other chooser shapes. `Always`, supported
 controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
 are admitted; flat-list applicability and card-result requirements are rejected. Branch and
 Otherwise bodies use the same recursive finite-program subset, and a binding may join only
@@ -208,7 +210,8 @@ whether that exact source incarnation can receive the counters both when the men
 when a branch answer is validated. A mandatory choice with exactly one live cost-free branch enters
 it automatically and logs the selection; optional choices and paid branches still receive prompts.
 If the original chooser leaves during a paid-branch payment, the branch is not transferred and the
-`Otherwise` block resolves.
+`Otherwise` block resolves. For `PutHandCardOnLibraryBottom`, the chooser privately
+selects one current hand card; if it is a declared Commander, its owner chooses Command zone or Library.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
 recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test

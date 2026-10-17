@@ -1037,7 +1037,8 @@ impl GameEngine {
             ResolutionContinuation::ProgramChoose {
                 choose: crate::state::PendingProgramChoose {
                     stage: crate::state::PendingProgramChooseStage::Selecting
-                        | crate::state::PendingProgramChooseStage::ChoosingDelegate { .. },
+                        | crate::state::PendingProgramChooseStage::ChoosingDelegate { .. }
+                        | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. },
                     ..
                 },
                 ..
@@ -1282,6 +1283,14 @@ impl GameEngine {
             ResolutionContinuation::AuthoredBranch { .. } => {
                 self.finish_resolution_branch_object(pending, chosen)
             }
+            ResolutionContinuation::ProgramChoose {
+                choose:
+                    crate::state::PendingProgramChoose {
+                        stage: crate::state::PendingProgramChooseStage::PayingHandCard { .. },
+                        ..
+                    },
+                ..
+            } => self.finish_program_choose_hand_bottom_object(pending, chosen),
             ResolutionContinuation::PermanentChoice { .. } => {
                 self.finish_permanent_choice(pending, chosen)
             }

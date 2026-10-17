@@ -1341,6 +1341,17 @@ pub(crate) enum PendingProgramChooseStage {
         branch_id: ChoiceId,
         payment: PendingManaPayment,
     },
+    PayingHandCard {
+        selected_branch: usize,
+        branch_id: ChoiceId,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
+    ChoosingCommanderDestination {
+        selected_branch: usize,
+        branch_id: ChoiceId,
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    },
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

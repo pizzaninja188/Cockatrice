@@ -70,6 +70,7 @@ pub(super) enum CostDebit {
         object_id: ObjectId,
         generation: u64,
         owner: PlayerId,
+        destination: Zone,
     },
     Exile {
         object_id: ObjectId,
@@ -151,6 +152,7 @@ pub(in crate::engine) enum PaidCardCost {
     },
     PutOnLibraryBottom {
         object_id: ObjectId,
+        destination: Zone,
         result: CardResultEntry,
     },
     Sacrifice {
@@ -180,9 +182,15 @@ impl PaidCardCost {
         match self {
             Self::Discard { card_name, .. } => format!("discarding {card_name}"),
             Self::Exile { card_name, .. } => format!("exiling {card_name}"),
-            Self::PutOnLibraryBottom { .. } => {
-                "putting a card on the bottom of their library".into()
-            }
+            Self::PutOnLibraryBottom {
+                destination: Zone::Library,
+                ..
+            } => "putting a card on the bottom of their library".into(),
+            Self::PutOnLibraryBottom {
+                destination: Zone::Command,
+                ..
+            } => "putting their commander into the command zone".into(),
+            Self::PutOnLibraryBottom { .. } => "putting a hand card in another zone".into(),
             Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
             Self::Tap { card_name, .. } => format!("tapping {card_name}"),
         }
@@ -562,6 +570,43 @@ impl GameEngine {
             player,
             player_idx,
             debits: vec![self.plan_object_payment(player, component, selected)?],
+            cast_cost_receipts: vec![],
+        })
+    }
+
+    /// Plan the shared hand-card bottom cost with the exact Commander replacement destination
+    /// already chosen by its owner. The pending resolution stores only object/generation and
+    /// branch context; this transaction plan and its receipt are created after the final choice.
+    pub(in crate::engine) fn plan_resolution_hand_bottom_cost(
+        &self,
+        player: PlayerId,
+        selected: rv1::CostObjectRef,
+        destination: Zone,
+    ) -> Result<CostTransactionPlan, EngineError> {
+        if !matches!(destination, Zone::Library | Zone::Command) {
+            return Err(EngineError::Illegal(
+                "hand-bottom payment has an unsupported destination",
+            ));
+        }
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        if destination == Zone::Command
+            && !self.state.players[player_idx]
+                .declared_commander_object_ids
+                .contains(&selected.object_id)
+        {
+            return Err(EngineError::Illegal(
+                "only a declared Commander can be put into the command zone",
+            ));
+        }
+        let component = ObjectPaymentComponent::PutHandCardOnLibraryBottom { destination };
+        Ok(CostTransactionPlan {
+            purpose: CostPurpose::Resolution,
+            player,
+            player_idx,
+            debits: vec![self.plan_object_payment(player, component, &[selected])?],
             cast_cost_receipts: vec![],
         })
     }
@@ -2247,13 +2292,14 @@ impl GameEngine {
                 CostDebit::PutHandCardOnLibraryBottom {
                     object_id: oid,
                     owner,
+                    destination,
                     ..
                 } => {
                     crate::engine::resolution::move_object_to_zone(
                         &mut self.state,
                         self.registry,
                         oid,
-                        Zone::Library,
+                        destination,
                         None,
                     )
                     .expect("prevalidated hand-card bottom cost must commit");
@@ -2261,12 +2307,17 @@ impl GameEngine {
                         &self.state,
                         oid,
                         owner,
-                        rv1::permanent_moved::Destination::Library,
+                        match destination {
+                            Zone::Library => rv1::permanent_moved::Destination::Library,
+                            Zone::Command => rv1::permanent_moved::Destination::Command,
+                            _ => unreachable!("validated hand-bottom destination"),
+                        },
                     ));
                     payment
                         .paid_card_costs
                         .push(PaidCardCost::PutOnLibraryBottom {
                             object_id: oid,
+                            destination,
                             result: card_result_entry(
                                 &self.state,
                                 self.registry,
@@ -2715,8 +2766,14 @@ impl GameEngine {
                     object_id,
                     generation,
                     owner,
+                    destination,
                 } => {
-                    *owner == plan.player
+                    matches!(*destination, Zone::Library | Zone::Command)
+                        && *owner == plan.player
+                        && (*destination != Zone::Command
+                            || self.state.players[plan.player_idx]
+                                .declared_commander_object_ids
+                                .contains(object_id))
                         && self.state.objects.get(object_id).is_some_and(|object| {
                             object.zone == Zone::Hand && object.owner == *owner
                         })
@@ -3793,6 +3850,94 @@ mod convoke_transaction_tests {
             .commit_cost_transaction(controlled_plan)
             .is_err());
         assert_eq!(format!("{:?}", controlled_engine.state), controlled_before);
+    }
+
+    #[test]
+    fn resolution_hand_bottom_receipt_keeps_actual_destination() {
+        use crate::engine::resolution::move_object_to_zone;
+
+        for (index, destination) in [Zone::Library, Zone::Command].into_iter().enumerate() {
+            let p0_deck = EngineDeck {
+                mainboard: vec!["mountain".into(); 12],
+                commanders: vec!["captain_storm,_cosmium_raider".into()],
+            };
+            let p1_deck = EngineDeck {
+                mainboard: vec!["forest".into(); 12],
+                commanders: Vec::new(),
+            };
+            let mut engine = GameEngine::new_with_commander_decks(
+                tricerules_cards::registry::global(),
+                240_240 + index as u64,
+                &[0, 1],
+                20,
+                Some(vec![p0_deck, p1_deck]),
+                true,
+            )
+            .unwrap();
+            let commander = engine.state.players[0].command_zone[0];
+            let ordinary_card = engine.state.players[0].hand[0];
+            let ordinary_ref = rv1::CostObjectRef {
+                object_id: ordinary_card,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&ordinary_card)
+                    .copied()
+                    .unwrap_or(0),
+            };
+            let before_invalid = format!("{:?}", engine.state);
+            assert!(engine
+                .plan_resolution_hand_bottom_cost(0, ordinary_ref, Zone::Command)
+                .is_err());
+            assert_eq!(format!("{:?}", engine.state), before_invalid);
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                commander,
+                Zone::Hand,
+                None,
+            )
+            .expect("return the declared commander to its owner's hand");
+            let card = commander;
+            let reference = rv1::CostObjectRef {
+                object_id: card,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&card)
+                    .copied()
+                    .unwrap_or(0),
+            };
+            let plan = engine
+                .plan_resolution_hand_bottom_cost(0, reference, destination)
+                .expect("the chosen hand card can pay the fixed resolution cost");
+
+            let receipt = engine
+                .commit_cost_transaction(plan)
+                .expect("the planned hand-card payment remains current");
+            let [PaidCardCost::PutOnLibraryBottom {
+                object_id,
+                destination: paid_destination,
+                result,
+            }] = receipt.paid_card_costs.as_slice()
+            else {
+                panic!("the payment receipt records exactly one hand-card cost");
+            };
+            assert_eq!(*object_id, card);
+            assert_eq!(*paid_destination, destination);
+            assert_eq!(result.action, CardResultAction::PutOnLibraryBottom);
+            assert_eq!(engine.state.objects[&card].zone, destination);
+            assert!(receipt.move_events.iter().any(|event| matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.object_id == card
+                        && moved.destination == match destination {
+                            Zone::Library => rv1::permanent_moved::Destination::Library as i32,
+                            Zone::Command => rv1::permanent_moved::Destination::Command as i32,
+                            _ => unreachable!(),
+                        }
+            )));
+        }
     }
 
     #[test]

@@ -30,7 +30,9 @@ pub(in crate::engine) enum ObjectPaymentComponent {
         source: rv1::CostObjectRef,
         filter: Option<ZoneCardFilter>,
     },
-    PutHandCardOnLibraryBottom,
+    PutHandCardOnLibraryBottom {
+        destination: Zone,
+    },
     Sacrifice {
         count: u32,
         filter: PermanentPaymentFilter,
@@ -116,7 +118,9 @@ impl ObjectPaymentComponent {
                 source,
                 filter: filter.clone(),
             },
-            ResolutionCost::PutHandCardOnLibraryBottom => Self::PutHandCardOnLibraryBottom,
+            ResolutionCost::PutHandCardOnLibraryBottom => Self::PutHandCardOnLibraryBottom {
+                destination: Zone::Library,
+            },
             ResolutionCost::SacrificePermanent {
                 filter,
                 source_only,
@@ -164,7 +168,7 @@ impl ObjectPaymentComponent {
                         filter.as_ref(),
                     )
             }
-            Self::PutHandCardOnLibraryBottom => {
+            Self::PutHandCardOnLibraryBottom { .. } => {
                 object.zone == Zone::Hand
                     && object.owner == player
                     && engine
@@ -216,7 +220,7 @@ impl ObjectPaymentComponent {
         }
         if matches!(
             self,
-            Self::Discard { .. } | Self::PutHandCardOnLibraryBottom
+            Self::Discard { .. } | Self::PutHandCardOnLibraryBottom { .. }
         ) {
             engine.state.players[index]
                 .hand
@@ -353,11 +357,12 @@ impl GameEngine {
                     exclude_source: false,
                 }
             }
-            ObjectPaymentComponent::PutHandCardOnLibraryBottom => {
+            ObjectPaymentComponent::PutHandCardOnLibraryBottom { destination } => {
                 CostDebit::PutHandCardOnLibraryBottom {
                     object_id: objects[0].object_id,
                     generation: objects[0].zone_change_generation,
                     owner: self.state.objects[&objects[0].object_id].owner,
+                    destination,
                 }
             }
             ObjectPaymentComponent::Sacrifice { .. } => CostDebit::SacrificeGroup {
