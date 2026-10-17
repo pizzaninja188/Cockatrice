@@ -67,6 +67,60 @@ const TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE: &str = r#"(
   )],
 )"#;
 
+const TEST_KINDRED_ARTIFACT_DRAGON: &str = r#"(
+  id: "test_kindred_artifact_dragon",
+  name: "Test Kindred Artifact Dragon",
+  face_id: "test_kindred_artifact_dragon",
+  mana_cost: "{0}",
+  types: ["Kindred", "Artifact", "Dragon"],
+)"#;
+
+// Test-only validated composition: the same exact closed Embermouth conditional leaf followed
+// by the shared Controller Draw tail. Production Embermouth remains its Oracle-exact search only.
+const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
+  id: "conditional_battlefield_search_tail_fixture",
+  name: "Conditional Battlefield Search Tail Fixture",
+  face_id: "conditional_battlefield_search_tail_fixture",
+  mana_cost: "{0}",
+  types: ["Creature", "Wolf"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "search_on_enter",
+    presentation: Fallback,
+    trigger: WhenSelfEntersBattlefield,
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_search", bind: [], input: None, kind: Choose(
+        choice: "search", chooser: Controller, optional: true,
+        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+          cost: None, requirement: Always, body: (steps: [
+            (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
+              who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+              filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
+              zones: Fixed([Library]), destination: TopOfLibrary,
+              conditional_destination: Some((condition: BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: None,
+                  required_subtypes: ["Dragon"], exclude_source: false),
+                aggregate: Count, min: Some(1), max: None, exclude_observed_object: false,
+              ), destination: Battlefield(tapped: true))),
+              shuffle: true, reveal: true, result_id: None,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))
+          ], yields: []))],
+        otherwise: (steps: [], yields: []),
+      )),
+      (id: "tail_draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+    ], yields: []), target_bindings: [])),
+    modal: None,
+    targeting: None,
+    may: false,
+    intervening_if: None,
+    triggers_only_once: false,
+    max_triggers_per_turn: None,
+  )],
+)"#;
+
 const DRAW_STEP_TRIGGERED_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
   id: "draw_step_triggered_battlefield_search_fixture",
   name: "Draw Step Triggered Battlefield Search Fixture",
@@ -163,6 +217,45 @@ fn test_engine(seed: u64) -> GameEngine {
     engine
 }
 
+fn conditional_search_tail_engine(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE,
+                TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE,
+                TEST_KINDRED_ARTIFACT_DRAGON,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/wan_shi_tong,_librarian.ron"),
+            ],
+            &[],
+        )
+        .expect("the conditional-search tail registry is valid"),
+    ));
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: [
+                vec!["conditional_battlefield_search_tail_fixture".into()],
+                vec!["forest".into(); 8],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: [
+                vec!["wan_shi_tong,_librarian".into()],
+                vec!["island".into(); 8],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
+        .expect("two-player conditional-search tail engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
 fn three_player_draw_step_search_engine(seed: u64) -> GameEngine {
     let registry = Box::leak(Box::new(
         CardRegistry::from_chunks_and_tokens(
@@ -203,6 +296,365 @@ fn three_player_draw_step_search_engine(seed: u64) -> GameEngine {
     ]);
     GameEngine::new_with_commander_decks(registry, seed, &[2, 0, 1], 20, decks, true)
         .expect("three-player triggered Battlefield-search engine")
+}
+
+fn embermouth_conditional_search_engine(seed: u64) -> (GameEngine, &'static CardRegistry) {
+    let registry = Box::leak(Box::new(
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/embermouth_sentinel.ron"),
+                TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE,
+                TEST_KINDRED_ARTIFACT_DRAGON,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/wan_shi_tong,_librarian.ron"),
+            ],
+            &[],
+        )
+        .expect("the Embermouth conditional-search registry is valid"),
+    ));
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: [vec!["embermouth_sentinel".into()], vec!["forest".into(); 8]].concat(),
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: [
+                vec!["wan_shi_tong,_librarian".into()],
+                vec!["island".into(); 8],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
+        .expect("two-player Embermouth conditional-search engine");
+    advance_to_main1_from_game_start(&mut engine);
+    (engine, registry)
+}
+
+#[test]
+fn embermouth_accepts_noncreature_kindred_dragon_and_locks_destination_through_entry_choice() {
+    let (mut engine, registry) = embermouth_conditional_search_engine(284_207);
+    let kindred_face = registry
+        .get("test_kindred_artifact_dragon")
+        .expect("test Kindred artifact");
+    assert!(!kindred_face.primary_face().is_creature);
+    assert!(kindred_face
+        .primary_face()
+        .types
+        .iter()
+        .any(|card_type| card_type == "Kindred"));
+    assert!(kindred_face
+        .primary_face()
+        .types
+        .iter()
+        .any(|subtype| subtype == "Dragon"));
+
+    let wan = install_search_observer(&mut engine);
+    let dragon = inject_permanent_on_battlefield(&mut engine, 0, "test_kindred_artifact_dragon");
+    let selected =
+        inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let selected_generation = engine
+        .state
+        .zone_change_generation
+        .get(&selected)
+        .copied()
+        .unwrap_or(0);
+
+    let search_batch = open_embermouth_library_search(&mut engine);
+    let search = find_resolution_choice(&search_batch).expect("Embermouth search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert!(search.candidate_object_ids.contains(&selected));
+    let entry_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("select the exact Basic Land Creature");
+    let entry_choice = find_resolution_choice(&entry_batch).expect("as-enters type choice");
+    let dragon_type = entry_choice
+        .resolution_branches
+        .iter()
+        .find(|branch| branch.label == "Dragon")
+        .expect("Dragon is a legal creature type");
+
+    // The accepted search has fixed its Battlefield destination. Remove the matching permanent
+    // before the asynchronous entry replacement resumes to prove the condition is not reevaluated.
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != dragon);
+    engine.state.players[0].graveyard.push(dragon);
+    engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(dragon)
+        .or_default() += 1;
+    let completion = engine
+        .apply_scenario_command(
+            0,
+            &choose_branch_for_prompt(entry_choice.resolution_prompt_id, dragon_type.branch_index),
+        )
+        .expect("finish the selected card's entry choice");
+
+    assert_eq!(engine.state.objects[&dragon].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Battlefield);
+    assert!(engine.state.players[0].battlefield.contains(&selected));
+    assert!(engine.state.objects[&selected].tapped);
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&selected)
+            .copied()
+            .unwrap_or(0),
+        selected_generation + 1,
+        "the selected physical object enters as one new incarnation"
+    );
+    assert_eq!(
+        entry_batch
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+                _ => None,
+            })
+            .flat_map(|reveal| reveal.cards.iter())
+            .filter(|card| card.object_id == selected)
+            .count(),
+        1,
+        "Embermouth reveals the selected card once"
+    );
+    assert_eq!(
+        search_batch
+            .events
+            .iter()
+            .chain(entry_batch.events.iter())
+            .chain(completion.events.iter())
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1,
+        "one completed library search shuffles once across the parked entry choice"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
+}
+
+fn open_embermouth_library_search(
+    engine: &mut GameEngine,
+) -> tricerules_proto::ruled::v1::RuledEventBatch {
+    ensure_in_hand(engine, 0, "embermouth_sentinel");
+    give_mana(
+        engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let hand_index = hand_index_for_card(engine, 0, "embermouth_sentinel");
+    engine
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
+        .expect("cast Embermouth Sentinel");
+    pass_both_players(engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes for the ETB trigger");
+    let offer = engine
+        .apply_scenario_command(1, &pass())
+        .expect("the ETB trigger offers its optional search");
+    let choice = find_resolution_choice(&offer).expect("optional search choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choose the search branch")
+}
+
+fn open_conditional_tail_library_search(
+    engine: &mut GameEngine,
+) -> tricerules_proto::ruled::v1::RuledEventBatch {
+    ensure_in_hand(engine, 0, "conditional_battlefield_search_tail_fixture");
+    let hand_index = hand_index_for_card(engine, 0, "conditional_battlefield_search_tail_fixture");
+    engine
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
+        .expect("cast the zero-cost conditional search fixture");
+    pass_both_players(engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes for the fixture ETB trigger");
+    let offer = engine
+        .apply_scenario_command(1, &pass())
+        .expect("fixture ETB offers its optional conditional search");
+    let choice = find_resolution_choice(&offer).expect("optional conditional search choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choose the conditional search branch")
+}
+
+fn assert_one_conditional_search_completion(
+    engine: &GameEngine,
+    wan: u32,
+    selected: u32,
+    batches: &[&tricerules_proto::ruled::v1::RuledEventBatch],
+) {
+    let events = batches.iter().flat_map(|batch| batch.events.iter());
+    assert_eq!(
+        events
+            .clone()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1,
+        "the conditional search shuffles once"
+    );
+    let revealed = events
+        .filter_map(|event| match &event.ev {
+            Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+            _ => None,
+        })
+        .flat_map(|reveal| reveal.cards.iter())
+        .collect::<Vec<_>>();
+    assert_eq!(revealed.len(), 1, "the accepted selection is revealed once");
+    assert_eq!(revealed[0].object_id, selected);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
+}
+
+#[test]
+fn conditional_search_top_result_is_drawn_by_the_typed_tail_once() {
+    let mut engine = conditional_search_tail_engine(284_208);
+    let wan = install_search_observer(&mut engine);
+    let selected = inject_library_card(&mut engine, 0, "forest");
+    let search_batch = open_conditional_tail_library_search(&mut engine);
+    let search = find_resolution_choice(&search_batch).expect("conditional top search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert!(search.candidate_object_ids.contains(&selected));
+    let hand_before_tail = engine.state.players[0].hand.len();
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("accept the resultless top search");
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Hand);
+    assert!(engine.state.players[0].hand.contains(&selected));
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before_tail + 1,
+        "the typed Controller Draw tail runs exactly once"
+    );
+    assert_one_conditional_search_completion(&engine, wan, selected, &[&completion]);
+}
+
+#[test]
+fn conditional_search_synchronous_battlefield_result_runs_tail_once() {
+    let mut engine = conditional_search_tail_engine(284_209);
+    let wan = install_search_observer(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "test_kindred_artifact_dragon");
+    let selected = inject_library_card(&mut engine, 0, "forest");
+    let selected_generation = engine
+        .state
+        .zone_change_generation
+        .get(&selected)
+        .copied()
+        .unwrap_or(0);
+    let search_batch = open_conditional_tail_library_search(&mut engine);
+    let search =
+        find_resolution_choice(&search_batch).expect("conditional Battlefield search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert!(search.candidate_object_ids.contains(&selected));
+    let hand_before_tail = engine.state.players[0].hand.len();
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("accept the conditional Battlefield destination");
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&selected].tapped);
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&selected)
+            .copied()
+            .unwrap_or(0),
+        selected_generation + 1
+    );
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before_tail + 1,
+        "the typed Controller Draw tail runs exactly once"
+    );
+    assert_one_conditional_search_completion(&engine, wan, selected, &[&completion]);
+}
+
+#[test]
+fn conditional_search_async_battlefield_result_locks_destination_and_resumes_tail_once() {
+    let mut engine = conditional_search_tail_engine(284_210);
+    let wan = install_search_observer(&mut engine);
+    let dragon = inject_permanent_on_battlefield(&mut engine, 0, "test_kindred_artifact_dragon");
+    let selected =
+        inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let selected_generation = engine
+        .state
+        .zone_change_generation
+        .get(&selected)
+        .copied()
+        .unwrap_or(0);
+    let search_batch = open_conditional_tail_library_search(&mut engine);
+    let search = find_resolution_choice(&search_batch).expect("conditional async search offer");
+    assert!(search.candidate_object_ids.contains(&selected));
+    let hand_before_tail = engine.state.players[0].hand.len();
+    let entry_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("accept the conditional Battlefield entrant");
+    let entry_choice = find_resolution_choice(&entry_batch).expect("as-enters creature type");
+    let dragon_type = entry_choice
+        .resolution_branches
+        .iter()
+        .find(|branch| branch.label == "Dragon")
+        .expect("Dragon is a legal creature type");
+
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != dragon);
+    engine.state.players[0].graveyard.push(dragon);
+    engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(dragon)
+        .or_default() += 1;
+    let completion = engine
+        .apply_scenario_command(
+            0,
+            &choose_branch_for_prompt(entry_choice.resolution_prompt_id, dragon_type.branch_index),
+        )
+        .expect("complete the entrant's replacement choice");
+
+    assert_eq!(engine.state.objects[&dragon].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&selected].tapped);
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&selected)
+            .copied()
+            .unwrap_or(0),
+        selected_generation + 1
+    );
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before_tail + 1,
+        "the typed tail resumes once, after the as-enters choice commits"
+    );
+    assert_one_conditional_search_completion(&engine, wan, selected, &[&entry_batch, &completion]);
 }
 
 fn install_search_observer(engine: &mut GameEngine) -> u32 {

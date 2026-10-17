@@ -199,9 +199,9 @@ must be fixed literals.
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
 Program `SearchLibrary` has bounded forms. The retained form uses fixed selection bounds and
-`KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Resultless forms use fixed `Library`
-zone, count one, bounds 0..1, shuffle, and no slots, selection constraint, cast-cost sizing,
-conditional destination or result ID. The `TopOfLibrary` form admits the controller's `BasicLand`
+`KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Ordinary resultless forms use fixed
+`Library` zone, count one, bounds 0..1, shuffle, and no slots, selection constraint, cast-cost
+sizing, conditional destination or result ID. The `TopOfLibrary` form admits the controller's `BasicLand`
 choice with reveal; Campus Guide, Spider-Bot and Fountainport Bell use it. The `Hand` form admits
 only a `BasicLand` filter or a nonempty exact-name-only filter with reveal; Environmental Scientist,
 Strixhaven Skycoach and Tempest Hawk use it. The `Battlefield` form admits only `BasicLand` and
@@ -212,8 +212,15 @@ continues the program (CR 701.23b, 701.24e). A declared Commander selected for t
 in the library while its owner chooses Command zone or Hand, then the exact selected incarnation
 moves, the remaining library shuffles once, and the caller resumes at its next instruction
 (CR 903.9b). A selected Battlefield card follows the normal entry-replacement and entry-trigger
-pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m). No other resultless
-`SearchLibrary` shape is admitted.
+pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m). Embermouth Sentinel's
+`triggered_01` is the sole currently authored card use of a conditional-destination search: its
+optional controller `Choose` has one free `Always` branch, whose resultless `SearchLibrary` searches
+the controller's Library for one `BasicLand` with bounds 0..1, reveals the selection, and shuffles;
+the base destination is the top of the library, changing to tapped Battlefield when the controller's
+battlefield contains at least one Dragon of any permanent type. The filter has no Creature
+restriction, so a noncreature Kindred Dragon qualifies (CR 109.2, 205.3m). The compiler accepts the
+exact closed conditional-search shape independently of owner identity; all other resultless
+`SearchLibrary` forms retain the restrictions above.
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.

@@ -196,18 +196,99 @@ fn issue_110_say_its_name_and_altanak_are_complete() {
 
 #[test]
 fn issue_110_conditional_and_owner_choice_cards_are_complete() {
-    let embermouth = card("embermouth_sentinel").primary_face();
-    assert!(
-        matches!(embermouth.triggered_abilities[0].effect.as_slice(), [
-            SpellEffectKind::ChooseResolutionBranch { branches, optional: true, .. }
-        ] if matches!(branches[0].effects.as_slice(), [SpellEffectKind::SearchLibrary {
+    let registry = tricerules_cards::registry::global();
+    let embermouth = card("embermouth_sentinel");
+    let face = embermouth.primary_face();
+    let [ability] = face.triggered_abilities.as_slice() else {
+        panic!("Embermouth Sentinel has one ETB search trigger");
+    };
+    assert!(ability.effect.is_empty());
+    assert!(ability.program.is_some());
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "embermouth_sentinel".to_owned(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![ability.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Embermouth's exact ETB ability owns the program");
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    let [choice_step] = program.body.steps.as_slice() else {
+        panic!("Embermouth has one top-level choice");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choice_step.kind
+    else {
+        panic!("Embermouth's outer may-choice is a structural Choose");
+    };
+    assert_eq!(choice.as_str(), "search");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Embermouth offers one search branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+    assert_eq!(branch.cost, ResolutionCost::None);
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::Always
+    ));
+    let [search_step] = branch.body.steps.as_slice() else {
+        panic!("Embermouth's branch contains one search");
+    };
+    assert!(search_step.outputs.is_empty());
+    let CompiledInstructionKind::Perform(effect) = &search_step.kind else {
+        panic!("Embermouth's branch contains a normal search leaf");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(filter),
+            selection_constraint: None,
+            slots,
+            zones: SearchZoneSelection::Fixed(zones),
             destination: SearchDestination::TopOfLibrary,
-            conditional_destination: Some(_),
+            conditional_destination: Some(conditional),
             shuffle: true,
             reveal: true,
-            ..
-        }]))
-    );
+            result_id: None,
+            selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
+        } if filter == &ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..Default::default()
+            }
+            && zones == &[CardSearchZone::Library]
+            && slots.is_empty()
+            && conditional.destination == (SearchDestination::Battlefield { tapped: true })
+            && matches!(
+                &conditional.condition,
+                tricerules_cards::primitives::GameCondition::BattlefieldAggregate {
+                    filter: tricerules_cards::primitives::BattlefieldPermanentFilter {
+                        controllers: tricerules_cards::primitives::RelativePlayerSet::Controller,
+                        card_type: None,
+                        required_subtypes,
+                        exclude_source: false,
+                        ..
+                    },
+                    aggregate: tricerules_cards::primitives::BattlefieldAggregate::Count,
+                    min: Some(1),
+                    max: None,
+                    exclude_observed_object: false,
+                } if required_subtypes == &["Dragon".to_owned()]
+            )
+    ));
 
     let voyage = card("uncharted_voyage").primary_face();
     assert!(matches!(

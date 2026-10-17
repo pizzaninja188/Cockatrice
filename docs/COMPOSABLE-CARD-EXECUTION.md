@@ -58,6 +58,16 @@ Battlefield entry batch preserves replacement choices and resumes the parked cur
 entry pipeline. A zero-card result still shuffles and fires the search event (CR 701.23b, 701.24e);
 entry choices and a begun ability remain governed by CR 614.12, 616.1, 113.7a and 608.2m. This
 increment adds no card admissions or protocol/client changes.
+The bounded 2026-10-17 Embermouth Sentinel increment exercises a resultless conditional destination
+on its `triggered_01`: an optional controller `Choose` offers one free branch whose Library
+`BasicLand` search reveals the selected card, shuffles, and puts it on top unless the controller has
+a Dragon, when it enters tapped. This is the sole currently authored card use of the accepted
+conditional-search shape; compilation validates the closed operation and Dragon-count condition
+independent of owner identity. The Battlefield aggregate has no Creature filter; a noncreature
+Kindred Dragon qualifies under CR 109.2 and 205.3m. The condition is evaluated after the accepted
+selection and fixes the destination before the existing entry-replacement pipeline, which resumes
+normally (CR 701.23a, 614.12, 616.1, 608.2m). This uses the existing search and entry transactions;
+it adds no core, protocol, client, or other card admission.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

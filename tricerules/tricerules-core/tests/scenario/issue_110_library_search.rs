@@ -284,7 +284,7 @@ fn uncharted_voyage_asks_the_target_owner_then_resumes_with_casters_surveil() {
 
 #[test]
 fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
-    fn resolve(with_dragon: bool) -> (GameEngine, u32) {
+    fn resolve(with_dragon: bool, add_dragon_after_search_offer: bool) -> (GameEngine, u32, u64) {
         let decks = Some(vec![
             deck_with("mountain", &["embermouth_sentinel"]),
             deck_with("island", &[]),
@@ -304,6 +304,12 @@ fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
             inject_creature_on_battlefield(&mut engine, 0, "dirgur_island_dragon_skimming_strike");
         }
         let basic = inject_library_card(&mut engine, 0, "forest");
+        let basic_generation = engine
+            .state
+            .zone_change_generation
+            .get(&basic)
+            .copied()
+            .unwrap_or(0);
         give_mana(
             &mut engine,
             0,
@@ -334,22 +340,141 @@ fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
             .expect("take search branch");
         let choice = find_resolution_choice(&search).expect("basic-land search");
         assert!(choice.candidate_object_ids.contains(&basic));
-        engine
+        if add_dragon_after_search_offer {
+            inject_creature_on_battlefield(&mut engine, 0, "dirgur_island_dragon_skimming_strike");
+        }
+        let completion = engine
             .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
             .expect("choose exact basic");
-        (engine, basic)
+        assert_eq!(
+            completion
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library."))
+                .count(),
+            1,
+            "one accepted search shuffles once"
+        );
+        let reveals = completion
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(reveals.len(), 1, "the selected card is revealed once");
+        assert_eq!(reveals[0].cards.len(), 1);
+        assert_eq!(reveals[0].cards[0].object_id, basic);
+        (engine, basic, basic_generation)
     }
 
-    let (without_dragon, top) = resolve(false);
+    let (without_dragon, top, top_generation) = resolve(false, false);
     assert_eq!(without_dragon.state.objects[&top].zone, Zone::Library);
     assert_eq!(without_dragon.state.players[0].library.front(), Some(&top));
+    assert_eq!(
+        without_dragon
+            .state
+            .zone_change_generation
+            .get(&top)
+            .copied()
+            .unwrap_or(0),
+        top_generation,
+        "the exact selected object remains in the library without a zone-change generation"
+    );
 
-    let (with_dragon, battlefield) = resolve(true);
+    let (with_dragon, battlefield, battlefield_generation) = resolve(true, false);
     assert_eq!(
         with_dragon.state.objects[&battlefield].zone,
         Zone::Battlefield
     );
     assert!(with_dragon.state.objects[&battlefield].tapped);
+    assert_eq!(
+        with_dragon
+            .state
+            .zone_change_generation
+            .get(&battlefield)
+            .copied()
+            .unwrap_or(0),
+        battlefield_generation + 1
+    );
+
+    let (dragon_added_after_offer, battlefield, before_generation) = resolve(false, true);
+    assert_eq!(
+        dragon_added_after_offer.state.objects[&battlefield].zone,
+        Zone::Battlefield,
+        "a Dragon entering after the ETB choice but before the library choice changes the destination"
+    );
+    assert!(dragon_added_after_offer.state.objects[&battlefield].tapped);
+    assert_eq!(
+        dragon_added_after_offer
+            .state
+            .zone_change_generation
+            .get(&battlefield)
+            .copied()
+            .unwrap_or(0),
+        before_generation + 1
+    );
+}
+
+#[test]
+fn embermouth_declining_the_optional_search_does_not_shuffle_or_reveal() {
+    let decks = Some(vec![
+        deck_with("mountain", &["embermouth_sentinel"]),
+        deck_with("island", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11030,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "embermouth_sentinel");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let sentinel = hand_index_for_card(&engine, 0, "embermouth_sentinel");
+    engine
+        .apply_scenario_command(0, &cast_spell(sentinel, vec![]))
+        .expect("cast Sentinel");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let optional = engine
+        .apply_scenario_command(1, &pass())
+        .expect("open optional ETB choice");
+    assert_eq!(
+        find_resolution_choice(&optional)
+            .expect("optional search branch")
+            .choice_kind(),
+        ChoiceKind::ResolutionBranch
+    );
+    let library_before = engine.state.players[0].library.clone();
+    let declined = engine
+        .apply_scenario_command(0, &decline_resolution_choice())
+        .expect("decline the optional search");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].library, library_before);
+    assert!(declined.events.iter().all(|event| {
+        !matches!(&event.ev, Some(Ev::CardsRevealed(_)))
+            && !matches!(
+                &event.ev,
+                Some(Ev::Log(log))
+                    if log.text == "P0 shuffles their library."
+            )
+    }));
 }
 
 #[test]

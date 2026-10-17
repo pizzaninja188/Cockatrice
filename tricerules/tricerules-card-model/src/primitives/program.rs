@@ -610,6 +610,7 @@ impl Compiler {
                         } if !is_resultless_direct_top_library_search(effect)
                             && !is_resultless_direct_hand_library_search(effect)
                             && !is_resultless_direct_battlefield_library_search(effect)
+                            && !is_resultless_embermouth_conditional_top_search(effect)
                     ) || matches!(
                         effect.as_ref(),
                         SpellEffectKind::RevealCohort
@@ -1377,6 +1378,12 @@ fn validate_and_result_types(
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
             destination: SearchDestination::TopOfLibrary,
+            conditional_destination: Some(_),
+            ..
+        } => validate_resultless_embermouth_conditional_top_search(effect, context),
+        SpellEffectKind::SearchLibrary {
+            selection_bounds: Some(_),
+            destination: SearchDestination::TopOfLibrary,
             ..
         } => validate_resultless_direct_top_library_search(effect, context),
         SpellEffectKind::SearchLibrary {
@@ -1802,6 +1809,89 @@ fn validate_resultless_direct_search(
     }
     ordinary.validate(context)?;
     Ok(Vec::new())
+}
+
+/// Keep Embermouth Sentinel's conditional destination as a closed, resultless program leaf.
+/// The shared BattlefieldAggregate condition must remain the exact live "controller controls a
+/// Dragon" predicate; in particular, do not narrow it to creatures, which would omit Kindreds.
+fn validate_resultless_embermouth_conditional_top_search(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
+    if !is_resultless_embermouth_conditional_top_search(effect) {
+        return Err(
+            "program conditional TopOfLibrary SearchLibrary supports only Embermouth's resultless controller BasicLand search with the exact live Controller Dragon-count to tapped Battlefield destination, fixed count 1, bounds 0..1, reveal and shuffle"
+                .into(),
+        );
+    }
+
+    // Only Program-owned bounds are normalized away; all ordinary SearchLibrary validation
+    // remains authoritative for this otherwise standard search.
+    validate_resultless_direct_search(effect, context)
+}
+
+fn is_resultless_embermouth_conditional_top_search(effect: &SpellEffectKind) -> bool {
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds,
+    } = effect
+    else {
+        return false;
+    };
+    let basic_land = filter.as_ref().is_some_and(|filter| {
+        filter
+            == &ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            }
+    });
+    let condition = super::GameCondition::BattlefieldAggregate {
+        filter: super::BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
+            token: None,
+            any_of: None,
+            controllers: super::RelativePlayerSet::Controller,
+            card_type: None,
+            color: None,
+            name: None,
+            required_subtypes: vec!["Dragon".into()],
+            exclude_source: false,
+        },
+        aggregate: super::BattlefieldAggregate::Count,
+        min: Some(1),
+        max: None,
+        exclude_observed_object: false,
+    };
+    let exact_conditional_destination = conditional_destination.as_ref().is_some_and(|actual| {
+        actual.condition == condition
+            && actual.destination == (SearchDestination::Battlefield { tapped: true })
+    });
+    *who == PlayerRecipient::Controller
+        && !*optional
+        && *count == 1
+        && count_by_cast_cost.is_none()
+        && basic_land
+        && selection_constraint.is_none()
+        && slots.is_empty()
+        && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+        && *destination == SearchDestination::TopOfLibrary
+        && exact_conditional_destination
+        && *shuffle
+        && *reveal
+        && result_id.is_none()
+        && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
 }
 
 fn validate_program_recipient(

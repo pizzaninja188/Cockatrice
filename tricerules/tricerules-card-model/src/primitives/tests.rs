@@ -4718,6 +4718,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             .to_string();
         assert!(
             error.contains("program direct TopOfLibrary SearchLibrary")
+                || error.contains("program conditional TopOfLibrary SearchLibrary supports only")
                 || error.contains("program direct Battlefield SearchLibrary supports only")
                 || error.contains("retained SearchLibrary supports only"),
             "{label}: unexpected diagnostic: {error}"
@@ -4745,6 +4746,190 @@ fn resultless_direct_battlefield_search_program() -> String {
                     ], yields: []))], otherwise: (steps: [], yields: [])))
         ], yields: [])"#,
     )
+}
+
+fn resultless_conditional_top_search_program() -> String {
+    program_fixture(
+        r#"(steps: [
+            (id: "search_choice", bind: [], input: None, kind: Choose(
+                choice: "search", chooser: Controller, optional: true,
+                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                    cost: None, requirement: Always, body: (steps: [
+                        (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
+                            who: Controller, optional: false, count: 1,
+                            count_by_cast_cost: None,
+                            filter: Some((card_type: Some(BasicLand))),
+                            selection_constraint: None, slots: [],
+                            zones: Fixed([Library]), destination: TopOfLibrary,
+                            conditional_destination: Some((condition: BattlefieldAggregate(
+                                filter: (controllers: Controller, card_type: None,
+                                    required_subtypes: ["Dragon"], exclude_source: false),
+                                aggregate: Count, min: Some(1), max: None,
+                                exclude_observed_object: false,
+                            ), destination: Battlefield(tapped: true))),
+                            shuffle: true, reveal: true, result_id: None,
+                            selection_bounds: Some((min: 0, max: 1)),
+                        )))
+                    ], yields: []))], otherwise: (steps: [], yields: [])))
+        ], yields: [])"#,
+    )
+}
+
+#[test]
+fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
+    let definition = resultless_conditional_top_search_program();
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the exact resultless Embermouth conditional search shape compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the fixture face owns its compiled Choose program");
+    let [choice] = program.body.steps.as_slice() else {
+        panic!("expected one outer optional Choose instruction");
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choice.kind
+    else {
+        panic!("the outer optionality remains structural Choose control flow");
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    assert!(choice.outputs.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("expected one no-cost search branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+    assert_eq!(branch.cost, crate::primitives::ResolutionCost::None);
+    let [search] = branch.body.steps.as_slice() else {
+        panic!("expected one conditional search operation");
+    };
+    assert!(search.outputs.is_empty(), "the search stays resultless");
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &search.kind else {
+        panic!("the selected branch contains a normal SearchLibrary leaf");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        crate::primitives::SpellEffectKind::SearchLibrary {
+            who: crate::primitives::PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(filter),
+            selection_constraint: None,
+            slots,
+            zones: crate::primitives::SearchZoneSelection::Fixed(zones),
+            destination: crate::primitives::SearchDestination::TopOfLibrary,
+            conditional_destination: Some(conditional),
+            shuffle: true,
+            reveal: true,
+            result_id: None,
+            selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
+        } if filter == &crate::primitives::ZoneCardFilter {
+                card_type: Some(crate::primitives::CardTypeFilter::BasicLand),
+                ..Default::default()
+            }
+            && zones == &[crate::primitives::CardSearchZone::Library]
+            && slots.is_empty()
+            && filter.validate().is_ok()
+            && conditional.condition == crate::primitives::GameCondition::BattlefieldAggregate {
+                filter: crate::primitives::BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
+                    token: None,
+                    any_of: None,
+                    controllers: crate::primitives::RelativePlayerSet::Controller,
+                    card_type: None,
+                    color: None,
+                    name: None,
+                    required_subtypes: vec!["Dragon".into()],
+                    exclude_source: false,
+                },
+                aggregate: crate::primitives::BattlefieldAggregate::Count,
+                min: Some(1),
+                max: None,
+                exclude_observed_object: false,
+            }
+            && conditional.destination == crate::primitives::SearchDestination::Battlefield { tapped: true }
+    ));
+    assert!(program.slots.is_empty());
+
+    for (label, malformed) in [
+        (
+            "the optionality belongs to Choose",
+            definition.replace("optional: false", "optional: true"),
+        ),
+        (
+            "the count is fixed at one",
+            definition.replace("count: 1,", "count: 2,"),
+        ),
+        (
+            "the filter is exactly BasicLand",
+            definition.replace("card_type: Some(BasicLand)", "card_type: Some(Land)"),
+        ),
+        (
+            "the base destination is TopOfLibrary",
+            definition.replace("destination: TopOfLibrary", "destination: Hand"),
+        ),
+        (
+            "the conditional destination is tapped Battlefield",
+            definition.replace("Battlefield(tapped: true)", "Battlefield(tapped: false)"),
+        ),
+        (
+            "the predicate has no creature-only card type",
+            definition.replace("card_type: None", "card_type: Some(Creature)"),
+        ),
+        (
+            "the predicate names only Dragon",
+            definition.replace("[\"Dragon\"]", "[\"Dragon\", \"Lizard\"]"),
+        ),
+        (
+            "the predicate is a count",
+            definition.replace("aggregate: Count", "aggregate: DistinctNames"),
+        ),
+        (
+            "the predicate has only a lower bound of one",
+            definition.replace("min: Some(1)", "min: Some(2)"),
+        ),
+        (
+            "the observed object is not excluded",
+            definition.replace(
+                "exclude_observed_object: false",
+                "exclude_observed_object: true",
+            ),
+        ),
+        (
+            "the search does not reveal",
+            definition.replace("reveal: true", "reveal: false"),
+        ),
+        (
+            "the search shuffles",
+            definition.replace("shuffle: true", "shuffle: false"),
+        ),
+        (
+            "the leaf remains resultless",
+            definition.replace("result_id: None", "result_id: Some(\"found\")"),
+        ),
+        (
+            "the bounds are 0..1",
+            definition.replace("min: 0, max: 1", "min: 1, max: 1"),
+        ),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[])
+            .expect_err("the conditional search admission must remain closed")
+            .to_string();
+        assert!(
+            error.contains("conditional") || error.contains("SearchLibrary"),
+            "{label}: unexpected diagnostic: {error}"
+        );
+    }
 }
 
 #[test]
