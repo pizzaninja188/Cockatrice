@@ -440,7 +440,10 @@ impl GameEngine {
         payer: PlayerId,
         cost: &ResolutionCost,
     ) -> bool {
-        if !matches!(cost, ResolutionCost::PutHandCardOnLibraryBottom) {
+        if !matches!(
+            cost,
+            ResolutionCost::PutHandCardOnLibraryBottom | ResolutionCost::Blight { .. }
+        ) {
             return true;
         }
         !self
@@ -451,6 +454,31 @@ impl GameEngine {
                 cost,
             )
             .is_empty()
+    }
+
+    fn program_choose_blight_cost_choice_event(
+        &self,
+        pending: &PendingResolution,
+        count: u32,
+        candidates: &[ObjectId],
+    ) -> rv1::RuledEvent {
+        let prompt = format!("Blight {count}: choose one creature you control.");
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: prompt,
+                    choice_kind: rv1::ChoiceKind::CostObjects as i32,
+                    candidate_object_ids: candidates.to_vec(),
+                    candidate_names: self.object_names(candidates),
+                    min: 1,
+                    max: 1,
+                    ..Default::default()
+                },
+            )),
+        }
     }
 
     fn hand_bottom_candidate_generations(&self, candidates: &[ObjectId]) -> Vec<(ObjectId, u64)> {
@@ -602,6 +630,232 @@ impl GameEngine {
             pending.deciding_player,
             destination,
         ));
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
+    }
+
+    pub(super) fn finish_program_choose_blight_object(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, choose, selected_branch, branch_id, count, candidate_generations) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
+                    PendingProgramChooseStage::PayingBlight {
+                        selected_branch,
+                        branch_id,
+                        count,
+                        candidate_generations,
+                    } => (
+                        stack.clone(),
+                        choose.clone(),
+                        *selected_branch,
+                        branch_id.clone(),
+                        *count,
+                        candidate_generations.clone(),
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "program Choose is not awaiting a Blight payment",
+                        ));
+                    }
+                },
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "program Choose Blight continuation missing",
+                    ));
+                }
+            };
+        if pending.deciding_player != choose.original_chooser {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "program Choose Blight payment cannot be delegated",
+            ));
+        }
+        if chosen.len() != 1 {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Blight payment requires one creature"));
+        }
+        let object_id = chosen[0];
+        let Some(zone_change_generation) = candidate_generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation))
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Blight payment choice is stale"));
+        };
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let cost = ResolutionCost::Blight { count };
+        let candidates = self.resolution_cost_candidates(
+            choose.original_chooser,
+            stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            stack.item.source_zone_change,
+            &cost,
+        );
+        if current_generation != zone_change_generation || !candidates.contains(&object_id) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Blight payment choice became stale"));
+        }
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        ) {
+            Ok(branch) if branch.branch_id == branch_id && branch.cost == cost => branch,
+            Ok(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose branch became stale"));
+            }
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let _ = branch;
+        let source = rv1::CostObjectRef {
+            object_id: stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            zone_change_generation: stack.item.source_zone_change,
+        };
+        let selected = rv1::CostObjectRef {
+            object_id,
+            zone_change_generation,
+        };
+        let result = (|| {
+            let plan = self.plan_resolution_object_costs(
+                choose.original_chooser,
+                source,
+                &cost,
+                &[selected],
+            )?;
+            let plan = self.prepare_cost_transaction_commit(plan)?;
+            let counter_costs = plan.counter_placement_costs();
+            if counter_costs.len() != 1
+                || counter_costs[0].object_id != object_id
+                || counter_costs[0].generation != zone_change_generation
+                || counter_costs[0].kind != tricerules_card_model::CounterKind::MinusOneMinusOne
+                || counter_costs[0].count != count
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "Blight payment plan did not retain its exact selected counter debit",
+                ));
+            }
+            let mut placements = Vec::with_capacity(counter_costs.len());
+            for debit in counter_costs {
+                let mut placement = self
+                    .proposed_object_counter_placement(
+                        choose.original_chooser,
+                        debit.object_id,
+                        [(debit.kind, debit.count)],
+                        super::super::continuous::CounterPlacementOrigin::Cost,
+                    )
+                    .ok_or(EngineError::Illegal("Blight cost recipient became stale"))?;
+                placement.cost_debit_index = Some(debit.debit_index);
+                placements.push(placement);
+            }
+            let (batch, candidates) = self.prepare_counter_placement_batch(placements)?;
+            if let Some(candidates) = candidates {
+                let completion = crate::state::CounterPlacementCompletion::ProgramChooseBlight {
+                    choose: choose.clone(),
+                    object_id,
+                    zone_change_generation,
+                };
+                let mut events = Vec::new();
+                self.park_counter_placement_choice(
+                    batch,
+                    candidates,
+                    Some(stack.clone()),
+                    completion,
+                    &mut events,
+                );
+                return Ok(finish_with_events(self, events));
+            }
+            self.finish_program_choose_blight_payment(
+                stack.clone(),
+                choose.clone(),
+                object_id,
+                zone_change_generation,
+                batch.events,
+            )
+        })();
+        if result.is_err() {
+            self.state.pending_resolution = Some(pending);
+        }
+        result
+    }
+
+    pub(in crate::engine) fn finish_program_choose_blight_payment(
+        &mut self,
+        mut stack: ParkedStackResolution,
+        choose: PendingProgramChoose,
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        placements: Vec<super::super::replacement::ProposedCounterPlacement>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (selected_branch, branch_id, count) = match &choose.stage {
+            PendingProgramChooseStage::PayingBlight {
+                selected_branch,
+                branch_id,
+                count,
+                ..
+            } => (*selected_branch, branch_id.clone(), *count),
+            _ => {
+                return Err(EngineError::ProgramInvariant(
+                    "counter replacement lost the pending Choose Blight occurrence",
+                ));
+            }
+        };
+        let cost = ResolutionCost::Blight { count };
+        let branch = self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        )?;
+        if branch.branch_id != branch_id || branch.cost != cost {
+            return Err(EngineError::Illegal("program Choose branch became stale"));
+        }
+        if self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0)
+            != zone_change_generation
+            || !self.can_blight_creature(choose.original_chooser, object_id)
+        {
+            return Err(EngineError::Illegal("Blight payment choice became stale"));
+        }
+        let source = rv1::CostObjectRef {
+            object_id: stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            zone_change_generation: stack.item.source_zone_change,
+        };
+        let selected = rv1::CostObjectRef {
+            object_id,
+            zone_change_generation,
+        };
+        // The serialized replacement continuation never stores the engine-local transaction
+        // plan. Rebuild and validate it after replacement order has completed.
+        let plan =
+            self.plan_resolution_object_costs(choose.original_chooser, source, &cost, &[selected])?;
+        let payment = self.commit_cost_transaction_with_counter_placements(plan, placements)?;
+        let mut events = payment.move_events;
+        self.fire_resolution_cost_triggers(payment.trigger_events, payment.sacrificed, &mut events);
+        let name = self.replacement_object_display_name(object_id, None);
+        events.push(ev_log(format!(
+            "P{} blights {count} using {name}.",
+            choose.original_chooser
+        )));
+        stack.item.blight_receipts.extend(payment.blight_receipts);
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
         let previous_result = stack.previous_result.clone();
         self.complete_parked_stack_with_previous(stack, previous_result, events)
@@ -1011,6 +1265,57 @@ impl GameEngine {
                     candidate_generations,
                 };
                 let event = self.hand_bottom_cost_choice_event(&pending, &candidates);
+                self.state.pending_resolution = Some(pending);
+                events.push(event);
+                Ok(finish_with_events(self, events))
+            }
+            ResolutionCost::Blight { count } => {
+                let payer = choose_state.original_chooser;
+                let candidates = self.resolution_cost_candidates(
+                    payer,
+                    stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    stack.item.source_zone_change,
+                    &ResolutionCost::Blight { count },
+                );
+                if candidates.is_empty() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "that program Choose branch no longer has a creature to blight",
+                    ));
+                }
+                pending.deciding_player = payer;
+                pending.presentation.choice_kind = rv1::ChoiceKind::CostObjects;
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    format!("Blight {count}: choose one creature you control.");
+                let candidate_generations = candidates
+                    .iter()
+                    .map(|object_id| {
+                        (
+                            *object_id,
+                            self.state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect();
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated program Choose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::PayingBlight {
+                    selected_branch: branch_index,
+                    branch_id: branch.branch_id,
+                    count,
+                    candidate_generations,
+                };
+                let event =
+                    self.program_choose_blight_cost_choice_event(&pending, count, &candidates);
                 self.state.pending_resolution = Some(pending);
                 events.push(event);
                 Ok(finish_with_events(self, events))
@@ -1565,7 +1870,7 @@ impl GameEngine {
         pending: PendingResolution,
         log: String,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (mut stack, choose) = match &pending.continuation {
+        let (stack, choose) = match &pending.continuation {
             ResolutionContinuation::ProgramChoose { stack, choose } => {
                 (stack.clone(), choose.clone())
             }
@@ -1576,6 +1881,15 @@ impl GameEngine {
                 ));
             }
         };
+        self.complete_program_choose_otherwise_from_parts(stack, choose, log)
+    }
+
+    pub(in crate::engine) fn complete_program_choose_otherwise_from_parts(
+        &mut self,
+        mut stack: ParkedStackResolution,
+        choose: PendingProgramChoose,
+        log: String,
+    ) -> Result<RuledEventBatch, EngineError> {
         self.enter_program_choose_body(&mut stack, &choose.occurrence, None)?;
         let previous_result = stack.previous_result.clone();
         self.complete_parked_stack_with_previous(stack, previous_result, vec![ev_log(log)])
@@ -1592,6 +1906,56 @@ impl GameEngine {
         let Some(mut pending) = self.state.pending_resolution.take() else {
             return Ok(());
         };
+        if let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion:
+                crate::state::CounterPlacementCompletion::ProgramChooseBlight {
+                    choose,
+                    object_id,
+                    zone_change_generation,
+                },
+        } = &pending.continuation
+        {
+            let stack = stack.clone();
+            let choose = choose.clone();
+            let payer_live = self
+                .state
+                .player_idx(choose.original_chooser)
+                .is_some_and(|index| !self.state.players[index].has_lost);
+            let replacement_chooser_live = self
+                .state
+                .player_idx(pending.deciding_player)
+                .is_some_and(|index| !self.state.players[index].has_lost);
+            let selected_creature_current = self
+                .state
+                .zone_change_generation
+                .get(object_id)
+                .copied()
+                .unwrap_or(0)
+                == *zone_change_generation
+                && self.can_blight_creature(choose.original_chooser, *object_id);
+            if payer_live && replacement_chooser_live && selected_creature_current {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+            if matches!(
+                self.state.pending_replacement_event,
+                Some(super::super::replacement::PendingReplacementEvent::Counters(_))
+            ) {
+                self.state.pending_replacement_event = None;
+            }
+            let log = if !payer_live {
+                "The departed payer cannot complete the program Choose Blight payment; Otherwise resolves."
+            } else if !selected_creature_current {
+                "The selected creature cannot receive the program Choose Blight payment; Otherwise resolves."
+            } else {
+                "The replacement chooser departed before the program Choose Blight payment; Otherwise resolves."
+            };
+            let completed =
+                self.complete_program_choose_otherwise_from_parts(stack, choose, log.into())?;
+            events.extend(completed.events);
+            return Ok(());
+        }
         let (stack, choose) = match &pending.continuation {
             ResolutionContinuation::ProgramChoose { stack, choose } => {
                 (stack.clone(), choose.clone())
@@ -1622,8 +1986,86 @@ impl GameEngine {
             choose.stage,
             PendingProgramChooseStage::PayingMana { .. }
                 | PendingProgramChooseStage::PayingHandCard { .. }
+                | PendingProgramChooseStage::PayingBlight { .. }
                 | PendingProgramChooseStage::ChoosingCommanderDestination { .. }
         );
+
+        if let PendingProgramChooseStage::PayingBlight {
+            selected_branch,
+            branch_id,
+            count,
+            candidate_generations: previous_candidates,
+        } = &choose.stage
+        {
+            if !original_chooser_live || !current_chooser_live {
+                let completed = self.complete_program_choose_otherwise(
+                    pending,
+                    "The departed payer cannot complete the program Choose Blight payment; Otherwise resolves."
+                        .into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+            if pending.deciding_player != choose.original_chooser {
+                let completed = self.complete_program_choose_otherwise(
+                    pending,
+                    "The program Choose Blight payment cannot be delegated; Otherwise resolves."
+                        .into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+            let candidates = self.resolution_cost_candidates(
+                choose.original_chooser,
+                stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                stack.item.source_zone_change,
+                &ResolutionCost::Blight { count: *count },
+            );
+            if candidates.is_empty() {
+                let completed = self.complete_program_choose_otherwise(
+                    pending,
+                    "No creature remains to pay the program Choose Blight cost; Otherwise resolves."
+                        .into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+            let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
+            let candidates_changed = candidate_generations != *previous_candidates;
+            let prompt_was_reset = pending.resolution_prompt_id.get() == 0;
+            if candidates_changed {
+                pending.presentation.candidates = candidates.clone();
+                pending.resolution_prompt_semantics = None;
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated ProgramChoose continuation")
+                };
+                let PendingProgramChooseStage::PayingBlight {
+                    candidate_generations: saved,
+                    ..
+                } = &mut choose.stage
+                else {
+                    unreachable!("validated Blight payment stage")
+                };
+                *saved = candidate_generations;
+            }
+            self.state.pending_resolution = Some(pending);
+            if candidates_changed || prompt_was_reset {
+                let pending = self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("refreshed program Blight payment remains parked");
+                events.push(self.program_choose_blight_cost_choice_event(
+                    pending,
+                    *count,
+                    &candidates,
+                ));
+            }
+            let _ = (selected_branch, branch_id);
+            return Ok(());
+        }
 
         if payment_prompt && original_chooser_live && current_chooser_live {
             self.state.pending_resolution = Some(pending);

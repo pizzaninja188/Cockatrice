@@ -6,9 +6,24 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [ChooseResolutionBranch(optional: true, branches: [(
-      branch_id: "blight_1", presentation: Fallback, cost: Blight(count: 1),
-      effects: [Discard(who: EachOpponent, quantity: Exact(1))],
-    )])],
+    program: Some((body: (steps: [
+      (id: "choose_blight", kind: Choose(
+        choice: "blight_1",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "blight_1",
+          presentation: Fallback,
+          cost: Blight(count: 1),
+          requirement: Always,
+          body: (steps: [
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+              who: EachOpponent, quantity: Exact(1),
+            ))),
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

@@ -1346,6 +1346,12 @@ pub(crate) enum PendingProgramChooseStage {
         branch_id: ChoiceId,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
+    PayingBlight {
+        selected_branch: usize,
+        branch_id: ChoiceId,
+        count: u32,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     ChoosingCommanderDestination {
         selected_branch: usize,
         branch_id: ChoiceId,
@@ -2033,6 +2039,14 @@ pub(crate) enum CounterPlacementCompletion {
         count: u32,
         creature: TriggerObjectRef,
         spell_label: String,
+    },
+    /// A typed Choose Blight cost stays uncommitted across replacement order. The enclosing
+    /// CounterReplacement continuation owns the exact parked stack; this payload owns the
+    /// occurrence, original chooser/branch cursor, and selected generation-bound creature.
+    ProgramChooseBlight {
+        choose: PendingProgramChoose,
+        object_id: ObjectId,
+        zone_change_generation: u64,
     },
     Explore {
         controller: PlayerId,

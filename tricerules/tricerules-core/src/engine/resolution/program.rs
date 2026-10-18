@@ -1140,6 +1140,10 @@ impl GameEngine {
                                 rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
                                 "Put a card on the bottom of your library".to_string(),
                             ),
+                            ResolutionCost::Blight { count } => (
+                                rv1::ResolutionBranchCostKind::Blight,
+                                format!("Blight {count}"),
+                            ),
                             _ => return None,
                         };
                         let label = branch.fallback_label();
@@ -1171,6 +1175,7 @@ impl GameEngine {
             }
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
             crate::state::PendingProgramChooseStage::PayingHandCard { .. }
+            | crate::state::PendingProgramChooseStage::PayingBlight { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
                 return None
             }

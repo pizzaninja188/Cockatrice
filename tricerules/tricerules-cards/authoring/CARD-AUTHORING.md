@@ -180,9 +180,13 @@ The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks;
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
 is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
 either all free or all paid; supported costs are `None`, fixed
-nonempty `Mana` without X, fixed nonempty `Waterbend` without X, and the fixed one-card
-`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch. That hand-bottom cost is
-not admitted for ability programs or other chooser shapes. `Always`, supported
+nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
+`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, and a
+fixed positive-count `Blight` on a `Controller`-chosen ability branch. The payment selects one
+creature that
+player controls and that can receive the counters; Blight is not admitted on spell programs or
+with other chooser shapes. The hand-bottom cost is not admitted for ability programs. `Always`,
+supported
 controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
 are admitted; flat-list applicability and card-result requirements are rejected. Branch and
 Otherwise bodies use the same recursive finite-program subset, and a binding may join only
@@ -197,11 +201,24 @@ plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
-not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
+not have that trigger input. Ability programs also admit `Discard(EachOpponent, Exact(1))`; each
+opponent may contribute up to one card to the combined `DiscardResult`, whose aggregate upper
+bound is not fixed. Permanent choosers must be `Controller`; draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
 Ability-program `Choose` may also use `SourceController`. The chooser is captured from the exact
 current source incarnation, or its last-known controller after it leaves, when the offer is made;
-that captured player remains the original chooser through delegation or a pending branch payment.
+that captured player remains the original chooser throughout the occurrence. A paid branch keeps
+that original chooser as its payer through payment and any counter-replacement prompts; payment
+cannot be transferred to a delegate. If the payer leaves, `Otherwise` can run only when another
+player's owning resolution survives. In the admitted `Controller`-chosen Blight shape, the payer
+also controls the triggered stack object: departure removes it under CR 800.4a, without entering
+either the paid body or `Otherwise`. A cost-payment choice is never delegated (CR 800.4f).
+For an ability `Choose` Blight payment,
+counter replacements finish before the cost transaction commits. CR 614.16 governs when an
+earlier replacement makes an effect-created-counter replacement apply; the affected permanent's
+controller chooses applicable replacements one at a time, repeating the check after each (CR
+616.1e-f). The selected body and the remainder of the resolving program finish before
+state-based actions are checked (CR 704.4).
 The ordinary `CreateTokens(..., who: SourceController)` leaf instead chooses its recipient when the
 effect resolves, so a later source control change can make that recipient differ from the earlier
 chooser. `EffectsApplicable` is admitted only on an ability `Choose` branch whose complete body is
@@ -209,17 +226,17 @@ one resultless, fixed positive `PutCounters(PlusOnePlusOne, Source)` operation. 
 whether that exact source incarnation can receive the counters both when the menu is offered and
 when a branch answer is validated. A mandatory choice with exactly one live cost-free branch enters
 it automatically and logs the selection; optional choices and paid branches still receive prompts.
-If the original chooser leaves during a paid-branch payment, the branch is not transferred and the
-`Otherwise` block resolves. For `PutHandCardOnLibraryBottom`, the chooser privately
+For `PutHandCardOnLibraryBottom`, the chooser privately
 selects one current hand card; if it is a declared Commander, its owner chooses Command zone or Library.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
 recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test
 runs when the instruction resolves, after preceding steps, so Dawnhand Eulogist checks its graveyard
 after milling and HYDRA Troopers checks before either its token creation or fallback mill (CR
-608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless only for a fixed amount applied to
-`EachOpponent`; it cannot bind or yield a result. Dawnhand uses this form, which shares the same
-fixed each-opponent loss shape as Acolyte of Aclazotz and Arbiter of Woe.
+608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`,
+or for a fixed amount applied to `Controller` on an ability program; neither form can bind or yield
+a result. Dawnhand uses the EachOpponent form, which it shares with Acolyte of Aclazotz and Arbiter
+of Woe.
 `If` may also inspect the current battlefield with `BattlefieldAggregate(Count)`, inclusive count
 bounds, and a validated `BattlefieldPermanentFilter`. This family requires
 `exclude_observed_object: false` and `Controller` at the root filter and every recursively nested
@@ -299,7 +316,7 @@ previous-effect subjects, modal or targetful child bodies, `may`, `once`, and ma
 do not generalize it to arbitrary effect-created or activated abilities. Koya's exact trigger,
 target filters, and target bounds remain in its card definition and ordinary targeting validation.
 
-`Blight` is resultless in a program. It may suspend for its normal controller creature choice and
+`Blight` as a `Perform` leaf is resultless in a program. It may suspend for its normal controller creature choice and
 for applicable counter-replacement choices, but it cannot bind or yield an output. Once those
 choices finish, execution continues at the next instruction in the same program block. If the
 controller has no creature, it records Blight without a creature prompt and continues immediately.

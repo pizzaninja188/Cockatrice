@@ -1935,6 +1935,10 @@ impl GameEngine {
                 )
                 | (
                     CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::ProgramChooseBlight { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::CounterMove { .. },
                 ) => {}
                 (CounterPlacementRecipient::EnteringObject { .. }, _) => {
@@ -1973,6 +1977,7 @@ impl GameEngine {
                     crate::state::CounterPlacementCompletion::StackEffect { .. }
                     | crate::state::CounterPlacementCompletion::Amass { .. }
                     | crate::state::CounterPlacementCompletion::ActivationCost { .. }
+                    | crate::state::CounterPlacementCompletion::ProgramChooseBlight { .. }
                     | crate::state::CounterPlacementCompletion::SagaLore { .. }
                     | crate::state::CounterPlacementCompletion::BlightEffect { .. }
                     | crate::state::CounterPlacementCompletion::Explore { .. }
@@ -2495,6 +2500,71 @@ impl GameEngine {
                     receipts,
                     &mut events,
                 ),
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                    self.state.pending_resolution = Some(pending);
+                    Err(error)
+                }
+            };
+        }
+        if let crate::state::CounterPlacementCompletion::ProgramChooseBlight {
+            choose,
+            object_id,
+            zone_change_generation,
+        } = &completion
+        {
+            let Some(stack) = stack else {
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "program Choose Blight payment lost its parked stack",
+                ));
+            };
+            if !matches!(
+                &choose.stage,
+                crate::state::PendingProgramChooseStage::PayingBlight { .. }
+            ) {
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "counter replacement lost the pending Choose Blight occurrence",
+                ));
+            }
+            let payer_live = self
+                .state
+                .player_idx(choose.original_chooser)
+                .is_some_and(|index| !self.state.players[index].has_lost);
+            let selected_creature_current = self
+                .state
+                .zone_change_generation
+                .get(object_id)
+                .copied()
+                .unwrap_or(0)
+                == *zone_change_generation
+                && self.can_blight_creature(choose.original_chooser, *object_id);
+            if !payer_live || !selected_creature_current {
+                let log = if !payer_live {
+                    "The departed payer cannot complete the program Choose Blight payment; Otherwise resolves."
+                } else {
+                    "The selected creature cannot receive the program Choose Blight payment; Otherwise resolves."
+                };
+                return self.complete_program_choose_otherwise_from_parts(
+                    stack,
+                    choose.clone(),
+                    log.into(),
+                );
+            }
+            return match self.finish_program_choose_blight_payment(
+                stack,
+                choose.clone(),
+                *object_id,
+                *zone_change_generation,
+                batch.events.clone(),
+            ) {
+                Ok(result) => Ok(result),
                 Err(error) => {
                     self.state.pending_replacement_event =
                         Some(PendingReplacementEvent::Counters(Box::new(batch)));

@@ -21,6 +21,153 @@ fn choose_branch(index: u32) -> RuledCommand {
 }
 
 #[test]
+fn issue_153_blight_owners_compile_their_exact_trigger_programs() {
+    use tricerules_card_model::primitives::{
+        CompiledInstructionKind, PlayerRecipient, ResolutionCost, SpellEffectKind,
+    };
+
+    let registry = tricerules_cards::registry::global();
+    for (card_id, ability_id, count) in [
+        ("blighted_blackthorn", "triggered_01", 2),
+        ("blighted_blackthorn", "triggered_02", 2),
+        ("dream_seizer", "triggered_01", 1),
+    ] {
+        let owner = tricerules_card_model::ProgramOwnerId::ability(
+            tricerules_card_model::AbilityDefinitionId {
+                card_id: card_id.into(),
+                face_id: tricerules_card_model::CardFaceId::new(card_id).unwrap(),
+                ability_path: vec![tricerules_card_model::AbilityId::new(ability_id).unwrap()],
+            },
+        );
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .unwrap_or_else(|| panic!("{card_id}/{ability_id} must own its typed trigger program"));
+        let [choose] = program.body.steps.as_slice() else {
+            panic!("{card_id}/{ability_id} has one root Choose instruction")
+        };
+        let CompiledInstructionKind::Choose {
+            chooser,
+            optional,
+            branches,
+            otherwise,
+            ..
+        } = &choose.kind
+        else {
+            panic!("{card_id}/{ability_id} retains the optional Choose presentation")
+        };
+        assert_eq!(*chooser, PlayerRecipient::Controller);
+        assert!(*optional);
+        assert!(otherwise.steps.is_empty());
+        let [branch] = branches.as_slice() else {
+            panic!("{card_id}/{ability_id} has exactly one Blight branch")
+        };
+        assert_eq!(branch.cost, ResolutionCost::Blight { count });
+        match card_id {
+            "blighted_blackthorn" => {
+                let [draw, lose_life] = branch.body.steps.as_slice() else {
+                    panic!("Blackthorn draws once, then its controller loses life")
+                };
+                assert!(matches!(
+                    &draw.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                            who: PlayerRecipient::Controller,
+                            count: tricerules_card_model::primitives::Amount::Fixed(1),
+                        })
+                ));
+                assert!(matches!(
+                    &lose_life.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
+                            who: PlayerRecipient::Controller,
+                            amount: tricerules_card_model::primitives::LifeAmount::Fixed(1),
+                        })
+                ));
+            }
+            "dream_seizer" => {
+                let [discard] = branch.body.steps.as_slice() else {
+                    panic!("Dream Seizer discards once per opponent")
+                };
+                assert!(matches!(
+                    &discard.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                            who: PlayerRecipient::EachOpponent,
+                            quantity: tricerules_card_model::primitives::DiscardQuantity::Exact(1),
+                        })
+                ));
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn issue_153_blackthorn_etb_trigger_on_stack(seed: u64, player_ids: &[i32]) -> (GameEngine, u32) {
+    let mut decks = vec![
+        deck_with("swamp", &["blighted_blackthorn"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ];
+    if player_ids.len() == 3 {
+        decks.push(deck_with("island", &["hill_giant"]));
+    }
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        player_ids,
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("Blackthorn fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "blighted_blackthorn");
+    engine.state.players[0].mana_pool.black = 1;
+    engine.state.players[0].mana_pool.colorless = 4;
+    let slot = hand_index_for_card(&engine, 0, "blighted_blackthorn");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .expect("cast Blighted Blackthorn");
+    pass_priority_round(&mut engine);
+    let blackthorn = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "blighted_blackthorn" && object.zone == Zone::Battlefield)
+        .expect("Blackthorn enters and puts its ETB trigger on the stack")
+        .id;
+    assert!(engine.state.stack.last().is_some_and(|item| {
+        item.source_permanent_id == Some(blackthorn)
+            && item.ability_text.is_some()
+            && item.controller == 0
+    }));
+    (engine, blackthorn)
+}
+
+fn issue_153_three_player_blackthorn_choose_for_p1(seed: u64) -> (GameEngine, u32, u32) {
+    let (mut engine, blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(seed, &[0, 1, 2]);
+    let target = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 12, 12);
+    engine
+        .state
+        .stack
+        .last_mut()
+        .expect("Blackthorn trigger remains on the stack")
+        .controller = 1;
+    pass_priority_round(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Blackthorn's optional Choose is offered to the captured trigger controller");
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    assert!(engine.state.objects[&blackthorn].zone == Zone::Battlefield);
+    (engine, blackthorn, target)
+}
+
+#[test]
 fn issue_153_chaos_spewer_declining_without_a_creature_completes_blight() {
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
@@ -383,6 +530,130 @@ fn program_blight_completion_resumes_following_tail_once() {
         engine.state.turn_history.current.player(0).cards_drawn,
         draws_before + 1,
         "the Draw after the resultless Blight runs exactly once"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn program_choose_blight_completion_resumes_branch_and_parent_tails_once() {
+    const PROGRAM: &str = r#"(
+        id: "program_choose_blight_tail_fixture",
+        name: "Program Choose Blight Tail Fixture",
+        face_id: "program_choose_blight_tail_fixture",
+        mana_cost: "{0}",
+        types: ["Creature"],
+        power: 2,
+        toughness: 2,
+        activated_abilities: [(
+            ability_id: "activated_01",
+            presentation: Fallback,
+            source_zone: Battlefield,
+            costs: [],
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "paid_blight", kind: Choose(
+                    choice: "paid_blight", chooser: Controller, optional: true,
+                    branches: [(
+                        branch_id: "blight_2", presentation: Fallback,
+                        cost: Blight(count: 2), requirement: Always,
+                        body: (steps: [
+                            (id: "branch_draw", bind: ["branch_draw"], kind: Perform(Draw(
+                                who: Controller, count: 1,
+                            )))
+                        ], yields: []),
+                    )],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "tail_draw", bind: ["tail_draw"], kind: Perform(Draw(
+                    who: Controller, count: 1,
+                ))),
+            ], yields: []), target_bindings: [])),
+            targeting: None,
+            timing: Normal,
+            conditions: [],
+            activation_limit: None,
+        )],
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                PROGRAM,
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/laezel,_vlaakiths_champion.ron"),
+                include_str!("../../../tricerules-cards/data/doubling_season.ron"),
+            ],
+            &[],
+        )
+        .expect("the paid Program Choose Blight fixture compiles for an ability owner"),
+    ));
+    let decks = Some(vec![deck_with("mountain", &[]), deck_with("mountain", &[])]);
+    let mut engine = GameEngine::new(registry, 153_121, &[0, 1], 20, decks, true)
+        .expect("Program Choose Blight fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let source =
+        inject_permanent_on_battlefield(&mut engine, 0, "program_choose_blight_tail_fixture");
+    inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 20, 20);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    apply_ability(&mut engine, 0, source, 0, vec![])
+        .expect("activate the ability's Program Choose");
+    let offered = find_resolution_choice(&pass_both_players_with_batch(&mut engine))
+        .expect("the ability offers its paid Blight branch");
+    assert_eq!(offered.choice_kind, ChoiceKind::ResolutionBranch as i32);
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choose the Blight payment");
+    let blight_cost = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(
+        blight_cost.presentation.choice_kind,
+        ChoiceKind::CostObjects
+    );
+    assert!(blight_cost.presentation.candidates.contains(&target));
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+        .expect("pay the Program Choose cost");
+    let replacement = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(
+        replacement.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(replacement.presentation.candidates.len(), 2);
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        0,
+        "the Program remains parked until cost replacements finish"
+    );
+    let completed = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice(vec![replacement.presentation.candidates[0]]),
+        )
+        .expect("order the cost replacements and resume both Program continuations");
+    assert!(find_resolution_choice(&completed).is_none());
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        12
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 2,
+        "the paid branch Draw and following parent Draw each run exactly once"
+    );
+    assert_eq!(
+        completed
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                    if log.text.contains("P0 blights 2 using")
+            ))
+            .count(),
+        1
     );
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
@@ -769,6 +1040,585 @@ fn issue_153_blackthorn_etb_pays_before_drawing_and_losing_life() {
     );
     assert_eq!(engine.state.players[0].hand.len(), before + 1);
     assert_eq!(engine.state.players[0].life, 19);
+}
+
+#[test]
+fn issue_153_blackthorn_attack_trigger_pays_blight_and_runs_its_body_once() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_112,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("mountain", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .unwrap();
+    advance_to_declare_attackers(&mut engine);
+    let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 20, 20);
+    let blackthorn = inject_creature_on_battlefield(&mut engine, 0, "blighted_blackthorn");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![blackthorn]))
+        .expect("attack with Blackthorn");
+    pass_both_players(&mut engine);
+    let menu = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Blackthorn's attack trigger offers its optional branch");
+    assert_eq!(menu.deciding_player, 0);
+    assert_eq!(menu.presentation.choice_kind, ChoiceKind::ResolutionBranch);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("select Blight from the actual attack trigger");
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the attack trigger parks on the Blight cost object");
+    assert_eq!(payment.presentation.choice_kind, ChoiceKind::CostObjects);
+    assert!(payment.presentation.candidates.contains(&blackthorn));
+    assert!(payment.presentation.candidates.contains(&target));
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+        .expect("pay the attack trigger's Blight cost");
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        2
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1
+    );
+    assert_eq!(engine.state.players[0].life, 19);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_153_blackthorn_decline_and_unpayable_no_creature_skip_the_paid_body() {
+    let (mut declined, blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(153_113, &[0, 1]);
+    pass_priority_round(&mut declined);
+    assert_eq!(
+        declined
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    let draws_before = declined.state.turn_history.current.player(0).cards_drawn;
+    declined
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline Blackthorn's optional Blight branch");
+    assert_eq!(declined.state.players[0].life, 20);
+    assert_eq!(
+        declined.state.turn_history.current.player(0).cards_drawn,
+        draws_before
+    );
+    assert_eq!(
+        declined.state.objects[&blackthorn].counter_count(CounterKind::MinusOneMinusOne),
+        0
+    );
+    assert!(declined.state.pending_resolution.is_none());
+    assert!(declined.state.stack.is_empty());
+
+    let (mut no_creature, blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(153_114, &[0, 1]);
+    no_creature.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != blackthorn);
+    no_creature.state.players[0].graveyard.push(blackthorn);
+    no_creature.state.objects.get_mut(&blackthorn).unwrap().zone = Zone::Graveyard;
+    *no_creature
+        .state
+        .zone_change_generation
+        .entry(blackthorn)
+        .or_default() += 1;
+    let no_creature_draws_before = no_creature.state.turn_history.current.player(0).cards_drawn;
+    pass_priority_round(&mut no_creature);
+    assert!(no_creature.state.pending_resolution.is_none());
+    assert!(no_creature.state.stack.is_empty());
+    assert_eq!(no_creature.state.players[0].life, 20);
+    assert_eq!(
+        no_creature.state.turn_history.current.player(0).cards_drawn,
+        no_creature_draws_before
+    );
+}
+
+#[test]
+fn issue_153_program_blight_choice_rejects_wrong_stale_and_replayed_selection_atomically() {
+    let (mut engine, blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(153_115, &[0, 1]);
+    let second_creature = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 8, 8);
+    let noncreature = inject_permanent_on_battlefield(&mut engine, 0, "mountain");
+    let blackthorn_generation = engine
+        .state
+        .zone_change_generation
+        .get(&blackthorn)
+        .copied()
+        .unwrap_or(0);
+    pass_priority_round(&mut engine);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("select the paid Blackthorn branch");
+    let prompt = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(prompt.presentation.choice_kind, ChoiceKind::CostObjects);
+    assert!(prompt.presentation.candidates.contains(&blackthorn));
+    assert!(prompt.presentation.candidates.contains(&second_creature));
+    assert!(!prompt.presentation.candidates.contains(&noncreature));
+
+    let before_wrong = engine.state.command_index;
+    assert!(engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![noncreature]))
+        .is_err());
+    assert_eq!(engine.state.command_index, before_wrong);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::CostObjects
+    );
+    assert_eq!(
+        engine.state.objects[&blackthorn].counter_count(CounterKind::MinusOneMinusOne),
+        0
+    );
+    assert_eq!(engine.state.players[0].life, 20);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before
+    );
+
+    *engine
+        .state
+        .zone_change_generation
+        .entry(second_creature)
+        .or_default() += 1;
+    let before_stale = engine.state.command_index;
+    assert!(engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![second_creature]))
+        .is_err());
+    assert_eq!(engine.state.command_index, before_stale);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::CostObjects
+    );
+    assert_eq!(
+        engine.state.objects[&blackthorn].counter_count(CounterKind::MinusOneMinusOne),
+        0
+    );
+
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![blackthorn]))
+        .expect("a current candidate still completes the choice after rejected submissions");
+    assert_eq!(
+        engine.state.zone_change_generation[&blackthorn],
+        blackthorn_generation
+    );
+    assert_eq!(
+        engine.state.objects[&blackthorn].counter_count(CounterKind::MinusOneMinusOne),
+        2
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1
+    );
+    assert_eq!(engine.state.players[0].life, 19);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+
+    let after_success = engine.state.command_index;
+    assert!(engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![blackthorn]))
+        .is_err());
+    assert_eq!(engine.state.command_index, after_success);
+    assert_eq!(
+        engine.state.objects[&blackthorn].counter_count(CounterKind::MinusOneMinusOne),
+        2
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1
+    );
+    assert_eq!(engine.state.players[0].life, 19);
+}
+
+#[test]
+fn issue_153_blackthorn_payer_departure_clears_object_and_replacement_waits_without_delegation() {
+    let (mut object_wait, blackthorn, target) =
+        issue_153_three_player_blackthorn_choose_for_p1(153_116);
+    object_wait
+        .apply_scenario_command(1, &choose_branch(0))
+        .expect("P1 selects Blackthorn's paid branch");
+    let object_choice = object_wait.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(object_choice.deciding_player, 1);
+    assert_eq!(
+        object_choice.presentation.choice_kind,
+        ChoiceKind::CostObjects
+    );
+    assert!(object_choice.presentation.candidates.contains(&target));
+    let p0_draws = object_wait.state.turn_history.current.player(0).cards_drawn;
+    let p0_life = object_wait.state.players[0].life;
+    let departure = object_wait
+        .apply_scenario_command(1, &concede())
+        .expect("the original payer can leave during the object choice");
+    assert!(object_wait.state.players[1].has_lost);
+    assert!(find_resolution_choice(&departure).is_none());
+    assert!(object_wait.state.pending_resolution.is_none());
+    assert!(object_wait.state.stack.is_empty());
+    assert!(object_wait
+        .state
+        .objects
+        .get(&target)
+        .is_none_or(|object| object.counter_count(CounterKind::MinusOneMinusOne) == 0));
+    assert!(!object_wait.state.players[1].battlefield.contains(&target));
+    assert_eq!(
+        object_wait.state.objects[&blackthorn].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(object_wait.state.players[0].life, p0_life);
+    assert_eq!(
+        object_wait.state.turn_history.current.player(0).cards_drawn,
+        p0_draws
+    );
+
+    let (mut replacement_wait, blackthorn, target) =
+        issue_153_three_player_blackthorn_choose_for_p1(153_117);
+    inject_permanent_on_battlefield(&mut replacement_wait, 1, "laezel,_vlaakiths_champion");
+    inject_permanent_on_battlefield(&mut replacement_wait, 1, "doubling_season");
+    inject_permanent_on_battlefield(&mut replacement_wait, 1, "doubling_season");
+    replacement_wait
+        .apply_scenario_command(1, &choose_branch(0))
+        .expect("P1 selects Blackthorn's paid branch before replacement");
+    replacement_wait
+        .apply_scenario_command(1, &submit_resolution_choice(vec![target]))
+        .expect("P1 selects its own creature for the cost");
+    let replacement = replacement_wait.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(replacement.deciding_player, 1);
+    assert_eq!(
+        replacement.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(replacement.presentation.candidates.len(), 2);
+    assert_eq!(
+        replacement_wait.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        0,
+        "the selected cost has not been committed while replacements are parked"
+    );
+    let p0_draws = replacement_wait
+        .state
+        .turn_history
+        .current
+        .player(0)
+        .cards_drawn;
+    let p0_life = replacement_wait.state.players[0].life;
+    let departure = replacement_wait
+        .apply_scenario_command(1, &concede())
+        .expect("the payer leaves while its cost is parked for replacement order");
+    assert!(replacement_wait.state.players[1].has_lost);
+    assert!(find_resolution_choice(&departure).is_none());
+    assert!(replacement_wait.state.pending_resolution.is_none());
+    assert!(replacement_wait.state.stack.is_empty());
+    assert!(replacement_wait
+        .state
+        .objects
+        .get(&target)
+        .is_none_or(|object| object.counter_count(CounterKind::MinusOneMinusOne) == 0));
+    assert!(!replacement_wait.state.players[1]
+        .battlefield
+        .contains(&target));
+    assert_eq!(
+        replacement_wait.state.objects[&blackthorn].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(replacement_wait.state.players[0].life, p0_life);
+    assert_eq!(
+        replacement_wait
+            .state
+            .turn_history
+            .current
+            .player(0)
+            .cards_drawn,
+        p0_draws
+    );
+    pass_priority_round(&mut replacement_wait);
+}
+
+#[test]
+fn issue_153_blackthorn_terminal_payer_departure_clears_both_blight_waits() {
+    for (replacement_wait, seed) in [(false, 153_121), (true, 153_122)] {
+        let (mut engine, _blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(seed, &[0, 1]);
+        let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 20, 20);
+        if replacement_wait {
+            inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+            inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+            inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+        }
+
+        pass_priority_round(&mut engine);
+        engine
+            .apply_scenario_command(0, &choose_branch(0))
+            .expect("P0 selects Blackthorn's paid branch");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the paid branch parks")
+                .presentation
+                .choice_kind,
+            ChoiceKind::CostObjects
+        );
+
+        if replacement_wait {
+            engine
+                .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+                .expect("P0 submits the cost before replacement order is chosen");
+            let replacement = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("Lae'zel and the two Seasons park the cost")
+                .presentation
+                .choice_kind;
+            assert_eq!(replacement, ChoiceKind::ReplacementEffect);
+        }
+
+        let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+        let life_before = engine.state.players[0].life;
+        let terminal_batch = engine
+            .apply_scenario_command(0, &concede())
+            .expect("P0 concedes while the Blight payment is pending");
+
+        assert!(engine.state.is_terminal());
+        assert_eq!(engine.state.winner(), Some(1));
+        assert!(engine.state.players[0].has_lost);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert!(
+            engine.diagnostic_snapshot().unwrap()["state"]["pending_replacement_event"].is_null()
+        );
+        assert!(find_resolution_choice(&terminal_batch).is_none());
+        assert!(terminal_batch.events.iter().all(|event| !matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            draws_before,
+            "the abandoned branch never draws"
+        );
+        assert_eq!(engine.state.players[0].life, life_before);
+        assert!(engine
+            .state
+            .objects
+            .get(&target)
+            .is_none_or(|object| { object.counter_count(CounterKind::MinusOneMinusOne) == 0 }));
+    }
+}
+
+#[test]
+fn issue_153_blackthorn_program_choose_doubling_season_does_not_modify_its_blight_cost() {
+    let (mut engine, _blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(153_118, &[0, 1]);
+    let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 20, 20);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    pass_priority_round(&mut engine);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("select Blackthorn's optional Blight branch");
+    let completed = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+        .expect("choose the actual target creature");
+    assert!(find_resolution_choice(&completed).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        2,
+        "Doubling Season does not modify counters paid as a cost"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "the Choose branch Draw runs exactly once"
+    );
+    assert_eq!(engine.state.players[0].life, 19);
+    assert_eq!(
+        completed
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                    if log.text.contains("P0 blights 2 using")
+            ))
+            .count(),
+        1,
+        "one completed cost produces one Blight receipt log"
+    );
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_153_blackthorn_program_choose_orders_laezel_and_doubling_season_then_receipts_once() {
+    let (mut engine, _blackthorn) = issue_153_blackthorn_etb_trigger_on_stack(153_120, &[0, 1]);
+    let target = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 20, 20);
+    inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    pass_priority_round(&mut engine);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("select Blackthorn's optional Blight branch");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![target]))
+        .expect("choose the actual target creature");
+    let replacement = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(
+        replacement.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(replacement.presentation.candidates.len(), 2);
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        0,
+        "the selected cost remains staged while the Season order is selected"
+    );
+    let ordered = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice(vec![replacement.presentation.candidates[1]]),
+        )
+        .expect("choose a Doubling Season after Lae'zel has auto-applied");
+    assert!(find_resolution_choice(&ordered).is_none());
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+        12,
+        "Lae'zel adds one counter, then both Seasons apply"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "the Choose branch Draw runs exactly once"
+    );
+    assert_eq!(engine.state.players[0].life, 19);
+    assert_eq!(
+        ordered
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                    if log.text.contains("P0 blights 2 using")
+            ))
+            .count(),
+        1,
+        "one completed cost produces one Blight receipt log"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_153_dream_seizer_three_player_discard_collects_private_apnap_choices() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        153_119,
+        &[0, 1, 2],
+        20,
+        Some(vec![
+            deck_with("swamp", &["dream_seizer"]),
+            deck_with("forest", &["grizzly_bears"]),
+            deck_with("island", &["hill_giant"]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "dream_seizer");
+    ensure_card_in_hand(&mut engine, 1, "grizzly_bears");
+    ensure_card_in_hand(&mut engine, 2, "hill_giant");
+    engine.state.players[0].mana_pool.black = 1;
+    engine.state.players[0].mana_pool.colorless = 3;
+    let source_slot = hand_index_for_card(&engine, 0, "dream_seizer");
+    engine
+        .apply_scenario_command(0, &cast_spell(source_slot, vec![]))
+        .expect("cast Dream Seizer");
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("select Dream Seizer's Blight branch");
+    let dream_seizer = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "dream_seizer" && object.zone == Zone::Battlefield)
+        .expect("Dream Seizer remains a legal Blight creature")
+        .id;
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![dream_seizer]))
+        .expect("pay Blight before any opponent chooses a discard");
+
+    let first = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(first.deciding_player, 1, "the first opponent acts APNAP");
+    assert_eq!(first.presentation.choice_kind, ChoiceKind::HandCards);
+    let p1_card = engine.state.players[1]
+        .hand
+        .iter()
+        .copied()
+        .find(|object_id| engine.state.objects[object_id].card_id == "grizzly_bears")
+        .expect("P1 has a known discardable card");
+    assert!(first.presentation.candidates.contains(&p1_card));
+    let p1_selection = engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![p1_card]))
+        .expect("P1 makes its private discard selection");
+    let second = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(second.deciding_player, 2, "the next opponent follows APNAP");
+    assert_eq!(second.presentation.choice_kind, ChoiceKind::HandCards);
+    assert!(engine.state.players[1].hand.contains(&p1_card));
+    assert_eq!(engine.state.objects[&p1_card].zone, Zone::Hand);
+    assert!(!second.presentation.candidates.contains(&p1_card));
+    assert!(second
+        .presentation
+        .candidates
+        .iter()
+        .all(|object_id| engine.state.players[2].hand.contains(object_id)));
+    assert!(find_resolution_choice(&p1_selection).is_some_and(|choice| {
+        choice.deciding_player_id == 2 && !choice.candidate_object_ids.contains(&p1_card)
+    }));
+    let p2_card = engine.state.players[2]
+        .hand
+        .iter()
+        .copied()
+        .find(|object_id| engine.state.objects[object_id].card_id == "hill_giant")
+        .expect("P2 has a known discardable card");
+    assert!(second.presentation.candidates.contains(&p2_card));
+    engine
+        .apply_scenario_command(2, &submit_resolution_choice(vec![p2_card]))
+        .expect("P2 finishes the frozen player-set selection");
+    assert_eq!(engine.state.objects[&p1_card].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&p2_card].zone, Zone::Graveyard);
+    assert!(engine.state.players[1].graveyard.contains(&p1_card));
+    assert!(engine.state.players[2].graveyard.contains(&p2_card));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
 }
 
 fn cast_blight(

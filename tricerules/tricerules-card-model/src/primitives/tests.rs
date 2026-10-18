@@ -5836,6 +5836,60 @@ fn program_accepts_resultless_each_opponent_fixed_life_loss() {
 }
 
 #[test]
+fn ability_program_admits_only_fixed_controller_life_loss_for_this_trigger() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile = |card_id: &str, context, amount: &str| {
+        let program: crate::CardProgram = ron::from_str(&format!(
+            r#"(body: (steps: [(id: "lose_life", bind: [], kind: Perform(LoseLife(
+                amount: {amount}, who: Controller,
+            )))], yields: []))"#
+        ))
+        .expect("program fixture parses");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: crate::CardFaceId::new(card_id).unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        CompiledProgram::compile(owner, context, &program)
+    };
+
+    let compiled = compile(
+        "controller_life_loss_fixture",
+        EffectContext::Ability,
+        "Fixed(1)",
+    )
+    .expect("the Blighted Blackthorn tail can lose one life from its ability controller");
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            })
+    ));
+    assert!(compiled.body.steps[0].outputs.is_empty());
+    assert!(
+        compile(
+            "spell_controller_life_loss_fixture",
+            EffectContext::Spell,
+            "Fixed(1)",
+        )
+        .is_err(),
+        "the controller recipient is admitted only in an ability program"
+    );
+    assert!(
+        compile(
+            "variable_controller_life_loss_fixture",
+            EffectContext::Ability,
+            "TargetManaValue",
+        )
+        .is_err(),
+        "target-dependent life loss remains outside this fixed tail"
+    );
+}
+
+#[test]
 fn program_each_opponent_life_loss_rejects_unsupported_shapes_and_results() {
     let valid = program_fixture(
         r#"(steps: [
@@ -8047,6 +8101,119 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
     assert!(
         ability_error.contains("does not support resolution cost"),
         "the failure is from the hand-bottom cost admission rule: {ability_error}"
+    );
+}
+
+#[test]
+fn program_choose_admits_fixed_blight_only_for_controller_ability_programs() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile = |card_id: &str, context, body: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: crate::CardFaceId::new(card_id).unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        CompiledProgram::compile(owner, context, &program)
+    };
+    let body = r#"(steps: [(id: "choose", bind: [], kind: Choose(
+        choice: "blight", chooser: Controller, optional: true,
+        branches: [(branch_id: "pay_blight", presentation: Fallback,
+            cost: Blight(count: 2), requirement: Always,
+            body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))],
+                yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let compiled = compile("blight_program_fixture", EffectContext::Ability, body)
+        .expect("a fixed positive Blight branch is admitted on an ability program");
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("the Blight cost remains inside one typed Choose instruction")
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        chooser, branches, ..
+    } = &choose.kind
+    else {
+        panic!("the Blight payment remains a Choose branch")
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    let [branch] = branches.as_slice() else {
+        panic!("the authored paid branch remains unique")
+    };
+    assert_eq!(
+        branch.cost,
+        crate::primitives::ResolutionCost::Blight { count: 2 }
+    );
+
+    let source_controller = body.replace("chooser: Controller", "chooser: SourceController");
+    assert!(
+        compile(
+            "source_controller_blight_fixture",
+            EffectContext::Ability,
+            &source_controller,
+        )
+        .is_err(),
+        "a SourceController chooser is outside the narrow Blight payment contract"
+    );
+    let zero_blight = body.replace("Blight(count: 2)", "Blight(count: 0)");
+    assert!(
+        compile("zero_blight_fixture", EffectContext::Ability, &zero_blight).is_err(),
+        "zero is not a positive fixed Blight payment"
+    );
+    assert!(
+        compile("spell_blight_fixture", EffectContext::Spell, body).is_err(),
+        "the Blight cost is not admitted on a spell program"
+    );
+}
+
+#[test]
+fn program_discard_each_opponent_exact_one_binds_a_combined_unbounded_cohort() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile = |context, quantity: &str| {
+        let body = format!(
+            r#"(steps: [(id: "discard", bind: ["cohort"], kind: Perform(Discard(
+                who: EachOpponent, quantity: {quantity},
+            )))], yields: [])"#
+        );
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "player_set_discard_fixture".into(),
+            face_id: crate::CardFaceId::new("player_set_discard_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        CompiledProgram::compile(owner, context, &program)
+    };
+
+    let compiled = compile(EffectContext::Ability, "Exact(1)")
+        .expect("a fixed one-card discard per opponent is admitted in an ability program");
+    let [discard] = compiled.body.steps.as_slice() else {
+        panic!("the player-set discard remains one typed operation")
+    };
+    let result = compiled
+        .slot(discard.outputs[0])
+        .expect("the discard result is bound");
+    assert_eq!(
+        result.result_type,
+        crate::primitives::ResultType::DiscardResult {
+            who: crate::primitives::PlayerRecipient::EachOpponent,
+            cardinality: crate::primitives::Cardinality { min: 0, max: None },
+            optional_payment: false,
+        },
+        "the single result contains every opponent's selected card, so it cannot claim max 1"
+    );
+
+    for unsupported_quantity in ["Exact(2)", "OptionalExact(1)"] {
+        assert!(
+            compile(EffectContext::Ability, unsupported_quantity).is_err(),
+            "only EachOpponent Exact(1) is admitted, not {unsupported_quantity}"
+        );
+    }
+    assert!(
+        compile(EffectContext::Spell, "Exact(1)").is_err(),
+        "the narrow EachOpponent contract does not widen spell programs"
     );
 }
 

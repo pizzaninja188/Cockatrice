@@ -820,6 +820,13 @@ impl Compiler {
                             {
                                 has_paid_branch = true;
                             }
+                            ResolutionCost::Blight { count }
+                                if *chooser == PlayerRecipient::Controller
+                                    && self.context == EffectContext::Ability
+                                    && *count > 0 =>
+                            {
+                                has_paid_branch = true;
+                            }
                             unsupported => {
                                 return Err(format!(
                                     "Choose instruction '{}' does not support resolution cost {unsupported:?}",
@@ -1354,13 +1361,15 @@ fn validate_and_result_types(
             Ok(Vec::new())
         }
         SpellEffectKind::LoseLife { amount, who }
-            if *who == PlayerRecipient::EachOpponent && matches!(amount, LifeAmount::Fixed(_)) =>
+            if matches!(amount, LifeAmount::Fixed(_))
+                && (*who == PlayerRecipient::EachOpponent
+                    || (*who == PlayerRecipient::Controller && context == EffectContext::Ability)) =>
         {
             effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::LoseLife { .. } => Err(
-            "LoseLife in a resolution program supports only a fixed amount for EachOpponent".into(),
+            "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on an ability program".into(),
         ),
         SpellEffectKind::Blight { .. } => {
             effect.validate(context)?;
@@ -1377,13 +1386,24 @@ fn validate_and_result_types(
         }
         SpellEffectKind::Discard { who, quantity } => {
             effect.validate(context)?;
-            validate_program_recipient(*who, context, "Discard recipient")?;
+            let player_set_discard = context == EffectContext::Ability
+                && *who == PlayerRecipient::EachOpponent
+                && matches!(quantity, super::DiscardQuantity::Exact(1));
+            if !player_set_discard {
+                validate_program_recipient(*who, context, "Discard recipient")?;
+            }
             let optional_payment = matches!(quantity, super::DiscardQuantity::OptionalExact(_));
             Ok(vec![ResultType::DiscardResult {
                 who: *who,
                 cardinality: Cardinality {
                     min: 0,
-                    max: discard_upper_bound(quantity),
+                    // EachOpponent contributes one choice per opponent to a combined typed
+                    // cohort, so the per-player Exact(1) count is not an aggregate upper bound.
+                    max: if player_set_discard {
+                        None
+                    } else {
+                        discard_upper_bound(quantity)
+                    },
                 },
                 optional_payment,
             }])

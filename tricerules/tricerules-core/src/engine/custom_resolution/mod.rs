@@ -1291,6 +1291,14 @@ impl GameEngine {
                     },
                 ..
             } => self.finish_program_choose_hand_bottom_object(pending, chosen),
+            ResolutionContinuation::ProgramChoose {
+                choose:
+                    crate::state::PendingProgramChoose {
+                        stage: crate::state::PendingProgramChooseStage::PayingBlight { .. },
+                        ..
+                    },
+                ..
+            } => self.finish_program_choose_blight_object(pending, chosen),
             ResolutionContinuation::PermanentChoice { .. } => {
                 self.finish_permanent_choice(pending, chosen)
             }
