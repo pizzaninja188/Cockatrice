@@ -15,7 +15,9 @@
       "start_line": 2,
       "end_line": 2,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0"
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/SearchLibrary"
       ]
     }
   ],
@@ -30,7 +32,11 @@
     },
     {
       "symbol": "SpellEffectKind::SearchLibrary",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/SearchLibrary"
+    },
+    {
+      "symbol": "SearchDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/SearchLibrary/destination"
     }
   ],
   "tokens": [],
@@ -38,6 +44,14 @@
     {
       "test": "scenario issue_misc19_batch::issue_misc19_rune_scarred_demon_tutors_any_card",
       "covers": "the entry trigger offers every library card and puts the chosen one into hand; the Demon has flying"
+    },
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_rune_scarred_demon_completes_with_an_empty_library",
+      "covers": "an unrestricted mandatory hand search with no library candidates completes without a choice"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_rune_scarred_demon_is_unrestricted_hand_search_program",
+      "covers": "the entry-search owner compiles as a resultless Program with an unrestricted controller Library-to-Hand search, required one-card selection, shuffle, and no reveal"
     },
     {
       "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",

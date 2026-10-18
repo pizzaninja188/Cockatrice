@@ -523,9 +523,48 @@ impl GameEngine {
 mod tests {
     use super::*;
 
+    const LEGACY_SCRY_DRAW_FIXTURE: &str = r#"(
+        id: "entry_order_legacy_scry_draw",
+        name: "Entry Order Legacy Scry Draw",
+        face_id: "entry_order_legacy_scry_draw",
+        mana_cost: "{U}",
+        types: ["Instant"],
+        spell_effect: [Scry(count: 1), Draw(count: 1)],
+    )"#;
+
+    fn legacy_scry_draw_registry() -> &'static tricerules_cards::registry::CardRegistry {
+        static REGISTRY: std::sync::OnceLock<tricerules_cards::registry::CardRegistry> =
+            std::sync::OnceLock::new();
+        REGISTRY.get_or_init(|| {
+            tricerules_cards::registry::CardRegistry::from_chunks_and_tokens(
+                &[
+                    LEGACY_SCRY_DRAW_FIXTURE,
+                    include_str!("../../../tricerules-cards/data/forest.ron"),
+                    include_str!("../../../tricerules-cards/data/island.ron"),
+                    include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                    include_str!("../../../tricerules-cards/data/pacifism.ron"),
+                    include_str!("../../../tricerules-cards/data/twenty-toed_toad.ron"),
+                ],
+                &[],
+            )
+            .expect("legacy Scry/draw entry-order fixture registry")
+        })
+    }
+
+    fn legacy_scry_draw_item(
+        engine: &GameEngine,
+        source: ObjectId,
+        controller: PlayerId,
+    ) -> StackItem {
+        let mut item = engine.observer_return_item(source, controller);
+        item.card_id = "entry_order_legacy_scry_draw".into();
+        item.ability_text = None;
+        item
+    }
+
     fn accepted_aura_timestamp_fixture(tokens: bool) -> (GameEngine, Vec<ObjectId>) {
         let mut engine = GameEngine::new(
-            tricerules_cards::registry::global(),
+            legacy_scry_draw_registry(),
             613_709,
             &[0, 1, 2],
             20,
@@ -543,9 +582,7 @@ mod tests {
             Some(1),
         )
         .unwrap();
-        let mut item = engine.observer_return_item(engine.state.players[0].hand[3], 0);
-        item.card_id = "opt".into();
-        item.ability_text = None;
+        let item = legacy_scry_draw_item(&engine, engine.state.players[0].hand[3], 0);
         let mut stack = ParkedStackResolution::new(item.clone());
         stack.resume_effect_index = Some(0);
         let ids = if tokens {
@@ -686,7 +723,7 @@ mod tests {
                 .all(|id| engine.state.objects[id].zone == Zone::Battlefield));
             assert!(
                 engine.state.pending_resolution.is_none(),
-                "outer Opt tail must be cancelled"
+                "outer legacy Scry/draw tail must be cancelled"
             );
             assert!(engine.state.players[2].has_lost);
         }
@@ -767,7 +804,7 @@ mod tests {
     fn accepted_aura_token_batch_skips_after_recipient_departure_during_second_choice_and_resumes_tail(
     ) {
         let mut engine = GameEngine::new(
-            tricerules_cards::registry::global(),
+            legacy_scry_draw_registry(),
             613_707,
             &[0, 1, 2],
             20,
@@ -799,9 +836,7 @@ mod tests {
             Some(AttachmentRecipient::Object(host));
         let snapshot =
             copying::token_copy_snapshot_from(&engine.state, engine.registry, source).unwrap();
-        let mut item = engine.observer_return_item(engine.state.players[0].hand[0], 0);
-        item.card_id = "opt".into();
-        item.ability_text = None;
+        let item = legacy_scry_draw_item(&engine, engine.state.players[0].hand[0], 0);
         let (entries, logs) = engine
             .prepare_token_entries(
                 resolution::TokenCreationRequest {
@@ -854,7 +889,7 @@ mod tests {
             .state
             .pending_resolution
             .as_ref()
-            .expect("Opt tail must remain owed");
+            .expect("legacy Scry/draw tail must remain owed");
         assert_eq!(
             pending.presentation.choice_kind,
             rv1::ChoiceKind::LibraryTop,
@@ -964,7 +999,7 @@ mod tests {
     #[test]
     fn accepted_observer_auras_skip_after_recipient_departure_and_resume_tail_once() {
         let mut engine = GameEngine::new(
-            tricerules_cards::registry::global(),
+            legacy_scry_draw_registry(),
             613_708,
             &[0, 1, 2],
             20,
@@ -1004,9 +1039,7 @@ mod tests {
                 },
             );
         }
-        let mut item = engine.observer_return_item(ids[2], 0);
-        item.card_id = "opt".into();
-        item.ability_text = None;
+        let item = legacy_scry_draw_item(&engine, ids[2], 0);
         let mut stack = ParkedStackResolution::new(item);
         stack.resume_effect_index = Some(0);
         let mut events = Vec::new();
@@ -1129,7 +1162,7 @@ mod tests {
     #[test]
     fn aura_return_pauses_preserve_the_observer_cohort_and_resume_the_effect_tail() {
         let mut engine = GameEngine::new(
-            tricerules_cards::registry::global(),
+            legacy_scry_draw_registry(),
             613_706,
             &[0, 1],
             20,
@@ -1180,9 +1213,7 @@ mod tests {
             );
         }
 
-        let mut item = engine.observer_return_item(first, 0);
-        item.card_id = "opt".into();
-        item.ability_text = None;
+        let item = legacy_scry_draw_item(&engine, first, 0);
         let mut stack = ParkedStackResolution::new(item);
         stack.resume_effect_index = Some(0);
         let mut events = Vec::new();
@@ -1240,7 +1271,7 @@ mod tests {
         let hand_before_draw = engine.state.players[0].hand.len();
         engine
             .apply_scenario_command(0, &choice(vec![]))
-            .expect("keep Opt's scried card on top and finish its draw");
+            .expect("keep the scried card on top and finish the legacy draw");
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.players[0].hand.len(), hand_before_draw + 1);
     }

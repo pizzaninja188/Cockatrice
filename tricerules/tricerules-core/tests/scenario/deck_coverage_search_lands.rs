@@ -180,6 +180,7 @@ fn rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_
 
     let forest = inject_library_card(&mut engine, 0, "forest");
     let taiga = inject_library_card(&mut engine, 0, "taiga");
+    let land_to_play = inject_card_into_hand(&mut engine, 0, "mountain");
     ensure_in_hand(&mut engine, 0, "rampant_growth");
     give_mana(
         &mut engine,
@@ -224,6 +225,80 @@ fn rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_
             Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
         )
     }));
+
+    let normal_land_index = hand_index_for_card(&engine, 0, "mountain");
+    engine
+        .apply_scenario_command(0, &play_land(normal_land_index))
+        .expect("Rampant Growth's battlefield entry does not use the normal land play");
+    assert_eq!(engine.state.objects[&land_to_play].zone, Zone::Battlefield);
+    assert!(!engine.state.objects[&land_to_play].tapped);
+}
+
+#[test]
+fn rampant_growth_can_fail_to_find_and_leave_normal_land_play_available() {
+    let decks = Some(vec![
+        deck_with("forest", &["rampant_growth"]),
+        deck_with("island", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_255,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let forest = inject_library_card(&mut engine, 0, "forest");
+    let land_to_play = inject_card_into_hand(&mut engine, 0, "mountain");
+    ensure_in_hand(&mut engine, 0, "rampant_growth");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(hand_index_for_card(&engine, 0, "rampant_growth"), vec![]),
+        )
+        .expect("cast Rampant Growth");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    let search_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Rampant Growth");
+    let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert!(choice.candidate_object_ids.contains(&forest));
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("fail to find a basic land");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&forest].zone, Zone::Library);
+    assert!(engine.state.players[0].hand.contains(&land_to_play));
+    assert!(completion.events.iter().any(|event| {
+        matches!(
+            &event.ev,
+            Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+        )
+    }));
+
+    let normal_land_index = hand_index_for_card(&engine, 0, "mountain");
+    engine
+        .apply_scenario_command(0, &play_land(normal_land_index))
+        .expect("the failed search does not use the normal land play");
+    assert_eq!(engine.state.objects[&land_to_play].zone, Zone::Battlefield);
+    assert!(!engine.state.objects[&land_to_play].tapped);
 }
 
 #[test]

@@ -6,13 +6,24 @@
       "face_id": "rampant_growth",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/spell_effect/0"]
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary"
+      ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::SearchLibrary",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary"
+    },
+    {
+      "symbol": "CardTypeFilter::BasicLand",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary/destination"
     }
   ],
   "tokens": [],
@@ -20,6 +31,14 @@
     {
       "test": "scenario deck_coverage_search_lands::rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_tapped",
       "covers": "private basic-land-only search excludes nonbasic Taiga, moves the chosen basic to the battlefield tapped, and shuffles"
+    },
+    {
+      "test": "scenario deck_coverage_search_lands::rampant_growth_can_fail_to_find_and_leave_normal_land_play_available",
+      "covers": "the optional-to-find BasicLand search completes with no match and leaves a normal land play available"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_rampant_growth_is_tapped_basic_land_search_program",
+      "covers": "the spell owner compiles as a resultless Library search restricted to BasicLand, entering the battlefield tapped with 0-to-1 selection and shuffle"
     },
     {
       "test": "deck_registry::deck_coverage_search_lands::rampant_growth_searches_for_a_basic_land_and_enters_tapped",

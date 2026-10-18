@@ -202,6 +202,19 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
 
     let req = find_resolution_choice(&batch).expect("resolution choice required");
     assert_eq!(req.choice_kind(), ChoiceKind::LibrarySearch);
+    assert!(
+        req.public_reveal.is_none(),
+        "candidates are private until selected"
+    );
+    assert!(
+        !batch.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+                _
+            ))
+        )),
+        "the candidate is not revealed before the controller selects it"
+    );
     assert_eq!(
         req.min, 0,
         "a search constrained by card characteristics may fail to find"
@@ -253,6 +266,75 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
         tricerules_core::state::Zone::Library,
         "counterspell zone is Library"
     );
+}
+
+#[test]
+fn mystical_tutor_can_choose_zero_without_revealing_candidates() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["mystical_tutor".to_string()];
+            while d.len() < 20 {
+                d.push("island".to_string());
+            }
+            d
+        },
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "mystical_tutor");
+    let counter_oid = inject_library_card(&mut e, 0, "counterspell");
+
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "mystical_tutor",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let req = find_resolution_choice(&batch).expect("qualified optional search choice");
+    assert_eq!(req.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!((req.min, req.max), (0, 1));
+    assert!(req.candidate_object_ids.contains(&counter_oid));
+    assert!(
+        req.public_reveal.is_none(),
+        "candidates remain private before selection"
+    );
+    assert!(
+        !batch.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+                _
+            ))
+        )),
+        "no candidate is revealed when the choice is offered"
+    );
+
+    let completion = e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("fail to find is allowed");
+    assert!(
+        !completion.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+                _
+            ))
+        )),
+        "choosing zero reveals no library card"
+    );
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert!(e.state.players[0].library.contains(&counter_oid));
 }
 
 /// Mystical Tutor: submitting a non-instant/sorcery card is rejected.

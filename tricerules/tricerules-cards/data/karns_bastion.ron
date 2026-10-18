@@ -19,7 +19,10 @@
       ability_id: "activated_02",
       presentation: OracleLines([2]),
       costs: [Mana("{4}"), Tap],
-      effect: [Proliferate],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "proliferate", bind: [], input: None, kind: Perform(Proliferate)),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

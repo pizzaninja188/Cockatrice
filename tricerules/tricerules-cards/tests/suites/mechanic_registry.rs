@@ -3,6 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../authored_operation_reuse.rs"]
+mod authored_operation_reuse;
 #[path = "../issue_101_zone_abilities.rs"]
 mod issue_101_zone_abilities;
 #[path = "../issue_102_activation_limits.rs"]

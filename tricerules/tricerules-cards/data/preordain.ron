@@ -4,10 +4,10 @@
   face_id: "preordain",
   mana_cost: "{U}",
   types: ["Sorcery"],
-  // Keeping both cards on top during the two-card scry prompts a second, ordering
-  // choice (CR 701.18a) before the draw resumes.
-  spell_effect: [
-    Scry(count: 2),
-    Draw(count: 1),
-  ],
+  // CR 701.22a: keeping both cards on top prompts an ordering choice before the draw.
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 2))),
+    (id: "draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+  ], yields: []), target_bindings: [])),
 )

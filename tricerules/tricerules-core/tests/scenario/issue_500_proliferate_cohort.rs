@@ -482,6 +482,38 @@ fn karns_bastion_keeps_its_colorless_mana_and_proliferate_abilities_distinct() {
 }
 
 #[test]
+fn karns_bastion_accepts_zero_recipients_while_counters_are_eligible() {
+    let mut engine = cohort_engine(500_014);
+    let bastion = inject_permanent_on_battlefield(&mut engine, 0, "karns_bastion");
+    let bear = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    add_permanent_counter(&mut engine, bear, CounterKind::PlusOnePlusOne, 1);
+    set_counter_on_player(&mut engine, 1, CounterKind::Poison, 1);
+    grant_pool(&mut engine, 0);
+
+    apply_ability(&mut engine, 0, bastion, 1, vec![]).expect("activate Karn's Bastion");
+    let batch = pass_both_players_with_batch(&mut engine);
+    let offer = find_resolution_choice(&batch).expect("Proliferate recipient choice");
+    assert_eq!(offer.choice_kind(), ChoiceKind::Proliferate);
+    assert!(offer.candidate_object_ids.contains(&bear));
+    assert!(offer.candidate_player_ids.contains(&1));
+
+    engine
+        .apply_scenario_command(0, &proliferate_choice(vec![], vec![]))
+        .expect("choosing zero recipients is allowed");
+    assert_eq!(
+        engine.state.objects[&bear].counters[&CounterKind::PlusOnePlusOne],
+        1
+    );
+    let opponent = engine.state.player_idx(1).expect("opponent");
+    assert_eq!(
+        engine.state.players[opponent].counters[&CounterKind::Poison],
+        1
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
 fn proliferate_observes_counter_replacement_and_poison_state_based_loss() {
     let mut engine = cohort_engine(500_008);
     let bastion = inject_permanent_on_battlefield(&mut engine, 0, "karns_bastion");

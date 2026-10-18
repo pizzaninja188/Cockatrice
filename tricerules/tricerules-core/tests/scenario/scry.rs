@@ -1,4 +1,4 @@
-//! CR 701.22 scry — the `Scry` primitive and the two legacy cards built on it, Opt and Preordain.
+//! CR 701.22 scry — the `Scry` primitive and the two authored cards built on it, Opt and Preordain.
 //!
 //! Both cards are `[Scry, Draw]`: the scry suspends resolution for the player's decision and the
 //! draw runs when it resumes, so these also exercise the effect-tail resume that `docs/issues.md`
@@ -308,10 +308,16 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
     let (scried, next) = (top[0], top[1]);
     let lib_before = e.state.players[0].library.len();
+    let hand_before_cast = e.state.players[0].hand.len();
 
     let batch = cast_instant_and_resolve(&mut e, 0, "opt", blue_mana());
 
     let req = find_resolution_choice(&batch).expect("scry parks for a choice");
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast - 1,
+        "Opt has not drawn while its Scry choice is pending"
+    );
     assert_eq!(req.choice_kind(), ChoiceKind::LibraryTop);
     assert_eq!(req.deciding_player_id, 0);
     assert_eq!(
@@ -357,6 +363,11 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
         lib_before - 1,
         "one card left the library, via the draw"
     );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast,
+        "Opt draws exactly one card after Scry"
+    );
 }
 
 #[test]
@@ -373,8 +384,14 @@ fn opt_keeping_the_scried_card_on_top_draws_it() {
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "opt");
     let scried = seat_on_top(&mut e, 0, &["grizzly_bears"])[0];
+    let hand_before_cast = e.state.players[0].hand.len();
 
-    cast_instant_and_resolve(&mut e, 0, "opt", blue_mana());
+    let batch = cast_instant_and_resolve(&mut e, 0, "opt", blue_mana());
+    assert!(
+        find_resolution_choice(&batch).is_some(),
+        "Scry parks before drawing"
+    );
+    assert_eq!(e.state.players[0].hand.len(), hand_before_cast - 1);
     // Keeping everything on top is submitting nothing (min is 0).
     e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep the scried card on top");
@@ -383,6 +400,11 @@ fn opt_keeping_the_scried_card_on_top_draws_it() {
     assert!(
         e.state.players[0].hand.contains(&scried),
         "the card kept on top is the one drawn"
+    );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast,
+        "Opt draws exactly one card after Scry"
     );
 }
 
@@ -404,9 +426,15 @@ fn preordain_bottoming_both_skips_the_ordering_step() {
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
     let (a, b, third) = (top[0], top[1], top[2]);
+    let hand_before_cast = e.state.players[0].hand.len();
 
     let batch = cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
     let req = find_resolution_choice(&batch).expect("scry parks");
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast - 1,
+        "Preordain has not drawn while its Scry choice is pending"
+    );
     assert_eq!((req.min, req.max), (0, 2));
     assert_eq!(req.candidate_object_ids, vec![a, b]);
 
@@ -427,6 +455,11 @@ fn preordain_bottoming_both_skips_the_ordering_step() {
         e.state.players[0].hand.contains(&third),
         "the draw comes from what was the third card"
     );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast,
+        "Preordain draws exactly one card after Scry"
+    );
 }
 
 #[test]
@@ -444,8 +477,14 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
     let (a, b) = (top[0], top[1]);
+    let hand_before_cast = e.state.players[0].hand.len();
 
-    cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
+    let batch = cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
+    assert!(
+        find_resolution_choice(&batch).is_some(),
+        "Scry parks before drawing"
+    );
+    assert_eq!(e.state.players[0].hand.len(), hand_before_cast - 1);
     let order_batch = e
         .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both on top");
@@ -469,9 +508,10 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
             ..
         }
     ));
-    assert!(
-        e.state.players[0].hand.is_empty() || !e.state.players[0].hand.contains(&a),
-        "the draw has not happened yet"
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast - 1,
+        "the draw has not happened while the top-order choice is pending"
     );
 
     // Swap them. The submitted list is bottom-first, so the *last* entry ends up on top —
@@ -487,6 +527,11 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
     assert_eq!(
         e.state.players[0].library[0], b,
         "the other kept card sits under it, now the top of the library"
+    );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast,
+        "Preordain draws exactly once after top ordering"
     );
 }
 
@@ -505,8 +550,14 @@ fn preordain_bottoming_one_of_two_skips_the_ordering_step() {
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
     let (a, b) = (top[0], top[1]);
+    let hand_before_cast = e.state.players[0].hand.len();
 
-    cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
+    let batch = cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
+    assert!(
+        find_resolution_choice(&batch).is_some(),
+        "Scry parks before drawing"
+    );
+    assert_eq!(e.state.players[0].hand.len(), hand_before_cast - 1);
     e.apply_scenario_command(0, &submit_resolution_choice(vec![a]))
         .expect("bottom the first");
 
@@ -518,6 +569,11 @@ fn preordain_bottoming_one_of_two_skips_the_ordering_step() {
     assert!(
         e.state.players[0].hand.contains(&b),
         "the kept card is drawn"
+    );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast,
+        "Preordain draws exactly once after Scry"
     );
 }
 

@@ -110,17 +110,22 @@ fn three_visits_searches_for_a_forest_subtype_and_enters_untapped() {
 
 #[test]
 fn rampant_growth_searches_for_a_basic_land_and_enters_tapped() {
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
-        tricerules_cards::registry::global().id_for_name("Rampant Growth"),
+        registry.id_for_name("Rampant Growth"),
         Some("rampant_growth")
     );
-    let filter = assert_search_defaults(
-        "rampant_growth",
-        "rampant_growth",
-        "Rampant Growth",
-        SearchDestination::Battlefield { tapped: true },
-    );
-    assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand));
+    let definition = registry.get("rampant_growth").expect("Rampant Growth");
+    assert_eq!(definition.name, "Rampant Growth");
+    assert_eq!(definition.layout, Layout::Normal);
+    assert_eq!(definition.face_count(), 1);
+    let face = definition.primary_face();
+    assert_eq!(face.face_id.as_str(), "rampant_growth");
+    assert_eq!(face.types, ["Sorcery"]);
+    assert_eq!(face.mana_cost.to_string(), "{1}{G}");
+    assert_eq!(face.colors(), [Color::Green]);
+    assert!(face.spell_effect.is_empty());
+    assert!(face.spell_program.is_some());
 }
 
 #[test]

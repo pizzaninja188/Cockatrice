@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "ac641490-ca14-48d7-8cc4-b69ce984befa",
+  "spans": [
+    {
+      "face_id": "preordain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Scry"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario scry::preordain_bottoming_both_skips_the_ordering_step",
+      "covers": "Scry 2 may bottom both cards and then resolves the one-card draw"
+    },
+    {
+      "test": "scenario scry::preordain_keeping_both_asks_for_an_order_then_draws_the_new_top",
+      "covers": "keeping both cards creates the ordering choice before the following draw"
+    },
+    {
+      "test": "scenario scry::preordain_bottoming_one_of_two_skips_the_ordering_step",
+      "covers": "putting one of two scried cards on the bottom skips ordering the single retained card before drawing"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_preordain_is_scry_then_draw_program",
+      "covers": "Preordain's spell owner is a resultless Program that performs Scry 2 followed by one controller draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -118,6 +118,22 @@ fn issue_misc19_rune_scarred_demon_tutors_any_card() {
 }
 
 #[test]
+fn issue_misc19_rune_scarred_demon_completes_with_an_empty_library() {
+    let mut e = engine(819_009);
+    e.state.players[0].library.clear();
+
+    cast(&mut e, 0, "rune-scarred_demon", vec![]);
+
+    assert!(e.state.players[0].library.is_empty());
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert!(e.state.players[0]
+        .battlefield
+        .iter()
+        .any(|oid| { e.state.objects[oid].card_id == "rune-scarred_demon" }));
+}
+
+#[test]
 fn issue_misc19_starfield_shepherd_filters_its_search() {
     let mut e = engine(819_002);
     let plains = inject_library_card(&mut e, 0, "plains");

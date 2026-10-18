@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "713332c1-5bd8-400f-bfff-c1ca0697a043",
+  "spans": [
+    {
+      "face_id": "opt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0"
+      ]
+    },
+    {
+      "face_id": "opt",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Scry"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario scry::opt_bottoming_the_scried_card_draws_the_next_one",
+      "covers": "Scry 1 completes before the spell draws the next card after the scried card is put on the bottom"
+    },
+    {
+      "test": "scenario scry::opt_keeping_the_scried_card_on_top_draws_it",
+      "covers": "the spell draws the retained top card after the Scry choice"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_opt_is_scry_then_draw_program",
+      "covers": "Opt's spell owner is a resultless Program that performs Scry 1 followed by one controller draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

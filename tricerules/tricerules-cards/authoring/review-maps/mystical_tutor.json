@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb81f95c-70f8-4eb7-8d15-15d0ae23ec03",
+  "spans": [
+    {
+      "face_id": "mystical_tutor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary"
+    },
+    {
+      "symbol": "CardTypeFilter::InstantOrSorcery",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "SearchDestination::TopOfLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/SearchLibrary/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tutor_search::mystical_tutor_filters_to_instant_or_sorcery",
+      "covers": "the private search only offers instant or sorcery cards, reveals the selected card, shuffles, and puts it on top"
+    },
+    {
+      "test": "scenario tutor_search::mystical_tutor_can_choose_zero_without_revealing_candidates",
+      "covers": "the qualified search may fail to find and candidate cards are not revealed before selection"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_mystical_tutor_is_revealed_filtered_top_search_program",
+      "covers": "the spell owner compiles as a resultless InstantOrSorcery Library search to the revealed top card with 0-to-1 selection and shuffle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

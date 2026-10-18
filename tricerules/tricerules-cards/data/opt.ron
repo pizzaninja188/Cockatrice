@@ -4,10 +4,10 @@
   face_id: "opt",
   mana_cost: "{U}",
   types: ["Instant"],
-  // Scry suspends for the player's decision and the following draw runs on resume
-  // (PendingResolution::resume_effect_index), so the drawn card reflects the scry.
-  spell_effect: [
-    Scry(count: 1),
-    Draw(count: 1),
-  ],
+  // CR 701.22: the Scry decision finishes before the following draw.
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 1))),
+    (id: "draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+  ], yields: []), target_bindings: [])),
 )

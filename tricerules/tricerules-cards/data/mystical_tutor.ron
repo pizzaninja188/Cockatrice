@@ -4,12 +4,23 @@
     face_id: "mystical_tutor",
     mana_cost: "{U}",
     types: ["Instant"],
-    spell_effect: [
-        SearchLibrary(
-          filter: Some((card_type: Some(InstantOrSorcery))),
+    spell_effect: [],
+    spell_program: Some((body: (steps: [
+        (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
+            who: Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some((card_type: Some(InstantOrSorcery))),
+            selection_constraint: None,
+            slots: [],
+            zones: Fixed([Library]),
             destination: TopOfLibrary,
+            conditional_destination: None,
             shuffle: true,
             reveal: true,
-        ),
-    ],
+            result_id: None,
+            selection_bounds: Some((min: 0, max: 1)),
+        ))),
+    ], yields: []), target_bindings: [])),
 )

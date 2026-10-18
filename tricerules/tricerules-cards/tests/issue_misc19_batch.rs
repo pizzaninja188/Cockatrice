@@ -104,14 +104,8 @@ fn issue_misc19_batch_maps_definitions() {
     // Rune-Scarred Demon: flying and an unrestricted entry tutor.
     let demon = primary(registry, "rune-scarred_demon");
     assert!(demon.keywords.contains(&Keyword::Flying));
-    assert!(matches!(
-        &demon.triggered_abilities[0].effect[0],
-        SpellEffectKind::SearchLibrary {
-            filter: None,
-            destination: SearchDestination::Hand,
-            ..
-        }
-    ));
+    assert!(demon.triggered_abilities[0].effect.is_empty());
+    assert!(demon.triggered_abilities[0].program.is_some());
 
     // Starfield Shepherd: flying, Warp {1}{W}, and a two-branch filtered entry search.
     let shepherd = primary(registry, "starfield_shepherd");
