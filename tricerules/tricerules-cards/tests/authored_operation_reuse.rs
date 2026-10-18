@@ -1,9 +1,12 @@
 //! Exact authored owners for the reusable Scry, search, and Proliferate operations.
 
 use tricerules_cards::primitives::{
-    Amount, CardSearchZone, CardTypeFilter, CompiledInstruction, CompiledInstructionKind,
-    PlayerRecipient, SearchDestination, SearchSelectionBounds, SearchZoneSelection,
-    SpellEffectKind, ZoneCardFilter,
+    Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef,
+    CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
+    CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
+    DiscardResultOutcome, PlayerRecipient, ResultType, SearchDestination, SearchSelectionBounds,
+    SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -77,13 +80,17 @@ fn ability_program(
     program
 }
 
-fn assert_perform(step: &CompiledInstruction, expected: SpellEffectKind) {
-    assert!(step.outputs.is_empty());
+fn assert_perform_effect(step: &CompiledInstruction, expected: SpellEffectKind) {
     assert!(step.input.is_none());
     let CompiledInstructionKind::Perform(effect) = &step.kind else {
-        panic!("expected a resultless Perform instruction");
+        panic!("expected a Perform instruction");
     };
     assert_eq!(**effect, expected);
+}
+
+fn assert_perform(step: &CompiledInstruction, expected: SpellEffectKind) {
+    assert!(step.outputs.is_empty());
+    assert_perform_effect(step, expected);
 }
 
 fn assert_single_search(
@@ -145,6 +152,178 @@ fn assert_spell_program(program: &tricerules_cards::primitives::CompiledProgram)
     assert!(program.required_inputs.is_empty());
     assert!(program.target_bindings.is_empty());
     assert!(program.slots.is_empty());
+}
+
+fn assert_flaring_cinder_optional_discard_program(
+    program: &tricerules_cards::primitives::CompiledProgram,
+) {
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [discard, branch] = program.body.steps.as_slice() else {
+        panic!("Flaring Cinder discards before its typed result branch");
+    };
+    assert_perform_effect(
+        discard,
+        SpellEffectKind::Discard {
+            who: PlayerRecipient::Controller,
+            quantity: DiscardQuantity::OptionalExact(1),
+        },
+    );
+    let [discard_result] = discard.outputs.as_slice() else {
+        panic!("Flaring Cinder's optional discard binds one typed result");
+    };
+    assert_eq!(
+        program.slot(*discard_result).unwrap().result_type,
+        ResultType::DiscardResult {
+            who: PlayerRecipient::Controller,
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+            optional_payment: true,
+        }
+    );
+    let CompiledInstructionKind::If { condition, yes, no } = &branch.kind else {
+        panic!("Flaring Cinder draws only through a result condition");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        CompiledProgramCondition::Result(
+            CompiledProgramResultCondition::DiscardOutcome {
+                result,
+                outcome: DiscardResultOutcome::ChosenToPay,
+            }
+        ) if result == discard_result
+    ));
+    assert!(yes.yields.is_empty());
+    assert!(no.steps.is_empty() && no.yields.is_empty());
+    let [draw] = yes.steps.as_slice() else {
+        panic!("a paid discard produces exactly one draw");
+    };
+    assert_perform(
+        draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    );
+}
+
+#[test]
+fn authored_flaring_cinder_enters_with_optional_discard_program() {
+    let program = ability_program("flaring_cinder", 0, false);
+    assert_flaring_cinder_optional_discard_program(program);
+}
+
+#[test]
+fn authored_flaring_cinder_cast_trigger_uses_optional_discard_program() {
+    let program = ability_program("flaring_cinder", 1, false);
+    assert_flaring_cinder_optional_discard_program(program);
+}
+
+#[test]
+fn authored_osseous_exhale_uses_owned_behold_receipt_program() {
+    let registry = tricerules_cards::registry::global();
+    let card = registry.get("osseous_exhale").expect("Osseous Exhale");
+    let face = card.primary_face();
+    let [group] = face.cast_cost_groups.as_slice() else {
+        panic!("Osseous Exhale keeps its one optional Behold group");
+    };
+    assert_eq!(group.group_id.as_str(), "cast_cost_01");
+    assert_eq!((group.min, group.max), (0, 1));
+    let [CastCostOptionDef::Behold {
+        option_id,
+        hand_filter,
+        permanent_filter,
+        ..
+    }] = group.options.as_slice()
+    else {
+        panic!("Osseous Exhale keeps the exact Dragon Behold option");
+    };
+    assert_eq!(option_id.as_str(), "option_01");
+    assert_eq!(hand_filter.required_subtypes, ["Dragon".to_string()]);
+    assert_eq!(permanent_filter.kind, TargetKind::AnyPermanent);
+    assert_eq!(permanent_filter.controller, TargetController::You);
+    assert_eq!(permanent_filter.required_subtypes, ["Dragon".to_string()]);
+
+    let program = face_program("osseous_exhale");
+    assert_eq!(program.context, EffectContext::Spell);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.slots.is_empty());
+    let [damage, choose] = program.body.steps.as_slice() else {
+        panic!("Osseous Exhale damages before checking its recorded Behold option");
+    };
+    let expected_target = TargetFilter {
+        kind: TargetKind::Creature,
+        combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
+        ..Default::default()
+    };
+    let CompiledInstructionKind::Perform(effect) = &damage.kind else {
+        panic!("Osseous Exhale begins with its targeted damage leaf");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        SpellEffectKind::DamageTarget { amount: Amount::Fixed(5), target }
+            if target == &expected_target
+    ));
+    assert_eq!(program.target_bindings.len(), 1);
+    assert_eq!(
+        program.target_bindings[0].instruction_address,
+        damage.instruction_address
+    );
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+    assert_eq!(program.target_bindings[0].role_index, 0);
+
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("the recorded Behold receipt controls a finite choice");
+    };
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(!optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [paid, unpaid] = branches.as_slice() else {
+        panic!("the cast-cost receipt has exact selected and not-selected branches");
+    };
+    assert_eq!(
+        paid.cost,
+        tricerules_cards::primitives::ResolutionCost::None
+    );
+    assert_eq!(
+        unpaid.cost,
+        tricerules_cards::primitives::ResolutionCost::None
+    );
+    assert!(matches!(
+        &paid.requirement,
+        CompiledChooseRequirement::CastCostReceipt(condition)
+            if condition.group_id.as_str() == "cast_cost_01"
+                && condition.option_id.as_str() == "option_01"
+                && condition.expected_selected
+    ));
+    assert!(matches!(
+        &unpaid.requirement,
+        CompiledChooseRequirement::CastCostReceipt(condition)
+            if condition.group_id.as_str() == "cast_cost_01"
+                && condition.option_id.as_str() == "option_01"
+                && !condition.expected_selected
+    ));
+    assert!(unpaid.body.steps.is_empty() && unpaid.body.yields.is_empty());
+    let [gain_life] = paid.body.steps.as_slice() else {
+        panic!("a recorded Behold receipt grants exactly two life");
+    };
+    assert_perform(
+        gain_life,
+        SpellEffectKind::GainLife {
+            amount: Amount::Fixed(2),
+        },
+    );
 }
 
 #[test]

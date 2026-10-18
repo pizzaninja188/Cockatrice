@@ -1,5 +1,5 @@
-// Oracle and ruling checked against Scryfall on 2026-08-26. A cast spell's mana value includes
-// announced X; copied spells are not cast and do not trigger this ability.
+// Oracle f70d65bf-5f1c-4aee-9bd1-f5ee6974b058 and rulings checked against Scryfall on 2026-10-18.
+// A cast spell's mana value includes announced X; copied spells are not cast and do not trigger.
 (
   id: "flaring_cinder",
   name: "Flaring Cinder",
@@ -13,27 +13,37 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "discard_a_card", presentation: Fallback,
-          cost: DiscardCard(filter: None),
-          effects: [Draw(count: 1)],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(
+          who: Controller, quantity: OptionalExact(1),
+        ))),
+        (id: "draw_if_discarded", kind: IfResult(
+          condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+          yes: (steps: [
+            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+      ], yields: []), target_bindings: [])),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([1]),
       trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(4))),
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "discard_a_card", presentation: Fallback,
-          cost: DiscardCard(filter: None),
-          effects: [Draw(count: 1)],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(
+          who: Controller, quantity: OptionalExact(1),
+        ))),
+        (id: "draw_if_discarded", kind: IfResult(
+          condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+          yes: (steps: [
+            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

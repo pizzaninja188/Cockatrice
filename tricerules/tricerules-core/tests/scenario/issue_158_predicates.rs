@@ -26,6 +26,113 @@ fn published_ability_mana_cost(
         .unwrap_or_else(|| panic!("missing published ability {ability_index} for {object_id}"))
 }
 
+fn flaring_cinder_etb_fixture(seed: u64) -> GameEngine {
+    let decks = Some(vec![
+        deck_with("mountain", &["flaring_cinder", "shock", "opt"]),
+        deck_with("island", &["island"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Flaring Cinder ETB fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    move_ready_to_battlefield(&mut engine, 0, "flaring_cinder");
+    ensure_in_hand(&mut engine, 0, "shock");
+    ensure_in_hand(&mut engine, 1, "island");
+    engine
+}
+
+fn select_flaring_cinder_discard_branch_if_legacy(engine: &mut GameEngine) {
+    let Some(pending) = engine.state.pending_resolution.as_ref() else {
+        panic!("Flaring Cinder's optional payment is offered");
+    };
+    if pending.presentation.choice_kind == ChoiceKind::ResolutionBranch {
+        let chooser = pending.deciding_player;
+        engine
+            .apply_scenario_command(
+                chooser,
+                &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
+            )
+            .expect("select the legacy discard branch before its payment");
+    }
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Flaring Cinder discard prompt")
+            .presentation
+            .choice_kind,
+        ChoiceKind::HandCards
+    );
+}
+
+fn decline_flaring_cinder_optional_payment(engine: &mut GameEngine) {
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Flaring Cinder's optional payment prompt");
+    let chooser = pending.deciding_player;
+    let command = match pending.presentation.choice_kind {
+        ChoiceKind::ResolutionBranch => {
+            submit_resolution_decision(ResolutionChoiceDecision::Decline)
+        }
+        ChoiceKind::HandCards => submit_resolution_choice(Vec::new()),
+        other => panic!("unexpected Flaring Cinder choice {other:?}"),
+    };
+    engine
+        .apply_scenario_command(chooser, &command)
+        .expect("decline Flaring Cinder's optional discard");
+}
+
+fn assert_rejected_flaring_cinder_answer_is_atomic(
+    engine: &mut GameEngine,
+    actor: i32,
+    command: RuledCommand,
+) {
+    let before = format!("{:?}", engine.state);
+    let command_index = engine.state.command_index;
+    assert!(engine.apply_command(actor, &command).is_err());
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert_eq!(engine.state.command_index, command_index);
+}
+
+fn empty_flaring_cinder_controller_hand(engine: &mut GameEngine) {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    engine.enable_dev_commands();
+    while let Some(object_id) = engine.state.players[0].hand.first().copied() {
+        let card_id = engine.state.objects[&object_id].card_id.clone();
+        let card_name = tricerules_cards::registry::global()
+            .get(&card_id)
+            .expect("hand card definition")
+            .name
+            .clone();
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::DevCommand(DevCommand {
+                        target_player_id: 0,
+                        dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                            card_name,
+                            zone: DevZone::Library as i32,
+                            ready: false,
+                        })),
+                    })),
+                },
+            )
+            .expect("move the fixture card out of the controller's hand");
+    }
+    assert!(engine.state.players[0].hand.is_empty());
+}
+
 #[test]
 fn starport_security_reduces_only_for_a_plus_one_plus_one_counter() {
     let decks = Some(vec![
@@ -205,7 +312,7 @@ fn sold_out_uses_the_chosen_targets_pre_exile_damage_identity() {
 #[test]
 fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
     let decks = Some(vec![
-        deck_with("mountain", &["flaring_cinder", "blaze", "blaze"]),
+        deck_with("mountain", &["flaring_cinder", "blaze", "blaze", "shock"]),
         deck_with("island", &[]),
     ]);
     let mut engine = GameEngine::new(
@@ -220,6 +327,7 @@ fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
     advance_to_main1_from_game_start(&mut engine);
     let cinder = relocate_to_battlefield(&mut engine, 0, "flaring_cinder", false);
     ensure_in_hand(&mut engine, 0, "blaze");
+    ensure_in_hand(&mut engine, 0, "shock");
 
     give_mana(
         &mut engine,
@@ -259,4 +367,218 @@ fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
     let trigger = engine.state.stack.last().expect("Flaring Cinder trigger");
     assert!(trigger.is_triggered);
     assert_eq!(trigger.source_permanent_id, Some(cinder));
+
+    let shock = engine.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|oid| {
+            engine
+                .state
+                .objects
+                .get(oid)
+                .map(|object| object.card_id.as_str())
+                == Some("shock")
+        })
+        .expect("the controller has a card available to pay Flaring Cinder");
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    pass_both_players(&mut engine);
+    select_flaring_cinder_discard_branch_if_legacy(&mut engine);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![shock]))
+        .expect("pay the actual mana-value-four Flaring Cinder trigger");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "paying the actual qualifying cast trigger draws exactly once"
+    );
+    assert_eq!(count_card_id_in_graveyard(&engine, 0, "shock"), 1);
+    resolve_entire_stack_two_player(&mut engine);
+}
+
+#[test]
+fn flaring_cinder_enters_and_optional_discard_draws_once_after_authorized_payment() {
+    let mut engine = flaring_cinder_etb_fixture(158_005);
+    let shock = engine.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|oid| {
+            engine
+                .state
+                .objects
+                .get(oid)
+                .map(|object| object.card_id.as_str())
+                == Some("shock")
+        })
+        .expect("the controller has a discard candidate");
+    let foreign_card = *engine.state.players[1]
+        .hand
+        .first()
+        .expect("the other player has a foreign hand object");
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    pass_both_players(&mut engine);
+    select_flaring_cinder_discard_branch_if_legacy(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Flaring Cinder's ETB discard offer");
+    let prompt_id = pending.resolution_prompt_id.get();
+    assert_ne!(prompt_id, 0);
+    assert_eq!(pending.deciding_player, 0);
+    assert!(pending.presentation.candidates.contains(&shock));
+    assert_eq!(pending.presentation.min, 0);
+    assert_eq!(pending.presentation.max, 1);
+
+    let mut wrong_actor = submit_resolution_choice(vec![shock]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = wrong_actor.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id;
+    assert_rejected_flaring_cinder_answer_is_atomic(&mut engine, 1, wrong_actor);
+
+    let mut foreign_candidate = submit_resolution_choice(vec![foreign_card]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = foreign_candidate.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id;
+    assert_rejected_flaring_cinder_answer_is_atomic(&mut engine, 0, foreign_candidate);
+
+    let mut stale_prompt = submit_resolution_choice(vec![shock]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_prompt.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id + 1;
+    assert_rejected_flaring_cinder_answer_is_atomic(&mut engine, 0, stale_prompt);
+
+    let mut paid = submit_resolution_choice(vec![shock]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = paid.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id;
+    engine
+        .apply_command(0, &paid)
+        .expect("the ETB trigger's controller pays with the offered card");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(count_card_id_in_graveyard(&engine, 0, "shock"), 1);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "the actual ETB trigger draws once after the discard payment commits"
+    );
+}
+
+#[test]
+fn flaring_cinder_draws_the_same_card_after_library_of_leng_replacement() {
+    let decks = Some(vec![
+        deck_with(
+            "mountain",
+            &["flaring_cinder", "shock", "opt", "library_of_leng"],
+        ),
+        deck_with("island", &["island"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Flaring Cinder Library of Leng fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    move_ready_to_battlefield(&mut engine, 0, "flaring_cinder");
+    relocate_to_battlefield(&mut engine, 0, "library_of_leng", false);
+    ensure_in_hand(&mut engine, 0, "shock");
+    let shock = engine.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|oid| {
+            engine
+                .state
+                .objects
+                .get(oid)
+                .map(|object| object.card_id.as_str())
+                == Some("shock")
+        })
+        .expect("the controller has the exact card to pay the trigger");
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&shock)
+        .copied()
+        .unwrap_or(0);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    pass_both_players(&mut engine);
+    select_flaring_cinder_discard_branch_if_legacy(&mut engine);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![shock]))
+        .expect("pay the actual Flaring Cinder ETB trigger");
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Library of Leng offers its replacement")
+            .presentation
+            .choice_kind,
+        ChoiceKind::PrivateReplacement
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
+        .expect("put the paid card on top with Library of Leng");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&shock].zone, Zone::Hand);
+    assert!(engine.state.players[0].hand.contains(&shock));
+    assert_eq!(
+        engine.state.zone_change_generation.get(&shock).copied(),
+        Some(generation_before + 2),
+        "the paid physical card moves through the library and then returns as the draw"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "the selected discard still counts as chosen to pay after its hidden replacement"
+    );
+}
+
+#[test]
+fn flaring_cinder_optional_discard_decline_does_not_draw() {
+    let mut engine = flaring_cinder_etb_fixture(158_006);
+    let hand_before = engine.state.players[0].hand.clone();
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    pass_both_players(&mut engine);
+    decline_flaring_cinder_optional_payment(&mut engine);
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].hand, hand_before);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before,
+        "declining the actual ETB trigger neither discards nor draws"
+    );
+}
+
+#[test]
+fn flaring_cinder_etb_with_empty_hand_has_no_free_draw_or_choice() {
+    let mut engine = flaring_cinder_etb_fixture(158_007);
+    empty_flaring_cinder_controller_hand(&mut engine);
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let batch = pass_both_players_with_batch(&mut engine);
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(find_resolution_choice(&batch).is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before,
+        "an unpayable optional discard does not become a free draw"
+    );
 }

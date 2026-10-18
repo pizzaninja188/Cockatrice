@@ -312,7 +312,7 @@ fn kicked_gnarlid_colony_enters_with_counters_and_grants_trample() {
 }
 
 #[test]
-fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_to_resolution() {
+fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_dragon_leaves_hand() {
     let decks = Some(vec![
         deck_with("forest", &["grizzly_bears"]),
         deck_with("plains", &["osseous_exhale", "adult_gold_dragon"]),
@@ -338,6 +338,13 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
     e.state.players[1].mana_pool.colorless = 1;
     let spell = hand_index_for_card(&e, 1, "osseous_exhale");
     let dragon = hand_index_for_card(&e, 1, "adult_gold_dragon");
+    let dragon_object = e.state.players[1].hand[dragon];
+    let dragon_generation_before = e
+        .state
+        .zone_change_generation
+        .get(&dragon_object)
+        .copied()
+        .unwrap_or(0);
     e.apply_scenario_command(
         1,
         &cast_spell_with_cast_cost_groups(
@@ -354,11 +361,220 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
         ),
     )
     .expect("cast Osseous Exhale with behold");
+
+    let receipt_before = e
+        .state
+        .stack
+        .last()
+        .expect("Osseous Exhale remains on the stack")
+        .cast_cost_receipts
+        .clone();
+    assert!(matches!(
+        receipt_before[0].objects.as_slice(),
+        [CastCostObjectReceipt::RevealedHand {
+            object_id,
+            card_id,
+            ..
+        }] if *object_id == dragon_object && card_id == "adult_gold_dragon"
+    ));
+    let moved_dragon = move_ready_to_battlefield(&mut e, 1, "adult_gold_dragon");
+    assert_eq!(moved_dragon, dragon_object);
+    assert_eq!(
+        e.state.zone_change_generation[&dragon_object],
+        dragon_generation_before + 1
+    );
+    assert_eq!(
+        e.state.stack.last().unwrap().cast_cost_receipts,
+        receipt_before,
+        "the cast-time receipt remains fixed after the revealed hand object changes zones"
+    );
+
     e.apply_scenario_command(1, &pass()).expect("defender pass");
     e.apply_scenario_command(0, &pass())
         .expect("resolve Osseous Exhale");
     assert_eq!(e.state.players[1].life, 22);
     assert_eq!(e.state.objects[&attacker].zone, Zone::Graveyard);
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn osseous_exhale_without_behold_does_not_gain_life_even_when_a_dragon_is_in_hand() {
+    let decks = Some(vec![
+        deck_with("forest", &["grizzly_bears"]),
+        deck_with("plains", &["osseous_exhale", "adult_gold_dragon"]),
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
+    advance_to_declare_attackers(&mut e);
+    let attacker = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    ensure_card_in_hand(&mut e, 1, "osseous_exhale");
+    ensure_card_in_hand(&mut e, 1, "adult_gold_dragon");
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to defender");
+    e.state.players[1].mana_pool.white = 1;
+    e.state.players[1].mana_pool.colorless = 1;
+    let spell = hand_index_for_card(&e, 1, "osseous_exhale");
+    e.apply_scenario_command(
+        1,
+        &cast_spell_with_cast_cost_groups(spell, target_object(attacker), vec![]),
+    )
+    .expect("cast without selecting the available Dragon");
+    assert!(e.state.stack.last().unwrap().cast_cost_receipts.is_empty());
+    assert!(e.state.pending_resolution.is_none());
+    e.apply_scenario_command(1, &pass()).expect("caster pass");
+    let resolving = e
+        .apply_scenario_command(0, &pass())
+        .expect("resolve Osseous Exhale without the receipt");
+
+    assert!(find_resolution_choice(&resolving).is_none());
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(e.state.players[1].life, 20);
+    assert_eq!(e.state.objects[&attacker].zone, Zone::Graveyard);
+    assert!(e.state.stack.is_empty());
+}
+
+#[test]
+fn osseous_exhale_all_illegal_targets_do_not_resolve_the_behold_branch() {
+    let decks = Some(vec![
+        deck_with("forest", &["grizzly_bears", "shock"]),
+        deck_with("plains", &["osseous_exhale", "adult_gold_dragon"]),
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
+    advance_to_declare_attackers(&mut e);
+    let attacker = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    ensure_card_in_hand(&mut e, 0, "shock");
+    ensure_card_in_hand(&mut e, 1, "osseous_exhale");
+    ensure_card_in_hand(&mut e, 1, "adult_gold_dragon");
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to defender");
+    e.state.players[1].mana_pool.white = 1;
+    e.state.players[1].mana_pool.colorless = 1;
+    let spell = hand_index_for_card(&e, 1, "osseous_exhale");
+    let dragon = hand_index_for_card(&e, 1, "adult_gold_dragon");
+    e.apply_scenario_command(
+        1,
+        &cast_spell_with_cast_cost_groups(
+            spell,
+            target_object(attacker),
+            vec![CastCostGroupSelection {
+                repetitions: None,
+                group_index: 0,
+                option_index: 0,
+                selected_object: Some(SelectedObject::HandIndex(dragon as u32)),
+                expected_zone_change_generation: 0,
+                battlefield_objects: None,
+            }],
+        ),
+    )
+    .expect("cast Osseous Exhale after beholding a Dragon");
+
+    let receipt_before = e
+        .state
+        .stack
+        .last()
+        .expect("Osseous Exhale remains on the stack")
+        .cast_cost_receipts
+        .clone();
+    assert_eq!(receipt_before.len(), 1);
+    e.apply_scenario_command(1, &pass())
+        .expect("Osseous caster yields priority to attacker for response");
+    e.state.players[0].mana_pool.red = 1;
+    let shock = hand_index_for_card(&e, 0, "shock");
+    e.apply_scenario_command(0, &cast_spell(shock, target_object(attacker)))
+        .expect("cast Shock in response to remove the spell's only target");
+    assert_eq!(e.state.stack.len(), 2);
+
+    pass_both_players(&mut e);
+    assert_eq!(e.state.objects[&attacker].zone, Zone::Graveyard);
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(
+        e.state.stack.last().unwrap().cast_cost_receipts,
+        receipt_before,
+        "the behold receipt remains fixed after its target leaves"
+    );
+
+    let resolving = pass_both_players_with_batch(&mut e);
+    assert!(find_resolution_choice(&resolving).is_none());
+
+    assert_eq!(e.state.players[1].life, 20);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+}
+
+#[test]
+fn osseous_exhale_rejects_a_noncombat_target_before_paying_behold() {
+    let decks = Some(vec![
+        deck_with("forest", &["grizzly_bears", "giant_spider"]),
+        deck_with("plains", &["osseous_exhale", "adult_gold_dragon"]),
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
+    advance_to_declare_attackers(&mut e);
+    let attacker = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let noncombat = relocate_to_battlefield(&mut e, 0, "giant_spider", false);
+    ensure_card_in_hand(&mut e, 1, "osseous_exhale");
+    ensure_card_in_hand(&mut e, 1, "adult_gold_dragon");
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
+        .expect("attack with only the Grizzly Bears");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to defender");
+    e.state.players[1].mana_pool.white = 1;
+    e.state.players[1].mana_pool.colorless = 1;
+    let spell = hand_index_for_card(&e, 1, "osseous_exhale");
+    let dragon = hand_index_for_card(&e, 1, "adult_gold_dragon");
+    let before = format!("{:?}", e.state);
+    let rejected = e.apply_scenario_command(
+        1,
+        &cast_spell_with_cast_cost_groups(
+            spell,
+            target_object(noncombat),
+            vec![CastCostGroupSelection {
+                repetitions: None,
+                group_index: 0,
+                option_index: 0,
+                selected_object: Some(SelectedObject::HandIndex(dragon as u32)),
+                expected_zone_change_generation: 0,
+                battlefield_objects: None,
+            }],
+        ),
+    );
+
+    assert!(
+        rejected.is_err(),
+        "the nonattacking creature is not a legal target"
+    );
+    assert_eq!(format!("{:?}", e.state), before);
+    assert_eq!(e.state.players[1].mana_pool.white, 1);
+    assert_eq!(e.state.players[1].mana_pool.colorless, 1);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.objects[&noncombat].zone, Zone::Battlefield);
 }
 
 fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {

@@ -1,0 +1,87 @@
+{
+  "format_version": 1,
+  "oracle_id": "8d84a706-080c-4fb2-b1b9-3dbb3294fb7b",
+  "spans": [
+    {
+      "face_id": "osseous_exhale",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0",
+        "/faces/0/cast_cost_groups/0/options/0"
+      ]
+    },
+    {
+      "face_id": "osseous_exhale",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/targeting",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/1/kind/Choose/branches/0",
+        "/faces/0/spell_program/body/steps/1/kind/Choose/branches/0/body/steps/0",
+        "/faces/0/spell_program/body/steps/1/kind/Choose/branches/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::Behold",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/DamageTarget"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionBranchRequirement::CastCostReceipt",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Choose/branches/0/requirement"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife"
+    },
+    {
+      "symbol": "ResolutionBranchRequirement::CastCostReceipt",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Choose/branches/1/requirement"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_osseous_exhale_uses_owned_behold_receipt_program",
+      "covers": "the exact Behold option and nonoptional true/false receipt choice retain fixed damage and life-gain semantics"
+    },
+    {
+      "test": "scenario issue_104_optional_cast_costs::osseous_exhale_uses_the_behold_receipt_after_the_revealed_dragon_leaves_hand",
+      "covers": "the cast-time Dragon receipt stays true after the same physical card leaves hand; damage and life gain resolve without a prompt"
+    },
+    {
+      "test": "scenario issue_104_optional_cast_costs::osseous_exhale_without_behold_does_not_gain_life_even_when_a_dragon_is_in_hand",
+      "covers": "having a Dragon in hand without selecting Behold yields no life gain or branch prompt"
+    },
+    {
+      "test": "scenario issue_104_optional_cast_costs::osseous_exhale_all_illegal_targets_do_not_resolve_the_behold_branch",
+      "covers": "an all-illegal-target spell does not resolve its damage or receipt-dependent life gain"
+    },
+    {
+      "test": "scenario issue_104_optional_cast_costs::osseous_exhale_rejects_a_noncombat_target_before_paying_behold",
+      "covers": "an otherwise legal creature that is not attacking or blocking is rejected atomically before Behold is paid"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

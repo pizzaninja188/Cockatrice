@@ -1,0 +1,89 @@
+{
+  "format_version": 1,
+  "oracle_id": "f70d65bf-5f1c-4aee-9bd1-f5ee6974b058",
+  "spans": [
+    {
+      "face_id": "flaring_cinder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0",
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/program/body/steps/0",
+        "/faces/0/triggered_abilities/1/program/body/steps/1",
+        "/faces/0/triggered_abilities/1/program/body/steps/1/kind/IfResult/yes/steps/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_flaring_cinder_enters_with_optional_discard_program",
+      "covers": "the exact ETB trigger owns a typed optional controller discard and draws one only when chosen to pay"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_flaring_cinder_cast_trigger_uses_optional_discard_program",
+      "covers": "the exact cast-trigger owner compiles an optional exact-one controller discard into a typed DiscardResult followed by a Draw body gated on ChosenToPay"
+    },
+    {
+      "test": "scenario issue_158_predicates::flaring_cinder_cast_trigger_includes_announced_x_in_mana_value",
+      "covers": "X=2 does not trigger; X=3 creates and resolves the actual Flaring Cinder trigger with one paid draw"
+    },
+    {
+      "test": "scenario issue_158_predicates::flaring_cinder_enters_and_optional_discard_draws_once_after_authorized_payment",
+      "covers": "the ETB trigger offers only the controller's card and rejects wrong-actor, foreign-object, and stale-prompt answers atomically"
+    },
+    {
+      "test": "scenario issue_158_predicates::flaring_cinder_optional_discard_decline_does_not_draw",
+      "covers": "declining the optional discard preserves the hand and does not draw"
+    },
+    {
+      "test": "scenario issue_158_predicates::flaring_cinder_etb_with_empty_hand_has_no_free_draw_or_choice",
+      "covers": "an unpayable optional discard completes without a prompt or free draw"
+    },
+    {
+      "test": "scenario issue_158_predicates::flaring_cinder_draws_the_same_card_after_library_of_leng_replacement",
+      "covers": "Library of Leng puts the selected physical card on top and the trigger draws that same card exactly once"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
