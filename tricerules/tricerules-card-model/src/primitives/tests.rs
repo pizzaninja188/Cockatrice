@@ -4748,6 +4748,34 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+fn ability_program_fixture(
+    card_id: &str,
+    body: &str,
+) -> Result<crate::primitives::CompiledProgram, String> {
+    let definition = format!(
+        r#"(id: "{card_id}", name: "Ability Program Fixture", face_id: "{card_id}",
+            types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: {body})), modal: None, targeting: None,
+                may: false, intervening_if: None, triggers_only_once: false,
+                max_triggers_per_turn: None,
+            )])"#
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .map_err(|error| error.to_string())?;
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: card_id.into(),
+        face_id: crate::CardFaceId::new(card_id).unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    registry
+        .compiled_program_for_owner(&owner)
+        .cloned()
+        .ok_or_else(|| format!("the exact triggered ability owner {owner:?} did not compile"))
+}
+
 fn resultless_direct_hand_search_program(filter: &str) -> String {
     program_fixture(&format!(
         r#"(steps: [
@@ -4832,23 +4860,15 @@ fn authored_choose_accepts_resultless_direct_hand_search_filters() {
     }
 
     for (label, filter) in [
-        ("a broad creature filter", "(card_type: Some(Creature))"),
-        (
-            "a compound exact-name filter",
-            "(exact_name: Some(\"Legal Test Commander\"), card_type: Some(Creature))",
-        ),
-        (
-            "an OR filter",
-            "(any_of: [(card_type: Some(BasicLand)), (exact_name: Some(\"Legal Test Commander\"))])",
-        ),
+        ("an empty filter", "()"),
         ("an empty name", "(exact_name: Some(\"\"))"),
     ] {
         let definition = resultless_direct_hand_search_program(filter);
         let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
-            .expect_err("direct Hand search must reject filters outside the bounded subset")
+            .expect_err("direct Hand search must reject invalid ordinary filters")
             .to_string();
         assert!(
-            error.contains("program direct Hand SearchLibrary"),
+            error.contains("zone card filter"),
             "{label}: unexpected diagnostic: {error}"
         );
     }
@@ -4976,8 +4996,8 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
         ),
         ("count must stay fixed at one", definition.replace("count: 1,", "count: 2,")),
         (
-            "only BasicLand is supported",
-            definition.replace("card_type: Some(BasicLand)", "card_type: Some(Land)"),
+            "filters still pass ordinary filter validation",
+            definition.replace("card_type: Some(BasicLand)", ""),
         ),
         (
             "selection constraints are excluded",
@@ -5017,10 +5037,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             definition.replace("min: 0, max: 1", "min: 1, max: 1"),
         ),
         (
-            "reveal remains enabled",
-            definition.replace("reveal: true", "reveal: false"),
-        ),
-        (
             "shuffle remains enabled",
             definition.replace("shuffle: true", "shuffle: false"),
         ),
@@ -5030,6 +5046,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             .to_string();
         assert!(
             error.contains("program direct TopOfLibrary SearchLibrary")
+                || error.contains("zone card filter")
                 || error.contains("program conditional TopOfLibrary SearchLibrary supports only")
                 || error.contains("program direct Battlefield SearchLibrary supports only")
                 || error.contains("retained SearchLibrary supports only"),
@@ -5088,10 +5105,246 @@ fn resultless_conditional_top_search_program() -> String {
 }
 
 #[test]
+fn program_reusable_operation_contract() {
+    let search_program =
+        |filter: &str, destination: &str, conditional_destination: &str, reveal: bool, min: u32| {
+            program_fixture(&format!(
+                r#"(steps: [
+                (id: "search_choice", bind: [], input: None, kind: Choose(
+                    choice: "search", chooser: Controller, optional: true,
+                    branches: [(branch_id: "search_for_card", presentation: Fallback,
+                        cost: None, requirement: Always, body: (steps: [
+                            (id: "search", bind: [], input: None, kind: Perform(SearchLibrary(
+                                who: Controller, optional: false, count: 1,
+                                count_by_cast_cost: None,
+                                filter: {filter}, selection_constraint: None, slots: [],
+                                zones: Fixed([Library]), destination: {destination},
+                                conditional_destination: {conditional_destination},
+                                shuffle: true, reveal: {reveal}, result_id: None,
+                                selection_bounds: Some((min: {min}, max: 1)),
+                            )))
+                        ], yields: []))], otherwise: (steps: [], yields: []))),
+            ], yields: [])"#
+            ))
+        };
+    let reflexive_program = |when: &str, child_metadata: &str, damage: &str| {
+        let effect = format!(
+            r#"CreateReflexiveTrigger({when}ability: (
+                ability_id: "reflexive_01", presentation: Fallback,
+                {child_metadata}effect: [{damage}],
+            ))"#
+        );
+        let body = format!(
+            r#"(steps: [(id: "reflexive", bind: [], input: None,
+                kind: Perform({effect}))], yields: [])"#
+        );
+        ability_program_fixture("program_reusable_fixture", &body)
+    };
+
+    let valid_searches = [
+        (
+            "qualified Creature/minimum-mana-value Hand search",
+            r#"Some((card_type: Some(Creature), min_mana_value: Some(6)))"#,
+            "Hand",
+            "None",
+            true,
+            0,
+        ),
+        (
+            "validated OR/name filter to Hand",
+            r#"Some((any_of: [(card_type: Some(Creature)), (exact_name: Some("Legal Test Commander"))]))"#,
+            "Hand",
+            "None",
+            true,
+            0,
+        ),
+        (
+            "unrestricted private Hand search",
+            "None",
+            "Hand",
+            "None",
+            false,
+            1,
+        ),
+        (
+            "validated OR filter to TopOfLibrary",
+            r#"Some((any_of: [(card_type: Some(Creature)), (required_subtypes: ["Elf"])]))"#,
+            "TopOfLibrary",
+            "None",
+            true,
+            0,
+        ),
+        (
+            "unrestricted TopOfLibrary search with no reveal",
+            "None",
+            "TopOfLibrary",
+            "None",
+            false,
+            1,
+        ),
+        (
+            "recursive live condition on the existing conditional destination",
+            r#"Some((card_type: Some(BasicLand)))"#,
+            "TopOfLibrary",
+            r#"Some((condition: AllOf([
+                ControllerLibraryEmpty,
+                AnyOf([
+                    CardsInHand(players: Relative(Controller), min: Some(1)),
+                    BattlefieldAggregate(
+                        filter: (controllers: Controller, card_type: Some(Creature)),
+                        aggregate: Count, min: Some(1), max: None,
+                        exclude_observed_object: false,
+                    ),
+                ]),
+            ]), destination: Battlefield(tapped: true)))"#,
+            true,
+            0,
+        ),
+    ];
+
+    for (label, filter, destination, conditional_destination, reveal, min) in valid_searches {
+        let definition = search_program(filter, destination, conditional_destination, reveal, min);
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| panic!("{label} must compile: {error}"));
+    }
+
+    for (label, filter, destination, conditional_destination, reveal, min, expected_error) in [
+        (
+            "empty filter cannot be treated as a qualified search",
+            "Some(())",
+            "Hand",
+            "None",
+            false,
+            0,
+            "zone card filter requires at least one predicate",
+        ),
+        (
+            "duplicate filter leaves remain invalid",
+            r#"Some((any_of: [(card_type: Some(Creature)), (card_type: Some(Creature))]))"#,
+            "Hand",
+            "None",
+            true,
+            0,
+            "zone card filter cannot contain duplicate terminal predicates",
+        ),
+        (
+            "unrestricted search cannot fail to find while a card exists",
+            "None",
+            "Hand",
+            "None",
+            false,
+            0,
+            "SearchLibrary",
+        ),
+        (
+            "qualified search preserves its fail-to-find minimum",
+            r#"Some((card_type: Some(Creature)))"#,
+            "Hand",
+            "None",
+            true,
+            1,
+            "SearchLibrary",
+        ),
+        (
+            "source-counter condition stays outside the live If domain",
+            r#"Some((card_type: Some(BasicLand)))"#,
+            "TopOfLibrary",
+            r#"Some((condition: SourceCounterCount(counter: Quest, min: Some(1)), destination: Battlefield(tapped: true)))"#,
+            true,
+            0,
+            "If condition uses context",
+        ),
+        (
+            "cast-snapshot condition stays outside the live If domain",
+            r#"Some((card_type: Some(BasicLand)))"#,
+            "TopOfLibrary",
+            r#"Some((condition: CastOrigin(origin: Hand), destination: Battlefield(tapped: true)))"#,
+            true,
+            0,
+            "If condition uses context",
+        ),
+    ] {
+        let definition = search_program(filter, destination, conditional_destination, reveal, min);
+        let error = invalid_program_reason(&definition);
+        assert!(
+            error.contains(expected_error),
+            "{label}: unexpected semantic validation error: {error}"
+        );
+    }
+
+    for (label, damage) in [
+        (
+            "existing Sparktongue-style AnyTarget parameter",
+            "DamageTarget(amount: 3, target: (kind: AnyTarget))",
+        ),
+        (
+            "fixed Creature-filtered damage parameter",
+            "DamageTarget(amount: 4, target: (kind: Creature))",
+        ),
+    ] {
+        reflexive_program("", "", damage)
+            .unwrap_or_else(|error| panic!("{label} ability Program must compile: {error}"));
+    }
+
+    let unsupported_reflexive_shapes = [
+        (
+            "receipt-bound reflexive child",
+            "when: Some(CountersPlaced(counter: Quest, object: Source)), ",
+            "",
+            "DamageTarget(amount: 3, target: (kind: AnyTarget))",
+            "CreateReflexiveTrigger supports only the approved resultless target shapes",
+        ),
+        (
+            "intervening-if metadata",
+            "",
+            "intervening_if: Some(ControllerLibraryEmpty), ",
+            "DamageTarget(amount: 3, target: (kind: AnyTarget))",
+            "CreateReflexiveTrigger supports only the approved resultless target shapes",
+        ),
+        (
+            "explicit child target metadata",
+            "",
+            "targeting: Some((groups: [(min: 1, max: 1, prompt: \"Choose target creature\", effect_indices: [0])])), ",
+            "DamageTarget(amount: 3, target: (kind: AnyTarget))",
+            "CreateReflexiveTrigger supports only the approved resultless target shapes",
+        ),
+        (
+            "dynamic reflexive damage amount",
+            "",
+            "",
+            "DamageTarget(amount: Conditional(condition: ControllerLibraryEmpty, when_true: 3, otherwise: 4), target: (kind: Creature))",
+            "CreateReflexiveTrigger DamageTarget supports only a fixed amount",
+        ),
+        (
+            "defending-player target context",
+            "",
+            "",
+            "DamageTarget(amount: 3, target: (kind: Creature, controller: DefendingPlayer))",
+            "cannot depend on a defending player outside its typed program inputs",
+        ),
+        (
+            "nested attached-object target context",
+            "",
+            "",
+            "DamageTarget(amount: 3, target: (any_of: [(kind: Creature, excluded_objects: [AttachedObject]), (kind: Creature)]))",
+            "cannot depend on an attached object outside its typed program inputs",
+        ),
+    ];
+    for (label, when, child_metadata, damage, expected_error) in unsupported_reflexive_shapes {
+        let error = reflexive_program(when, child_metadata, damage)
+            .expect_err("unsupported ability-owned reflexive shape must fail closed");
+        assert!(
+            error.contains(expected_error),
+            "{label}: unexpected semantic validation error: {error}"
+        );
+    }
+}
+
+#[test]
 fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
     let definition = resultless_conditional_top_search_program();
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
-        .expect("the exact resultless Embermouth conditional search shape compiles");
+        .expect("Embermouth's resultless conditional search shape compiles");
     let owner = crate::ProgramOwnerId::face(
         "program_fixture",
         crate::CardFaceId::new("program_fixture").unwrap(),
@@ -5195,27 +5448,15 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             definition.replace("Battlefield(tapped: true)", "Battlefield(tapped: false)"),
         ),
         (
-            "the predicate has no creature-only card type",
-            definition.replace("card_type: None", "card_type: Some(Creature)"),
-        ),
-        (
-            "the predicate names only Dragon",
-            definition.replace("[\"Dragon\"]", "[\"Dragon\", \"Lizard\"]"),
-        ),
-        (
-            "the predicate is a count",
-            definition.replace("aggregate: Count", "aggregate: DistinctNames"),
-        ),
-        (
-            "the predicate has only a lower bound of one",
-            definition.replace("min: Some(1)", "min: Some(2)"),
-        ),
-        (
-            "the observed object is not excluded",
+            "the predicate remains in the live controller domain",
             definition.replace(
-                "exclude_observed_object: false",
-                "exclude_observed_object: true",
+                "controllers: Controller, card_type: None",
+                "controllers: Opponents, card_type: None",
             ),
+        ),
+        (
+            "the predicate is a Count aggregate",
+            definition.replace("aggregate: Count", "aggregate: DistinctNames"),
         ),
         (
             "the search does not reveal",
@@ -5238,7 +5479,10 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             .expect_err("the conditional search admission must remain closed")
             .to_string();
         assert!(
-            error.contains("conditional") || error.contains("SearchLibrary"),
+            error.contains("conditional")
+                || error.contains("SearchLibrary")
+                || error.contains("If condition")
+                || error.contains("ProgramIf"),
             "{label}: unexpected diagnostic: {error}"
         );
     }
@@ -5954,36 +6198,35 @@ fn program_accepts_resultless_proliferate_leaf() {
 
 #[test]
 fn program_accepts_only_supported_resultless_reflexive_trigger_shapes() {
-    let definition = |effect: &str| {
-        program_fixture(&format!(
+    let body = |effect: &str| {
+        format!(
             r#"(steps: [
                 (id: "create_reflexive", bind: [], input: None,
                  kind: Perform({effect})),
             ], yields: [])"#
-        ))
+        )
     };
-    let sentry = definition(
+    let sentry = body(
         r#"CreateReflexiveTrigger(ability: (
             ability_id: "reflexive_01", presentation: Fallback,
             effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
         ))"#,
     );
-    let sparktongue = definition(
+    let sparktongue = body(
         r#"CreateReflexiveTrigger(ability: (
             ability_id: "reflexive_01", presentation: Fallback,
             effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
         ))"#,
     );
-    for card in [&sentry, &sparktongue] {
-        let registry = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
-            .expect("the two reviewed resultless reflexive target shapes compile");
-        let owner = crate::ProgramOwnerId::face(
-            "program_fixture",
-            crate::CardFaceId::new("program_fixture").unwrap(),
-        );
-        let compiled = registry
-            .compiled_program_for_owner(&owner)
-            .expect("the exact fixture owner keeps its compiled program");
+    let creature_damage = body(
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [DamageTarget(amount: 3, target: (kind: Creature))],
+        ))"#,
+    );
+    for card in [&sentry, &sparktongue, &creature_damage] {
+        let compiled = ability_program_fixture("program_reflexive_fixture", card)
+            .expect("the ability-owned resultless reflexive target shape compiles");
         assert!(matches!(
             &compiled.body.steps[0].kind,
             crate::primitives::CompiledInstructionKind::Perform(effect)
@@ -6000,13 +6243,10 @@ fn program_accepts_only_supported_resultless_reflexive_trigger_shapes() {
             ability_id: "reflexive_01", presentation: Fallback,
             effect: [Tap(subject: Chosen((kind: Creature, controller: You)))],
         ))"#,
-        r#"CreateReflexiveTrigger(ability: (
-            ability_id: "reflexive_01", presentation: Fallback,
-            effect: [DamageTarget(amount: 3, target: (kind: Creature))],
-        ))"#,
     ] {
-        let invalid = definition(unsupported);
-        let error = invalid_program_reason(&invalid);
+        let invalid = body(unsupported);
+        let error = ability_program_fixture("program_reflexive_fixture", &invalid)
+            .expect_err("unsupported ability-owned reflexive shape must fail closed");
         assert!(
             error.contains(
                 "CreateReflexiveTrigger supports only the approved resultless target shapes"
@@ -6014,6 +6254,21 @@ fn program_accepts_only_supported_resultless_reflexive_trigger_shapes() {
             "unexpected reflexive admission error: {error}"
         );
     }
+}
+
+#[test]
+fn program_reflexive_trigger_rejects_spell_without_source_capture() {
+    let definition = program_fixture(
+        r#"(steps: [(id: "create_reflexive", bind: [], input: None,
+            kind: Perform(CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive_01", presentation: Fallback,
+                effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+            ))))], yields: [])"#,
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+        "a spell Program cannot stage a reflexive child without a captured permanent source"
+    );
 }
 
 #[test]

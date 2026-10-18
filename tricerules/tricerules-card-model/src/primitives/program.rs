@@ -639,7 +639,7 @@ impl Compiler {
                         } if !is_resultless_direct_top_library_search(effect)
                             && !is_resultless_direct_hand_library_search(effect)
                             && !is_resultless_direct_battlefield_library_search(effect)
-                            && !is_resultless_embermouth_conditional_top_search(effect)
+                            && !is_resultless_conditional_top_search(effect)
                     ) || matches!(
                         effect.as_ref(),
                         SpellEffectKind::RevealCohort
@@ -1381,7 +1381,7 @@ fn validate_and_result_types(
         }
         SpellEffectKind::CreateReflexiveTrigger { .. } => {
             effect.validate(context)?;
-            validate_resultless_program_reflexive_trigger(effect)?;
+            validate_resultless_program_reflexive_trigger(effect, context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::Discard { who, quantity } => {
@@ -1473,7 +1473,7 @@ fn validate_and_result_types(
             destination: SearchDestination::TopOfLibrary,
             conditional_destination: Some(_),
             ..
-        } => validate_resultless_embermouth_conditional_top_search(effect, context),
+        } => validate_resultless_conditional_top_search(effect, context),
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
             destination: SearchDestination::TopOfLibrary,
@@ -1729,10 +1729,19 @@ fn is_token_copy_batch_consumer(effect: &SpellEffectKind) -> bool {
     }
 }
 
-fn validate_resultless_program_reflexive_trigger(effect: &SpellEffectKind) -> Result<(), String> {
+fn validate_resultless_program_reflexive_trigger(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<(), String> {
     let SpellEffectKind::CreateReflexiveTrigger { when, ability } = effect else {
         return Err("expected a CreateReflexiveTrigger program leaf".into());
     };
+    if context != EffectContext::Ability {
+        return Err(
+            "CreateReflexiveTrigger in a resolution program requires an ability-owned permanent source"
+                .into(),
+        );
+    }
     if when.is_some() || ability.targeting.is_some() || ability.intervening_if.is_some() {
         return Err(
             "CreateReflexiveTrigger supports only the approved resultless target shapes".into(),
@@ -1753,14 +1762,12 @@ fn validate_resultless_program_reflexive_trigger(effect: &SpellEffectKind) -> Re
         }
     }
 
-    if let [SpellEffectKind::DamageTarget {
-        amount: Amount::Fixed(3),
-        target,
-    }] = ability.effect.as_slice()
-    {
-        if target == &TargetFilter::default() {
-            return Ok(());
+    if let [SpellEffectKind::DamageTarget { amount, target }] = ability.effect.as_slice() {
+        if !matches!(amount, Amount::Fixed(_)) {
+            return Err("CreateReflexiveTrigger DamageTarget supports only a fixed amount".into());
         }
+        validate_program_target_filter(target, "CreateReflexiveTrigger DamageTarget target")?;
+        return Ok(());
     }
 
     Err("CreateReflexiveTrigger supports only the approved resultless target shapes".into())
@@ -1853,6 +1860,7 @@ fn is_resultless_direct_search_base(effect: &SpellEffectKind) -> bool {
         optional,
         count,
         count_by_cast_cost,
+        filter,
         selection_constraint,
         slots,
         zones,
@@ -1876,30 +1884,23 @@ fn is_resultless_direct_search_base(effect: &SpellEffectKind) -> bool {
         && conditional_destination.is_none()
         && *shuffle
         && result_id.is_none()
-        && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
+        && resultless_search_bounds_match(filter, *selection_bounds)
+}
+
+fn resultless_search_bounds_match(
+    filter: &Option<ZoneCardFilter>,
+    selection_bounds: Option<SearchSelectionBounds>,
+) -> bool {
+    let min = if filter.is_some() { 0 } else { 1 };
+    selection_bounds == Some(SearchSelectionBounds { min, max: 1 })
 }
 
 fn is_resultless_direct_top_library_search(effect: &SpellEffectKind) -> bool {
-    let SpellEffectKind::SearchLibrary {
-        filter,
-        destination,
-        reveal,
-        ..
-    } = effect
-    else {
+    let SpellEffectKind::SearchLibrary { destination, .. } = effect else {
         return false;
     };
 
-    is_resultless_direct_search_base(effect)
-        && filter.as_ref().is_some_and(|filter| {
-            *filter
-                == ZoneCardFilter {
-                    card_type: Some(CardTypeFilter::BasicLand),
-                    ..ZoneCardFilter::default()
-                }
-        })
-        && *destination == SearchDestination::TopOfLibrary
-        && *reveal
+    is_resultless_direct_search_base(effect) && *destination == SearchDestination::TopOfLibrary
 }
 
 fn validate_resultless_direct_top_library_search(
@@ -1908,7 +1909,7 @@ fn validate_resultless_direct_top_library_search(
 ) -> Result<Vec<ResultType>, String> {
     if !is_resultless_direct_top_library_search(effect) {
         return Err(
-            "program direct TopOfLibrary SearchLibrary supports only a resultless controller BasicLand search with fixed count 1, bounds 0..1, reveal and shuffle"
+            "program direct TopOfLibrary SearchLibrary supports only a resultless controller search with a validated filter or None, fixed count 1, qualified/unrestricted bounds, and shuffle"
                 .into(),
         );
     }
@@ -1917,40 +1918,11 @@ fn validate_resultless_direct_top_library_search(
 }
 
 fn is_resultless_direct_hand_library_search(effect: &SpellEffectKind) -> bool {
-    let SpellEffectKind::SearchLibrary {
-        filter,
-        destination,
-        reveal,
-        ..
-    } = effect
-    else {
+    let SpellEffectKind::SearchLibrary { destination, .. } = effect else {
         return false;
     };
 
-    let permitted_filter = filter.as_ref().is_some_and(|filter| {
-        if filter.validate().is_err() {
-            return false;
-        }
-        let basic_land = filter
-            == &ZoneCardFilter {
-                card_type: Some(CardTypeFilter::BasicLand),
-                ..ZoneCardFilter::default()
-            };
-        let exact_name_only = filter.exact_name.as_ref().is_some_and(|name| {
-            !name.trim().is_empty()
-                && filter
-                    == &ZoneCardFilter {
-                        exact_name: Some(name.clone()),
-                        ..ZoneCardFilter::default()
-                    }
-        });
-        basic_land || exact_name_only
-    });
-
-    is_resultless_direct_search_base(effect)
-        && permitted_filter
-        && *destination == SearchDestination::Hand
-        && *reveal
+    is_resultless_direct_search_base(effect) && *destination == SearchDestination::Hand
 }
 
 fn validate_resultless_direct_hand_library_search(
@@ -1959,7 +1931,7 @@ fn validate_resultless_direct_hand_library_search(
 ) -> Result<Vec<ResultType>, String> {
     if !is_resultless_direct_hand_library_search(effect) {
         return Err(
-            "program direct Hand SearchLibrary supports only a resultless controller BasicLand or exact-name search with fixed count 1, bounds 0..1, reveal and shuffle"
+            "program direct Hand SearchLibrary supports only a resultless controller search with a validated filter or None, fixed count 1, qualified/unrestricted bounds, and shuffle"
                 .into(),
         );
     }
@@ -2023,26 +1995,34 @@ fn validate_resultless_direct_search(
     Ok(Vec::new())
 }
 
-/// Keep Embermouth Sentinel's conditional destination as a closed, resultless program leaf.
-/// The shared BattlefieldAggregate condition must remain the exact live "controller controls a
-/// Dragon" predicate; in particular, do not narrow it to creatures, which would omit Kindreds.
-fn validate_resultless_embermouth_conditional_top_search(
+/// Keep conditional resultless search to the existing TopOfLibrary-to-tapped-Battlefield
+/// transaction while validating its predicate through the same live condition domain as ProgramIf.
+fn validate_resultless_conditional_top_search(
     effect: &SpellEffectKind,
     context: EffectContext,
 ) -> Result<Vec<ResultType>, String> {
-    if !is_resultless_embermouth_conditional_top_search(effect) {
+    if !is_resultless_conditional_top_search(effect) {
         return Err(
-            "program conditional TopOfLibrary SearchLibrary supports only Embermouth's resultless controller BasicLand search with the exact live Controller Dragon-count to tapped Battlefield destination, fixed count 1, bounds 0..1, reveal and shuffle"
+            "program conditional TopOfLibrary SearchLibrary supports only a resultless controller BasicLand search to a tapped Battlefield destination, fixed count 1, bounds 0..1, reveal and shuffle"
                 .into(),
         );
     }
+
+    let SpellEffectKind::SearchLibrary {
+        conditional_destination: Some(conditional_destination),
+        ..
+    } = effect
+    else {
+        unreachable!("the validated conditional search shape has a destination predicate")
+    };
+    validate_program_condition(&conditional_destination.condition)?;
 
     // Only Program-owned bounds are normalized away; all ordinary SearchLibrary validation
     // remains authoritative for this otherwise standard search.
     validate_resultless_direct_search(effect, context)
 }
 
-fn is_resultless_embermouth_conditional_top_search(effect: &SpellEffectKind) -> bool {
+fn is_resultless_conditional_top_search(effect: &SpellEffectKind) -> bool {
     let SpellEffectKind::SearchLibrary {
         who,
         optional,
@@ -2069,26 +2049,8 @@ fn is_resultless_embermouth_conditional_top_search(effect: &SpellEffectKind) -> 
                 ..ZoneCardFilter::default()
             }
     });
-    let condition = super::GameCondition::BattlefieldAggregate {
-        filter: super::BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
-            any_of: None,
-            controllers: super::RelativePlayerSet::Controller,
-            card_type: None,
-            color: None,
-            name: None,
-            required_subtypes: vec!["Dragon".into()],
-            exclude_source: false,
-        },
-        aggregate: super::BattlefieldAggregate::Count,
-        min: Some(1),
-        max: None,
-        exclude_observed_object: false,
-    };
     let exact_conditional_destination = conditional_destination.as_ref().is_some_and(|actual| {
-        actual.condition == condition
-            && actual.destination == (SearchDestination::Battlefield { tapped: true })
+        actual.destination == (SearchDestination::Battlefield { tapped: true })
     });
     *who == PlayerRecipient::Controller
         && !*optional

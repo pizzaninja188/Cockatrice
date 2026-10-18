@@ -5,6 +5,43 @@ use crate::helpers::*;
 /// is shuffled afterward.
 #[test]
 fn demonic_tutor_puts_chosen_card_in_hand() {
+    let registry = tricerules_cards::registry::global();
+    let tutor = registry
+        .get("demonic_tutor")
+        .expect("Demonic Tutor is registered");
+    assert!(tutor.primary_face().spell_effect.is_empty());
+    assert!(tutor.primary_face().spell_program.is_some());
+    let owner = tricerules_cards::ProgramOwnerId::face(
+        "demonic_tutor",
+        tricerules_cards::CardFaceId::new("demonic_tutor").expect("stable face ID"),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Demonic Tutor's exact face owns its search Program");
+    let [search_step] = program.body.steps.as_slice() else {
+        panic!("Demonic Tutor has one direct search instruction");
+    };
+    let tricerules_cards::CompiledInstructionKind::Perform(effect) = &search_step.kind else {
+        panic!("Demonic Tutor directly performs SearchLibrary");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        tricerules_cards::primitives::SpellEffectKind::SearchLibrary {
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            filter: None,
+            destination: tricerules_cards::primitives::SearchDestination::Hand,
+            shuffle: true,
+            reveal: false,
+            selection_bounds: Some(tricerules_cards::primitives::SearchSelectionBounds {
+                min: 1,
+                max: 1,
+            }),
+            ..
+        }
+    ));
+
     // P0 deck: Demonic Tutor + swamps for mana + a mountain (the search target).
     let decks = Some(vec![
         {
@@ -62,6 +99,18 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
         e.state.players[0].hand.len(),
         hand_size_before - 1,
         "demonic tutor moved to graveyard"
+    );
+
+    // The compiled mandatory min=1 search must reject an empty answer atomically while the
+    // library has a legal candidate.
+    let before_empty_answer = serde_json::to_value(&e.state).expect("serialize pending search");
+    assert!(e
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .is_err());
+    assert_eq!(
+        serde_json::to_value(&e.state).expect("serialize state after rejected empty answer"),
+        before_empty_answer,
+        "rejecting an empty mandatory search answer preserves the complete pending state"
     );
 
     // Submit the search choice: pick the mountain.
@@ -269,9 +318,9 @@ fn mystical_tutor_rejects_non_instant_sorcery() {
     assert_eq!(e.state.players[0].hand, hand_snapshot, "hand unchanged");
 }
 
-/// Empty library: Demonic Tutor with no eligible cards allows an empty choice (min = 0).
+/// Empty library: Demonic Tutor finishes its resultless search without offering a choice.
 #[test]
-fn demonic_tutor_empty_library_allows_empty_choice() {
+fn demonic_tutor_empty_library_resolves_without_choice() {
     let decks = Some(vec![
         {
             let mut d = vec!["demonic_tutor".to_string()];
@@ -293,9 +342,27 @@ fn demonic_tutor_empty_library_allows_empty_choice() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "demonic_tutor");
+    let tutor_oid = e.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|oid| {
+            e.state
+                .objects
+                .get(oid)
+                .is_some_and(|object| object.card_id == "demonic_tutor")
+        })
+        .expect("Demonic Tutor is in hand");
 
     // Drain the library completely so there are no valid search targets.
     e.state.players[0].library.clear();
+    let other_object_zones_before = e
+        .state
+        .objects
+        .iter()
+        .map(|(oid, object)| (*oid, object.zone))
+        .filter(|(oid, _)| *oid != tutor_oid)
+        .collect::<std::collections::BTreeMap<_, _>>();
 
     let batch = cast_instant_and_resolve(
         &mut e,
@@ -308,14 +375,42 @@ fn demonic_tutor_empty_library_allows_empty_choice() {
         },
     );
 
-    let req = find_resolution_choice(&batch).expect("resolution choice required");
-    assert_eq!(req.min, 0, "empty library allows empty choice");
-    assert_eq!(req.candidate_object_ids.len(), 0, "no candidates");
-
-    // Submit empty choice — must succeed.
-    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
-        .expect("empty search resolves without error");
+    assert!(
+        find_resolution_choice(&batch).is_none(),
+        "an empty resultless Program search completes without a choice prompt"
+    );
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
+    assert!(
+        e.state.stack.is_empty(),
+        "the Tutor spell finished resolving"
+    );
+    assert!(e.state.players[0].library.is_empty());
+    for (oid, zone) in other_object_zones_before {
+        assert_eq!(
+            e.state.objects[&oid].zone, zone,
+            "an empty search moved no other card"
+        );
+    }
+    assert_eq!(
+        count_card_id_in_graveyard(&e, 0, "demonic_tutor"),
+        1,
+        "the Tutor itself resolves to its graveyard"
+    );
+    for log in ["P0 finds no card.", "P0 shuffles their library."] {
+        assert_eq!(
+            batch
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(message))
+                        if message.text == log
+                ))
+                .count(),
+            1,
+            "the empty search emits '{log}' exactly once"
+        );
+    }
 }
 
 /// Library search choice_kind is LibrarySearch (private) — verifies relay redaction signal.

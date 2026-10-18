@@ -13,19 +13,23 @@
   ],
   "primitive_references": [
     {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
       "symbol": "SpellEffectKind::SearchLibrary",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
     },
     {
       "symbol": "ZoneCardFilter.min_mana_value",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/SearchLibrary/filter/min_mana_value"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary/filter/min_mana_value"
     }
   ],
   "tokens": [],
   "semantic_fixtures": [
     {
       "test": "scenario issue_etb_batch::issue_etb_fierce_empath",
-      "covers": "the optional entry search finds a creature card with mana value 6 or greater and puts it into hand"
+      "covers": "the optional Program choice finds a matching creature, fails to find when none qualifies, or declines without moving a card"
     },
     {
       "test": "batch_registry::issue_etb_batch::issue_etb_batch_maps_definitions",

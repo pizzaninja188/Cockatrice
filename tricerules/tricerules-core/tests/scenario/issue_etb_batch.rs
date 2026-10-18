@@ -274,6 +274,31 @@ fn issue_etb_fierce_empath() {
     assert!(!decline.state.players[0].hand.contains(&big));
     assert_eq!(decline.state.players[0].library.len(), library_before);
     assert_eq!(decline.state.players[0].hand.len(), hand_before);
+
+    // Selecting the optional branch with no matching card fails to find and still completes.
+    let mut fail_to_find = etb_engine(710_013);
+    let small = inject_library_card(&mut fail_to_find, 0, "grizzly_bears");
+    let hand_before = fail_to_find.state.players[0].hand.len();
+    let library_before = fail_to_find.state.players[0].library.len();
+    cast_creature(&mut fail_to_find, "fierce_empath");
+    fail_to_find
+        .apply_scenario_command(0, &pass())
+        .expect("trigger resolves");
+    let batch = fail_to_find
+        .apply_scenario_command(1, &pass())
+        .expect("park for the search");
+    let branch_prompt = find_resolution_choice(&batch).expect("optional search prompt");
+    let search_batch = semantic::accepted(&mut fail_to_find, 0, &submit_branch(0));
+    let search = find_resolution_choice(&search_batch).expect("qualified search choice");
+    assert!(search.candidate_object_ids.is_empty());
+    // The authored 0..1 bounds are clamped to the empty live candidate set in the prompt.
+    assert_eq!((search.min, search.max), (0, 0));
+    semantic::accepted(&mut fail_to_find, 0, &submit_resolution_choice(Vec::new()));
+    assert!(fail_to_find.state.pending_resolution.is_none());
+    assert_eq!(fail_to_find.state.players[0].library.len(), library_before);
+    assert_eq!(fail_to_find.state.players[0].hand.len(), hand_before);
+    assert_eq!(fail_to_find.state.objects[&small].zone, Zone::Library);
+    assert_eq!(branch_prompt.deciding_player_id, 0);
 }
 
 #[test]

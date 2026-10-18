@@ -121,6 +121,56 @@ const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
   )],
 )"#;
 
+const RECURSIVE_CONDITION_SEARCH_FIXTURE: &str = r#"(
+  id: "recursive_condition_search_fixture",
+  name: "Recursive Condition Search Fixture",
+  face_id: "recursive_condition_search_fixture",
+  mana_cost: "{0}",
+  types: ["Creature", "Wolf"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "search_on_enter",
+    presentation: Fallback,
+    trigger: WhenSelfEntersBattlefield,
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_search", bind: [], input: None, kind: Choose(
+        choice: "search", chooser: Controller, optional: true,
+        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+          cost: None, requirement: Always, body: (steps: [
+            (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
+              who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+              filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
+              zones: Fixed([Library]), destination: TopOfLibrary,
+              conditional_destination: Some((condition: AllOf([
+                CardsInHand(players: Relative(Controller), min: Some(1)),
+                AnyOf([
+                  BattlefieldAggregate(
+                    filter: (controllers: Controller, required_subtypes: ["Dragon"]),
+                    aggregate: Count, min: Some(1), max: None,
+                    exclude_observed_object: false,
+                  ),
+                  ControllerLibraryEmpty,
+                ]),
+              ]), destination: Battlefield(tapped: true))),
+              shuffle: true, reveal: true, result_id: None,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))
+          ], yields: []))],
+        otherwise: (steps: [], yields: []),
+      )),
+      (id: "tail_draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
+    ], yields: []), target_bindings: [])),
+    modal: None,
+    targeting: None,
+    may: false,
+    intervening_if: None,
+    triggers_only_once: false,
+    max_triggers_per_turn: None,
+  )],
+)"#;
+
 const DRAW_STEP_TRIGGERED_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
   id: "draw_step_triggered_battlefield_search_fixture",
   name: "Draw Step Triggered Battlefield Search Fixture",
@@ -252,6 +302,44 @@ fn conditional_search_tail_engine(seed: u64) -> GameEngine {
     ]);
     let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
         .expect("two-player conditional-search tail engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn recursive_condition_search_engine(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                RECURSIVE_CONDITION_SEARCH_FIXTURE,
+                TEST_KINDRED_ARTIFACT_DRAGON,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/wan_shi_tong,_librarian.ron"),
+            ],
+            &[],
+        )
+        .expect("the recursive conditional-search registry is valid"),
+    ));
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: [
+                vec!["recursive_condition_search_fixture".into()],
+                vec!["forest".into(); 8],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: [
+                vec!["wan_shi_tong,_librarian".into()],
+                vec!["island".into(); 8],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
+        .expect("two-player recursive conditional-search engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -496,6 +584,29 @@ fn open_conditional_tail_library_search(
         .expect("choose the conditional search branch")
 }
 
+fn open_recursive_condition_library_search(
+    engine: &mut GameEngine,
+) -> tricerules_proto::ruled::v1::RuledEventBatch {
+    ensure_in_hand(engine, 0, "recursive_condition_search_fixture");
+    let hand_index = hand_index_for_card(engine, 0, "recursive_condition_search_fixture");
+    engine
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
+        .expect("cast the zero-cost recursive-condition fixture");
+    pass_both_players(engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes for the fixture ETB trigger");
+    let offer = engine
+        .apply_scenario_command(1, &pass())
+        .expect("fixture ETB offers its optional conditional search");
+    let choice = find_resolution_choice(&offer).expect("optional conditional search choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
+    engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choose the recursive conditional search branch")
+}
+
 fn assert_one_conditional_search_completion(
     engine: &GameEngine,
     wan: u32,
@@ -550,6 +661,74 @@ fn conditional_search_top_result_is_drawn_by_the_typed_tail_once() {
         "the typed Controller Draw tail runs exactly once"
     );
     assert_one_conditional_search_completion(&engine, wan, selected, &[&completion]);
+}
+
+#[test]
+fn recursive_conditional_search_uses_the_live_program_condition_at_choice_time() {
+    for (seed, remove_dragon_before_answer, enters_battlefield) in
+        [(284_219, false, true), (284_220, true, false)]
+    {
+        let mut engine = recursive_condition_search_engine(seed);
+        inject_card_into_hand(&mut engine, 0, "island");
+        let dragon =
+            inject_permanent_on_battlefield(&mut engine, 0, "test_kindred_artifact_dragon");
+        let selected = inject_library_card(&mut engine, 0, "forest");
+        let search_batch = open_recursive_condition_library_search(&mut engine);
+        let search = find_resolution_choice(&search_batch).expect("conditional search offer");
+        assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+        assert!(search.candidate_object_ids.contains(&selected));
+        let hand_before_tail = engine.state.players[0].hand.len();
+
+        if remove_dragon_before_answer {
+            engine.state.players[0]
+                .battlefield
+                .retain(|object_id| *object_id != dragon);
+            engine.state.players[0].graveyard.push(dragon);
+            engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Graveyard;
+            *engine
+                .state
+                .zone_change_generation
+                .entry(dragon)
+                .or_default() += 1;
+        }
+
+        let completion = engine
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+            .expect("submit the offered Basic Land");
+        assert_eq!(
+            engine.state.objects[&selected].zone,
+            if enters_battlefield {
+                Zone::Battlefield
+            } else {
+                Zone::Hand
+            },
+            "the nested live predicate controls the destination before the parent Draw tail"
+        );
+        if enters_battlefield {
+            assert!(!engine.state.players[0].hand.contains(&selected));
+        } else {
+            assert!(engine.state.players[0].hand.contains(&selected));
+        }
+        assert_eq!(
+            engine.state.players[0].hand.len(),
+            hand_before_tail + 1,
+            "the Draw instruction after the search runs once"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            completion
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(Ev::Log(log))
+                        if log.text == "P0 draws 1 card (Recursive Condition Search Fixture)."
+                ))
+                .count(),
+            1,
+            "the parent Draw tail runs exactly once"
+        );
+    }
 }
 
 #[test]

@@ -125,29 +125,78 @@ fn issue_etb_batch_maps_definitions() {
     let [trigger] = f.triggered_abilities.as_slice() else {
         panic!("one trigger");
     };
-    let [search] = trigger.effect.as_slice() else {
-        panic!("one search effect");
+    assert!(trigger.effect.is_empty());
+    let program_owner =
+        tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+            card_id: "fierce_empath".into(),
+            face_id: f.face_id.clone(),
+            ability_path: vec![trigger.ability_id.clone()],
+        });
+    let program = registry
+        .compiled_program_for_owner(&program_owner)
+        .expect("Fierce Empath's exact triggered ability owns its search Program");
+    let [choice_step] = program.body.steps.as_slice() else {
+        panic!("Fierce Empath has one optional search choice");
     };
-    let SpellEffectKind::SearchLibrary {
+    let tricerules_cards::CompiledInstructionKind::Choose {
+        choice,
+        chooser,
         optional,
-        filter: Some(filter),
-        destination,
-        shuffle,
-        reveal,
-        ..
-    } = search
+        branches,
+        otherwise,
+    } = &choice_step.kind
     else {
-        panic!("Fierce Empath searches, got {search:?}");
+        panic!("Fierce Empath search is a structural Choose");
     };
+    assert_eq!(choice.as_str(), "search");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
     assert!(*optional, "the search is optional");
-    assert_eq!(*destination, SearchDestination::Hand);
-    assert!(*shuffle);
-    assert!(*reveal);
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("one search branch");
+    };
     assert_eq!(
-        filter.card_type,
-        Some(tricerules_cards::primitives::CardTypeFilter::Creature)
+        branch.presentation,
+        tricerules_cards::AbilityPresentation::Fallback
     );
-    assert_eq!(filter.min_mana_value, Some(6));
+    assert_eq!(
+        branch.cost,
+        tricerules_cards::primitives::ResolutionCost::None
+    );
+    let [search_step] = branch.body.steps.as_slice() else {
+        panic!("one search operation");
+    };
+    let tricerules_cards::CompiledInstructionKind::Perform(search) = &search_step.kind else {
+        panic!("the branch contains SearchLibrary");
+    };
+    assert_eq!(
+        search.as_ref(),
+        &SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(tricerules_cards::primitives::ZoneCardFilter {
+                card_type: Some(tricerules_cards::primitives::CardTypeFilter::Creature),
+                min_mana_value: Some(6),
+                ..Default::default()
+            }),
+            selection_constraint: None,
+            slots: Vec::new(),
+            zones: tricerules_cards::primitives::SearchZoneSelection::Fixed(vec![
+                tricerules_cards::primitives::CardSearchZone::Library,
+            ]),
+            destination: SearchDestination::Hand,
+            conditional_destination: None,
+            shuffle: true,
+            reveal: true,
+            result_id: None,
+            selection_bounds: Some(tricerules_cards::primitives::SearchSelectionBounds {
+                min: 0,
+                max: 1,
+            }),
+        }
+    );
 
     // Token creators.
     for (id, token_id, count) in [

@@ -252,34 +252,45 @@ the simultaneous cohort; Commander owner-hand replacement choices suspend and re
 operation, and the leaf cannot bind or yield a result.
 `Proliferate` is an accepted resultless leaf: Ezuri, Stalker of Spheres uses it twice in one
 paid branch, with each instruction retaining its own recipient choice and trigger event.
-`CreateReflexiveTrigger` is accepted as a resultless leaf only in two closed shapes: one `Tap` of a
-chosen opposing creature (Icewrought Sentry) or one fixed-three `DamageTarget` with the default
-`AnyTarget` filter (Sparktongue Dragon). The inner ability cannot add a separate `when`, targeting
-definition, or intervening condition. These are operation-shape admissions; the compiler does not
-bind either shape to a particular card or ability owner.
+`CreateReflexiveTrigger` is accepted as a resultless leaf in an ability-owned Program when its
+reflexive child contains one fixed-amount `DamageTarget` with a valid Program target filter, or the
+existing `Tap` of a chosen opposing creature (Icewrought Sentry). Sparktongue Dragon uses fixed 3
+damage with `AnyTarget`; other fixed amounts and ordinary filters use the same targeting contract.
+The inner ability cannot add a separate `when`, targeting definition, or intervening condition,
+and a spell Program cannot create a reflexive child without a captured permanent source.
 Program `SearchLibrary` has bounded forms. The retained form uses fixed selection bounds and
-`KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Ordinary resultless forms use fixed
-`Library` zone, count one, bounds 0..1, shuffle, and no slots, selection constraint, cast-cost
-sizing, conditional destination or result ID. The `TopOfLibrary` form admits the controller's `BasicLand`
-choice with reveal; Campus Guide, Spider-Bot and Fountainport Bell use it. The `Hand` form admits
-only a `BasicLand` filter or a nonempty exact-name-only filter with reveal; Environmental Scientist,
-Strixhaven Skycoach and Tempest Hawk use it. The `Battlefield` form admits only `BasicLand` and
-puts the selected card onto the battlefield tapped without revealing it; Lumbering Worldwagon's
-ETB and attack triggers and Solemn Simulacrum's ETB use it. These direct resultless forms bind and
-yield no search result, so finding no card, including when the library is empty, still shuffles and
-continues the program (CR 701.23b, 701.24e). A declared Commander selected for the Hand form stays
-in the library while its owner chooses Command zone or Hand, then the exact selected incarnation
-moves, the remaining library shuffles once, and the caller resumes at its next instruction
-(CR 903.9b). A selected Battlefield card follows the normal entry-replacement and entry-trigger
-pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m). Embermouth Sentinel's
-`triggered_01` is the sole currently authored card use of a conditional-destination search: its
-optional controller `Choose` has one free `Always` branch, whose resultless `SearchLibrary` searches
-the controller's Library for one `BasicLand` with bounds 0..1, reveals the selection, and shuffles;
-the base destination is the top of the library, changing to tapped Battlefield when the controller's
-battlefield contains at least one Dragon of any permanent type. The filter has no Creature
-restriction, so a noncreature Kindred Dragon qualifies (CR 109.2, 205.3m). The compiler accepts the
-exact closed conditional-search shape independently of owner identity; all other resultless
-`SearchLibrary` forms retain the restrictions above.
+`KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Direct resultless `TopOfLibrary` and
+`Hand` forms use the controller's fixed `Library`, count one, shuffle, no slots, selection
+constraint, cast-cost sizing, conditional destination or result ID, and either a valid ordinary
+`ZoneCardFilter` or no filter. Qualified searches use bounds 0..1 so they may fail to find; an
+unrestricted search uses bounds 1..1 when candidates exist. Both preserve the authored reveal flag.
+Fountainport Bell, Campus Guide and Spider-Bot use `TopOfLibrary`; Environmental Scientist,
+Strixhaven Skycoach and Tempest Hawk use `Hand`. Demonic Tutor is an unrestricted private Hand
+search, and Fierce Empath uses the Creature/minimum-mana-value filter. The `Battlefield` form remains
+limited to `BasicLand`, bounds 0..1, tapped entry, and no reveal; Lumbering Worldwagon's ETB and
+attack triggers and Solemn Simulacrum's ETB use it. These direct resultless forms bind and yield no
+search result, so finding no card, including when the library is empty, still shuffles and continues
+the program (CR 701.23b, 701.24e). A declared Commander selected for the Hand form stays in the
+library while its owner chooses Command zone or Hand, then the exact selected incarnation moves,
+the remaining library shuffles once, and the caller resumes at its next instruction (CR 903.9b). A
+selected Battlefield card follows the normal entry-replacement and entry-trigger pipeline before
+the search resumes its caller (CR 614.12, 616.1, 608.2m). Embermouth Sentinel's `triggered_01` is
+the current conditional-destination use: its optional controller `Choose` has one free `Always`
+branch, whose resultless search checks one `BasicLand` with bounds 0..1, reveals the selection, and
+shuffles; the base destination is the top of the library, changing to tapped Battlefield when the
+controller's battlefield contains at least one Dragon of any permanent type. The filter has no
+Creature restriction, so a noncreature Kindred Dragon qualifies (CR 109.2, 205.3m). This conditional
+search keeps that destination shape and accepts a predicate from the same live condition domain as
+Program `If`; source/cast snapshots and other condition contexts remain excluded.
+
+Private, non-revealing Hand searches do not emit an explicit `CardsRevealed` event, and the relay
+redacts library-search candidate details from non-deciders while keeping hand views private.
+However, `PermanentMoved.object_id` is public: an observer who already knows an object's identity can
+correlate that same object moving from Library to Hand. Do not promise that the current protocol
+prevents every inference of a selected card's identity. This is a preexisting relay/protocol privacy
+boundary shared by legacy and Program searches; a fix requires separate scope. See
+[`PermanentMoved`](../../../libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto#L2337)
+and the [participant redaction path](../../../libcockatrice_network/libcockatrice/network/server/remote/game/ruled_broadcast_router.cpp#L585).
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.

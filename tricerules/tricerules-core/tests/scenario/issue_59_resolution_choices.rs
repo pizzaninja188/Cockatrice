@@ -23,6 +23,116 @@ fn engine() -> GameEngine {
     engine
 }
 
+const REFLEXIVE_PROGRAM_DAMAGE_FIXTURE: &str = r#"(
+  id: "reflexive_program_damage_fixture",
+  name: "Reflexive Program Damage Fixture",
+  face_id: "reflexive_program_damage_fixture",
+  mana_cost: "{0}",
+  types: ["Creature", "Human"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "choose_reflexive_damage",
+    presentation: Fallback,
+    trigger: WhenSelfEntersBattlefield,
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_damage", kind: Choose(
+        choice: "damage", chooser: Controller, optional: false,
+        branches: [
+          (branch_id: "three_any_target", presentation: Fallback,
+            cost: None, requirement: Always, body: (steps: [
+              (id: "create_any_target_reflexive", kind: Perform(CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive_01", presentation: Fallback,
+                effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+              )))),
+            ], yields: [])),
+          (branch_id: "four_opposing_creature", presentation: Fallback,
+            cost: None, requirement: Always, body: (steps: [
+              (id: "create_opposing_creature_reflexive", kind: Perform(CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive_02", presentation: Fallback,
+                effect: [DamageTarget(amount: 4, target: (kind: Creature, controller: Opponent))],
+              )))),
+            ], yields: [])),
+        ],
+        otherwise: (steps: [], yields: []),
+      )),
+      (id: "parent_tail", kind: Perform(GainLife(amount: 1))),
+    ], yields: []), target_bindings: [])),
+    modal: None,
+    targeting: None,
+    may: false,
+    intervening_if: None,
+    triggers_only_once: false,
+    max_triggers_per_turn: None,
+  )],
+)"#;
+
+const TEST_SIX_TOUGHNESS_CREATURE: &str = r#"(
+  id: "test_six_toughness_creature",
+  name: "Test Six-Toughness Creature",
+  face_id: "test_six_toughness_creature",
+  mana_cost: "{0}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 6,
+)"#;
+
+fn reflexive_program_engine(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                REFLEXIVE_PROGRAM_DAMAGE_FIXTURE,
+                TEST_SIX_TOUGHNESS_CREATURE,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .expect("the reflexive Program fixture registry is valid"),
+    ));
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: [
+                vec!["reflexive_program_damage_fixture".into()],
+                vec!["forest".into(); 19],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+        tricerules_core::EngineDeck {
+            mainboard: [
+                vec!["test_six_toughness_creature".into()],
+                vec!["mountain".into(); 19],
+            ]
+            .concat(),
+            commanders: vec![],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, decks, true)
+        .expect("two-player reflexive Program engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn open_reflexive_program_choice(engine: &mut GameEngine) {
+    inject_card_into_hand(engine, 0, "reflexive_program_damage_fixture");
+    let hand_index = hand_index_for_card(engine, 0, "reflexive_program_damage_fixture");
+    engine
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
+        .expect("cast the reflexive Program fixture");
+    pass_both_players(engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes for the fixture ETB trigger");
+    let offer = engine
+        .apply_scenario_command(1, &pass())
+        .expect("fixture trigger offers the Program branch choice");
+    let choice = find_resolution_choice(&offer).expect("reflexive Program branch choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
+}
+
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
@@ -51,6 +161,138 @@ fn crime_with_bolt(e: &mut GameEngine) {
         ),
     )
     .unwrap();
+}
+
+#[test]
+fn ability_program_reflexive_damage_uses_a_fresh_target_and_resumes_its_tail_once() {
+    let mut any_target = reflexive_program_engine(5_901);
+    open_reflexive_program_choice(&mut any_target);
+    any_target
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose fixed 3 AnyTarget damage");
+    assert_eq!(
+        any_target.state.players[0].life, 21,
+        "parent tail gains life once"
+    );
+    assert_eq!(any_target.state.pending_triggers.len(), 1);
+    any_target
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_player(1),
+                })),
+            },
+        )
+        .expect("choose the reflexive child's fresh player target");
+    pass_both_players(&mut any_target);
+    assert_eq!(any_target.state.players[1].life, 17);
+    assert_eq!(any_target.state.players[0].life, 21);
+    assert!(any_target.state.pending_triggers.is_empty());
+    assert!(any_target.state.stack.is_empty());
+
+    let mut creature = reflexive_program_engine(5_902);
+    let target = inject_creature_with_stats(&mut creature, 1, "test_six_toughness_creature", 0, 6);
+    open_reflexive_program_choice(&mut creature);
+    creature
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose fixed 4 opposing-Creature damage");
+    assert_eq!(
+        creature.state.players[0].life, 21,
+        "parent tail gains life once"
+    );
+    creature
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_object(target),
+                })),
+            },
+        )
+        .expect("choose a fresh opposing-Creature target for the child trigger");
+    pass_both_players(&mut creature);
+    assert_eq!(creature.state.objects[&target].damage, 4);
+    assert_eq!(
+        creature.state.objects[&target].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(creature.state.players[0].life, 21);
+    assert!(creature.state.pending_triggers.is_empty());
+    assert!(creature.state.stack.is_empty());
+}
+
+#[test]
+fn ability_program_reflexive_creature_child_is_removed_without_a_legal_target() {
+    let mut engine = reflexive_program_engine(5_903);
+    open_reflexive_program_choice(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose the filtered Creature child with no opposing creature available");
+
+    assert_eq!(
+        engine.state.players[0].life, 21,
+        "the parent tail still resolves once"
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn ability_program_reflexive_target_does_not_follow_a_new_zone_generation() {
+    let mut engine = reflexive_program_engine(5_904);
+    let target = inject_creature_with_stats(&mut engine, 1, "test_six_toughness_creature", 0, 6);
+    open_reflexive_program_choice(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose the filtered Creature child");
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_object(target),
+                })),
+            },
+        )
+        .expect("choose the fresh Creature target");
+    let original_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+    engine.state.players[1]
+        .battlefield
+        .retain(|object_id| *object_id != target);
+    engine.state.players[1].hand.push(target);
+    engine.state.objects.get_mut(&target).unwrap().zone = tricerules_core::Zone::Hand;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(target)
+        .or_default() += 1;
+    assert!(engine.state.zone_change_generation[&target] > original_generation);
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&target].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert_eq!(engine.state.objects[&target].damage, 0);
+    assert_eq!(engine.state.players[1].life, 20);
+    assert_eq!(
+        engine.state.players[0].life, 21,
+        "the parent tail resolved once"
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]

@@ -543,12 +543,24 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
         });
         ability.may = false;
         if search {
-            let mut effect = tricerules_cards::registry::global()
-                .get("demonic_tutor")
-                .unwrap()
-                .primary_face()
-                .spell_effect[0]
-                .clone();
+            let mut effect = SpellEffectKind::SearchLibrary {
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                count_by_cast_cost: None,
+                filter: None,
+                selection_constraint: None,
+                slots: Vec::new(),
+                zones: tricerules_cards::primitives::SearchZoneSelection::Fixed(vec![
+                    tricerules_cards::primitives::CardSearchZone::Library,
+                ]),
+                destination: tricerules_cards::primitives::SearchDestination::Hand,
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+                selection_bounds: None,
+            };
             let SpellEffectKind::SearchLibrary {
                 filter: search_filter,
                 ..
