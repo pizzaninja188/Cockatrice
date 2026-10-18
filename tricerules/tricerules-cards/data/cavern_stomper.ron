@@ -15,7 +15,10 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [Scry(count: 2)],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 2))),
+    ], yields: []), target_bindings: [])),
   )],
   activated_abilities: [(
     ability_id: "activated_01",

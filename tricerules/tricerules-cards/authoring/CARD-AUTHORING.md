@@ -250,6 +250,14 @@ player sets.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
+`Scry` is a resultless Program leaf with a fixed literal count. A fixed count of zero is accepted in
+Programs only; legacy effect lists retain their positive-count rule. The resolving card's controller
+makes the normal library partition choice: zero does nothing (CR 701.22b), an empty library completes
+without a choice, and multiple retained cards use the normal order choice (CR 701.22a). Scry accepts
+no input result and binds or yields no output. The reviewed owners are Cavern Stomper's Scry 2 entry
+trigger and Greedy Freebooter's Scry 1 followed by its Treasure creation. This bounded Program subset
+does not add trigger-observer support for `Whenever you scry`, change who can see or answer the
+existing private prompt, or admit additional card definitions.
 `Proliferate` is an accepted resultless leaf: Ezuri, Stalker of Spheres uses it twice in one
 paid branch, with each instruction retaining its own recipient choice and trigger event.
 `CreateReflexiveTrigger` is accepted as a resultless leaf in an ability-owned Program when its

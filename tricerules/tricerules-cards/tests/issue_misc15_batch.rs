@@ -9,8 +9,8 @@
 //! CR 702.20 (vigilance).
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, PowerComparison, SpellEffectKind, StaticAbilityDef, TargetKind,
-    TriggerCondition,
+    AbilityCost, Amount, InstructionKind, PowerComparison, SpellEffectKind, StaticAbilityDef,
+    TargetKind, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, Keyword, Layout};
 
@@ -205,17 +205,25 @@ fn issue_misc15_batch_maps_definitions() {
         .groups[0];
     assert_eq!((dragon_group.min, dragon_group.max), (1, 1));
 
-    // Cavern Stomper: entry scry 2 plus {3}{G} unblockable-by-power-2-or-less.
+    // Cavern Stomper: entry Scry 2 Program plus {3}{G} unblockable-by-power-2-or-less.
     let stomper = primary(registry, "cavern_stomper");
+    let [stomper_trigger] = stomper.triggered_abilities.as_slice() else {
+        panic!("one entry trigger");
+    };
+    assert!(stomper_trigger.effect.is_empty());
+    let stomper_program = stomper_trigger
+        .program
+        .as_ref()
+        .expect("entry Scry Program");
+    assert!(stomper_program.body.yields.is_empty());
+    let [scry_step] = stomper_program.body.steps.as_slice() else {
+        panic!("one Scry step");
+    };
     assert!(
-        matches!(
-            &stomper.triggered_abilities[0].effect[0],
-            SpellEffectKind::Scry {
-                count: Amount::Fixed(2)
-            }
-        ),
+        matches!(&scry_step.kind, InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Scry { count: Amount::Fixed(2) })),
         "{:?}",
-        stomper.triggered_abilities[0].effect
+        stomper_program.body.steps
     );
     let stomper_ability = activated(registry, "cavern_stomper", 0);
     assert!(

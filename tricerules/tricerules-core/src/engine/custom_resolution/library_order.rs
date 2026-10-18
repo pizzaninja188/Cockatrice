@@ -275,7 +275,7 @@ impl GameEngine {
         if kind == PendingLibraryPartitionKind::Surveil {
             self.fire_triggers(&[GameEvent::Surveilled { player: controller }], &mut ev);
         }
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+        self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev)
     }
 
     /// Finish either step of a bounded library look. Step 0 moves the selected cohort to hand;

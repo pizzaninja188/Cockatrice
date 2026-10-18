@@ -5182,7 +5182,7 @@ fn resolve_library_cast_offer(
     Ok(EffectOutcome::Suspended)
 }
 
-/// CR 701.18 scry enters the shared private top-library partition state machine. Scry's selected
+/// CR 701.22 scry enters the shared private top-library partition state machine. Scry's selected
 /// cohort goes to the library bottom; the retained cohort may require a second ordering choice.
 pub(super) fn scry(
     cx: &mut EffectCx<'_>,
@@ -5632,6 +5632,8 @@ fn begin_library_partition(
     top_max: Option<u32>,
     kind: PendingLibraryPartitionKind,
 ) -> Result<EffectOutcome, EngineError> {
+    // Capture the full resolution cursor before borrowing the engine and event sink mutably.
+    let stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
@@ -5641,7 +5643,8 @@ fn begin_library_partition(
     let Some(idx) = engine.state.player_idx(controller) else {
         return Ok(EffectOutcome::Continue);
     };
-    // CR 701.18b: scrying fewer cards than asked for is legal — you look at as many as there are.
+    // CR 701.22a and CR 609.3: scrying fewer cards than asked for is legal — look at as many as
+    // there are.
     let candidates: Vec<ObjectId> = engine.state.players[idx]
         .library
         .iter()
@@ -5776,7 +5779,7 @@ fn begin_library_partition(
             choice_kind,
         },
         continuation: ResolutionContinuation::LibraryPartition {
-            stack: ParkedStackResolution::new(top.clone()),
+            stack,
             looked_at: candidates,
             candidate_generations,
             stage: PendingLibraryPartitionStage::ChooseDestination,

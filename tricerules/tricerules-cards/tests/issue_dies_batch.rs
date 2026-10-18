@@ -3,12 +3,12 @@
 //! Beamsaw Prospector, Mintstrosity, Greedy Freebooter, Maalfeld Twins, Spring Splasher and
 //! Crackling Cyclops were promoted after complete-definition review against the pinned Scryfall
 //! snapshot (exact records and `rulings_uri` fetched 2026-09-21). Governance: CR 603.6c (dies
-//! triggers), 111.1 (tokens), 701.18 (scry), 508.1/603.2c (attack triggers and entity-scoped
+//! triggers), 111.1 (tokens), 701.22 (scry), 508.1/603.2c (attack triggers and entity-scoped
 //! targets), 611.2c and 613 layer 7c (until-end-of-turn pumps), and 601.2/603.2 (cast triggers).
 
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, EffectSubject, SpellCastFilter, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind, TriggerCondition,
+    Amount, CardTypeFilter, EffectSubject, InstructionKind, SpellCastFilter, SpellEffectKind,
+    TargetController, TargetFilter, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -130,24 +130,30 @@ fn issue_dies_batch_maps_definitions() {
         panic!("one trigger");
     };
     assert_eq!(trigger.trigger, TriggerCondition::WhenSelfDies);
-    let [first, second] = trigger.effect.as_slice() else {
-        panic!("scry then token");
+    assert!(trigger.effect.is_empty());
+    let program = trigger
+        .program
+        .as_ref()
+        .expect("Scry then Treasure Program");
+    assert!(program.body.yields.is_empty());
+    let [first, second] = program.body.steps.as_slice() else {
+        panic!("Scry then token");
     };
     assert_eq!(
-        first,
-        &SpellEffectKind::Scry {
+        &first.kind,
+        &InstructionKind::Perform(Box::new(SpellEffectKind::Scry {
             count: Amount::Fixed(1)
-        }
+        }))
     );
     assert_eq!(
-        second,
-        &SpellEffectKind::CreateTokens {
+        &second.kind,
+        &InstructionKind::Perform(Box::new(SpellEffectKind::CreateTokens {
             token: "treasure".into(),
             count: Amount::Fixed(1),
             who: tricerules_cards::primitives::PlayerRecipient::Controller,
             tapped: false,
             sacrifice_timing: None,
-        }
+        }))
     );
 
     // Spring Splasher: attack trigger gives a defending-player creature -3/-0.

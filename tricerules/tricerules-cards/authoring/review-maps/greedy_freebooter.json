@@ -18,11 +18,11 @@
     },
     {
       "symbol": "SpellEffectKind::Scry",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Scry"
     },
     {
       "symbol": "SpellEffectKind::CreateTokens",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/CreateTokens"
     }
   ],
   "tokens": [
@@ -31,7 +31,7 @@
   "semantic_fixtures": [
     {
       "test": "scenario issue_dies_batch::issue_dies_greedy_freebooter",
-      "covers": "the dies trigger scrys one card before creating one registered Treasure token, in that order"
+      "covers": "the dies trigger resolves its Scry 1 Program before creating one registered Treasure token, in that order"
     },
     {
       "test": "batch_registry::issue_dies_batch::issue_dies_batch_maps_definitions",

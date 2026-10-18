@@ -5105,6 +5105,169 @@ fn resultless_conditional_top_search_program() -> String {
 }
 
 #[test]
+fn program_scry_fixed_counts_are_resultless_for_spell_and_ability_owners() {
+    let scry_body = |count: u32| {
+        format!(
+            r#"(steps: [
+                (id: "scry", bind: [], input: None,
+                    kind: Perform(Scry(count: {count})))
+            ], yields: [])"#
+        )
+    };
+    let assert_scry = |label: &str, program: &crate::primitives::CompiledProgram, expected| {
+        let [step] = program.body.steps.as_slice() else {
+            panic!("{label} must compile as one Scry step");
+        };
+        assert!(step.outputs.is_empty(), "{label} Scry remains resultless");
+        let crate::primitives::CompiledInstructionKind::Perform(effect) = &step.kind else {
+            panic!("{label} must compile as an effect leaf");
+        };
+        assert!(
+            matches!(
+                effect.as_ref(),
+                crate::primitives::SpellEffectKind::Scry {
+                    count: crate::primitives::Amount::Fixed(actual),
+                } if *actual == expected
+            ),
+            "{label} must retain the fixed Scry count"
+        );
+    };
+
+    for count in [1, 2, 3] {
+        let body = scry_body(count);
+
+        let spell_definition = program_fixture(&body);
+        let spell_registry = crate::CardRegistry::from_chunks_and_tokens(&[&spell_definition], &[])
+            .unwrap_or_else(|error| {
+                panic!("Spell Scry {count} must compile through the registry: {error}")
+            });
+        let spell_owner = crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        );
+        let spell_program = spell_registry
+            .compiled_program_for_owner(&spell_owner)
+            .expect("the Spell fixture face owns its compiled Program");
+        assert_scry(&format!("Spell Scry {count}"), spell_program, count);
+
+        let ability_program = ability_program_fixture("program_scry_ability", &body)
+            .unwrap_or_else(|error| {
+                panic!("Ability Scry {count} must compile through the registry: {error}")
+            });
+        assert_scry(&format!("Ability Scry {count}"), &ability_program, count);
+    }
+}
+
+#[test]
+fn program_scry_allows_fixed_zero_without_widening_legacy_scry_validation() {
+    let fixed_zero = r#"(steps: [
+        (id: "scry", bind: [], input: None,
+            kind: Perform(Scry(count: 0)))
+    ], yields: [])"#;
+
+    let spell_definition = program_fixture(fixed_zero);
+    let spell_registry = crate::CardRegistry::from_chunks_and_tokens(&[&spell_definition], &[])
+        .unwrap_or_else(|error| {
+            panic!("fixed-zero Program Scry must compile through the registry: {error}")
+        });
+    let spell_owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let spell_program = spell_registry
+        .compiled_program_for_owner(&spell_owner)
+        .expect("the zero-count Spell fixture owns its compiled Program");
+    assert!(spell_program.body.steps[0].outputs.is_empty());
+    assert!(matches!(
+        &spell_program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Scry {
+                count: crate::primitives::Amount::Fixed(0),
+            })
+    ));
+
+    let ability_program = ability_program_fixture("program_scry_zero_ability", fixed_zero)
+        .unwrap_or_else(|error| {
+            panic!("fixed-zero Ability Program Scry must compile through the registry: {error}")
+        });
+    assert!(ability_program.body.steps[0].outputs.is_empty());
+    assert!(matches!(
+        &ability_program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Scry {
+                count: crate::primitives::Amount::Fixed(0),
+            })
+    ));
+
+    let legacy_zero = r#"(id: "legacy_scry_zero", name: "Legacy Scry Zero", face_id: "legacy_scry_zero",
+        mana_cost: "{0}", types: ["Instant"], spell_effect: [Scry(count: 0)])"#;
+    let Err(legacy_error) = crate::CardRegistry::from_chunks_and_tokens(&[legacy_zero], &[]) else {
+        panic!(
+            "the fixed-zero exception belongs to Programs; a legacy Scry list still rejects zero"
+        );
+    };
+    assert!(
+        legacy_error
+            .to_string()
+            .contains("Scry requires a count of at least 1"),
+        "legacy Scry must retain its positive-count validation: {legacy_error}"
+    );
+}
+
+#[test]
+fn program_scry_rejects_dynamic_counts_captured_inputs_and_output_bindings() {
+    let definition = |body: &str| program_fixture(body);
+    let dynamic_count = definition(
+        r#"(steps: [(id: "scry", bind: [], input: None, kind: Perform(Scry(count: Count(
+            BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Island"]))
+        ))))], yields: [])"#,
+    );
+    let captured_input = definition(
+        r#"(steps: [
+            (id: "draw", bind: ["drawn"], input: None, kind: Perform(Draw(count: 1))),
+            (id: "scry", bind: [], input: Some("drawn"), kind: Perform(Scry(count: 1)))
+        ], yields: [])"#,
+    );
+    let nonempty_binding = definition(
+        r#"(steps: [(id: "scry", bind: ["scry_result"], input: None,
+            kind: Perform(Scry(count: 1)))], yields: [])"#,
+    );
+
+    let Err(dynamic_error) = crate::CardRegistry::from_chunks_and_tokens(&[&dynamic_count], &[])
+    else {
+        panic!("a dynamic Scry count must be rejected");
+    };
+    assert!(
+        dynamic_error
+            .to_string()
+            .contains("Scry count supports only a fixed literal in spell_program"),
+        "dynamic Scry must fail the fixed-count contract: {dynamic_error}"
+    );
+
+    let Err(captured_error) = crate::CardRegistry::from_chunks_and_tokens(&[&captured_input], &[])
+    else {
+        panic!("Scry must not consume even a valid captured Draw receipt");
+    };
+    assert!(
+        captured_error
+            .to_string()
+            .contains("instruction does not accept an input result"),
+        "the bound Draw receipt reaches the Scry input check: {captured_error}"
+    );
+
+    let Err(binding_error) = crate::CardRegistry::from_chunks_and_tokens(&[&nonempty_binding], &[])
+    else {
+        panic!("resultless Scry must reject a nonempty output binding");
+    };
+    assert!(
+        binding_error
+            .to_string()
+            .contains("binds 1 names for 0 results"),
+        "Scry must remain resultless: {binding_error}"
+    );
+}
+
+#[test]
 fn program_reusable_operation_contract() {
     let search_program =
         |filter: &str, destination: &str, conditional_destination: &str, reveal: bool, min: u32| {

@@ -1354,6 +1354,16 @@ fn validate_and_result_types(
                 cardinality: Cardinality { min: 0, max: None },
             }])
         }
+        SpellEffectKind::Scry { count } => {
+            validate_program_amount(count)?;
+            validate_fixed_program_amount("Scry count", count)?;
+            // Legacy Scry rejects a literal zero, but Programs admit it as a resultless no-op.
+            // Keep the ordinary validator for positive counts and preserve its context checks.
+            if !matches!(count, Amount::Fixed(0)) {
+                effect.validate(context)?;
+            }
+            Ok(Vec::new())
+        }
         SpellEffectKind::GainLife { amount } => {
             effect.validate(context)?;
             validate_program_amount(amount)?;

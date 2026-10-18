@@ -26,7 +26,7 @@
     },
     {
       "symbol": "SpellEffectKind::Scry",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Scry"
     },
     {
       "symbol": "SpellEffectKind::ApplyCombatRestriction",
@@ -40,8 +40,12 @@
       "covers": "the activated ability prevents power-2-or-less creatures from blocking while a power-3 creature may still block"
     },
     {
+      "test": "scenario scry::cavern_stomper_entry_scry2_program_orders_retained_cards",
+      "covers": "the entry Program presents Scry 2 and orders both retained cards before it completes"
+    },
+    {
       "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
-      "covers": "reviewed identity, printed characteristics, the entry scry, and the activated blocker restriction of Cavern Stomper"
+      "covers": "reviewed identity, printed characteristics, entry Scry 2 Program, and the activated blocker restriction of Cavern Stomper"
     },
     {
       "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
