@@ -193,12 +193,13 @@ Otherwise bodies use the same recursive finite-program subset, and a binding may
 compatible explicit yields from every branch and Otherwise exit. Declining an optional choice or a
 paid branch follows Otherwise. A cost-free branch whose sole instruction is a `Draw` is omitted
 when the current draw limit prevents that draw in full; paid branches remain selectable and the
-draw operation still applies normal draw limits when it resolves. Targetless leaves accepted are
+draw operation still applies normal draw limits when it resolves. Common targetless leaves include
 `Draw`, `Discard`, `Blight`, `ChoosePermanents`,
 `UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop`, `Mill`, `ChooseCard`,
 and `GainLife`,
 plus ordinary
-fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
+fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
+accepted targetless forms, are described below. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
 not have that trigger input. Ability programs also admit `Discard(EachOpponent, Exact(1))`; each

@@ -412,8 +412,8 @@ Do not re-derive this per card.
   assessed when a concrete Humility-class card needs it; check current code and tracker first.
 - **State-based actions.** `engine/state_based.rs` runs the CR 704.4 fixed point: `apply_sbas`
   loops `apply_sbas_once` until nothing changes, with per-rule passes (704.5f/g/h/j/m/p, plus
-  CR 122.3 counter annihilation). SBAs are **not** checked while a tier-3 resolution is parked;
-  they run when it completes.
+  CR 122.3 counter annihilation). SBAs are **not** checked while a resolution is parked; they run
+  when it completes.
 - **Continuous-effect lifecycle** (creation on ETB, expiry, LTB drain) lives in
   `engine/continuous.rs` — separate from evaluation on purpose.
 - **Replacement effects.** `engine/replacement.rs` owns the shared proposed-event choice channel:
@@ -422,11 +422,13 @@ Do not re-derive this per card.
   and battlefield entry use that channel today. Entry state is committed before CR 603 triggers,
   so "enters tapped" is never emitted as a later tap event. Regeneration remains a specialized
   destruction-replacement path until it first overlaps another applicable effect.
-- **Resolution.** `engine/resolution/mod.rs` owns stack setup, the fizzle check and the custom
-  (tier-3) handoff. `engine/resolution/dispatch.rs` owns the exhaustive `SpellEffectKind` match:
-  each delegates to a domain submodule (`damage`, `life`, `zones`, `pump_counters`, `mass`,
-  `tokens`, `stack_ops`, `misc`). A new primitive is therefore still a compile error until an arm
-  exists.
+- **Resolution.** `engine/resolution/mod.rs` owns stack setup and the target fizzle, routing
+  compiled programs to `engine/resolution/program.rs` and legacy effect lists to
+  `engine/resolution/dispatch.rs`. Ordinary `Perform` leaves reuse effect dispatch; program-only
+  result-producing leaves run in the program path. `dispatch.rs` delegates ordinary effects to
+  domain submodules (`damage`, `life`, `zones`, `pump_counters`, `mass`, `tokens`, `stack_ops`,
+  `misc`) and owns the exhaustive `SpellEffectKind` match, so a new ordinary effect variant needs
+  an arm there; the compiler checks that match for exhaustiveness.
 - **Finite spell programs.** The model compiles lexical bindings and explicit branch yields into
   an immutable registry program. `engine/resolution/program.rs` sequences its supported leaves,
   retains entered branch paths/cursors and private typed result slots, and reuses draw, discard
@@ -567,14 +569,12 @@ and `applyPromptStateText()`; push it through the single `setRuledPromptState()`
 `TabGame::refreshRuledPromptState()`. Coverage in `tests/game_prompt/`. Combat, priority and sticky
 errors stay orthogonal inputs — they legitimately coexist with the modes.
 
-### Add a tier-3 (custom Rust) card
+### Add an engine capability
 
-Use tier 3 only when the resolution algorithm itself is unique: a live mid-resolution choice or
-interdependent choices over one revealed set that static `(effect_kind, parameters)` data cannot
-describe. The [card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md)
-owns the registration and coverage workflow. Custom code stays capability-narrowed, reuses generic
-resolution-choice protocol, and remains one-to-one with a card ID; shared algorithms belong in a
-widened primitive.
+Use this tier only when existing typed primitives and finite Programs cannot express the required
+rules. Add reusable typed engine semantics; do not add card-specific resolution handlers. Follow
+the [card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) for
+card-level source review, definition authoring, and coverage.
 
 ---
 
