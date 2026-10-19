@@ -289,14 +289,30 @@ impl GameEngine {
             )));
         }
         discard.selections.push(chosen.to_vec());
-        if discard.current + 1 < discard.choices.len() {
-            discard.current += 1;
+        discard.current += 1;
+        self.prune_departed_player_set_discard_rows(&mut discard)?;
+        if discard.current < discard.choices.len() {
             resolution::zones::park_player_set_discard_choice(self, &mut events, stack, discard);
             return Ok(finish_with_events(self, events));
         }
 
-        let all_current =
-            discard
+        if !self.player_set_discard_selections_are_current(&discard) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "staged discard card is stale or no longer legal",
+            ));
+        }
+
+        let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, &mut events)?
+        else {
+            return Ok(finish_with_events(self, events));
+        };
+        self.complete_parked_stack_with_previous(stack, result.into(), events)
+    }
+
+    fn player_set_discard_selections_are_current(&self, discard: &PendingPlayerSetDiscard) -> bool {
+        discard.choices.len() == discard.selections.len()
+            && discard
                 .choices
                 .iter()
                 .zip(&discard.selections)
@@ -340,20 +356,81 @@ impl GameEngine {
                             && hand_contains
                             && generation_matches
                     })
-                });
-        if !all_current {
-            self.state.pending_resolution = Some(pending);
+                })
+    }
+
+    fn prune_departed_player_set_discard_rows(
+        &self,
+        discard: &mut PendingPlayerSetDiscard,
+    ) -> Result<bool, EngineError> {
+        if discard.current > discard.choices.len() || discard.selections.len() != discard.current {
             return Err(EngineError::Illegal(
-                "staged discard card is stale or no longer legal",
+                "player-set discard accepted prefix is misaligned",
             ));
         }
-
-        let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, &mut events)?
-        else {
-            return Ok(finish_with_events(self, events));
-        };
-        self.complete_parked_stack_with_previous(stack, result.into(), events)
+        let original_current = discard.current;
+        let mut choices = Vec::with_capacity(discard.choices.len());
+        let mut selections = Vec::with_capacity(discard.selections.len());
+        for (index, choice) in discard.choices.iter().enumerate() {
+            let departed = self
+                .state
+                .player_idx(choice.player)
+                .is_none_or(|player_index| self.state.players[player_index].has_lost);
+            if departed {
+                continue;
+            }
+            choices.push(choice.clone());
+            if index < original_current {
+                selections.push(discard.selections[index].clone());
+            }
+        }
+        let changed = choices.len() != discard.choices.len();
+        discard.choices = choices;
+        discard.selections = selections;
+        discard.current = discard.selections.len();
+        Ok(changed)
     }
+
+    /// Retire departed chooser rows without reopening the operation or its accepted live prefix.
+    /// Restoration forces a new offer ID even when only the saved outer prompt was interrupted.
+    pub(in crate::engine) fn reconcile_pending_player_set_discard_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+        force_reoffer: bool,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::PlayerSetDiscard { stack, discard } = &pending.continuation
+        else {
+            return Ok(false);
+        };
+        let stack = stack.clone();
+        let mut discard = discard.clone();
+        let changed = self.prune_departed_player_set_discard_rows(&mut discard)?;
+        if !changed && !force_reoffer {
+            return Ok(false);
+        }
+        if discard.current < discard.choices.len() {
+            resolution::zones::park_player_set_discard_choice(self, events, stack, discard);
+        } else {
+            if !self.player_set_discard_selections_are_current(&discard) {
+                return Err(EngineError::Illegal(
+                    "staged discard card is stale or no longer legal",
+                ));
+            }
+            self.state.pending_resolution = None;
+            let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, events)?
+            else {
+                return Ok(true);
+            };
+            let completed =
+                self.complete_parked_stack_with_previous(stack, result.into(), Vec::new())?;
+            events.extend(completed.events);
+        }
+        Ok(true)
+    }
+
     /// Commit a fully selected cohort, or park its discard replacements without finishing the tail.
     pub(in crate::engine) fn apply_player_set_discard(
         &mut self,

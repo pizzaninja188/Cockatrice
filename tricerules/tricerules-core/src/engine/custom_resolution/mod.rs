@@ -37,6 +37,54 @@ mod sacrifice_choices;
 mod trigger_choices;
 mod ward;
 
+#[cfg(test)]
+fn synthetic_mill_result_count_tail() -> tricerules_card_model::primitives::SpellEffectKind {
+    use tricerules_card_model::primitives::{
+        Amount, CardResultAction, CardResultFilter, CardResultSource, PlayerRecipient,
+        RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
+        ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
+    };
+
+    SpellEffectKind::ChooseResolutionBranch {
+        chooser: PlayerRecipient::Controller,
+        optional: false,
+        selection: ResolutionBranchSelection::FirstApplicable,
+        branches: vec![ResolutionBranchDef {
+            branch_id: tricerules_card_model::ChoiceId::new("synthetic_mill_result")
+                .expect("valid synthetic test branch id"),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
+            runtime_fallback: None,
+            cost: ResolutionCost::None,
+            requirement: ResolutionBranchRequirement::CardResultCount {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: None,
+                },
+                min: Some(1),
+                max: None,
+            },
+            effects: vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            }],
+        }],
+        otherwise: Vec::new(),
+    }
+}
+
+pub(in crate::engine) fn can_preserve_player_set_discard_after_controller_departure(
+    stack: &ParkedStackResolution,
+    discard: &PendingPlayerSetDiscard,
+) -> bool {
+    stack.item.ability_program_owner().is_some()
+        && !discard.choices.is_empty()
+        && discard
+            .choices
+            .iter()
+            .all(|choice| !choice.optional_exact && choice.alternative_filter.is_none())
+}
+
 fn extend_disjoint_card_names(
     previously_seen: &mut HashSet<String>,
     card_names: impl IntoIterator<Item = String>,

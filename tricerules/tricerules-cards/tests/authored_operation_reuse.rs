@@ -783,6 +783,65 @@ fn authored_heated_argument_is_exact_typed_optional_graveyard_exile_program() {
 }
 
 #[test]
+fn authored_fanatic_of_the_harrowing_is_each_player_discard_then_controller_draw_program() {
+    let program = ability_program("fanatic_of_the_harrowing", 0, false);
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.body.yields.is_empty());
+    let [discard, draw_check] = program.body.steps.as_slice() else {
+        panic!("Fanatic's exact trigger discards before checking its result");
+    };
+    assert_perform_effect(
+        discard,
+        SpellEffectKind::Discard {
+            who: PlayerRecipient::EachPlayer,
+            quantity: DiscardQuantity::Exact(1),
+        },
+    );
+    assert_eq!(discard.outputs.len(), 1);
+    let result = program
+        .slot(discard.outputs[0])
+        .expect("Fanatic binds the complete EachPlayer discard result");
+    assert_eq!(
+        result.result_type,
+        ResultType::DiscardResult {
+            who: PlayerRecipient::EachPlayer,
+            cardinality: Cardinality { min: 0, max: None },
+            optional_payment: false,
+        }
+    );
+
+    let CompiledInstructionKind::If { condition, yes, no } = &draw_check.kind else {
+        panic!("Fanatic checks whether its controller discarded a card");
+    };
+    let CompiledProgramCondition::Result(CompiledProgramResultCondition::DiscardCount {
+        result: checked_result,
+        players,
+        card_type,
+        min,
+        max,
+    }) = condition.as_ref()
+    else {
+        panic!("Fanatic's condition uses the typed discard result");
+    };
+    assert_eq!(*checked_result, discard.outputs[0]);
+    assert_eq!(*players, RelativePlayerSet::Controller);
+    assert_eq!(*card_type, None);
+    assert_eq!(*min, Some(1));
+    assert_eq!(*max, None);
+    let [draw] = yes.steps.as_slice() else {
+        panic!("the controller draws exactly one card after discarding");
+    };
+    assert_perform(
+        draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    );
+    assert!(no.steps.is_empty() && no.yields.is_empty());
+}
+
+#[test]
 fn authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs() {
     let registry = tricerules_cards::registry::global();
     let bridge_face = registry

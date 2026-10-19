@@ -3267,28 +3267,7 @@ mod tests {
             *search_count = 2;
             *count_by_cast_cost = None;
             *reveal = false;
-            let mut tail = engine
-                .registry
-                .get("fanatic_of_the_harrowing")
-                .unwrap()
-                .primary_face()
-                .triggered_abilities[0]
-                .effect[1]
-                .clone();
-            let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
-                unreachable!()
-            };
-            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
-                filter,
-                ..
-            } = &mut branches[0].requirement
-            else {
-                unreachable!()
-            };
-            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
-            branches[0].effects = vec![SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3),
-            }];
+            let tail = super::super::synthetic_mill_result_count_tail();
             let mut item = test_stack_item();
             item.card_id = "myriad_landscape".into();
             item.ability_text = Some("search plus sentinel".into());

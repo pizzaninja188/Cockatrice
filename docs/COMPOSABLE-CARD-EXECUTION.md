@@ -444,6 +444,22 @@ contained mechanism card-specific.
 Wash Out uses the shared owner-hand return continuation for matching mass returns and individual
 returns. Library-return cohort consolidation remains separate and deferred for a later migration.
 
+Fanatic of the Harrowing's exact `triggered_01` owner now uses an authored ability Program. It
+collects each live player's private `Exact(1)` discard choice in APNAP order, commits the complete
+resulting cohort, then checks whether the trigger controller discarded at least one card before
+drawing one. The narrow compiler addition admits ability-owned `Discard(EachPlayer, Exact(1))` with
+an unbounded aggregate result and its controller-only, unfiltered `DiscardCount` projection with
+`min: Some(1)` and `max: None`; existing `EachOpponent` and controller-produced result forms remain
+intact.
+This reuses the existing Program and player-set discard runtime, preserves CR 101.4, 109.5, 603.3a,
+608.2c, 614.6 and 701.9a semantics, and adds no card admission or whole-card readiness claim. No
+protobuf, relay or client surface changes.
+Player departure now retires only that player's pending row and corresponding uncommitted selection;
+live accepted rows retain APNAP order and generation bindings. Observer restoration republishes the
+same player-set transaction with a fresh prompt ID and its original Program cursor. A begun
+controller-owned ability continues through controller departure only for mandatory, unfiltered
+player-set discard; spell, optional and alternative-cost departure behavior is unchanged.
+
 Heated Argument's exact face owner now uses an authored `spell_program`: deal six damage to the
 target creature, then offer the controller the optional one-card graveyard-exile cost, with the
 paid branch dealing two damage to that target's controller. Its empty `Otherwise` preserves the

@@ -12,32 +12,20 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [
-      Discard(who: EachPlayer, quantity: Exact(1)),
-      ChooseResolutionBranch(
-        selection: FirstApplicable,
-        branches: [
-          (
-            branch_id: "draw_a_card", presentation: Fallback,
-            cost: None,
-            requirement: CardResultCount(
-              filter: (
-                source: PreviousEffect,
-                action: Discard,
-                players: Controller,
-              ),
-              min: Some(1),
-            ),
-            effects: [Draw(count: 1)],
-          ),
-          (
-            branch_id: "do_not_draw", presentation: Fallback,
-            cost: None,
-            requirement: Always,
-            effects: [],
-          ),
-        ],
-      ),
-    ],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "discard_each_player", bind: ["discarded"], input: None,
+       kind: Perform(Discard(who: EachPlayer, quantity: Exact(1)))),
+      (id: "draw_if_controller_discarded", bind: [], input: None,
+       kind: IfResult(
+         condition: DiscardCount(
+           result: "discarded", players: Controller, card_type: None,
+           min: Some(1), max: None,
+         ),
+         yes: (steps: [(id: "draw_one", bind: [], input: None,
+           kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+         no: (steps: [], yields: []),
+       )),
+    ], yields: []))),
   )],
 )

@@ -100,14 +100,33 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
-        let discard_departed_suspended_program = self
+        let discard_departed_suspended_resolution = self
             .state
             .pending_observer_return_batch
             .as_ref()
             .and_then(|batch| batch.suspended_resolution.as_ref())
-            .and_then(|pending| pending.continuation.stack())
-            .is_some_and(|stack| stack.program.is_some() && is_departed(stack));
-        if discard_departed_suspended_program {
+            .and_then(|pending| {
+                let stack = pending.continuation.stack()?;
+                let discard = match &pending.continuation {
+                    ResolutionContinuation::PlayerSetDiscard { discard, .. } => Some(discard),
+                    _ => None,
+                };
+                Some((stack, discard))
+            })
+            .is_some_and(|(stack, discard)| {
+                if !is_departed(stack) {
+                    return false;
+                }
+                if let Some(discard) = discard {
+                    if departed.contains(&stack.item.controller) {
+                        return !super::custom_resolution::can_preserve_player_set_discard_after_controller_departure(
+                            stack, discard,
+                        );
+                    }
+                }
+                stack.program.is_some()
+            });
+        if discard_departed_suspended_resolution {
             if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
                 // The observer's return remains owed, but a departed spell owner cannot have
                 // their parked program choice restored after the independent return completes.
@@ -265,6 +284,16 @@ impl GameEngine {
                 | ResolutionContinuation::PlayerSetSacrifice { .. } => {
                     // CR 608.2m: an instant, sorcery, or ability that leaves the stack after
                     // starting to resolve still continues fully. Keep its parked continuation.
+                    preserve = true;
+                }
+                ResolutionContinuation::PlayerSetDiscard { stack, discard }
+                    if departed.contains(&stack.item.controller)
+                        && super::custom_resolution::can_preserve_player_set_discard_after_controller_departure(
+                            stack, discard,
+                        ) =>
+                {
+                    // Preserve only a begun ability-owned mandatory discard; its departed rows
+                    // are retired below while every live accepted choice remains committed.
                     preserve = true;
                 }
                 ResolutionContinuation::SpecialCastCommanderCleanup { .. }
@@ -875,6 +904,7 @@ impl GameEngine {
             }
         }
         if !observer_return_parked {
+            self.reconcile_pending_player_set_discard_departure(events, false)?;
             self.refresh_player_set_sacrifice_departure(events)?;
         }
         self.refresh_mass_sacrifice_departure(events)?;

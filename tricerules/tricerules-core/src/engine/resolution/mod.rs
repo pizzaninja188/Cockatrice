@@ -2557,6 +2557,9 @@ impl GameEngine {
         if self.reconcile_departed_special_cast_resolution(events)? {
             return Ok(true);
         }
+        if self.reconcile_pending_player_set_discard_departure(events, true)? {
+            return Ok(true);
+        }
         if self.refresh_suspended_program_draw_replacement(events)?
             || self.refresh_suspended_program_discard_replacement(events)?
             || self.refresh_suspended_program_choice(events)?
@@ -2603,11 +2606,11 @@ impl GameEngine {
         Ok(true)
     }
 
-    /// Re-enter the one authored chooser leaf that was suspended beneath an observer return.
+    /// Re-enter an authored chooser leaf that was suspended beneath an observer return.
     /// Choice leaves have not committed a transaction, so rebuilding them is safe and lets their
     /// normal domain handler refresh private candidates, generations, names, and the full prompt.
-    /// Controller-only program discards use a player-set continuation; that leaf can only be
-    /// restarted before its one chooser has answered. Parent frames and published slots remain.
+    /// Player-set discards are reconciled by their dedicated transaction path and are never
+    /// restarted here, so an accepted live prefix cannot be lost.
     fn refresh_suspended_program_choice(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
@@ -2619,22 +2622,6 @@ impl GameEngine {
             ResolutionContinuation::HandChoice { stack, hand_choice }
                 if hand_choice.program_selection && stack.program.is_some() =>
             {
-                stack.clone()
-            }
-            ResolutionContinuation::PlayerSetDiscard { stack, discard }
-                if stack.program.is_some() =>
-            {
-                // The current compiler admits only the resolving controller as a program discard
-                // recipient. Its single prompt has no accepted prefix until it is answered.
-                let valid_controller_choice = discard.current == 0
-                    && discard.choices.len() == 1
-                    && discard.selections.is_empty()
-                    && discard.choices[0].player == stack.item.controller;
-                if !valid_controller_choice {
-                    return Err(EngineError::ProgramInvariant(
-                        "restored program discard choice has a committed player-set prefix",
-                    ));
-                }
                 stack.clone()
             }
             ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
@@ -2651,9 +2638,6 @@ impl GameEngine {
                 if hand_choice.program_selection =>
             {
                 matches!(effect, SpellEffectKind::SelectHandCards { .. })
-            }
-            ResolutionContinuation::PlayerSetDiscard { .. } => {
-                matches!(effect, SpellEffectKind::Discard { .. })
             }
             ResolutionContinuation::PermanentChoice { .. } => matches!(
                 effect,
@@ -4514,6 +4498,122 @@ mod attached_subject_tests {
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
+        }
+    }
+
+    fn observer_restore_test_engine(seed: u64) -> GameEngine {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .expect("three-player observer-restore engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        clear_observer_restore_starting_zones(&mut engine);
+        engine
+    }
+
+    fn clear_observer_restore_starting_zones(engine: &mut GameEngine) {
+        let mut starting_cards = Vec::new();
+        for player in &mut engine.state.players {
+            starting_cards.append(&mut player.hand);
+            starting_cards.extend(player.library.drain(..));
+        }
+        for object_id in starting_cards {
+            engine.state.objects.remove(&object_id);
+            engine.state.zone_change_generation.remove(&object_id);
+        }
+    }
+
+    fn add_observer_restore_zone_card(
+        engine: &mut GameEngine,
+        owner: PlayerId,
+        card_id: &str,
+        zone: Zone,
+    ) -> ObjectId {
+        let object_id = add_battlefield_object(engine, owner, card_id);
+        let index = engine.state.player_idx(owner).expect("zone-card owner");
+        engine.state.players[index]
+            .battlefield
+            .retain(|candidate| *candidate != object_id);
+        match zone {
+            Zone::Hand => engine.state.players[index].hand.push(object_id),
+            Zone::Library => engine.state.players[index].library.push_front(object_id),
+            _ => panic!("observer-restore fixture only moves cards to hand or library"),
+        }
+        engine.state.objects.get_mut(&object_id).unwrap().zone = zone;
+        object_id
+    }
+
+    fn captured_printed_trigger_item(
+        engine: &GameEngine,
+        source: ObjectId,
+        card_id: &str,
+    ) -> StackItem {
+        let definition = engine
+            .registry
+            .get(card_id)
+            .expect("trigger card definition");
+        let face = definition.primary_face();
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("trigger card has a first ability")
+            .clone();
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let ability_definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let mut item = triggered_item(source, generation);
+        item.card_id = card_id.into();
+        item.source_owner = engine.state.objects.get(&source).map(|object| object.owner);
+        item.triggered_ability = Some(ability);
+        item.trigger_use_key = Some(crate::state::TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: crate::state::TriggerAbilityOrigin::Printed(ability_definition),
+        });
+        item
+    }
+
+    fn resolution_choice_offer(events: &[rv1::RuledEvent]) -> rv1::ResolutionChoiceRequired {
+        events
+            .iter()
+            .rev()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                    Some(choice.clone())
+                }
+                _ => None,
+            })
+            .expect("resolution-choice offer")
+    }
+
+    fn submit_choice_command(
+        prompt_id: u64,
+        chosen_object_ids: Vec<ObjectId>,
+    ) -> rv1::RuledCommand {
+        rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids,
+                    ..Default::default()
+                },
+            )),
         }
     }
 
@@ -7868,6 +7968,483 @@ mod attached_subject_tests {
                 if leng { 0 } else { count }
             );
         }
+    }
+
+    #[test]
+    fn observer_restore_fanatic_program_discard_keeps_accepted_prefix_and_runs_tail_once() {
+        let mut engine = observer_restore_test_engine(38_211);
+        let source = add_battlefield_object(&mut engine, 0, "fanatic_of_the_harrowing");
+        let cards = [
+            add_observer_restore_zone_card(&mut engine, 0, "forest", Zone::Hand),
+            add_observer_restore_zone_card(&mut engine, 1, "island", Zone::Hand),
+            add_observer_restore_zone_card(&mut engine, 2, "swamp", Zone::Hand),
+        ];
+        let draw_reserve = add_observer_restore_zone_card(&mut engine, 0, "island", Zone::Library);
+        let draw_top = add_observer_restore_zone_card(&mut engine, 0, "forest", Zone::Library);
+        let item = captured_printed_trigger_item(&engine, source, "fanatic_of_the_harrowing");
+        let owners = engine
+            .compiled_resolution_program_owners(&item)
+            .expect("Fanatic Program owner lookup")
+            .expect("actual Fanatic trigger has a compiled Program");
+        let program = engine.begin_program_run(&item, owners).unwrap();
+        let mut initial_events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut initial_events,
+                )
+                .unwrap(),
+            ResolutionProgress::Parked
+        );
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .unwrap();
+        let initial_offer = resolution_choice_offer(&initial_events);
+        assert_eq!(initial_offer.deciding_player_id, 0);
+        let initial_id = initial_offer.resolution_prompt_id;
+        let accepted = engine
+            .apply_command(0, &submit_choice_command(initial_id, vec![cards[0]]))
+            .unwrap();
+        let next_offer = resolution_choice_offer(&accepted.events);
+        assert_eq!(next_offer.deciding_player_id, 1);
+        assert_eq!(next_offer.candidate_object_ids, [cards[1]]);
+        let old_id = next_offer.resolution_prompt_id;
+        let (saved_frames, saved_in_flight, saved_slot_count) = {
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            let ResolutionContinuation::PlayerSetDiscard { stack, discard } = &pending.continuation
+            else {
+                panic!("Fanatic remains parked on its shared discard transaction");
+            };
+            assert_eq!(discard.current, 1);
+            assert_eq!(discard.selections, [vec![cards[0]]]);
+            let program = stack
+                .program
+                .as_ref()
+                .expect("Fanatic Program cursor is parked");
+            (
+                program
+                    .frames
+                    .iter()
+                    .map(|frame| {
+                        (
+                            frame.path.clone(),
+                            frame.next_instruction,
+                            frame.yield_to.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                program.in_flight.clone(),
+                program.slots.len(),
+            )
+        };
+
+        let suspended = engine.state.pending_resolution.take();
+        let replacement = engine.state.pending_replacement_event.take();
+        let mut restored_events = Vec::new();
+        engine
+            .restore_suspended_observer_resolution(suspended, replacement, &mut restored_events)
+            .expect("restore accepted-prefix Fanatic discard");
+        engine
+            .publish_resolution_prompt_ids(&mut restored_events)
+            .unwrap();
+        let restored = resolution_choice_offer(&restored_events);
+        assert_eq!(restored.deciding_player_id, 1);
+        assert_eq!(restored.candidate_object_ids, [cards[1]]);
+        assert_ne!(restored.resolution_prompt_id, old_id);
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        let ResolutionContinuation::PlayerSetDiscard { stack, discard } = &pending.continuation
+        else {
+            panic!("restored Fanatic remains parked on its shared discard transaction");
+        };
+        assert_eq!(discard.current, 1);
+        assert_eq!(discard.selections, [vec![cards[0]]]);
+        let program = stack.program.as_ref().unwrap();
+        assert_eq!(
+            program
+                .frames
+                .iter()
+                .map(|frame| {
+                    (
+                        frame.path.clone(),
+                        frame.next_instruction,
+                        frame.yield_to.clone(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            saved_frames
+        );
+        assert_eq!(program.in_flight, saved_in_flight);
+        assert_eq!(program.slots.len(), saved_slot_count);
+        assert!(engine
+            .apply_command(1, &submit_choice_command(old_id, vec![cards[1]]))
+            .is_err());
+        let second = engine
+            .apply_command(
+                1,
+                &submit_choice_command(restored.resolution_prompt_id, vec![cards[1]]),
+            )
+            .unwrap();
+        let third = resolution_choice_offer(&second.events);
+        assert_eq!(third.deciding_player_id, 2);
+        engine
+            .apply_command(
+                2,
+                &submit_choice_command(third.resolution_prompt_id, vec![cards[2]]),
+            )
+            .unwrap();
+
+        for (player, card) in cards.into_iter().enumerate() {
+            assert_eq!(engine.state.objects[&card].zone, Zone::Graveyard);
+            assert!(engine.state.players[player].graveyard.contains(&card));
+        }
+        assert_eq!(engine.state.players[0].hand.len(), 1);
+        assert_eq!(engine.state.players[0].hand.first(), Some(&draw_top));
+        assert_eq!(engine.state.players[0].library.len(), 1);
+        assert_eq!(engine.state.players[0].library.front(), Some(&draw_reserve));
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    fn observer_restore_player_set_discard_survives_controller_concession(
+        card_id: &str,
+        seed: u64,
+        expects_program: bool,
+    ) {
+        let mut engine = observer_restore_test_engine(seed);
+        engine.state.active_player_idx = 1;
+        engine.state.priority_idx = 1;
+        let source = add_battlefield_object(&mut engine, 0, card_id);
+        let cards = [
+            add_observer_restore_zone_card(&mut engine, 0, "forest", Zone::Hand),
+            add_observer_restore_zone_card(&mut engine, 1, "island", Zone::Hand),
+            add_observer_restore_zone_card(&mut engine, 2, "swamp", Zone::Hand),
+        ];
+        let controller_draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+        let generations_before = [
+            engine
+                .state
+                .zone_change_generation
+                .get(&cards[1])
+                .copied()
+                .unwrap_or_default(),
+            engine
+                .state
+                .zone_change_generation
+                .get(&cards[2])
+                .copied()
+                .unwrap_or_default(),
+        ];
+        let item = captured_printed_trigger_item(&engine, source, card_id);
+        let expected_ability_owner = item.ability_program_owner();
+        assert!(
+            expected_ability_owner.is_some(),
+            "the printed trigger has an owner"
+        );
+        assert_eq!(
+            item.triggered_ability
+                .as_ref()
+                .is_some_and(|ability| ability.program.is_some()),
+            expects_program
+        );
+
+        let mut initial_events = Vec::new();
+        if let Some(owners) = engine
+            .compiled_resolution_program_owners(&item)
+            .expect("printed trigger Program lookup")
+        {
+            assert!(expects_program, "only Fanatic uses the Program path here");
+            let program = engine
+                .begin_program_run(&item, owners)
+                .expect("begin the printed Program");
+            assert_eq!(
+                engine
+                    .run_program_with_previous(
+                        &item,
+                        program,
+                        crate::state::EffectResult::default(),
+                        &mut initial_events,
+                    )
+                    .expect("run until the mandatory player-set choice"),
+                ResolutionProgress::Parked
+            );
+        } else {
+            assert!(!expects_program, "Burglar Rat uses its legacy effect list");
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut initial_events)
+                .expect("run until the mandatory player-set choice");
+        }
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .expect("publish the first private choice");
+        let first = resolution_choice_offer(&initial_events);
+        assert_eq!(first.deciding_player_id, 1);
+        assert_eq!(first.candidate_object_ids, [cards[1]]);
+
+        let accepted = engine
+            .apply_command(
+                1,
+                &submit_choice_command(first.resolution_prompt_id, vec![cards[1]]),
+            )
+            .expect("P1 stages its discard");
+        let next = resolution_choice_offer(&accepted.events);
+        assert_eq!(next.deciding_player_id, 2);
+        assert_eq!(next.candidate_object_ids, [cards[2]]);
+        {
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            assert_eq!(pending.deciding_player, 2);
+            let ResolutionContinuation::PlayerSetDiscard { stack, discard } = &pending.continuation
+            else {
+                panic!("the printed trigger is parked on its player-set discard");
+            };
+            assert_eq!(stack.item.controller, 0);
+            assert_eq!(stack.item.card_id, card_id);
+            assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
+            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(discard.current, 1);
+            assert_eq!(discard.selections, [vec![cards[1]]]);
+        }
+
+        let suspended_resolution = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("the saved choice is suspended in the observer-return batch");
+        {
+            let ResolutionContinuation::PlayerSetDiscard { stack, discard } =
+                &suspended_resolution.continuation
+            else {
+                panic!("the saved continuation remains on its player-set discard");
+            };
+            assert_eq!(stack.item.controller, 0);
+            assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
+            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(discard.current, 1);
+            assert_eq!(discard.selections, [vec![cards[1]]]);
+        }
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(suspended_resolution),
+                suspended_replacement_event: None,
+            });
+
+        let concession = engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("the saved-choice controller concedes through apply_command");
+
+        assert!(engine.state.players[0].has_lost);
+        assert!(!engine.state.objects.contains_key(&source));
+        assert!(!engine.state.objects.contains_key(&cards[0]));
+        let restored = resolution_choice_offer(&concession.events);
+        assert_eq!(restored.deciding_player_id, 2);
+        assert_eq!(restored.candidate_object_ids, [cards[2]]);
+        assert!(engine.state.pending_observer_return_batch.is_none());
+        {
+            let pending = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("concession restores the surviving discard offer");
+            assert_eq!(pending.deciding_player, 2);
+            let ResolutionContinuation::PlayerSetDiscard { stack, discard } = &pending.continuation
+            else {
+                panic!("the restored continuation remains on its player-set discard");
+            };
+            assert_eq!(stack.item.controller, 0, "retain the original controller");
+            assert_eq!(stack.item.card_id, card_id);
+            assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
+            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(discard.current, 1);
+            assert_eq!(discard.selections, [vec![cards[1]]]);
+            assert!(discard.choices.iter().all(|choice| choice.player != 0));
+        }
+        assert_eq!(engine.state.objects[&cards[1]].zone, Zone::Hand);
+        assert_eq!(engine.state.objects[&cards[2]].zone, Zone::Hand);
+
+        engine
+            .apply_command(
+                2,
+                &submit_choice_command(restored.resolution_prompt_id, vec![cards[2]]),
+            )
+            .expect("P2 finishes the surviving discard cohort");
+
+        for (offset, (player, card)) in [(1, cards[1]), (2, cards[2])].into_iter().enumerate() {
+            assert_eq!(engine.state.objects[&card].zone, Zone::Graveyard);
+            assert_eq!(
+                engine.state.players[player]
+                    .graveyard
+                    .iter()
+                    .filter(|&&object_id| object_id == card)
+                    .count(),
+                1,
+                "each accepted discard commits exactly once"
+            );
+            assert_eq!(
+                engine.state.zone_change_generation[&card],
+                generations_before[offset] + 1,
+                "each accepted card changes zones once"
+            );
+        }
+        assert_eq!(
+            engine.state.turn_history.current.player(0).cards_drawn,
+            controller_draws_before,
+            "the departed controller receives no draw"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.state.pending_observer_return_batch.is_none());
+    }
+
+    #[test]
+    fn observer_restore_fanatic_player_set_discard_survives_controller_concession() {
+        observer_restore_player_set_discard_survives_controller_concession(
+            "fanatic_of_the_harrowing",
+            38_221,
+            true,
+        );
+    }
+
+    #[test]
+    fn observer_restore_legacy_burglar_rat_player_set_discard_survives_controller_concession() {
+        observer_restore_player_set_discard_survives_controller_concession(
+            "burglar_rat",
+            38_222,
+            false,
+        );
+    }
+
+    #[test]
+    fn observer_restore_each_opponent_program_fixture_keeps_accepted_prefix() {
+        // Runtime fixture: this admitted Program shape isolates EachOpponent from Fanatic's
+        // actual EachPlayer card while exercising the same controller-owned Program invariant.
+        let card = r#"(id: "observer_each_opponent_program_fixture", name: "Observer Each Opponent Program Fixture",
+            face_id: "observer_each_opponent_program_fixture", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "discard", bind: ["discarded"], input: None,
+                        kind: Perform(Discard(who: EachOpponent, quantity: Exact(1)))),
+                    (id: "tail", bind: [], input: None, kind: Perform(GainLife(amount: 2))),
+                ], yields: []), target_bindings: [])),
+            )])"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    r#"(id: "island", name: "Island", face_id: "island", types: ["Basic", "Land", "Island"])"#,
+                    r#"(id: "swamp", name: "Swamp", face_id: "swamp", types: ["Basic", "Land", "Swamp"])"#,
+                    card,
+                ],
+                &[],
+            )
+            .expect("EachOpponent Program runtime fixture compiles"),
+        ));
+        let mut engine = GameEngine::new(
+            registry,
+            38_212,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["island".into(); 20]; 3]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        clear_observer_restore_starting_zones(&mut engine);
+        let source =
+            add_battlefield_object(&mut engine, 0, "observer_each_opponent_program_fixture");
+        let cards = [
+            add_observer_restore_zone_card(&mut engine, 1, "island", Zone::Hand),
+            add_observer_restore_zone_card(&mut engine, 2, "swamp", Zone::Hand),
+        ];
+        let item = captured_printed_trigger_item(
+            &engine,
+            source,
+            "observer_each_opponent_program_fixture",
+        );
+        let owners = engine
+            .compiled_resolution_program_owners(&item)
+            .unwrap()
+            .unwrap();
+        let program = engine.begin_program_run(&item, owners).unwrap();
+        let mut initial_events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut initial_events
+                )
+                .unwrap(),
+            ResolutionProgress::Parked
+        );
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .unwrap();
+        let first = resolution_choice_offer(&initial_events);
+        assert_eq!(first.deciding_player_id, 1);
+        let accepted = engine
+            .apply_command(
+                1,
+                &submit_choice_command(first.resolution_prompt_id, vec![cards[0]]),
+            )
+            .unwrap();
+        let next = resolution_choice_offer(&accepted.events);
+        assert_eq!(next.deciding_player_id, 2);
+        assert_eq!(next.candidate_object_ids, [cards[1]]);
+        let suspended = engine.state.pending_resolution.take();
+        let replacement = engine.state.pending_replacement_event.take();
+        let mut restored_events = Vec::new();
+        engine
+            .restore_suspended_observer_resolution(suspended, replacement, &mut restored_events)
+            .expect("restore EachOpponent Program accepted prefix");
+        engine
+            .publish_resolution_prompt_ids(&mut restored_events)
+            .unwrap();
+        let restored = resolution_choice_offer(&restored_events);
+        assert_eq!(restored.deciding_player_id, 2);
+        assert_eq!(restored.candidate_object_ids, [cards[1]]);
+        assert_ne!(restored.resolution_prompt_id, next.resolution_prompt_id);
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        let ResolutionContinuation::PlayerSetDiscard { discard, .. } = &pending.continuation else {
+            panic!("restored EachOpponent fixture remains on its shared discard transaction");
+        };
+        assert_eq!(discard.current, 1);
+        assert_eq!(discard.selections, [vec![cards[0]]]);
+        assert!(engine
+            .apply_command(
+                2,
+                &submit_choice_command(next.resolution_prompt_id, vec![cards[1]])
+            )
+            .is_err());
+        engine
+            .apply_command(
+                2,
+                &submit_choice_command(restored.resolution_prompt_id, vec![cards[1]]),
+            )
+            .unwrap();
+        assert_eq!(
+            engine.state.players[0].life, 22,
+            "the Program tail runs exactly once"
+        );
+        for (player, card) in [(1, cards[0]), (2, cards[1])] {
+            assert_eq!(engine.state.objects[&card].zone, Zone::Graveyard);
+            assert!(engine.state.players[player].graveyard.contains(&card));
+        }
+        assert!(engine.state.pending_resolution.is_none());
     }
 
     #[test]

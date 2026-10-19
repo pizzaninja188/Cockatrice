@@ -746,28 +746,7 @@ mod into_the_wilds_tests {
             for &oid in looked.iter().rev() {
                 engine.state.players[0].library.push_front(oid);
             }
-            let mut tail = engine
-                .registry
-                .get("fanatic_of_the_harrowing")
-                .unwrap()
-                .primary_face()
-                .triggered_abilities[0]
-                .effect[1]
-                .clone();
-            let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
-                unreachable!()
-            };
-            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
-                filter,
-                ..
-            } = &mut branches[0].requirement
-            else {
-                unreachable!()
-            };
-            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
-            branches[0].effects = vec![SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3),
-            }];
+            let tail = super::super::synthetic_mill_result_count_tail();
             let mut item = test_stack_item();
             item.card_id = "deploy_the_gatewatch".into();
             item.is_triggered = true;
@@ -963,28 +942,7 @@ mod into_the_wilds_tests {
             let forest = library_card(&mut engine, "forest");
             engine.state.players[0].library.retain(|id| *id != forest);
             engine.state.players[0].library.push_front(forest);
-            let mut tail = engine
-                .registry
-                .get("fanatic_of_the_harrowing")
-                .unwrap()
-                .primary_face()
-                .triggered_abilities[0]
-                .effect[1]
-                .clone();
-            let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
-                unreachable!()
-            };
-            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
-                filter,
-                ..
-            } = &mut branches[0].requirement
-            else {
-                unreachable!()
-            };
-            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
-            branches[0].effects = vec![SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3),
-            }];
+            let tail = super::super::synthetic_mill_result_count_tail();
             let mut item = test_stack_item();
             item.card_id = "into_the_wilds".into();
             item.is_triggered = true;

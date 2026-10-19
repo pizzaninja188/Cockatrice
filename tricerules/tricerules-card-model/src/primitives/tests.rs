@@ -10058,6 +10058,178 @@ fn program_discard_each_opponent_exact_one_binds_a_combined_unbounded_cohort() {
 }
 
 #[test]
+fn program_discard_each_player_exact_one_feeds_controller_discard_count() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile =
+        |context, quantity: &str, players: &str, card_type: &str, min: &str, max: &str| {
+            let body = format!(
+                r#"(steps: [
+                (id: "discard_each_player", bind: ["discarded"], input: None,
+                 kind: Perform(Discard(who: EachPlayer, quantity: {quantity}))),
+                (id: "draw_if_controller_discarded", bind: [], input: None,
+                 kind: IfResult(
+                    condition: DiscardCount(
+                        result: "discarded", players: {players}, card_type: {card_type},
+                        min: {min}, max: {max},
+                    ),
+                    yes: (steps: [(id: "draw", bind: [], input: None,
+                        kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                    no: (steps: [], yields: []),
+                 )),
+            ], yields: [])"#
+            );
+            let program: crate::CardProgram =
+                ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+            let owner = match context {
+                EffectContext::Spell => crate::ProgramOwnerId::face(
+                    "fanatic_discard_fixture",
+                    crate::CardFaceId::new("fanatic_discard_fixture").unwrap(),
+                ),
+                EffectContext::Ability => {
+                    crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                        card_id: "fanatic_discard_fixture".into(),
+                        face_id: crate::CardFaceId::new("fanatic_discard_fixture").unwrap(),
+                        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                    })
+                }
+            };
+            CompiledProgram::compile(owner, context, &program)
+        };
+
+    let compiled = compile(
+        EffectContext::Ability,
+        "Exact(1)",
+        "Controller",
+        "None",
+        "Some(1)",
+        "None",
+    )
+    .expect("an EachPlayer Exact(1) discard cohort feeds the controller's discard count");
+
+    assert_eq!(compiled.context, EffectContext::Ability);
+    let [discard, draw_check] = compiled.body.steps.as_slice() else {
+        panic!("the Program discards once before checking its result")
+    };
+    assert_eq!(discard.id.as_str(), "discard_each_player");
+    assert_eq!(discard.outputs.len(), 1);
+    let result = compiled
+        .slot(discard.outputs[0])
+        .expect("the player-set discard result is bound");
+    assert_eq!(
+        result.result_type,
+        crate::primitives::ResultType::DiscardResult {
+            who: crate::primitives::PlayerRecipient::EachPlayer,
+            cardinality: crate::primitives::Cardinality { min: 0, max: None },
+            optional_payment: false,
+        },
+        "one aggregate result can include every player's choice"
+    );
+
+    let crate::primitives::CompiledInstructionKind::If { condition, yes, no } = &draw_check.kind
+    else {
+        panic!("the controller's discard count guards the draw")
+    };
+    let crate::primitives::CompiledProgramCondition::Result(
+        crate::primitives::CompiledProgramResultCondition::DiscardCount {
+            result: checked_result,
+            players,
+            card_type,
+            min,
+            max,
+        },
+    ) = condition.as_ref()
+    else {
+        panic!("the conditional reads the typed discard result")
+    };
+    assert_eq!(*checked_result, discard.outputs[0]);
+    assert_eq!(*players, crate::primitives::RelativePlayerSet::Controller);
+    assert_eq!(*card_type, None);
+    assert_eq!(*min, Some(1));
+    assert_eq!(*max, None);
+    let [draw] = yes.steps.as_slice() else {
+        panic!("the positive controller count draws one card")
+    };
+    assert!(draw.input.is_none() && draw.outputs.is_empty());
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &draw.kind else {
+        panic!("the positive controller count draws one card")
+    };
+    assert_eq!(
+        **effect,
+        crate::primitives::SpellEffectKind::Draw {
+            who: crate::primitives::PlayerRecipient::Controller,
+            count: crate::primitives::Amount::Fixed(1),
+        },
+    );
+    assert!(no.steps.is_empty() && no.yields.is_empty());
+
+    for quantity in ["Exact(2)", "OptionalExact(1)"] {
+        assert!(
+            compile(
+                EffectContext::Ability,
+                quantity,
+                "Controller",
+                "None",
+                "Some(1)",
+                "None",
+            )
+            .is_err(),
+            "only EachPlayer Exact(1) is admitted, not {quantity}"
+        );
+    }
+    let spell_error = compile(
+        EffectContext::Spell,
+        "Exact(1)",
+        "Controller",
+        "None",
+        "Some(1)",
+        "None",
+    )
+    .expect_err("EachPlayer Exact(1) discard remains ability-only");
+    assert!(
+        spell_error.contains("Discard recipient supports only the resolving spell controller"),
+        "the valid face owner reaches spell-recipient validation, got: {spell_error}"
+    );
+    for (players, card_type, min, max, unsupported_shape) in [
+        (
+            "Opponents",
+            "None",
+            "Some(1)",
+            "None",
+            "other player cohort",
+        ),
+        (
+            "Controller",
+            "Some(Nonland)",
+            "Some(1)",
+            "None",
+            "card filter",
+        ),
+        ("Controller", "None", "Some(2)", "None", "larger minimum"),
+        (
+            "Controller",
+            "None",
+            "Some(1)",
+            "Some(1)",
+            "bounded maximum",
+        ),
+    ] {
+        assert!(
+            compile(
+                EffectContext::Ability,
+                "Exact(1)",
+                players,
+                card_type,
+                min,
+                max,
+            )
+            .is_err(),
+            "the EachPlayer result projection rejects a {unsupported_shape}"
+        );
+    }
+}
+
+#[test]
 fn endure_program_constituent_contracts_fail_independently_before_admission() {
     use crate::primitives::{CompiledProgram, EffectContext};
 

@@ -1230,7 +1230,14 @@ fn compile_program_condition(
                     "result '{result}' is not a compatible discard result"
                 ));
             };
-            if *who != PlayerRecipient::Controller || *players != RelativePlayerSet::Controller {
+            let controller_count_from_each_player = *who == PlayerRecipient::EachPlayer
+                && *players == RelativePlayerSet::Controller
+                && card_type.is_none()
+                && *min == Some(1)
+                && max.is_none();
+            if (*who != PlayerRecipient::Controller || *players != RelativePlayerSet::Controller)
+                && !controller_count_from_each_player
+            {
                 return Err(format!(
                     "discard result '{result}' does not expose the requested player cohort"
                 ));
@@ -1626,7 +1633,7 @@ fn validate_and_result_types(
         SpellEffectKind::Discard { who, quantity } => {
             effect.validate(context)?;
             let player_set_discard = context == EffectContext::Ability
-                && *who == PlayerRecipient::EachOpponent
+                && matches!(*who, PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer)
                 && matches!(quantity, super::DiscardQuantity::Exact(1));
             if !player_set_discard {
                 validate_program_recipient(*who, context, "Discard recipient")?;
@@ -1636,8 +1643,9 @@ fn validate_and_result_types(
                 who: *who,
                 cardinality: Cardinality {
                     min: 0,
-                    // EachOpponent contributes one choice per opponent to a combined typed
-                    // cohort, so the per-player Exact(1) count is not an aggregate upper bound.
+                    // Player-set recipients contribute one choice per applicable player to a
+                    // combined typed cohort, so the per-player Exact(1) count is not an
+                    // aggregate upper bound.
                     max: if player_set_discard {
                         None
                     } else {

@@ -212,9 +212,20 @@ fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, a
 accepted targetless forms, are described below. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
-not have that trigger input. Ability programs also admit `Discard(EachOpponent, Exact(1))`; each
-opponent may contribute up to one card to the combined `DiscardResult`, whose aggregate upper
-bound is not fixed. Permanent choosers must be `Controller`; draw and hand-selection counts
+not have that trigger input. Ability programs admit `Discard(EachOpponent, Exact(1))` as a combined
+opponent cohort and the narrow `Discard(EachPlayer, Exact(1))` shape used by Fanatic of the
+Harrowing; neither has a fixed aggregate maximum. For an `EachPlayer` result, only an unfiltered
+controller `DiscardCount` with `min: Some(1)` and `max: None` is admitted, so the condition tests
+whether that ability's controller discarded at least one card. Other cohorts, contexts, quantities
+and predicates remain unsupported for this `EachPlayer` projection; controller-produced results
+retain their existing predicate rules. This pairs Burglar Rat's player-set discard mechanic with
+Gristle Glutton's typed controller discard-count mechanic. A begun ability-owned mandatory
+player-set discard continues if its controller leaves; departed rows and their selections are
+retired together while the live accepted prefix and its generations remain fixed (CR 101.4, 608.2m,
+800.4a). Observer restoration republishes that same transaction with a fresh prompt ID. This runtime
+hardening does not admit new syntax; spell, optional and alternative-cost departure behavior is
+unchanged. Permanent choosers must be `Controller`;
+draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
 
 A Program `ExileGraveyardCard` cost is admitted only on an optional `Controller`-chosen spell
