@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "oracle_id": "42510758-6167-420b-bb70-65f914b7a259",
+  "spans": [
+    {
+      "face_id": "decode_transmissions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/If/no/steps/1"
+      ]
+    },
+    {
+      "face_id": "decode_transmissions",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/If/condition",
+        "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If"
+    },
+    {
+      "symbol": "GameCondition::Void",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/1/kind/Perform/LoseLife"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/no/steps/1/kind/Perform/LoseLife"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_decode_transmissions_is_void_if_then_draw_and_life_loss_program",
+      "covers": "Exact spell owner and both typed branches preserve draw-before-life-loss order and recipients."
+    },
+    {
+      "test": "scenario issue_148_warp_void::issue_148_void_consumers_check_their_own_timing",
+      "covers": "Decode Transmissions draws two in either case and samples Void at resolution after a real departure."
+    },
+    {
+      "test": "scenario issue_148_warp_void::issue_148_decode_transmissions_void_drains_each_opponent_in_three_player_game",
+      "covers": "The Void branch leaves the caster unchanged and makes both opponents lose two life in a three-player game."
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_does_not_skip_decode_transmissions_first_applicable_tail",
+      "covers": "Narset's draw prevention skips Decode's draw without skipping its selected life-loss tail."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

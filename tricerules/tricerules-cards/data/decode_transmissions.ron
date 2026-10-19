@@ -5,10 +5,18 @@
   face_id: "decode_transmissions",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [
-    (branch_id: "draw_two_cards_each_opponent_loses_2_life", presentation: OracleLines([2]), cost: None,
-      requirement: GameCondition(Void), effects: [Draw(count: 2), LoseLife(amount: Fixed(2), who: EachOpponent)]),
-    (branch_id: "draw_two_cards_and_lose_2_life", presentation: OracleLines([1]), cost: None,
-      requirement: Always, effects: [Draw(count: 2), LoseLife(amount: Fixed(2))]),
-  ])],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "branch_on_void", kind: If(
+      condition: Void,
+      yes: (steps: [
+        (id: "void_draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+        (id: "void_opponents_lose_life", kind: Perform(LoseLife(amount: Fixed(2), who: EachOpponent))),
+      ], yields: []),
+      no: (steps: [
+        (id: "ordinary_draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+        (id: "ordinary_controller_loses_life", kind: Perform(LoseLife(amount: Fixed(2), who: Controller))),
+      ], yields: []),
+    )),
+  ], yields: []), target_bindings: [])),
 )

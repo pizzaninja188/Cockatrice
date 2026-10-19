@@ -5,9 +5,11 @@
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals, `If` accepts only controller-scoped hand/library counts, graveyard CardCount filters,
-//! and battlefield Count filters, and permanent choices cannot use event-bound filters or
-//! cross-object constraints. Widening these rules needs a separately typed context/result contract.
+//! literals. `If` admits the top-level global `Void` predicate plus controller-scoped hand/library
+//! counts, graveyard CardCount filters, and battlefield Count filters; `Void` is not admitted in
+//! composite conditions, Choose requirements, or conditional search predicates. Permanent choices
+//! cannot use event-bound filters or cross-object constraints. Widening these rules needs a
+//! separately typed context/result contract.
 
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
@@ -665,12 +667,23 @@ impl Compiler {
                             instruction.id
                         ));
                     }
-                    let condition = compile_program_condition(
-                        &ProgramCondition::Game(condition.as_ref().clone()),
-                        &names,
-                        &self.slots,
-                    )
-                    .map_err(|reason| format!("If instruction '{}': {reason}", instruction.id))?;
+                    // Void is admitted only as this top-level ProgramIf condition. Keep the shared
+                    // game-condition compiler narrow for Choose and conditional search predicates.
+                    let condition = if matches!(condition.as_ref(), GameCondition::Void) {
+                        condition.validate_live().map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?;
+                        CompiledProgramCondition::Game(condition.as_ref().clone())
+                    } else {
+                        compile_program_condition(
+                            &ProgramCondition::Game(condition.as_ref().clone()),
+                            &names,
+                            &self.slots,
+                        )
+                        .map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?
+                    };
                     let (yes, yes_types) = self.compile_block(yes, &names)?;
                     let (no, no_types) = self.compile_block(no, &names)?;
                     if yes_types.len() != no_types.len() {
@@ -1398,13 +1411,14 @@ fn validate_and_result_types(
         SpellEffectKind::LoseLife { amount, who }
             if matches!(amount, LifeAmount::Fixed(_))
                 && (*who == PlayerRecipient::EachOpponent
-                    || (*who == PlayerRecipient::Controller && context == EffectContext::Ability)) =>
+                    || (*who == PlayerRecipient::Controller
+                        && matches!(context, EffectContext::Spell | EffectContext::Ability))) =>
         {
             effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::LoseLife { .. } => Err(
-            "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on an ability program".into(),
+            "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on a spell or ability program".into(),
         ),
         SpellEffectKind::Blight { .. } => {
             effect.validate(context)?;

@@ -5655,6 +5655,26 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
 }
 
 #[test]
+fn conditional_top_search_rejects_void_as_its_predicate() {
+    let definition = resultless_conditional_top_search_program();
+    let void_condition = definition.replace(
+        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, card_type: None,\n                                    required_subtypes: [\"Dragon\"], exclude_source: false),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
+        "condition: Void, destination:",
+    );
+    assert_ne!(
+        void_condition, definition,
+        "the conditional search fixture's existing predicate was replaced"
+    );
+    let error = invalid_program_reason(&void_condition);
+    assert!(
+        error.contains(
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
+        ),
+        "Void remains outside the conditional TopOfLibrary search predicate domain: {error}"
+    );
+}
+
+#[test]
 fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_tapped() {
     let definition = resultless_direct_battlefield_search_program(1, 1);
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
@@ -6092,6 +6112,75 @@ fn program_if_accepts_controller_card_count_graveyard_condition() {
 }
 
 #[test]
+fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
+    let void_definition = program_fixture(
+        r#"(steps: [
+            (id: "void_branch", kind: If(
+                condition: Void,
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&void_definition], &[])
+        .expect("Void is an admitted live ProgramIf condition");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner retains its compiled program");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("Void remains one typed If instruction")
+    };
+    let crate::primitives::CompiledInstructionKind::If { condition, yes, no } = &instruction.kind
+    else {
+        panic!("Void compiles to ProgramIf")
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Game(GameCondition::Void)
+    ));
+    assert!(yes.steps.is_empty() && yes.yields.is_empty());
+    assert!(no.steps.is_empty() && no.yields.is_empty());
+
+    let unrelated_turn_history = program_fixture(
+        r#"(steps: [
+            (id: "if", kind: If(
+                condition: SpellsCastThisTurn(players: Controller, min: Some(1)),
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let error = invalid_program_reason(&unrelated_turn_history);
+    assert!(
+        error.contains(
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
+        ),
+        "an unrelated turn-history condition remains rejected: {error}"
+    );
+
+    let composite_void = program_fixture(
+        r#"(steps: [
+            (id: "if", kind: If(
+                condition: AllOf([Void]),
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let error = invalid_program_reason(&composite_void);
+    assert!(
+        error.contains(
+            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
+        ),
+        "Void remains unsupported inside composite ProgramIf conditions: {error}"
+    );
+}
+
+#[test]
 fn program_if_keeps_graveyard_condition_admission_narrow() {
     for (label, condition, expected_error) in [
         (
@@ -6359,21 +6448,25 @@ fn program_accepts_resultless_each_opponent_fixed_life_loss() {
 }
 
 #[test]
-fn ability_program_admits_only_fixed_controller_life_loss_for_this_trigger() {
+fn spell_and_ability_programs_admit_only_fixed_controller_life_loss() {
     use crate::primitives::{CompiledProgram, EffectContext};
 
-    let compile = |card_id: &str, context, amount: &str| {
+    let compile = |card_id: &str, context, amount: &str, recipient: &str| {
         let program: crate::CardProgram = ron::from_str(&format!(
             r#"(body: (steps: [(id: "lose_life", bind: [], kind: Perform(LoseLife(
-                amount: {amount}, who: Controller,
+                amount: {amount}, who: {recipient},
             )))], yields: []))"#
         ))
         .expect("program fixture parses");
-        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-            card_id: card_id.into(),
-            face_id: crate::CardFaceId::new(card_id).unwrap(),
-            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
-        });
+        let owner = if context == EffectContext::Spell {
+            crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+        } else {
+            crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                card_id: card_id.into(),
+                face_id: crate::CardFaceId::new(card_id).unwrap(),
+                ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+            })
+        };
         CompiledProgram::compile(owner, context, &program)
     };
 
@@ -6381,6 +6474,7 @@ fn ability_program_admits_only_fixed_controller_life_loss_for_this_trigger() {
         "controller_life_loss_fixture",
         EffectContext::Ability,
         "Fixed(1)",
+        "Controller",
     )
     .expect("the Blighted Blackthorn tail can lose one life from its ability controller");
     assert!(matches!(
@@ -6392,23 +6486,58 @@ fn ability_program_admits_only_fixed_controller_life_loss_for_this_trigger() {
             })
     ));
     assert!(compiled.body.steps[0].outputs.is_empty());
-    assert!(
-        compile(
+    let spell = compile(
+        "spell_controller_life_loss_fixture",
+        EffectContext::Spell,
+        "Fixed(2)",
+        "Controller",
+    )
+    .expect("spell programs admit a fixed controller life-loss tail");
+    assert_eq!(
+        spell.owner,
+        crate::ProgramOwnerId::face(
             "spell_controller_life_loss_fixture",
-            EffectContext::Spell,
-            "Fixed(1)",
+            crate::CardFaceId::new("spell_controller_life_loss_fixture").unwrap(),
         )
-        .is_err(),
-        "the controller recipient is admitted only in an ability program"
     );
+    assert!(matches!(
+        &spell.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            })
+    ));
+    assert!(spell.body.steps[0].outputs.is_empty());
     assert!(
         compile(
             "variable_controller_life_loss_fixture",
             EffectContext::Ability,
             "TargetManaValue",
+            "Controller",
         )
         .is_err(),
         "target-dependent life loss remains outside this fixed tail"
+    );
+    assert!(
+        compile(
+            "variable_spell_controller_life_loss_fixture",
+            EffectContext::Spell,
+            "TargetManaValue",
+            "Controller",
+        )
+        .is_err(),
+        "spell controller life loss remains fixed-only"
+    );
+    assert!(
+        compile(
+            "unsupported_spell_recipient_fixture",
+            EffectContext::Spell,
+            "Fixed(2)",
+            "AffectedPlayer",
+        )
+        .is_err(),
+        "spell life loss does not admit unrelated recipients"
     );
 }
 
@@ -6423,8 +6552,8 @@ fn program_each_opponent_life_loss_rejects_unsupported_shapes_and_results() {
     );
     for (label, malformed) in [
         (
-            "controller-only loss",
-            valid.replace("who: EachOpponent", "who: Controller"),
+            "affected-player loss",
+            valid.replace("who: EachOpponent", "who: AffectedPlayer"),
         ),
         (
             "target-dependent amount",
@@ -8512,7 +8641,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "does not support CardResultCount requirements",
         ),
         (
-            "unsupported game-condition requirement",
+            "Void game-condition requirement remains unsupported for Choose",
             "Controller",
             "None",
             "GameCondition(Void)",

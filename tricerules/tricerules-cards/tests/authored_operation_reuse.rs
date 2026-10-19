@@ -4,9 +4,10 @@ use tricerules_cards::primitives::{
     Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer,
     CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
     CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
-    DiscardResultOutcome, GameCondition, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
-    ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds, SearchZoneSelection,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
+    DiscardResultOutcome, GameCondition, LifeAmount, PermanentTypeFilter, PlayerRecipient,
+    RelativePlayerSet, ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds,
+    SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -366,6 +367,84 @@ fn authored_preordain_is_scry_then_draw_program() {
         SpellEffectKind::Draw {
             who: PlayerRecipient::Controller,
             count: Amount::Fixed(1),
+        },
+    );
+}
+
+#[test]
+fn authored_decode_transmissions_is_void_if_then_draw_and_life_loss_program() {
+    let program = face_program("decode_transmissions");
+    assert_spell_program(program);
+    assert!(program.body.yields.is_empty());
+    let [branch] = program.body.steps.as_slice() else {
+        panic!("Decode Transmissions selects one branch before its effects");
+    };
+    let CompiledInstructionKind::If { condition, yes, no } = &branch.kind else {
+        panic!("Decode Transmissions begins with a typed ProgramIf");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        CompiledProgramCondition::Game(GameCondition::Void)
+    ));
+    assert!(yes.yields.is_empty() && no.yields.is_empty());
+
+    let [void_draw, void_life_loss] = yes.steps.as_slice() else {
+        panic!("the Void branch draws before losing life");
+    };
+    assert_perform(
+        void_draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(2),
+        },
+    );
+    assert_perform(
+        void_life_loss,
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::Fixed(2),
+            who: PlayerRecipient::EachOpponent,
+        },
+    );
+
+    let [ordinary_draw, ordinary_life_loss] = no.steps.as_slice() else {
+        panic!("the ordinary branch draws before losing life");
+    };
+    assert_perform(
+        ordinary_draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(2),
+        },
+    );
+    assert_perform(
+        ordinary_life_loss,
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::Fixed(2),
+            who: PlayerRecipient::Controller,
+        },
+    );
+}
+
+#[test]
+fn authored_visions_of_villainy_is_draw_then_controller_life_loss_program() {
+    let program = face_program("visions_of_villainy");
+    assert_spell_program(program);
+    assert!(program.body.yields.is_empty());
+    let [draw, life_loss] = program.body.steps.as_slice() else {
+        panic!("Visions of Villainy draws before its life-loss tail");
+    };
+    assert_perform(
+        draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(2),
+        },
+    );
+    assert_perform(
+        life_loss,
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::Fixed(2),
+            who: PlayerRecipient::Controller,
         },
     );
 }

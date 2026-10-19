@@ -795,6 +795,157 @@ mod library_replacement_tests {
             1
         );
     }
+
+    #[test]
+    fn decode_transmissions_samples_void_once_before_parked_draw_replacements() {
+        fn add_draw_replacement(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+            let source = engine.state.players[0].library[0];
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .unwrap();
+            engine.state.objects.get_mut(&source).unwrap().card_id = card_id.into();
+            source
+        }
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            121_082,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 2]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        add_draw_replacement(&mut engine, "alhammarrets_archive");
+        add_draw_replacement(&mut engine, "teferis_ageless_insight");
+        assert_eq!(engine.state.players[0].library.len(), 15);
+        assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 0);
+
+        let spell = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&spell).unwrap().card_id = "decode_transmissions".into();
+        engine.state.players[0].mana_pool.black = 3;
+        let cast = rv1::CastSpell {
+            cast_method: rv1::CastMethod::Normal as i32,
+            source: Some(rv1::CastSource {
+                location: Some(rv1::cast_source::Location::HandIndex(0)),
+                expected_zone_change_generation: Some(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&spell)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+            }),
+            ..Default::default()
+        };
+        engine.cast_spell(0, &cast).unwrap();
+        assert!(!engine.state.turn_history.current.void_holds());
+        assert_eq!(
+            engine.resolve_top_of_stack(&mut Vec::new()).unwrap(),
+            resolution::ResolutionProgress::Parked,
+            "the selected no-Void branch reaches its real draw replacement prompt"
+        );
+        match engine.state.pending_replacement_event.as_ref().unwrap() {
+            PendingReplacementEvent::Draw(work) => {
+                assert_eq!(work.requests.front().unwrap().drawn, 0);
+                assert!(work.receipts.is_empty());
+                assert_eq!(work.applications.len(), 2);
+                let DrawCompletion::ResumeEffects(resume) = &work.completion else {
+                    panic!("Decode's draw suspends its resolving spell Program")
+                };
+                let program = resume
+                    .stack
+                    .program
+                    .as_ref()
+                    .expect("the actual Decode face owns the parked resolution Program");
+                assert_eq!(
+                    program.owner,
+                    tricerules_card_model::ProgramOwnerId::face(
+                        "decode_transmissions",
+                        tricerules_card_model::CardFaceId::new("decode_transmissions").unwrap(),
+                    ),
+                    "the real spell owner, not a manually seeded continuation, is parked"
+                );
+                assert_eq!(program.frames.len(), 2);
+                assert!(program.frames[0].path.is_empty());
+                assert_eq!(program.frames[0].next_instruction, 1);
+                assert_eq!(program.frames[1].path.len(), 1);
+                assert_eq!(program.frames[1].path[0].instruction_index, 0);
+                assert_eq!(
+                    program.frames[1].path[0].arm,
+                    crate::state::ProgramArm::No,
+                    "Void was false when Decode selected its ordinary branch"
+                );
+                assert_eq!(program.frames[1].next_instruction, 1);
+            }
+            other => panic!("expected Decode's parked draw replacement, found {other:?}"),
+        }
+
+        // The branch is selected before its Draw instruction. No priority window exists while
+        // the replacement choice is parked, so this deterministic harness mutation tests that
+        // the suspended program retains that already-selected branch.
+        engine
+            .state
+            .turn_history
+            .current
+            .nonland_permanent_left_battlefield = true;
+
+        let mut replacement_choices = 0;
+        while engine.state.pending_resolution.is_some() {
+            let handle = match engine.state.pending_replacement_event.as_ref().unwrap() {
+                PendingReplacementEvent::Draw(work) => work.applications[0].handle,
+                other => panic!("expected Decode's pending draw replacement, found {other:?}"),
+            };
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![handle],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            replacement_choices += 1;
+        }
+
+        assert!(
+            replacement_choices > 0,
+            "the parked draw replacement is answered"
+        );
+        assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 8);
+        assert_eq!(engine.state.players[0].library.len(), 7);
+        assert_eq!(
+            engine.state.players[0].life, 18,
+            "the original no-Void arm loses life"
+        );
+        assert_eq!(
+            engine.state.players[1].life, 20,
+            "the newly true Void arm does not run"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.players[0]
+                .graveyard
+                .iter()
+                .filter(|object_id| **object_id == spell)
+                .count(),
+            1,
+            "the actual spell occurrence completes once"
+        );
+    }
 }
 
 #[cfg(test)]

@@ -192,6 +192,37 @@ fn issue_148_void_consumers_check_their_own_timing() {
 }
 
 #[test]
+fn issue_148_decode_transmissions_void_drains_each_opponent_in_three_player_game() {
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        148_003,
+        &[0, 1, 2],
+        20,
+        Some(vec![vec!["forest".into(); 30]; 3]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    cast(&mut e, "unsummon", CastMethod::Normal, target_object(bear));
+    pass_priority_round(&mut e);
+    assert!(e.state.turn_history.current.void_holds());
+    assert_eq!(e.state.objects[&bear].zone, Zone::Hand);
+
+    let hand = e.state.players[0].hand.len();
+    cast(&mut e, "decode_transmissions", CastMethod::Normal, vec![]);
+    pass_priority_round(&mut e);
+    assert_eq!(e.state.players[0].hand.len(), hand + 2);
+    assert_eq!(
+        e.state.players[0].life, 20,
+        "the controller draws but does not lose life"
+    );
+    assert_eq!(e.state.players[1].life, 18);
+    assert_eq!(e.state.players[2].life, 18);
+}
+
+#[test]
 fn issue_148_temporal_cost_and_public_reveal_use_existing_choice_contract() {
     let mut e = engine();
     let temporal = inject_card_into_hand(&mut e, 0, "temporal_intervention");

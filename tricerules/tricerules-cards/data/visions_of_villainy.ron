@@ -10,5 +10,9 @@
       min: Some(1),
     ),
   )],
-  spell_effect: [Draw(count: 2), LoseLife(amount: Fixed(2))],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+    (id: "controller_loses_life", kind: Perform(LoseLife(amount: Fixed(2), who: Controller))),
+  ], yields: []), target_bindings: [])),
 )

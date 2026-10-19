@@ -250,13 +250,17 @@ Commander, its owner makes the CR 903.9b Command-zone-or-Hand choice before move
 search continuation completes.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
-recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test
-runs when the instruction resolves, after preceding steps, so Dawnhand Eulogist checks its graveyard
-after milling and HYDRA Troopers checks before either its token creation or fallback mill (CR
-608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`,
-or for a fixed amount applied to `Controller` on an ability program; neither form can bind or yield
-a result. Dawnhand uses the EachOpponent form, which it shares with Acolyte of Aclazotz and Arbiter
-of Woe.
+recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. A direct
+top-level Program `If` may also test `Void`, which is sampled when that instruction resolves before
+the selected branch begins; a later draw-replacement suspension does not reevaluate the condition
+(CR 608.2c, 608.2h). `Void` is not admitted inside `AllOf`/`AnyOf`, as a `Choose` requirement, or
+as the predicate for a conditional top-of-library search. The graveyard test also runs when its
+instruction resolves, after preceding steps, so Dawnhand Eulogist checks its graveyard after milling
+and HYDRA Troopers checks before either its token creation or fallback mill (CR 608.2c, 608.2h,
+701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`, or for a fixed
+amount applied to `Controller` on a spell or ability program; neither form can bind or yield a
+result. Dawnhand uses the EachOpponent form, which it shares with Acolyte of Aclazotz and Arbiter of
+Woe. Decode Transmissions and Visions of Villainy use the fixed Controller form on spell programs.
 `If` may also inspect the current battlefield with `BattlefieldAggregate(Count)`, inclusive count
 bounds, and a validated `BattlefieldPermanentFilter`. This family requires
 `exclude_observed_object: false` and `Controller` at the root filter and every recursively nested
@@ -327,8 +331,11 @@ and the [participant redaction path](../../../libcockatrice_network/libcockatric
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.
-`If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, and valid `AllOf`/`AnyOf`
-combinations of those conditions. Other contexts and leaf operations fail registration.
+`If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, controller
+`GraveyardAggregate(CardCount)`, and controller-filtered `BattlefieldAggregate(Count)` predicates.
+`AllOf` and `AnyOf` recursively combine these admitted non-`Void` predicates. The direct top-level
+`Void` form is a separate global turn-history predicate. Other contexts and leaf operations fail
+registration.
 
 Use `Choose` for a resolution-time branch whose cost and body belong together. Give the node a
 program-unique `choice` ID, give each branch a stable ID local to that choice, and put the branch

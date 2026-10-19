@@ -15,8 +15,8 @@
       "start_line": 2,
       "end_line": 2,
       "typed_paths": [
-        "/faces/0/spell_effect/0",
-        "/faces/0/spell_effect/1"
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
       ]
     }
   ],
@@ -31,15 +31,19 @@
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Draw"
     },
     {
       "symbol": "SpellEffectKind::LoseLife",
-      "typed_path": "/faces/0/spell_effect/1"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/LoseLife"
     }
   ],
   "tokens": [],
   "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_visions_of_villainy_is_draw_then_controller_life_loss_program",
+      "covers": "Exact spell owner preserves the ordered draw-two and fixed controller life-loss Program."
+    },
     {
       "test": "scenario issue_misc44_batch::issue_misc44_visions_of_villainy",
       "covers": "Villain-controlled generic reduction plus draw two and two life loss"
