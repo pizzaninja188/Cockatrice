@@ -128,6 +128,20 @@ fn issue_465_scalestorm_summoner() {
         "the power-4 condition is met and one Dinosaur token is created"
     );
 
+    // A qualifying creature on an opponent's battlefield does not satisfy the controller-only
+    // condition.
+    let mut opponent_only = combat_engine(722_007);
+    let summoner = inject_creature_on_battlefield(&mut opponent_only, 0, "scalestorm_summoner");
+    inject_creature_with_stats(&mut opponent_only, 1, "grizzly_bears", 8, 8);
+    opponent_only
+        .apply_scenario_command(0, &declare_attackers(vec![summoner]))
+        .expect("declare the Summoner as an attacker");
+    resolve_entire_stack_two_player(&mut opponent_only);
+    assert!(
+        battlefield_token_oids(&opponent_only, 0, "dinosaur_r_3_1").is_empty(),
+        "an opponent's 8-power creature does not satisfy the controller's power-4 condition"
+    );
+
     // The condition is checked only as the ability resolves: raising a creature's power after the
     // trigger is on the stack still creates the Dinosaur (matching the printed ruling).
     let mut response = combat_engine(722_006);

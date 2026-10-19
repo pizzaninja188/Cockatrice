@@ -100,6 +100,15 @@ cards to hand is not drawing (CR 121.5); the owner orders cards placed together 
 order prompt. The existing private `LIBRARY_LOOK` flow and physical candidate binding are reused;
 filtered, revealed, optional, random-bottom, and ability-owned forms remain on the legacy effect-list
 path. This adds no card admission or protocol or client change (CR 608.2c, 608.2h).
+The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
+`MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
+remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the
+flat `ChooseResolutionBranch` to the existing `If` and `CreateTokens` program operations. The attack
+trigger remains unconditional; the pinned Oracle record `55ede1d4-593d-433c-943a-4db12eeb5fa8`
+(rechecked 2026-10-19) and WotC ruling (2024-04-12) confirm that the condition is checked only as the
+ability resolves, so power added in response qualifies and a qualifying creature removed before
+resolution does not (CR 603.4, 608.2c, 608.2h). This reuses the current condition evaluator and leaves
+the registered Dinosaur unchanged. Its complete definition and updated review map have independent semantic approval. It adds no card admission or runtime, protocol, or client change.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

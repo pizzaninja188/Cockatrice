@@ -13,22 +13,27 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "create_dinosaur",
-          presentation: Fallback,
-          cost: None,
-          requirement: GameCondition(BattlefieldAggregate(
-            filter: (controllers: Controller, card_type: Some(Creature)),
-            aggregate: MaximumPower,
-            min: Some(4),
-          )),
-          effects: [CreateTokens(token: "dinosaur_r_3_1", count: 1)],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "create_dinosaur_if_power_4", kind: If(
+        condition: BattlefieldAggregate(
+          filter: (controllers: Controller, card_type: Some(Creature)),
+          aggregate: MaximumPower,
+          min: Some(4),
+          max: None,
+          exclude_observed_object: false,
         ),
-        (branch_id: "no_dinosaur", presentation: Fallback, cost: None, requirement: Always, effects: []),
-      ],
-    )],
+        yes: (steps: [
+          (id: "create_dinosaur", kind: Perform(CreateTokens(
+            token: "dinosaur_r_3_1",
+            count: 1,
+            who: Controller,
+            tapped: false,
+            sacrifice_timing: None,
+          ))),
+        ], yields: []),
+        no: (steps: [], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

@@ -2428,19 +2428,48 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
             aggregate: super::BattlefieldAggregate::Count,
             ..
         } => validate_program_battlefield_filter(filter)?,
+        GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate: super::BattlefieldAggregate::MaximumPower,
+            min: Some(min),
+            max: None,
+            exclude_observed_object: false,
+        } => validate_program_maximum_power_filter(filter, *min)?,
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
             for branch in branches {
                 validate_program_condition(branch)?;
             }
         }
-        _ => {
-            return Err(
-                "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state supported by spell_program"
-                    .into(),
-            )
-        }
+        _ => return Err(PROGRAM_CONDITION_UNSUPPORTED.into()),
     }
     condition.validate_live()
+}
+
+const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(
+    "If condition uses context outside controller hand, library, CardCount graveyard, or ",
+    "Controller battlefield Count state supported by spell_program; ProgramIf also admits ",
+    "only positive-min Controller Creature MaximumPower without max, extra filter fields, ",
+    "or observed-object exclusion",
+);
+
+fn validate_program_maximum_power_filter(
+    filter: &super::BattlefieldPermanentFilter,
+    min: u32,
+) -> Result<(), String> {
+    if min == 0
+        || filter.controllers != RelativePlayerSet::Controller
+        || filter.card_type != Some(CardTypeFilter::Creature)
+        || !filter.required_supertypes.is_empty()
+        || filter.token.is_some()
+        || filter.any_of.is_some()
+        || filter.color.is_some()
+        || filter.name.is_some()
+        || !filter.required_subtypes.is_empty()
+        || filter.exclude_source
+    {
+        return Err(PROGRAM_CONDITION_UNSUPPORTED.into());
+    }
+    Ok(())
 }
 
 fn validate_program_battlefield_filter(

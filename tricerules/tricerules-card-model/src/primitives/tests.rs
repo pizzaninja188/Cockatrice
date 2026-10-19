@@ -6319,11 +6319,6 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
             unsupported,
         ),
         (
-            "MaximumPower",
-            r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: MaximumPower, min: Some(1))"#,
-            unsupported,
-        ),
-        (
             "legacy BattlefieldCreatureCount",
             r#"BattlefieldCreatureCount(filter: (controllers: Controller, subtype: Some("Hero")), min: Some(1))"#,
             unsupported,
@@ -6409,6 +6404,191 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
             error.contains(expected_error),
             "{label}: expected {expected_error:?}, got {error:?}"
         );
+    }
+}
+
+#[test]
+fn program_if_accepts_controller_creature_maximum_power_conditions() {
+    let body = r#"(steps: [(id: "qualifying_creature", kind: If(
+        condition: BattlefieldAggregate(
+            filter: (controllers: Controller, card_type: Some(Creature)),
+            aggregate: MaximumPower, min: Some(4), max: None,
+            exclude_observed_object: false,
+        ),
+        yes: (steps: [], yields: []),
+        no: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let program = ability_program_fixture("maximum_power_program_fixture", body)
+        .expect("a Controller Creature MaximumPower ProgramIf compiles");
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("the fixture retains one ProgramIf instruction");
+    };
+    let crate::primitives::CompiledInstructionKind::If { condition, .. } = &instruction.kind else {
+        panic!("the maximum-power predicate remains a typed ProgramIf");
+    };
+
+    let expected = crate::primitives::CompiledProgramCondition::Game(
+        crate::primitives::GameCondition::BattlefieldAggregate {
+            filter: crate::primitives::BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
+                token: None,
+                any_of: None,
+                controllers: crate::primitives::RelativePlayerSet::Controller,
+                card_type: Some(crate::primitives::CardTypeFilter::Creature),
+                color: None,
+                name: None,
+                required_subtypes: Vec::new(),
+                exclude_source: false,
+            },
+            aggregate: crate::primitives::BattlefieldAggregate::MaximumPower,
+            min: Some(4),
+            max: None,
+            exclude_observed_object: false,
+        },
+    );
+    assert_eq!(condition.as_ref(), &expected);
+}
+
+#[test]
+fn program_if_rejects_unsupported_maximum_power_shapes() {
+    let cases = [
+        (
+            "Controller cohort without an explicit Creature filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller), aggregate: MaximumPower,
+                min: Some(4), max: None, exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "opponent cohort",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Opponents, card_type: Some(Creature)),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "noncreature filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Land)),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "required supertype filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature),
+                    required_supertypes: ["Legendary"]),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "token filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), token: Some(true)),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "disjunctive filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), any_of: Some([
+                    (controllers: Controller, card_type: Some(Creature)),
+                    (controllers: Controller, required_subtypes: ["Dinosaur"]),
+                ])),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "color filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), color: Some(Green)),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "name filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), name: Some("Grizzly Bears")),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "subtype filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature),
+                    required_subtypes: ["Dinosaur"]),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "source exclusion",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), exclude_source: true),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "observed-object exclusion",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature)),
+                aggregate: MaximumPower, min: Some(4), max: None,
+                exclude_observed_object: true,
+            )"#,
+        ),
+        (
+            "upper bound",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature)),
+                aggregate: MaximumPower, min: Some(4), max: Some(5),
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "zero threshold",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature)),
+                aggregate: MaximumPower, min: Some(0), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "missing threshold",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature)),
+                aggregate: MaximumPower, min: None, max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "unsupported TotalPower aggregate",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature)),
+                aggregate: TotalPower, min: Some(4), max: None,
+                exclude_observed_object: false,
+            )"#,
+        ),
+    ];
+
+    for (index, (label, condition)) in cases.into_iter().enumerate() {
+        let body = format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition},
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        let card_id = format!("maximum_power_invalid_{index}");
+        let result = ability_program_fixture(&card_id, &body);
+        assert!(result.is_err(), "unsupported {label} was admitted");
     }
 }
 

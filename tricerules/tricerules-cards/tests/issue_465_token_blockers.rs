@@ -9,8 +9,7 @@
 
 use tricerules_cards::primitives::{
     Amount, BattlefieldAggregate, CardTypeFilter, GameCondition, PlayerRecipient,
-    RelativePlayerSet, ResolutionBranchRequirement, ResolutionBranchSelection, SpellEffectKind,
-    StaticAbilityDef, TriggerCondition,
+    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TriggerCondition,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -151,47 +150,73 @@ fn issue_465_token_blockers_maps_definitions() {
             minimum_other_attackers: 0
         }
     );
-    let [effect] = trigger.effect.as_slice() else {
-        panic!("one effect");
+    assert!(
+        trigger.effect.is_empty(),
+        "the authored Program replaces the legacy effect list"
+    );
+    let program = trigger
+        .program
+        .as_ref()
+        .expect("the attack trigger owns an authored Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("one ProgramIf instruction");
     };
-    let SpellEffectKind::ChooseResolutionBranch {
-        selection,
-        branches,
-        ..
-    } = effect
+    let tricerules_cards::primitives::InstructionKind::If { condition, yes, no } =
+        &instruction.kind
     else {
-        panic!("conditional branch, got {effect:?}");
-    };
-    assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-    let [dinosaur, fallback] = branches.as_slice() else {
-        panic!("two branches");
+        panic!(
+            "authored condition is a ProgramIf, got {:?}",
+            instruction.kind
+        );
     };
     assert!(
         matches!(
-            &dinosaur.requirement,
-            ResolutionBranchRequirement::GameCondition(GameCondition::BattlefieldAggregate {
+            condition.as_ref(),
+            GameCondition::BattlefieldAggregate {
                 filter,
                 aggregate: BattlefieldAggregate::MaximumPower,
                 min: Some(4),
-                ..
-            }) if filter.controllers == RelativePlayerSet::Controller
+                max: None,
+                exclude_observed_object: false,
+            } if filter.controllers == RelativePlayerSet::Controller
                 && filter.card_type == Some(CardTypeFilter::Creature)
+                && filter.required_supertypes.is_empty()
+                && filter.token.is_none()
+                && filter.any_of.is_none()
+                && filter.color.is_none()
+                && filter.name.is_none()
+                && filter.required_subtypes.is_empty()
+                && !filter.exclude_source
         ),
         "power-4 condition, got {:?}",
-        dinosaur.requirement
+        condition
     );
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let [create_token] = yes.steps.as_slice() else {
+        panic!("the qualifying ProgramIf body has one instruction");
+    };
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &create_token.kind else {
+        panic!(
+            "the qualifying body creates a token, got {:?}",
+            create_token.kind
+        );
+    };
     assert_eq!(
-        dinosaur.effects,
-        [SpellEffectKind::CreateTokens {
+        effect.as_ref(),
+        &SpellEffectKind::CreateTokens {
             token: "dinosaur_r_3_1".into(),
             count: Amount::Fixed(1),
             who: PlayerRecipient::Controller,
             tapped: false,
             sacrifice_timing: None,
-        }]
+        }
     );
-    assert_eq!(fallback.requirement, ResolutionBranchRequirement::Always);
-    assert!(fallback.effects.is_empty());
+    assert!(create_token.bind.is_empty());
+    assert!(create_token.input.is_none());
+    assert!(yes.yields.is_empty());
+    assert!(no.steps.is_empty() && no.yields.is_empty());
 }
 
 #[test]

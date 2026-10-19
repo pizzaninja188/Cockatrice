@@ -17,16 +17,16 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/If"
     },
     {
       "symbol": "GameCondition::BattlefieldAggregate",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/requirement"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/If/condition"
     },
     {
       "symbol": "SpellEffectKind::CreateTokens",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/If/yes/steps/0/kind/Perform/CreateTokens"
     }
   ],
   "tokens": [
@@ -35,7 +35,7 @@
   "semantic_fixtures": [
     {
       "test": "scenario issue_465_token_blockers::issue_465_scalestorm_summoner",
-      "covers": "the attack trigger is placed even with no creature that has power 4 or greater, creates a registered 3/1 red Dinosaur token only when the controller has one as the ability resolves (power added in response qualifies), and creates none when the last such creature leaves before resolution"
+      "covers": "the attack trigger is placed even with no creature that has power 4 or greater, an opponent-only 8-power creature does not qualify, creates a registered 3/1 red Dinosaur token only when the controller has one as the ability resolves (power added in response qualifies), and creates none when the last such creature leaves before resolution"
     },
     {
       "test": "mechanic_registry::issue_465_token_blockers::issue_465_token_blockers_maps_definitions",

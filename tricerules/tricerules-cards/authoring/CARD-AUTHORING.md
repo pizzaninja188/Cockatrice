@@ -305,8 +305,16 @@ evaluated when its instruction runs, after preceding steps. Hero in Training cou
 controlled permanent with the Hero subtype, including noncreature Kindred Heroes and a returned
 new generation of the same physical card. Tend the Sprigs counts each controlled permanent once
 when it matches Land or Treefolk after its Basic Land search. These shapes do not admit other
-battlefield aggregates, legacy creature counts, observed-object-dependent counts, or other relative
-player sets.
+legacy creature counts, observed-object-dependent counts, or other relative player sets. Other
+battlefield aggregate leaves remain unsupported except for the separate exact `MaximumPower` form
+below.
+`If` separately admits one `BattlefieldAggregate(MaximumPower)` form: exactly the controller's
+creatures, `min: Some(positive)`, `max: None`, `exclude_observed_object: false`, and every other
+`BattlefieldPermanentFilter` field at its default. It uses live power when that instruction runs;
+it does not admit another cohort, bound, filter, or observed-object context. Scalestorm Summoner
+uses this condition in its triggered ability. Fanatic of Rhonas's mana condition and Drowsing
+Tyrannodon's attack restriction are existing `MaximumPower` analogues; this Program shape reuses
+the current condition evaluator and adds no runtime operation.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
@@ -387,7 +395,9 @@ Discard retains the existing validated `DiscardQuantity` choices. Permanent filt
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, controller
-`GraveyardAggregate(CardCount)`, and controller-filtered `BattlefieldAggregate(Count)` predicates.
+`GraveyardAggregate(CardCount)`, controller-filtered `BattlefieldAggregate(Count)`, and the exact
+controller-Creature `BattlefieldAggregate(MaximumPower)` form with a positive `min`, no `max`,
+default remaining filter fields, and no observed-object exclusion.
 `AllOf` and `AnyOf` recursively combine these admitted non-`Void` predicates. The direct top-level
 `Void` form is a separate global turn-history predicate. Other contexts and leaf operations fail
 registration.
