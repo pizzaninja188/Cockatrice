@@ -1,13 +1,14 @@
 //! Exact authored owners for the reusable Scry, search, and Proliferate operations.
 
 use tricerules_cards::primitives::{
-    Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer,
-    CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
-    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
-    DiscardResultOutcome, GameCondition, GraveyardAggregate, LibraryBottomOrder, LifeAmount,
+    AbilityCost, Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef,
+    CastTriggerPlayer, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction,
+    CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
+    CompiledProgramResultCondition, DiscardQuantity, DiscardResultOutcome, EntersTappedAffected,
+    GameCondition, GraveyardAggregate, LibraryBottomOrder, LifeAmount, ManaAmount,
     PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost, ResultType,
     SearchDestination, SearchSelectionBounds, SearchZoneSelection, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -634,6 +635,189 @@ fn assert_single_sacrifice_choose<'a>(
         }
     );
     branch
+}
+
+fn assert_single_tap_choose<'a>(
+    program: &'a CompiledProgram,
+    expected_branch_id: &str,
+    expected_filter: TargetFilter,
+    expected_exclude_source: bool,
+) -> (
+    &'a CompiledChooseBranch,
+    &'a tricerules_cards::primitives::CompiledBlock,
+) {
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [step] = program.body.steps.as_slice() else {
+        panic!("the triggered ability is one Program Choose");
+    };
+    assert_eq!(step.id, "choose_tap");
+    assert!(step.input.is_none());
+    assert!(step.outputs.is_empty());
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &step.kind
+    else {
+        panic!("the triggered ability uses Program Choose");
+    };
+    assert_eq!(choice.as_str(), "tap_permanent");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    let [branch] = branches.as_slice() else {
+        panic!("the Program has one optional tap-cost branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), expected_branch_id);
+    assert_eq!(branch.requirement, CompiledChooseRequirement::Always);
+    assert_eq!(
+        branch.cost,
+        ResolutionCost::TapPermanents {
+            count: 1,
+            filter: expected_filter,
+            exclude_source: expected_exclude_source,
+        }
+    );
+    (branch, otherwise)
+}
+
+#[test]
+fn authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs() {
+    let registry = tricerules_cards::registry::global();
+    let bridge_face = registry
+        .get("command_bridge")
+        .expect("Command Bridge")
+        .primary_face();
+    let [enters_tapped] = bridge_face.static_abilities.as_slice() else {
+        panic!("Command Bridge has one enters-tapped replacement ability");
+    };
+    assert!(matches!(
+        enters_tapped.definition,
+        StaticAbilityDef::EntersTapped {
+            affected: EntersTappedAffected::Self_,
+            condition: None,
+            unless_cost: None,
+        }
+    ));
+    let [bridge_mana] = bridge_face.activated_abilities.as_slice() else {
+        panic!("Command Bridge has one printed mana ability");
+    };
+    assert_eq!(bridge_mana.costs, [AbilityCost::Tap]);
+    assert!(bridge_mana.is_mana_ability());
+    let any_color_options = [
+        ManaAmount {
+            w: 1,
+            ..Default::default()
+        },
+        ManaAmount {
+            u: 1,
+            ..Default::default()
+        },
+        ManaAmount {
+            b: 1,
+            ..Default::default()
+        },
+        ManaAmount {
+            r: 1,
+            ..Default::default()
+        },
+        ManaAmount {
+            g: 1,
+            ..Default::default()
+        },
+    ];
+    assert!(matches!(
+        bridge_mana.effect.as_slice(),
+        [SpellEffectKind::ProduceMana {
+            options,
+            commander_color_identity: false,
+            restriction: None,
+            conditional: None,
+        }] if options.as_slice() == any_color_options.as_slice()
+    ));
+    let [bridge_trigger] = bridge_face.triggered_abilities.as_slice() else {
+        panic!("Command Bridge keeps its one entry trigger");
+    };
+    assert_eq!(bridge_trigger.ability_id.as_str(), "triggered_01");
+    assert_eq!(
+        bridge_trigger.trigger,
+        TriggerCondition::WhenSelfEntersBattlefield
+    );
+    let bridge_program = ability_program("command_bridge", 0, false);
+    let bridge_filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        ..Default::default()
+    };
+    let (bridge_tap, bridge_otherwise) = assert_single_tap_choose(
+        bridge_program,
+        "tap_an_untapped_permanent_you_control",
+        bridge_filter,
+        false,
+    );
+    assert!(bridge_tap.body.steps.is_empty() && bridge_tap.body.yields.is_empty());
+    let [sacrifice_source] = bridge_otherwise.steps.as_slice() else {
+        panic!("declining or lacking the tap payment sacrifices Command Bridge");
+    };
+    assert_perform(
+        sacrifice_source,
+        SpellEffectKind::Sacrifice {
+            subject: tricerules_cards::primitives::EffectSubject::Source,
+        },
+    );
+    assert!(bridge_otherwise.yields.is_empty());
+
+    let gravelgill_face = registry
+        .get("gravelgill_scoundrel")
+        .expect("Gravelgill Scoundrel")
+        .primary_face();
+    assert_eq!(gravelgill_face.power, Some(1));
+    assert_eq!(gravelgill_face.toughness, Some(3));
+    assert_eq!(
+        gravelgill_face.keywords.as_slice(),
+        &[tricerules_cards::primitives::Keyword::Vigilance]
+    );
+    let [gravelgill_trigger] = gravelgill_face.triggered_abilities.as_slice() else {
+        panic!("Gravelgill Scoundrel keeps its one attack trigger");
+    };
+    assert_eq!(gravelgill_trigger.ability_id.as_str(), "triggered_01");
+    assert_eq!(
+        gravelgill_trigger.trigger,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0,
+        }
+    );
+    let gravelgill_program = ability_program("gravelgill_scoundrel", 0, false);
+    let creature_filter = TargetFilter {
+        kind: TargetKind::Creature,
+        controller: TargetController::You,
+        ..Default::default()
+    };
+    let (gravelgill_tap, gravelgill_otherwise) = assert_single_tap_choose(
+        gravelgill_program,
+        "tap_another_untapped_creature_you_control",
+        creature_filter,
+        true,
+    );
+    let [unblockable] = gravelgill_tap.body.steps.as_slice() else {
+        panic!("paying the tap cost makes Gravelgill Scoundrel unblockable");
+    };
+    assert_perform(
+        unblockable,
+        SpellEffectKind::ApplyCombatRestriction {
+            scope: tricerules_cards::primitives::CombatRestrictionScope::Source,
+            restriction: tricerules_cards::primitives::CombatRestriction {
+                cant_be_blocked: true,
+                ..Default::default()
+            },
+        },
+    );
+    assert!(gravelgill_otherwise.steps.is_empty() && gravelgill_otherwise.yields.is_empty());
 }
 
 #[test]

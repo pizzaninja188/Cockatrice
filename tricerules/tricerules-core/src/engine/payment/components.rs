@@ -41,7 +41,7 @@ pub(in crate::engine) enum ObjectPaymentComponent {
     Tap {
         constraint: ObjectPaymentConstraint,
         filter: PermanentPaymentFilter,
-        excluded: Option<ObjectId>,
+        excluded: Option<rv1::CostObjectRef>,
         cast_cost_kind: Option<ObjectCastCostKind>,
     },
     Blight {
@@ -91,7 +91,7 @@ impl ObjectPaymentComponent {
         source: Option<ObjectId>,
         filter: &TargetFilter,
         constraint: ObjectPaymentConstraint,
-        excluded: Option<ObjectId>,
+        excluded: Option<rv1::CostObjectRef>,
         cast_cost_kind: Option<ObjectCastCostKind>,
     ) -> Self {
         Self::Tap {
@@ -142,7 +142,7 @@ impl ObjectPaymentComponent {
                     source,
                     filter: Box::new(filter.clone()),
                 },
-                excluded: exclude_source.then_some(source.object_id),
+                excluded: (*exclude_source).then_some(source),
                 cast_cost_kind: None,
             },
             ResolutionCost::Blight { count } => Self::Blight { count: *count },
@@ -201,7 +201,12 @@ impl ObjectPaymentComponent {
             }
             Self::Tap {
                 filter, excluded, ..
-            } => !object.tapped && *excluded != Some(oid) && filter.matches(engine, player, oid),
+            } => {
+                let excluded_incarnation = excluded.as_ref().is_some_and(|excluded| {
+                    excluded.object_id == oid && engine.payment_object_ref(oid) == *excluded
+                });
+                !object.tapped && !excluded_incarnation && filter.matches(engine, player, oid)
+            }
             Self::Blight { .. } => engine.can_blight_creature(player, oid),
         }
     }

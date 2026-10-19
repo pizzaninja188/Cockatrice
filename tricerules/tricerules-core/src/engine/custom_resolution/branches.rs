@@ -444,6 +444,7 @@ impl GameEngine {
             cost,
             ResolutionCost::PutHandCardOnLibraryBottom
                 | ResolutionCost::Blight { .. }
+                | ResolutionCost::TapPermanents { .. }
                 | ResolutionCost::SacrificePermanent { .. }
         ) {
             return true;
@@ -483,18 +484,28 @@ impl GameEngine {
         }
     }
 
-    fn program_choose_sacrifice_cost_choice_event(
+    fn program_choose_permanent_cost_choice_event(
         &self,
         pending: &PendingResolution,
         candidates: &[ObjectId],
-    ) -> rv1::RuledEvent {
-        rv1::RuledEvent {
+        cost: &ResolutionCost,
+    ) -> Result<rv1::RuledEvent, EngineError> {
+        let action = match cost {
+            ResolutionCost::TapPermanents { .. } => "tap",
+            ResolutionCost::SacrificePermanent { .. } => "sacrifice",
+            _ => {
+                return Err(EngineError::ProgramInvariant(
+                    "Program Choose permanent-cost prompt has an unsupported cost",
+                ));
+            }
+        };
+        Ok(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: pending.resolution_prompt_id.get(),
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
-                    prompt_text: pending.presentation.prompt.clone(),
+                    prompt_text: format!("Choose a permanent to {action}, or decline."),
                     choice_kind: rv1::ChoiceKind::CostObjects as i32,
                     candidate_object_ids: candidates.to_vec(),
                     candidate_names: self.object_names(candidates),
@@ -503,7 +514,7 @@ impl GameEngine {
                     ..Default::default()
                 },
             )),
-        }
+        })
     }
 
     fn hand_bottom_candidate_generations(&self, candidates: &[ObjectId]) -> Vec<(ObjectId, u64)> {
@@ -818,7 +829,7 @@ impl GameEngine {
         result
     }
 
-    pub(super) fn finish_program_choose_sacrifice_object(
+    pub(super) fn finish_program_choose_permanent_cost(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
@@ -827,7 +838,7 @@ impl GameEngine {
         let (stack, choose, selected_branch, branch_id, candidate_generations) =
             match &pending.continuation {
                 ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
-                    PendingProgramChooseStage::PayingSacrificePermanent {
+                    PendingProgramChooseStage::PayingPermanentCost {
                         selected_branch,
                         branch_id,
                         candidate_generations,
@@ -841,14 +852,14 @@ impl GameEngine {
                     _ => {
                         self.state.pending_resolution = Some(pending);
                         return Err(EngineError::Illegal(
-                            "program Choose is not awaiting a sacrifice payment",
+                            "program Choose is not awaiting a permanent-cost payment",
                         ));
                     }
                 },
                 _ => {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
-                        "program Choose sacrifice continuation missing",
+                        "program Choose permanent-cost continuation missing",
                     ));
                 }
             };
@@ -862,27 +873,27 @@ impl GameEngine {
         if invalid_fields {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "sacrifice payment choice contains unrelated fields",
+                "permanent-cost payment choice contains unrelated fields",
             ));
         }
         if pending.deciding_player != choose.original_chooser {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "program Choose sacrifice payment cannot be delegated",
+                "program Choose permanent-cost payment cannot be delegated",
             ));
         }
         if decision == rv1::ResolutionChoiceDecision::Decline {
             if !answer.chosen_object_ids.is_empty() {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
-                    "declining a sacrifice payment cannot include an object",
+                    "declining a permanent-cost payment cannot include an object",
                 ));
             }
             return self.complete_program_choose_otherwise_from_parts(
                 stack,
                 choose,
                 format!(
-                    "P{} declines the program Choose sacrifice cost; Otherwise resolves.",
+                    "P{} declines the program Choose permanent cost; Otherwise resolves.",
                     pending.deciding_player
                 ),
             );
@@ -890,7 +901,7 @@ impl GameEngine {
         if decision != rv1::ResolutionChoiceDecision::Unspecified {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "sacrifice payment requires an object choice or decline",
+                "permanent-cost payment requires an object choice or decline",
             ));
         }
         if answer.chosen_object_ids.is_empty() {
@@ -898,7 +909,7 @@ impl GameEngine {
                 stack,
                 choose,
                 format!(
-                    "P{} declines the program Choose sacrifice cost; Otherwise resolves.",
+                    "P{} declines the program Choose permanent cost; Otherwise resolves.",
                     pending.deciding_player
                 ),
             );
@@ -906,7 +917,7 @@ impl GameEngine {
         if answer.chosen_object_ids.len() != 1 {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "sacrifice payment requires one permanent",
+                "permanent-cost payment requires one permanent",
             ));
         }
 
@@ -918,7 +929,11 @@ impl GameEngine {
         ) {
             Ok(branch)
                 if branch.branch_id == branch_id
-                    && matches!(&branch.cost, ResolutionCost::SacrificePermanent { .. }) =>
+                    && matches!(
+                        &branch.cost,
+                        ResolutionCost::TapPermanents { .. }
+                            | ResolutionCost::SacrificePermanent { .. }
+                    ) =>
             {
                 branch
             }
@@ -937,7 +952,9 @@ impl GameEngine {
             .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation))
         else {
             self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal("sacrifice payment choice is stale"));
+            return Err(EngineError::Illegal(
+                "permanent-cost payment choice is stale",
+            ));
         };
         let current_generation = self
             .state
@@ -965,7 +982,7 @@ impl GameEngine {
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "sacrifice payment choice became stale",
+                "permanent-cost payment choice became stale",
             ));
         }
         let receipt = match self
@@ -986,11 +1003,16 @@ impl GameEngine {
         let mut events = receipt.move_events;
         self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed, &mut events);
         for cost in receipt.paid_card_costs {
-            if let PaidCardCost::Sacrifice { card_name, .. } = cost {
-                events.push(ev_log(format!(
+            match cost {
+                PaidCardCost::Sacrifice { card_name, .. } => events.push(ev_log(format!(
                     "P{} sacrifices {card_name}.",
                     choose.original_chooser
-                )));
+                ))),
+                PaidCardCost::Tap { card_name, .. } => events.push(ev_log(format!(
+                    "P{} taps {card_name}.",
+                    choose.original_chooser
+                ))),
+                _ => {}
             }
         }
         let mut stack = stack;
@@ -1526,7 +1548,8 @@ impl GameEngine {
                 events.push(event);
                 Ok(finish_with_events(self, events))
             }
-            cost @ ResolutionCost::SacrificePermanent { .. } => {
+            cost @ (ResolutionCost::TapPermanents { .. }
+            | ResolutionCost::SacrificePermanent { .. }) => {
                 let payer = choose_state.original_chooser;
                 let candidates = self.resolution_cost_candidates(
                     payer,
@@ -1535,29 +1558,41 @@ impl GameEngine {
                     &cost,
                 );
                 if candidates.is_empty() {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(EngineError::Illegal(
-                        "that program Choose branch no longer has a permanent to sacrifice",
-                    ));
+                    let mut otherwise = self.complete_program_choose_otherwise_from_parts(
+                        stack,
+                        choose_state,
+                        "No permanent remains to pay the program Choose cost; Otherwise resolves."
+                            .into(),
+                    )?;
+                    events.extend(otherwise.events);
+                    otherwise.events = events;
+                    return Ok(otherwise);
                 }
                 pending.deciding_player = payer;
                 pending.presentation.choice_kind = rv1::ChoiceKind::CostObjects;
                 pending.presentation.candidates = candidates.clone();
                 pending.presentation.min = 0;
                 pending.presentation.max = 1;
-                pending.presentation.prompt = "Choose a permanent to sacrifice, or decline.".into();
+                let action = match &cost {
+                    ResolutionCost::TapPermanents { .. } => "tap",
+                    ResolutionCost::SacrificePermanent { .. } => "sacrifice",
+                    _ => unreachable!("validated Program Choose permanent cost"),
+                };
+                pending.presentation.prompt =
+                    format!("Choose a permanent to {action}, or decline.");
                 let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
                 let ResolutionContinuation::ProgramChoose { choose, .. } =
                     &mut pending.continuation
                 else {
                     unreachable!("validated program Choose continuation")
                 };
-                choose.stage = PendingProgramChooseStage::PayingSacrificePermanent {
+                choose.stage = PendingProgramChooseStage::PayingPermanentCost {
                     selected_branch: branch_index,
                     branch_id: branch.branch_id,
                     candidate_generations,
                 };
-                let event = self.program_choose_sacrifice_cost_choice_event(&pending, &candidates);
+                let event =
+                    self.program_choose_permanent_cost_choice_event(&pending, &candidates, &cost)?;
                 self.state.pending_resolution = Some(pending);
                 events.push(event);
                 Ok(finish_with_events(self, events))
@@ -2229,18 +2264,18 @@ impl GameEngine {
             PendingProgramChooseStage::PayingMana { .. }
                 | PendingProgramChooseStage::PayingHandCard { .. }
                 | PendingProgramChooseStage::PayingBlight { .. }
-                | PendingProgramChooseStage::PayingSacrificePermanent { .. }
+                | PendingProgramChooseStage::PayingPermanentCost { .. }
                 | PendingProgramChooseStage::ChoosingCommanderDestination { .. }
         );
 
-        if let PendingProgramChooseStage::PayingSacrificePermanent {
+        if let PendingProgramChooseStage::PayingPermanentCost {
             selected_branch,
             branch_id,
             candidate_generations: previous_candidates,
         } = &choose.stage
         {
             if !original_chooser_live {
-                // Controller-only Program sacrifice payment has no delegate. The controlling
+                // Controller-only Program permanent-cost payment has no delegate. The controlling
                 // player left, so the owning resolution has already ended under CR 800.4a; do
                 // not enter the paid body, Otherwise, or parent tail.
                 return Ok(());
@@ -2248,7 +2283,7 @@ impl GameEngine {
             if !current_chooser_live || pending.deciding_player != choose.original_chooser {
                 let completed = self.complete_program_choose_otherwise(
                     pending,
-                    "The program Choose sacrifice payment cannot be delegated; Otherwise resolves."
+                    "The program Choose permanent-cost payment cannot be delegated; Otherwise resolves."
                         .into(),
                 )?;
                 events.extend(completed.events);
@@ -2257,7 +2292,7 @@ impl GameEngine {
             if choose.original_chooser != controller {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::ProgramInvariant(
-                    "Controller sacrifice payment lost its resolving controller",
+                    "Controller permanent-cost payment lost its resolving controller",
                 ));
             }
             let branch = match self.program_choose_branch_at_occurrence(
@@ -2267,14 +2302,18 @@ impl GameEngine {
             ) {
                 Ok(branch)
                     if branch.branch_id == *branch_id
-                        && matches!(&branch.cost, ResolutionCost::SacrificePermanent { .. }) =>
+                        && matches!(
+                            &branch.cost,
+                            ResolutionCost::TapPermanents { .. }
+                                | ResolutionCost::SacrificePermanent { .. }
+                        ) =>
                 {
                     branch
                 }
                 Ok(_) => {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::ProgramInvariant(
-                        "parked Program sacrifice branch changed identity",
+                        "parked Program permanent-cost branch changed identity",
                     ));
                 }
                 Err(error) => {
@@ -2292,7 +2331,7 @@ impl GameEngine {
                 let completed = self.complete_program_choose_otherwise_from_parts(
                     stack,
                     choose,
-                    "No permanent remains to pay the program Choose sacrifice cost; Otherwise resolves."
+                    "No permanent remains to pay the program Choose cost; Otherwise resolves."
                         .into(),
                 )?;
                 events.extend(completed.events);
@@ -2309,12 +2348,12 @@ impl GameEngine {
                 else {
                     unreachable!("validated ProgramChoose continuation")
                 };
-                let PendingProgramChooseStage::PayingSacrificePermanent {
+                let PendingProgramChooseStage::PayingPermanentCost {
                     candidate_generations: saved,
                     ..
                 } = &mut choose.stage
                 else {
-                    unreachable!("validated Program sacrifice payment stage")
+                    unreachable!("validated Program permanent-cost payment stage")
                 };
                 *saved = candidate_generations;
             }
@@ -2324,8 +2363,17 @@ impl GameEngine {
                     .state
                     .pending_resolution
                     .as_ref()
-                    .expect("refreshed Program sacrifice payment remains parked");
-                events.push(self.program_choose_sacrifice_cost_choice_event(pending, &candidates));
+                    .expect("refreshed Program permanent-cost payment remains parked");
+                let branch = self.program_choose_branch_at_occurrence(
+                    &stack,
+                    &choose.occurrence,
+                    *selected_branch,
+                )?;
+                events.push(self.program_choose_permanent_cost_choice_event(
+                    pending,
+                    &candidates,
+                    &branch.cost,
+                )?);
             }
             return Ok(());
         }

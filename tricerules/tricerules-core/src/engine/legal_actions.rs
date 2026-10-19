@@ -1230,7 +1230,7 @@ pub(super) fn legal_ability_cost_choices(
                     Some(source),
                     filter,
                     *constraint,
-                    exclude_source.then_some(source),
+                    (*exclude_source).then(|| eng.payment_object_ref(source)),
                     None,
                 )
                 .candidates(eng, player);
@@ -1445,7 +1445,7 @@ fn legal_spell_cost_choices(
                     None,
                     filter,
                     *constraint,
-                    exclude_source.then_some(source),
+                    (*exclude_source).then(|| eng.payment_object_ref(source)),
                     None,
                 )
                 .candidates(eng, player);

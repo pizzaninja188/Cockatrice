@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "oracle_id": "87c8e1ed-258a-4a89-bcc6-211405e49692",
+  "spans": [
+    {
+      "face_id": "command_bridge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "command_bridge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Sacrifice"
+      ]
+    },
+    {
+      "face_id": "command_bridge",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::TapPermanents",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Sacrifice"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_144_selectable_tap_payments::command_bridge_taps_a_physical_permanent_or_sacrifices_itself",
+      "covers": "the land enters tapped and its ETB offers the untargeted optional tap payment"
+    },
+    {
+      "test": "scenario issue_144_selectable_tap_payments::command_bridge_otherwise_cannot_sacrifice_source_after_pending_trigger_is_stolen",
+      "covers": "the pending trigger cannot sacrifice the Bridge after another player gains control"
+    },
+    {
+      "test": "scenario issue_144_selectable_tap_payments::untapped_command_bridge_can_pay_for_itself_or_remain_untapped",
+      "covers": "any untapped permanent you control, including the Bridge itself, may pay"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs",
+      "covers": "the enters-tapped replacement, five-color tap mana ability, trigger, and typed payment branch"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

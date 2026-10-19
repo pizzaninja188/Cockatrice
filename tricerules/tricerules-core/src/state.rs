@@ -1352,7 +1352,7 @@ pub(crate) enum PendingProgramChooseStage {
         count: u32,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
-    PayingSacrificePermanent {
+    PayingPermanentCost {
         selected_branch: usize,
         branch_id: ChoiceId,
         candidate_generations: Vec<(ObjectId, u64)>,

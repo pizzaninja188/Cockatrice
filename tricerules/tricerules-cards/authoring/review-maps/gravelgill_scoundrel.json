@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "6d7f7e6e-5076-4af7-afe3-3e500835c4aa",
+  "spans": [
+    {
+      "face_id": "gravelgill_scoundrel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "gravelgill_scoundrel",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/ApplyCombatRestriction"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::TapPermanents",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/ApplyCombatRestriction"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_144_selectable_tap_payments::gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment",
+      "covers": "Vigilance preserves the attacker's untapped status, the other creature pays, and the actual paid attack trigger prevents blocking"
+    },
+    {
+      "test": "scenario issue_144_selectable_tap_payments::returned_gravelgill_incarnation_can_pay_but_old_attack_trigger_does_not_restrict_it",
+      "covers": "the same ObjectId with a new generation can pay the old trigger while its returned incarnation is not restricted"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs",
+      "covers": "the 1/3 Vigilance identity, attack trigger, exact-source exclusion, and paid unblockable effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

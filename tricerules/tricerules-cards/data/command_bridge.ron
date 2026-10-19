@@ -1,5 +1,5 @@
-// Oracle and rulings checked 2026-08-26. The entry trigger offers a real untargeted tap payment;
-// if it cannot or will not be paid, sacrificing the source is a semantic sacrifice, not destroy.
+// Oracle and rulings checked 2026-08-26. The entry trigger offers an untargeted tap payment;
+// otherwise it attempts to sacrifice this exact source under CR 701.21a's control requirement.
 (
   id: "command_bridge",
   name: "Command Bridge",
@@ -16,24 +16,25 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [ChooseResolutionBranch(
-      branches: [
-        (
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_tap", bind: [], input: None, kind: Choose(
+        choice: "tap_permanent", chooser: Controller, optional: true,
+        branches: [(
           branch_id: "tap_an_untapped_permanent_you_control", presentation: Fallback,
           cost: TapPermanents(
             count: 1,
             filter: (kind: AnyPermanent, controller: You),
             exclude_source: false,
-          ),
-          effects: [],
-        ),
-        (
-          branch_id: "sacrifice_command_bridge", presentation: Fallback,
-          cost: None,
-          effects: [Sacrifice(subject: Source)],
-        ),
-      ],
-    )],
+          ), requirement: Always,
+          body: (steps: [], yields: []),
+        )],
+        otherwise: (steps: [
+          (id: "sacrifice_source", bind: [], input: None,
+            kind: Perform(Sacrifice(subject: Source))),
+        ], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_))],
 )

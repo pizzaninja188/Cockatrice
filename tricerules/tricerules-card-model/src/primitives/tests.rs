@@ -6605,6 +6605,111 @@ fn program_accepts_resultless_proliferate_leaf() {
 }
 
 #[test]
+fn program_ability_admits_only_two_resultless_source_effect_leaves() {
+    let body = |leaf: &str, bind: &str| {
+        format!(
+            r#"(steps: [(id: "effect", bind: {bind}, input: None,
+                kind: Perform({leaf}))], yields: [])"#
+        )
+    };
+    let source_sacrifice = crate::primitives::SpellEffectKind::Sacrifice {
+        subject: crate::primitives::EffectSubject::Source,
+    };
+    let source_cannot_be_blocked = crate::primitives::SpellEffectKind::ApplyCombatRestriction {
+        scope: crate::primitives::CombatRestrictionScope::Source,
+        restriction: crate::primitives::CombatRestriction {
+            cant_be_blocked: true,
+            ..Default::default()
+        },
+    };
+
+    for (card_id, leaf, expected) in [
+        (
+            "program_source_sacrifice_fixture",
+            "Sacrifice(subject: Source)",
+            source_sacrifice,
+        ),
+        (
+            "program_source_unblockable_fixture",
+            "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true))",
+            source_cannot_be_blocked,
+        ),
+    ] {
+        let compiled = ability_program_fixture(card_id, &body(leaf, "[]"))
+            .unwrap_or_else(|error| panic!("the exact Ability source leaf is admitted: {error}"));
+        assert_eq!(compiled.context, crate::primitives::EffectContext::Ability);
+        assert!(compiled.required_inputs.is_empty());
+        assert!(compiled.target_bindings.is_empty());
+        assert!(compiled.slots.is_empty());
+        assert!(compiled.body.yields.is_empty());
+        let [step] = compiled.body.steps.as_slice() else {
+            panic!("the resultless source effect remains one direct instruction")
+        };
+        assert!(step.input.is_none());
+        assert!(step.outputs.is_empty());
+        let crate::primitives::CompiledInstructionKind::Perform(effect) = &step.kind else {
+            panic!("the source effect remains a Perform instruction")
+        };
+        assert_eq!(**effect, expected, "{card_id}");
+    }
+
+    for (label, leaf) in [
+        ("source sacrifice", "Sacrifice(subject: Source)"),
+        (
+            "source combat restriction",
+            "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true))",
+        ),
+    ] {
+        let spell = program_fixture(&body(leaf, "[]"));
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]).is_err(),
+            "the Ability-only {label} is rejected for a spell owner"
+        );
+    }
+
+    for (label, leaf) in [
+        (
+            "non-source sacrifice",
+            "Sacrifice(subject: AttachedObject)",
+        ),
+        (
+            "other source combat restriction",
+            "ApplyCombatRestriction(scope: Source, restriction: (cant_attack: true))",
+        ),
+        (
+            "combined source combat restriction flags",
+            "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true, cant_attack: true))",
+        ),
+        (
+            "valid non-source combat restriction scope",
+            "ApplyCombatRestriction(scope: Matching((kind: Creature)), restriction: (cant_be_blocked: true))",
+        ),
+    ] {
+        let card_id = format!("program_reject_{}_fixture", label.replace(' ', "_"));
+        assert!(
+            ability_program_fixture(&card_id, &body(leaf, "[]")).is_err(),
+            "only the fixed Source effect shape is admitted: {label}"
+        );
+    }
+
+    for leaf in [
+        "Sacrifice(subject: Source)",
+        "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true))",
+    ] {
+        let name = if leaf.starts_with("Sacrifice") {
+            "sacrifice"
+        } else {
+            "restriction"
+        };
+        let card_id = format!("program_reject_bound_{name}_fixture");
+        assert!(
+            ability_program_fixture(&card_id, &body(leaf, "[\"effect_result\"]")).is_err(),
+            "the resultless {leaf} cannot bind a result"
+        );
+    }
+}
+
+#[test]
 fn program_admits_only_exact_private_chosen_library_look() {
     let valid = program_fixture(
         r#"(steps: [
@@ -8962,6 +9067,145 @@ fn program_choose_admits_controller_ability_sacrifice_permanent_cost() {
     assert!(
         spell_error.contains("does not support resolution cost"),
         "the failure comes from the narrow ability-only cost admission: {spell_error}"
+    );
+}
+
+#[test]
+fn program_choose_admits_fixed_controller_ability_tap_permanent_cost() {
+    let body = |chooser: &str, optional: bool, cost: &str, bind: &str, input: &str| {
+        format!(
+            r#"(steps: [(id: "choose", bind: {bind}, input: {input}, kind: Choose(
+                choice: "tap", chooser: {chooser}, optional: {optional},
+                branches: [(
+                    branch_id: "pay_tap", presentation: Fallback,
+                    cost: {cost}, requirement: Always,
+                    body: (steps: [], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+    let any_permanent_cost =
+        "TapPermanents(count: 1, filter: (kind: AnyPermanent, controller: You), exclude_source: false)";
+    let creature_cost =
+        "TapPermanents(count: 1, filter: (kind: Creature, controller: You), exclude_source: true)";
+
+    for (card_id, optional, cost) in [
+        ("command_bridge_tap_cost_fixture", true, any_permanent_cost),
+        ("gravelgill_tap_cost_fixture", true, creature_cost),
+        ("required_tap_cost_fixture", false, creature_cost),
+    ] {
+        let compiled =
+            ability_program_fixture(card_id, &body("Controller", optional, cost, "[]", "None"))
+                .unwrap_or_else(|error| {
+                    panic!("the fixed Controller ability tap cost is admitted: {error}")
+                });
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the tap payment remains inside one typed Choose instruction")
+        };
+        let crate::primitives::CompiledInstructionKind::Choose {
+            chooser,
+            optional: compiled_optional,
+            branches,
+            ..
+        } = &choose.kind
+        else {
+            panic!("the tap payment remains a Choose branch cost")
+        };
+        assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+        assert_eq!(*compiled_optional, optional);
+        let [branch] = branches.as_slice() else {
+            panic!("the authored tap branch remains unique")
+        };
+        let expected: crate::primitives::ResolutionCost =
+            ron::from_str(cost).expect("the exact tap cost is valid RON");
+        assert_eq!(branch.cost, expected, "{card_id}");
+    }
+
+    for (label, chooser, cost) in [
+        (
+            "SourceController chooser",
+            "SourceController",
+            creature_cost,
+        ),
+        (
+            "zero count",
+            "Controller",
+            "TapPermanents(count: 0, filter: (kind: Creature, controller: You), exclude_source: true)",
+        ),
+        (
+            "count above one",
+            "Controller",
+            "TapPermanents(count: 2, filter: (kind: Creature, controller: You), exclude_source: true)",
+        ),
+        (
+            "opponent-controlled filter",
+            "Controller",
+            "TapPermanents(count: 1, filter: (kind: Creature, controller: Opponent), exclude_source: true)",
+        ),
+        (
+            "unsupported permanent kind",
+            "Controller",
+            "TapPermanents(count: 1, filter: (kind: AnyTarget, controller: You), exclude_source: true)",
+        ),
+        (
+            "any_of filter",
+            "Controller",
+            "TapPermanents(count: 1, filter: (any_of: Some([(kind: Creature, controller: You), (kind: AnyPermanent, controller: You)])), exclude_source: true)",
+        ),
+        (
+            "filter exclusions",
+            "Controller",
+            "TapPermanents(count: 1, filter: (kind: Creature, controller: You, excluded_objects: [Source]), exclude_source: true)",
+        ),
+    ] {
+        assert!(
+            ability_program_fixture(
+                &format!("program_reject_tap_{}_fixture", label.replace(' ', "_")),
+                &body(chooser, true, cost, "[]", "None"),
+            )
+            .is_err(),
+            "the TapPermanents admission rejects {label}"
+        );
+    }
+
+    let spell = program_fixture(&body("Controller", true, creature_cost, "[]", "None"));
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]).is_err(),
+        "TapPermanents resolution costs are ability-only"
+    );
+
+    for (label, bind, input) in [
+        ("result binding", "[\"tap_result\"]", "None"),
+        ("result input", "[]", "Some(\"prior_result\")"),
+    ] {
+        assert!(
+            ability_program_fixture(
+                &format!("program_reject_tap_{}_fixture", label.replace(' ', "_")),
+                &body("Controller", true, creature_cost, bind, input),
+            )
+            .is_err(),
+            "the tap payment does not expose or consume results: {label}"
+        );
+    }
+
+    let mixed = r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+        choice: "tap", chooser: Controller, optional: false,
+        branches: [
+            (branch_id: "free", presentation: Fallback, cost: None,
+                requirement: Always, body: (steps: [], yields: [])),
+            (branch_id: "paid", presentation: Fallback,
+                cost: TapPermanents(count: 1,
+                    filter: (kind: Creature, controller: You), exclude_source: true),
+                requirement: Always, body: (steps: [], yields: [])),
+        ],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let mixed_error = ability_program_fixture("mixed_tap_cost_fixture", mixed)
+        .expect_err("TapPermanents cannot introduce mixed free and paid sibling branches");
+    assert!(
+        mixed_error.contains("cannot mix free and paid sibling branches"),
+        "{mixed_error}"
     );
 }
 

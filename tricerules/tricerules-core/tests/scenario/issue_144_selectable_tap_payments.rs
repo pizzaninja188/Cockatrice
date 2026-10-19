@@ -73,6 +73,31 @@ fn waterbend_ref(engine: &GameEngine, object_id: u32) -> CostObjectRef {
     }
 }
 
+fn dev_move_owned_card_to_zone(
+    engine: &mut GameEngine,
+    player: usize,
+    card_name: &str,
+    zone: rv1::DevZone,
+) {
+    let player_id = engine.state.players[player].id;
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            player_id,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(rv1::DevCommand {
+                    target_player_id: player_id,
+                    dev: Some(rv1::dev_command::Dev::MoveCard(rv1::DevMoveCard {
+                        card_name: card_name.into(),
+                        zone: zone as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("dev move preserves the owned physical card identity");
+}
+
 #[test]
 fn waterbend_payload_cannot_be_silently_ignored_by_a_mana_ability() {
     let mut engine = GameEngine::new(
@@ -620,7 +645,7 @@ fn stale_or_duplicate_tap_selection_rejects_without_partial_taps() {
 fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
     let decks = Some(vec![
         deck_with("island", &["gravelgill_scoundrel", "grizzly_bears"]),
-        deck_with("forest", &[]),
+        deck_with("forest", &["grizzly_bears"]),
     ]);
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
@@ -634,6 +659,7 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
     advance_to_main1_from_game_start(&mut engine);
     let scoundrel = relocate_to_battlefield(&mut engine, 0, "gravelgill_scoundrel", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine
         .state
         .objects
@@ -686,6 +712,115 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
         !engine.state.objects[&scoundrel].tapped,
         "vigilance keeps attacker untapped"
     );
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes after the paid trigger resolves");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes before declaring blockers");
+    assert_eq!(
+        engine.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    engine
+        .apply_scenario_command(
+            1,
+            &declare_blockers(vec![rv1::BlockPair {
+                attacker_id: scoundrel,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect_err("the actual paid attack trigger makes Scoundrel unblockable this turn");
+}
+
+#[test]
+fn returned_gravelgill_incarnation_can_pay_but_old_attack_trigger_does_not_restrict_it() {
+    let decks = Some(vec![
+        deck_with("island", &["gravelgill_scoundrel"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let scoundrel = relocate_to_battlefield(&mut engine, 0, "gravelgill_scoundrel", false);
+    engine
+        .state
+        .objects
+        .get_mut(&scoundrel)
+        .unwrap()
+        .summoning_sick = false;
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .expect("main phase to beginning of combat");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![scoundrel]))
+        .expect("attack and stage the original trigger");
+    let trigger = engine
+        .state
+        .stack
+        .last()
+        .expect("the attack trigger is stacked");
+    let original_generation = waterbend_ref(&engine, scoundrel).zone_change_generation;
+    assert_eq!(trigger.source_zone_change, original_generation);
+
+    dev_move_owned_card_to_zone(
+        &mut engine,
+        0,
+        "Gravelgill Scoundrel",
+        rv1::DevZone::Graveyard,
+    );
+    assert_eq!(
+        engine.state.objects[&scoundrel].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let returned = move_ready_to_battlefield(&mut engine, 0, "gravelgill_scoundrel");
+    assert_eq!(returned, scoundrel, "the same physical card returns");
+    let returned_generation = waterbend_ref(&engine, scoundrel).zone_change_generation;
+    assert_ne!(returned_generation, original_generation);
+
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let branch_batch = engine.apply_scenario_command(1, &pass()).unwrap();
+    assert!(find_resolution_choice(&branch_batch).is_some());
+    let payment_batch = engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the tap-payment branch");
+    let payment = find_resolution_choice(&payment_batch).expect("returned incarnation is payable");
+    assert_eq!(payment.candidate_object_ids, [scoundrel]);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![scoundrel]))
+        .expect("the returned incarnation can pay although it is the same ObjectId");
+    assert!(engine.state.objects[&scoundrel].tapped);
+    assert_eq!(
+        waterbend_ref(&engine, scoundrel).zone_change_generation,
+        returned_generation
+    );
+    assert!(
+        !engine.state.continuous_effects.iter().any(|effect| {
+            effect.affected == tricerules_core::AffectedScope::Single(scoundrel)
+                && matches!(
+                    &effect.kind,
+                    tricerules_cards::primitives::ContinuousEffectKind::CombatRestriction(
+                        restriction
+                    ) if restriction.cant_be_blocked
+                )
+        }),
+        "the old trigger cannot restrict the returned incarnation"
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
 }
 
 #[test]
@@ -719,15 +854,24 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
     let branch_batch = engine
         .apply_scenario_command(1, &pass())
         .expect("ETB resolves");
-    let branch = find_resolution_choice(&branch_batch).expect("tap or sacrifice branch");
-    assert_eq!(branch.resolution_branches.len(), 2);
+    let branch = find_resolution_choice(&branch_batch).expect("optional tap-payment branch");
+    assert_eq!(branch.resolution_branches.len(), 1);
+    assert_eq!((branch.min, branch.max), (0, 1));
+    assert_eq!(
+        branch.resolution_branches[0].cost_kind,
+        rv1::ResolutionBranchCostKind::TapPermanents as i32
+    );
+    assert_eq!(
+        branch.resolution_branches[0].cost_text,
+        "tap 1 matching permanents"
+    );
     let payment_batch = engine
         .apply_scenario_command(0, &select_branch(0))
         .expect("choose tap payment");
     let payment = find_resolution_choice(&payment_batch).expect("tap candidate prompt");
     assert_eq!(payment.candidate_object_ids, [bear]);
-    assert_eq!(payment.min, 1);
-    assert!(!payment.prompt_text.contains("decline"));
+    assert_eq!((payment.min, payment.max), (0, 1));
+    assert!(payment.prompt_text.contains("or decline"));
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .expect("tap creature");
@@ -767,6 +911,110 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
         fallback.state.objects[&bridge].zone,
         tricerules_core::Zone::Graveyard
     );
+
+    let decks = Some(vec![
+        deck_with("forest", &["command_bridge", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut declined = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut declined);
+    let bear = relocate_to_battlefield(&mut declined, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut declined, 0, "command_bridge");
+    let slot = hand_index_for_card(&declined, 0, "command_bridge");
+    let bridge = declined.state.players[0].hand[slot];
+    declined
+        .apply_scenario_command(0, &play_land(slot))
+        .expect("play Command Bridge");
+    declined.apply_scenario_command(0, &pass()).unwrap();
+    let branch_batch = declined.apply_scenario_command(1, &pass()).unwrap();
+    assert!(find_resolution_choice(&branch_batch).is_some());
+    declined
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the tap-payment branch");
+    let payment_batch = declined
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline the optional payment");
+    assert!(find_resolution_choice(&payment_batch).is_none());
+    assert!(declined.state.objects[&bear].zone == tricerules_core::Zone::Battlefield);
+    assert_eq!(
+        declined.state.objects[&bridge].zone,
+        tricerules_core::Zone::Graveyard,
+        "Otherwise sacrifices Bridge after a payment decline"
+    );
+}
+
+#[test]
+fn command_bridge_otherwise_cannot_sacrifice_source_after_pending_trigger_is_stolen() {
+    let decks = Some(vec![
+        deck_with("forest", &["command_bridge", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut engine, 0, "command_bridge");
+    let slot = hand_index_for_card(&engine, 0, "command_bridge");
+    let bridge = engine.state.players[0].hand[slot];
+    engine
+        .apply_scenario_command(0, &play_land(slot))
+        .expect("play Command Bridge; its ETB trigger is now pending");
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != bridge);
+    engine.state.players[1].battlefield.push(bridge);
+    let object = engine.state.objects.get_mut(&bridge).unwrap();
+    object.controller = 1;
+    object.base_controller = 1;
+
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let branch_batch = engine.apply_scenario_command(1, &pass()).unwrap();
+    let branch =
+        find_resolution_choice(&branch_batch).expect("the original trigger controller chooses");
+    assert_eq!(branch.deciding_player_id, 0);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("P0 chooses the only paid branch");
+    let declined = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("P0 declines while the bridge is controlled by P1");
+    assert!(find_resolution_choice(&declined).is_none());
+    assert!(!engine.state.objects[&bear].tapped);
+    assert_eq!(
+        engine.state.objects[&bridge].zone,
+        tricerules_core::Zone::Battlefield,
+        "CR 701.21a prevents P0 from sacrificing a permanent controlled by P1"
+    );
+    assert_eq!(engine.state.objects[&bridge].controller, 1);
+    assert!(engine.state.players[1].battlefield.contains(&bridge));
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(!declined.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(rv1::ruled_event::Ev::Log(log))
+            if log.text.starts_with("P0 sacrifices ") || log.text.starts_with("P1 sacrifices ")
+    )));
 }
 
 #[test]

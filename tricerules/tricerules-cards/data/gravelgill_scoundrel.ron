@@ -1,5 +1,5 @@
 // Oracle and rulings checked 2026-08-26. This is an optional resolution payment, not a target;
-// the chosen creature may have entered this turn and the selection excludes the attacker itself.
+// the creature may have entered this turn, while the restriction stays on the attacking incarnation.
 (
   id: "gravelgill_scoundrel",
   name: "Gravelgill Scoundrel",
@@ -13,20 +13,27 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [ChooseResolutionBranch(
-      optional: true,
-      branches: [(
-        branch_id: "tap_another_untapped_creature_you_control", presentation: Fallback,
-        cost: TapPermanents(
-          count: 1,
-          filter: (kind: Creature, controller: You),
-          exclude_source: true,
-        ),
-        effects: [ApplyCombatRestriction(
-          scope: Source,
-          restriction: (cant_be_blocked: true),
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_tap", bind: [], input: None, kind: Choose(
+        choice: "tap_permanent", chooser: Controller, optional: true,
+        branches: [(
+          branch_id: "tap_another_untapped_creature_you_control", presentation: Fallback,
+          cost: TapPermanents(
+            count: 1,
+            filter: (kind: Creature, controller: You),
+            exclude_source: true,
+          ), requirement: Always,
+          body: (steps: [
+            (id: "make_unblockable", bind: [], input: None,
+              kind: Perform(ApplyCombatRestriction(
+                scope: Source,
+                restriction: (cant_be_blocked: true),
+              ))),
+          ], yields: []),
         )],
-      )],
-    )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
 )

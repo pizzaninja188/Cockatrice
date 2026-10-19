@@ -1272,7 +1272,7 @@ impl GameEngine {
                             None,
                             filter,
                             *constraint,
-                            exclude_source.then_some(source_oid),
+                            (*exclude_source).then(|| self.payment_object_ref(source_oid)),
                             None,
                         ),
                         &selected.objects,
@@ -1746,7 +1746,7 @@ impl GameEngine {
                             Some(permanent_id),
                             filter,
                             *constraint,
-                            exclude_source.then_some(permanent_id),
+                            (*exclude_source).then(|| self.payment_object_ref(permanent_id)),
                             None,
                         ),
                         &selected.objects,
@@ -3756,6 +3756,77 @@ mod convoke_transaction_tests {
             object_id,
             zone_change_generation: engine.state.zone_change_generation[&object_id],
         }
+    }
+
+    #[test]
+    fn resolution_tap_source_exclusion_tracks_exact_source_incarnation() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            218_002,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&source).unwrap().tapped = false;
+
+        let captured_source = engine.payment_object_ref(source);
+        let cost = tricerules_card_model::primitives::ResolutionCost::TapPermanents {
+            count: 1,
+            filter: tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                controller: tricerules_card_model::primitives::TargetController::You,
+                ..Default::default()
+            },
+            exclude_source: true,
+        };
+        let component = ObjectPaymentComponent::resolution(captured_source, &cost)
+            .expect("TapPermanents has an object-payment component");
+        assert!(
+            component.candidates(&engine, 0).is_empty(),
+            "the exact captured source incarnation is excluded from its own tap payment"
+        );
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            Some(0),
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&source).unwrap().tapped = false;
+
+        let returned_source = engine.payment_object_ref(source);
+        assert_eq!(returned_source.object_id, captured_source.object_id);
+        assert_ne!(
+            returned_source.zone_change_generation, captured_source.zone_change_generation,
+            "leaving and returning creates a new source incarnation"
+        );
+        assert_eq!(
+            component.candidates(&engine, 0),
+            vec![source],
+            "the returned incarnation is eligible because only the captured source generation is excluded"
+        );
     }
 
     fn battlefield_self_exile_fixture() -> (GameEngine, ObjectId, Vec<AbilityCost>) {

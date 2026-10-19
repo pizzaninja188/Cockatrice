@@ -1157,6 +1157,10 @@ impl GameEngine {
                                 rv1::ResolutionBranchCostKind::Blight,
                                 format!("Blight {count}"),
                             ),
+                            ResolutionCost::TapPermanents { count, .. } => (
+                                rv1::ResolutionBranchCostKind::TapPermanents,
+                                format!("tap {count} matching permanents"),
+                            ),
                             ResolutionCost::SacrificePermanent { .. } => (
                                 rv1::ResolutionBranchCostKind::SacrificePermanent,
                                 "sacrifice a matching permanent".to_string(),
@@ -1193,7 +1197,7 @@ impl GameEngine {
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
             crate::state::PendingProgramChooseStage::PayingHandCard { .. }
             | crate::state::PendingProgramChooseStage::PayingBlight { .. }
-            | crate::state::PendingProgramChooseStage::PayingSacrificePermanent { .. }
+            | crate::state::PendingProgramChooseStage::PayingPermanentCost { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
                 return None
             }
@@ -2816,6 +2820,683 @@ mod invariant_rollback_tests {
         (engine, top, owners, source, borrowed)
     }
 
+    fn controller_tap_choose_fixture_for_players(
+        player_ids: &[PlayerId],
+    ) -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+    ) {
+        use crate::state::{TriggerAbilityOrigin, TriggerUseKey};
+
+        let card_id = "controller_tap_program_fixture";
+        let card = r#"(
+            id: "controller_tap_program_fixture",
+            name: "Controller Tap Program Fixture",
+            face_id: "controller_tap_program_fixture",
+            types: ["Creature"], power: 2, toughness: 2,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "choose_tap", bind: [], input: None, kind: Choose(
+                        choice: "tap_permanent", chooser: Controller, optional: true,
+                        branches: [(
+                            branch_id: "tap_a_permanent", presentation: Fallback,
+                            cost: TapPermanents(
+                                count: 1,
+                                filter: (kind: AnyPermanent, controller: You),
+                                exclude_source: false,
+                            ), requirement: Always,
+                            body: (steps: [(id: "branch_gain", kind: Perform(GainLife(amount: 2)))],
+                                yields: []),
+                        )],
+                        otherwise: (steps: [(id: "otherwise_gain", kind: Perform(GainLife(amount: 4)))],
+                            yields: []),
+                    )),
+                    (id: "parent_tail", bind: [], input: None,
+                        kind: Perform(GainLife(amount: 3))),
+                ], yields: []), target_bindings: [])),
+            )],
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("Controller tap Program fixture compiles"),
+        ));
+        let decks = Some(
+            (0..player_ids.len())
+                .map(|_| vec![card_id.to_string(); 30])
+                .collect(),
+        );
+        let mut engine = GameEngine::new(registry, 91_210, player_ids, 20, decks, true)
+            .expect("two-player Controller tap fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let source = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("fixture source is owned by player zero");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(player_ids[0]),
+        )
+        .expect("fixture source enters under player zero's control");
+
+        let face = registry
+            .get(card_id)
+            .and_then(|definition| definition.face(0))
+            .expect("fixture face");
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("fixture triggered ability")
+            .clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(source, player_ids[0]);
+        top.id = engine.state.next_object_id.saturating_add(1);
+        top.controller = player_ids[0];
+        top.card_id = card_id.into();
+        top.ability_text = Some("Controller Tap Program Fixture trigger".into());
+        top.source_permanent_id = Some(source);
+        top.source_owner = Some(engine.state.objects[&source].owner);
+        top.source_zone_change = generation;
+        top.ability_index = Some(0);
+        top.triggered_ability = Some(ability);
+        top.trigger_use_key = Some(TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::Printed(definition),
+        });
+        top.is_triggered = true;
+        top.is_copy = false;
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("trigger program owner lookup")
+            .expect("fixture ability has a compiled Program");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners, source)
+    }
+
+    fn controller_tap_choose_fixture() -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+    ) {
+        controller_tap_choose_fixture_for_players(&[0, 1])
+    }
+
+    fn resolve_controller_tap_choose_to_prompt(engine: &mut GameEngine) {
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine
+                .resolve_top_of_stack(&mut events)
+                .expect("trigger resolves to its Program Choose"),
+            ResolutionProgress::Parked
+        ));
+        engine
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("Program Choose prompt gets its stable ID");
+    }
+
+    #[test]
+    fn program_choose_tap_cost_offer_uses_existing_kind_and_human_text() {
+        let (mut engine, top, owners, _source) = controller_tap_choose_fixture();
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+
+        let offer = engine
+            .program_choose_choice_event()
+            .expect("the tap-cost Program Choose offer is rendered");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(offer)) = offer.ev.as_ref() else {
+            panic!("Controller receives the ordinary Program Choose offer");
+        };
+        let [branch] = offer.resolution_branches.as_slice() else {
+            panic!("the single tap-cost branch is offered");
+        };
+        assert_eq!(
+            branch.cost_kind,
+            rv1::ResolutionBranchCostKind::TapPermanents as i32
+        );
+        let normalized_label = branch.label.to_ascii_lowercase();
+        assert!(
+            normalized_label.contains("tap") && normalized_label.contains("permanent"),
+            "the label describes tapping a permanent: {}",
+            branch.label
+        );
+        assert!(
+            !branch.label.contains('_'),
+            "the public label does not expose an internal branch slug: {}",
+            branch.label
+        );
+        assert_eq!(branch.cost_text, "tap 1 matching permanents");
+        assert!(branch.selectable);
+    }
+
+    #[test]
+    fn program_choose_tap_payment_commits_once_and_runs_branch_then_parent_tail_once() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let player_ids = [7, 13, 29];
+        let (mut engine, _top, _owners, payer) =
+            controller_tap_choose_fixture_for_players(&player_ids);
+        let starting_life = engine.state.players[0].life;
+        let starting_tap_action = engine.state.next_tap_action_id;
+        resolve_controller_tap_choose_to_prompt(&mut engine);
+        let (pending, _, _) = parked_program(&engine);
+        assert_eq!(pending.deciding_player, player_ids[0]);
+
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let payment_offer = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("tap payment is pending");
+        assert_eq!(payment_offer.deciding_player, player_ids[0]);
+        assert_eq!(payment_offer.presentation.candidates, vec![payer]);
+        assert_eq!(
+            (
+                payment_offer.presentation.min,
+                payment_offer.presentation.max
+            ),
+            (0, 1)
+        );
+        let payment_prompt_id = payment_offer.resolution_prompt_id.get();
+
+        let completed = nested_select_objects(&mut engine, vec![payer]);
+        assert!(engine.state.objects[&payer].tapped);
+        assert_eq!(
+            engine.state.next_tap_action_id,
+            starting_tap_action + 1,
+            "one accepted payment commits one tap action"
+        );
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = completed
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![2, 3],
+            "branch and parent tail each run once"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+
+        let before_duplicate = command_snapshot(&engine);
+        let duplicate_payment = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: payment_prompt_id,
+                    chosen_object_ids: vec![payer],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(
+            engine
+                .apply_scenario_command(player_ids[0], &duplicate_payment)
+                .is_err(),
+            "a completed tap payment prompt cannot be submitted again"
+        );
+        assert!(
+            command_snapshot(&engine) == before_duplicate,
+            "duplicate completion leaves the full command snapshot unchanged"
+        );
+    }
+
+    #[test]
+    fn program_choose_tap_decline_empty_payment_and_no_candidates_run_otherwise_then_tail_once() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        for empty_payment in [false, true] {
+            let (mut engine, _top, _owners, _payer) = controller_tap_choose_fixture();
+            let starting_life = engine.state.players[0].life;
+            resolve_controller_tap_choose_to_prompt(&mut engine);
+            let completed = if empty_payment {
+                nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+                nested_select_objects(&mut engine, Vec::new())
+            } else {
+                nested_answer(&mut engine, Decision::Decline, 0, Vec::new())
+            };
+
+            assert_eq!(engine.state.players[0].life, starting_life + 7);
+            let life_deltas = completed
+                .events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(life_deltas, vec![4, 3]);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+        }
+
+        let (mut engine, _top, _owners, source) = controller_tap_choose_fixture();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the source leaves before its trigger resolves, leaving no controlled candidate");
+        let starting_life = engine.state.players[0].life;
+        let mut events = Vec::new();
+        assert_eq!(
+            engine
+                .resolve_top_of_stack(&mut events)
+                .expect("an unavailable tap cost enters Otherwise"),
+            ResolutionProgress::Completed
+        );
+        assert_eq!(engine.state.players[0].life, starting_life + 7);
+        let life_deltas = events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![4, 3]);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn program_choose_tap_payment_rejects_invalid_answers_atomically() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let player_ids = [7, 13, 29];
+        let (mut engine, _top, _owners, payer) =
+            controller_tap_choose_fixture_for_players(&player_ids);
+        let second_payer = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| **object_id != payer)
+            .expect("a second controlled permanent is available");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            second_payer,
+            Zone::Battlefield,
+            Some(player_ids[0]),
+        )
+        .expect("the second permanent enters under the nonconsecutive first seat ID");
+        resolve_controller_tap_choose_to_prompt(&mut engine);
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("tap payment is pending")
+            .resolution_prompt_id
+            .get();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            vec![payer, second_payer]
+        );
+        let offered_second_payer_generation = engine.state.zone_change_generation[&second_payer];
+
+        let command = |prompt_id, chosen_object_ids| RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids,
+                    ..Default::default()
+                },
+            )),
+        };
+        fn assert_rejected_atomically(
+            engine: &mut GameEngine,
+            actor: PlayerId,
+            answer: RuledCommand,
+            reason: &str,
+        ) {
+            let before = command_snapshot(engine);
+            assert!(
+                engine.apply_scenario_command(actor, &answer).is_err(),
+                "{reason} payment answer is rejected"
+            );
+            assert!(
+                command_snapshot(engine) == before,
+                "{reason} payment rejection preserves the pending offer and game state"
+            );
+        }
+
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[1],
+            command(prompt_id, vec![payer]),
+            "wrong actor",
+        );
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id + 1, vec![payer]),
+            "stale prompt",
+        );
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id, vec![payer, payer]),
+            "duplicate object",
+        );
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id, vec![payer, second_payer]),
+            "over-count",
+        );
+
+        let old_generation = engine.state.zone_change_generation[&payer];
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            payer,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the offered payer leaves before its answer");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            payer,
+            Zone::Battlefield,
+            Some(player_ids[0]),
+        )
+        .expect("the same physical card returns as a different incarnation");
+        assert_ne!(old_generation, engine.state.zone_change_generation[&payer]);
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id, vec![payer]),
+            "stale object incarnation",
+        );
+
+        assert_eq!(
+            engine.state.zone_change_generation[&second_payer], offered_second_payer_generation,
+            "the second payer is still the offered incarnation before the tapped check"
+        );
+        engine.state.objects.get_mut(&second_payer).unwrap().tapped = true;
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id, vec![second_payer]),
+            "newly tapped object",
+        );
+        engine.state.objects.get_mut(&second_payer).unwrap().tapped = false;
+        assert_eq!(
+            engine.state.zone_change_generation[&second_payer], offered_second_payer_generation,
+            "restoring the tap state keeps the offered incarnation current"
+        );
+        engine
+            .state
+            .objects
+            .get_mut(&second_payer)
+            .unwrap()
+            .controller = player_ids[1];
+        assert_eq!(
+            engine.state.zone_change_generation[&second_payer], offered_second_payer_generation,
+            "control changes do not make the second payer's zone generation stale"
+        );
+        assert_rejected_atomically(
+            &mut engine,
+            player_ids[0],
+            command(prompt_id, vec![second_payer]),
+            "control-changed object",
+        );
+    }
+
+    #[test]
+    fn program_choose_tap_owner_departure_routes_otherwise_or_reoffers_survivor() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let player_ids = [7, 13, 29];
+        let payment_offer = |include_survivor: bool| {
+            let (mut engine, top, owners, source) =
+                controller_tap_choose_fixture_for_players(&player_ids);
+            // Keep the resolving Controller alive while making the borrowed permanent the only
+            // payer unless a second, Controller-owned permanent is requested below.
+            engine.state.objects.get_mut(&source).unwrap().tapped = true;
+            let borrowed = *engine.state.players[1]
+                .hand
+                .first()
+                .expect("seat 13 owns an available permanent");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                borrowed,
+                Zone::Battlefield,
+                Some(player_ids[0]),
+            )
+            .expect("seat 13's permanent is controlled by the resolving Controller");
+
+            let survivor = if include_survivor {
+                let own = *engine.state.players[0]
+                    .hand
+                    .first()
+                    .expect("seat 7 owns another available permanent");
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    own,
+                    Zone::Battlefield,
+                    Some(player_ids[0]),
+                )
+                .expect("seat 7's surviving permanent enters under its owner's control");
+                Some(own)
+            } else {
+                None
+            };
+
+            let starting_life = engine.state.players[0].life;
+            let starting_tap_action = engine.state.next_tap_action_id;
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+            let pending = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the selected branch offers its tap payment");
+            assert_eq!(pending.deciding_player, player_ids[0]);
+            assert!(pending.presentation.candidates.contains(&borrowed));
+            assert!(
+                !pending.presentation.candidates.contains(&source),
+                "the tapped resolving source is not a legal payer"
+            );
+            match survivor {
+                Some(own) => assert!(pending.presentation.candidates.contains(&own)),
+                None => assert_eq!(pending.presentation.candidates, vec![borrowed]),
+            }
+            assert_eq!(engine.state.objects[&borrowed].owner, player_ids[1]);
+            assert_eq!(engine.state.objects[&borrowed].controller, player_ids[0]);
+            let prompt_id = pending.resolution_prompt_id.get();
+            (
+                engine,
+                source,
+                borrowed,
+                survivor,
+                starting_life,
+                starting_tap_action,
+                prompt_id,
+            )
+        };
+
+        let (
+            mut no_candidate,
+            source,
+            borrowed,
+            _survivor,
+            starting_life,
+            starting_tap_action,
+            _old_prompt_id,
+        ) = payment_offer(false);
+        no_candidate.state.players[1].has_lost = true;
+        move_object_to_zone(
+            &mut no_candidate.state,
+            no_candidate.registry,
+            borrowed,
+            Zone::Exile,
+            None,
+        )
+        .expect("the departed owner's controlled permanent leaves the battlefield");
+        let mut departure = Vec::new();
+        no_candidate
+            .refresh_program_choose_departure(&mut departure)
+            .expect("a tap payment with no surviving candidate enters Otherwise");
+        assert_eq!(no_candidate.state.players[0].life, starting_life + 7);
+        let life_deltas = departure
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![4, 3],
+            "Otherwise and the parent tail run once"
+        );
+        assert_eq!(no_candidate.state.next_tap_action_id, starting_tap_action);
+        assert_eq!(no_candidate.state.objects[&borrowed].zone, Zone::Exile);
+        assert_eq!(no_candidate.state.objects[&source].zone, Zone::Battlefield);
+        assert!(no_candidate.state.objects[&source].tapped);
+        assert!(no_candidate.state.pending_resolution.is_none());
+        assert!(no_candidate.state.stack.is_empty());
+        assert!(!departure.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+
+        let (
+            mut surviving_candidate,
+            _source,
+            departed_candidate,
+            survivor,
+            starting_life,
+            starting_tap_action,
+            old_prompt_id,
+        ) = payment_offer(true);
+        let survivor = survivor.expect("the second offer retains one Controller-owned candidate");
+        let survivor_generation = surviving_candidate.state.zone_change_generation[&survivor];
+        surviving_candidate.state.players[1].has_lost = true;
+        move_object_to_zone(
+            &mut surviving_candidate.state,
+            surviving_candidate.registry,
+            departed_candidate,
+            Zone::Exile,
+            None,
+        )
+        .expect("the departed owner's offered permanent leaves the battlefield");
+        let mut refreshed = Vec::new();
+        surviving_candidate
+            .refresh_program_choose_departure(&mut refreshed)
+            .expect("the surviving Controller's payment offer is narrowed");
+        surviving_candidate
+            .publish_resolution_prompt_ids(&mut refreshed)
+            .expect("the narrowed offer receives a fresh prompt ID");
+        let pending = surviving_candidate
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the surviving candidate keeps the payment stage parked");
+        assert_eq!(pending.deciding_player, player_ids[0]);
+        assert_ne!(pending.resolution_prompt_id.get(), old_prompt_id);
+        assert_eq!(pending.presentation.candidates, vec![survivor]);
+        let crate::state::ResolutionContinuation::ProgramChoose { choose, .. } =
+            &pending.continuation
+        else {
+            panic!("the refreshed tap payment remains a Program Choose");
+        };
+        let crate::state::PendingProgramChooseStage::PayingPermanentCost {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("the refreshed tap offer retains its permanent-cost stage");
+        };
+        assert!(candidate_generations.contains(&(survivor, survivor_generation)));
+
+        let stale_answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: old_prompt_id,
+                    chosen_object_ids: vec![departed_candidate],
+                    ..Default::default()
+                },
+            )),
+        };
+        let before_stale_answer = command_snapshot(&surviving_candidate);
+        assert!(surviving_candidate
+            .apply_scenario_command(player_ids[0], &stale_answer)
+            .is_err());
+        assert!(command_snapshot(&surviving_candidate) == before_stale_answer);
+        assert_eq!(surviving_candidate.state.players[0].life, starting_life);
+        assert!(surviving_candidate.state.pending_resolution.is_some());
+
+        let paid = nested_select_objects(&mut surviving_candidate, vec![survivor]);
+        assert_eq!(surviving_candidate.state.players[0].life, starting_life + 5);
+        assert!(surviving_candidate.state.objects[&survivor].tapped);
+        assert_eq!(
+            surviving_candidate.state.next_tap_action_id,
+            starting_tap_action + 1
+        );
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![2, 3],
+            "paid body and parent tail each run once"
+        );
+        assert!(surviving_candidate.state.pending_resolution.is_none());
+        assert!(surviving_candidate.state.stack.is_empty());
+    }
+
     #[test]
     fn program_choose_sacrifice_permanent_cost_is_offered_to_controller() {
         use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
@@ -3180,7 +3861,7 @@ mod invariant_rollback_tests {
         else {
             panic!("the refreshed sacrifice occurrence stays parked");
         };
-        let crate::state::PendingProgramChooseStage::PayingSacrificePermanent {
+        let crate::state::PendingProgramChooseStage::PayingPermanentCost {
             candidate_generations,
             ..
         } = &choose.stage

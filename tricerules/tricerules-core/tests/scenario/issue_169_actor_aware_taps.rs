@@ -35,6 +35,55 @@ fn setup() -> GameEngine {
     engine
 }
 
+const ISSUE_169_LEGACY_TARGETED_TAP_FIXTURE: &str = r#"(
+  id: "issue_169_legacy_targeted_tap_fixture",
+  name: "Issue 169 Legacy Targeted Tap Fixture",
+  face_id: "issue_169_legacy_targeted_tap_fixture",
+  mana_cost: "{0}",
+  types: ["Sorcery"],
+  spell_effect: [ChooseResolutionBranch(
+    chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+    optional: false,
+    selection: PlayerChoice,
+    branches: [(
+      branch_id: "tap_a_creature",
+      presentation: Fallback,
+      cost: TapPermanents(
+        count: 1,
+        filter: (kind: Creature, controller: You),
+        exclude_source: false,
+      ),
+      requirement: Always,
+      effects: [],
+    )],
+    otherwise: [],
+  )],
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [0],
+  )])),
+)"#;
+
+fn legacy_targeted_tap_engine() -> GameEngine {
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                ISSUE_169_LEGACY_TARGETED_TAP_FIXTURE,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/icewrought_sentry.ron"),
+            ],
+            &[],
+        )
+        .expect("test-only legacy targeted-tap registry is valid"),
+    ));
+    let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
+    let mut engine = GameEngine::new(registry, 169021, &[0, 1], 20, decks, true)
+        .expect("legacy targeted-tap fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
 fn cast_card(engine: &mut GameEngine, card: &str) {
     assert!(
         tricerules_cards::registry::global().get(card).is_some(),
@@ -336,21 +385,29 @@ fn cryptic_mass_tap_counts_creatures_once_and_sharae_once() {
 
 #[test]
 fn resolution_payment_uses_the_deciding_player_not_the_stack_controller() {
-    let mut engine = setup();
+    let mut engine = legacy_targeted_tap_engine();
     let sentry = inject_creature_on_battlefield(&mut engine, 0, "icewrought_sentry");
     let enemy = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    inject_card_into_hand(&mut engine, 0, "command_bridge");
-    let slot = hand_index_for_card(&engine, 0, "command_bridge");
-    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
-    pass_both_players(&mut engine);
-    // Tangle Wire-shaped fixture: the ability belongs to P0, but P1 is instructed to tap.
-    // Exercise the existing resolution payment path, without introducing a new card/picker.
+    inject_card_into_hand(&mut engine, 0, "issue_169_legacy_targeted_tap_fixture");
+    let slot = hand_index_for_card(&engine, 0, "issue_169_legacy_targeted_tap_fixture");
     engine
-        .state
-        .pending_resolution
-        .as_mut()
-        .unwrap()
-        .deciding_player = 1;
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
+        .expect("P0 casts the Tangle Wire-shaped targeted tap fixture");
+    let choice_batch = pass_both_players_with_batch(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("targeted player receives the tap choice")
+            .deciding_player,
+        1,
+        "the targeted opponent is the natural chooser"
+    );
+    assert!(choice_batch.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(_))
+    )));
     engine
         .apply_scenario_command(
             1,

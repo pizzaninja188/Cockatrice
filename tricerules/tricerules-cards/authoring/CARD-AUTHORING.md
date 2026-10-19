@@ -182,15 +182,20 @@ is `Controller`, with `SourceController` also admitted for ability programs. Its
 either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
 `PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, a fixed positive-count
-`Blight` on a `Controller`-chosen ability branch, and a one-permanent `SacrificePermanent` cost on
-a `Controller`-chosen ability branch. Blight selects one creature that player controls and that
+`Blight` on a `Controller`-chosen ability branch, and one-permanent `SacrificePermanent` or
+`TapPermanents` costs on a `Controller`-chosen ability branch. Blight selects one creature that
+player controls and that
 can receive the counters; it is not admitted on spell programs or with other chooser shapes. The
 hand-bottom cost is not admitted for ability programs. A Program
 sacrifice filter requires every terminal leaf to select a `Creature` or `AnyPermanent` controlled
 by `You`; `source_only: true` remains bound to the exact source and cannot use exclusions. With
 `source_only: false`, flat filter-level `excluded_objects` remains supported, but exclusions on
 `any_of` branches are rejected by typed Programs. Legacy `ChooseResolutionBranch` retains its own
-filter validation. `Always`, supported
+filter validation. A Program tap-cost filter must be flat, select a `Creature` or `AnyPermanent`
+controlled by `You`, and cannot use `any_of` or filter-level `excluded_objects`. The cost-level
+`exclude_source: true` instead omits the exact source incarnation (ObjectId plus zone-change
+generation), as Gravelgill Scoundrel requires when it taps “another” creature. A candidate must be
+untapped for the tap payment (CR 701.26a); this remains an untargeted resolution cost. `Always`, supported
 controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
 are admitted; flat-list applicability and card-result requirements are rejected. Branch and
 Otherwise bodies use the same recursive finite-program subset, and a binding may join only
@@ -233,10 +238,11 @@ when a branch answer is validated. A mandatory choice with exactly one live cost
 it automatically and logs the selection; optional choices and paid branches still receive prompts.
 For `PutHandCardOnLibraryBottom`, the chooser privately
 selects one current hand card; if it is a declared Commander, its owner chooses Command zone or Library.
-For `SacrificePermanent`, the parked occurrence retains its original `Controller` payer and the
-candidate ObjectIds with their zone-change generations. The engine revalidates the selected
-candidate's incarnation, filter, and control before committing one shared cost transaction; a
-source-only payment remains tied to that exact source incarnation. Declining the optional branch or
+For `SacrificePermanent` and the one-permanent `TapPermanents` cost, the parked occurrence retains
+its original `Controller` payer and candidate ObjectIds with their zone-change generations. The
+engine revalidates the selected candidate's incarnation, filter, and control before committing the
+shared cost transaction; a source-only sacrifice or `exclude_source` tap remains tied to that exact
+source incarnation. Declining the optional branch or
 declining/submitting an empty paid-cost selection follows `Otherwise` once. A cost with no current
 candidate is omitted; if no branch remains selectable, `Otherwise` runs once. A departed candidate
 owner loses their objects under CR 800.4a, after which the
@@ -274,6 +280,13 @@ player sets.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
+Two additional leaves are restricted to ability-owned Programs and are resultless: `Sacrifice` may
+use only `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
+`restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.
+Neither leaf accepts an input or binds or yields a result. Command Bridge uses source sacrifice in
+`Otherwise`; Gravelgill Scoundrel applies the source combat restriction only after its tap-payment
+branch is paid. These exact shapes do not admit other sacrifice subjects, restriction scopes, or
+restriction fields.
 `Scry` is a resultless Program leaf with a fixed literal count. A fixed count of zero is accepted in
 Programs only; legacy effect lists retain their positive-count rule. The resolving card's controller
 makes the normal library partition choice: zero does nothing (CR 701.22b), an empty library completes

@@ -340,6 +340,9 @@ impl CompiledChooseBranch {
             ResolutionCost::Waterbend(cost) => format!("Waterbend {cost}"),
             ResolutionCost::Mana(cost) => format!("Pay {cost}"),
             ResolutionCost::SacrificePermanent { .. } => "Sacrifice a permanent".into(),
+            ResolutionCost::TapPermanents { count, .. } => {
+                format!("Tap {count} permanent(s)")
+            }
             ResolutionCost::None if self.body.steps.is_empty() => "Continue".into(),
             ResolutionCost::None => {
                 let effects = self
@@ -863,6 +866,21 @@ impl Compiler {
                                         instruction.id, branch.branch_id
                                     )
                                 })?;
+                                has_paid_branch = true;
+                            }
+                            ResolutionCost::TapPermanents {
+                                count: 1, filter, ..
+                            } if *chooser == PlayerRecipient::Controller
+                                && self.context == EffectContext::Ability =>
+                            {
+                                validate_program_tap_permanent_cost_filter(filter).map_err(
+                                    |reason| {
+                                        format!(
+                                            "Choose instruction '{}' branch '{}' tap cost: {reason}",
+                                            instruction.id, branch.branch_id
+                                        )
+                                    },
+                                )?;
                                 has_paid_branch = true;
                             }
                             unsupported => {
@@ -1743,6 +1761,25 @@ fn validate_and_result_types(
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::Sacrifice {
+            subject: EffectSubject::Source,
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ApplyCombatRestriction {
+            scope: super::CombatRestrictionScope::Source,
+            restriction,
+        } if context == EffectContext::Ability
+            && restriction
+                == &(super::CombatRestriction {
+                    cant_be_blocked: true,
+                    ..Default::default()
+                }) =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::ReturnTriggeredCard {
             reference: super::TriggeredCardReference::ExactTriggerObject,
             from,
@@ -2267,6 +2304,22 @@ fn validate_program_choice_filter(filter: &TargetFilter) -> Result<(), String> {
         for branch in branches {
             validate_program_choice_filter(branch)?;
         }
+    }
+    filter.validate_characteristic_constraints()
+}
+
+fn validate_program_tap_permanent_cost_filter(filter: &TargetFilter) -> Result<(), String> {
+    if filter.any_of.is_some() {
+        return Err("filter cannot use any_of".into());
+    }
+    if filter.controller != super::TargetController::You {
+        return Err("filter requires controller You".into());
+    }
+    if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+        return Err("filter kind must be Creature or AnyPermanent".into());
+    }
+    if !filter.excluded_objects.is_empty() {
+        return Err("filter cannot use excluded_objects".into());
     }
     filter.validate_characteristic_constraints()
 }

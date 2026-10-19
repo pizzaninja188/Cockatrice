@@ -78,6 +78,18 @@ filter, and control before committing the shared cost transaction; optional decl
 offer with no selectable branch follows `Otherwise`, and the paid body and parent cursor resume
 once. Other legacy sacrifice callers remain on their existing path. This adds no card admission or
 protocol or client change.
+The bounded 2026-10-19 `TapPermanents` increment admits a fixed one-permanent cost only on a
+`Controller`-chosen ability Program branch. Command Bridge taps one permanent you control and keeps
+its existing sacrifice `Otherwise`; Gravelgill Scoundrel taps one creature you control while
+excluding the exact source incarnation, then makes that attacking incarnation unblockable. The
+flat filter must select `Creature` or `AnyPermanent` controlled by `You`; `any_of` and filter-level
+`excluded_objects` are not admitted. The parked resolution keeps its original payer and
+generation-bound candidates, then revalidates identity, filter, and control through the shared
+one-permanent `TapPermanents`/`SacrificePermanent` cost resolver before committing payment. Only an
+untapped permanent can be tapped (CR 701.26a); these choices are not targets. A zone-changed card is
+a new object (CR 400.7, 403.4), so a returned Gravelgill can pay the old trigger's cost without the
+old effect restricting that new incarnation. This adds no card admission or protocol or client
+change.
 The bounded 2026-10-19 `LookChooseToHand` increment adds a resultless leaf only to spell Programs
 with no filter, no reveal, chosen bottom ordering, and a fixed positive exact selection. Sleight of
 Hand uses the two-card, choose-one form; Flow State uses `ProgramIf` to choose its two-card or
