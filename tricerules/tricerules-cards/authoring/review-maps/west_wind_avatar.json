@@ -1,0 +1,115 @@
+{
+  "format_version": 1,
+  "oracle_id": "92e45a8f-c582-45e1-9b7f-def219023ebf",
+  "spans": [
+    {
+      "face_id": "west_wind_avatar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "west_wind_avatar",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife",
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/program/body/steps/0",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife"
+      ]
+    },
+    {
+      "face_id": "west_wind_avatar",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/2",
+        "/faces/0/triggered_abilities/2/program/body/steps/0",
+        "/faces/0/triggered_abilities/2/program/body/steps/0/kind/Perform/Draw"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/2/trigger"
+    },
+    {
+      "symbol": "GameCondition::PermanentLeftBattlefieldThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/2/intervening_if"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/2/program/body/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_189_disappear::west_wind_entry_sacrifices_a_token_and_enables_its_disappear_draw",
+      "covers": "the entry trigger sacrifices a Token, gains 3 life, and leaves the Disappear condition true for the end-step draw"
+    },
+    {
+      "test": "scenario issue_189_disappear::west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined",
+      "covers": "the attack trigger accepts a Land but not an ordinary Creature, with optional decline"
+    },
+    {
+      "test": "scenario issue_189_disappear::west_wind_finality_replacement_keeps_sacrifice_paid_and_exiles_land",
+      "covers": "a Finality replacement exiles the sacrificed Land while the paid branch gains 3 life once"
+    },
+    {
+      "test": "scenario issue_189_disappear::west_wind_entry_trigger_can_pay_with_land_after_source_leaves",
+      "covers": "the resolving entry trigger can pay with a controlled Land after its source leaves"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs",
+      "covers": "Trample and all three complete triggers: the entry/attack sacrifice branches and the Disappear end-step Draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

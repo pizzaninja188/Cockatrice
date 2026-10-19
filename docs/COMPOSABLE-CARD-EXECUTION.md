@@ -68,6 +68,16 @@ Kindred Dragon qualifies under CR 109.2 and 205.3m. The condition is evaluated a
 selection and fixes the destination before the existing entry-replacement pipeline, which resumes
 normally (CR 701.23a, 614.12, 616.1, 608.2m). This uses the existing search and entry transactions;
 it adds no core, protocol, client, or other card admission.
+The bounded 2026-10-18 `SacrificePermanent` increment adds a fixed one-permanent cost only to
+`Controller`-chosen ability Programs. It covers four existing owners: Servant of the Stinger's
+combat-damage trigger and West Wind Avatar's enter, attack, and Disappear triggers. Every terminal
+sacrifice-filter leaf must select a `Creature` or `AnyPermanent` controlled by `You`; typed Programs
+reject `excluded_objects` on `any_of` branches while preserving flat exclusions within the
+`source_only: false` bound. The parked occurrence revalidates current candidate identity, generation,
+filter, and control before committing the shared cost transaction; optional decline or an
+offer with no selectable branch follows `Otherwise`, and the paid body and parent cursor resume
+once. Other legacy sacrifice callers remain on their existing path. This adds no card admission or
+protocol or client change.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

@@ -1,0 +1,79 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+  "spans": [
+    {
+      "face_id": "servant_of_the_stinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "servant_of_the_stinger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::CrimesCommittedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_59_resolution_choices::issue_171_servant_sacrifices_only_itself_then_searches",
+      "covers": "combat damage after a committed crime offers the optional source sacrifice and completes its search"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::issue_171_servant_can_decline_its_optional_sacrifice_payment",
+      "covers": "declining the optional sacrifice does not search"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::issue_171_servant_checks_condition_and_never_searches_without_payment",
+      "covers": "the crime condition and payment intent gate the search"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::issue_171_servant_rejects_a_returned_source_during_payment",
+      "covers": "a returned source incarnation cannot pay the stale sacrifice offer"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::issue_171_servant_search_commander_uses_903_9b_hand_or_command_zone",
+      "covers": "a searched Commander stays in its library incarnation until its owner chooses Hand or the Command zone"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs",
+      "covers": "Deathtouch, the crime-gated combat-damage trigger, its source-only sacrifice cost, and the exact Library-to-Hand search"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

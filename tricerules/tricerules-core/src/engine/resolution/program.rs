@@ -1000,6 +1000,32 @@ impl GameEngine {
         original_chooser: PlayerId,
         branch_index: usize,
     ) -> Result<CompiledChooseBranch, EngineError> {
+        let branch = self.program_choose_branch_at_occurrence(stack, occurrence, branch_index)?;
+        let original_chooser_live = self
+            .state
+            .player_idx(original_chooser)
+            .is_some_and(|idx| !self.state.players[idx].has_lost);
+        if (!original_chooser_live && branch.cost != ResolutionCost::None)
+            || !self.program_choose_requirement_holds(&stack.item, &branch.requirement)
+            || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
+            || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
+        {
+            return Err(EngineError::Illegal(
+                "that program Choose branch is no longer legal",
+            ));
+        }
+        Ok(branch)
+    }
+
+    /// Resolve a saved branch occurrence without rechecking its current selectable state. The
+    /// departure reconciler uses this to recover the exact cost before deciding whether changed
+    /// candidate generations require a fresh offer or the Otherwise arm.
+    pub(in crate::engine) fn program_choose_branch_at_occurrence(
+        &self,
+        stack: &ParkedStackResolution,
+        occurrence: &crate::state::ProgramChooseOccurrence,
+        branch_index: usize,
+    ) -> Result<CompiledChooseBranch, EngineError> {
         let run = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
             "program Choose lost its parked execution state",
         ))?;
@@ -1030,19 +1056,6 @@ impl GameEngine {
             .get(branch_index)
             .cloned()
             .ok_or(EngineError::Illegal("bad program Choose branch index"))?;
-        let original_chooser_live = self
-            .state
-            .player_idx(original_chooser)
-            .is_some_and(|idx| !self.state.players[idx].has_lost);
-        if (!original_chooser_live && branch.cost != ResolutionCost::None)
-            || !self.program_choose_requirement_holds(&stack.item, &branch.requirement)
-            || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
-            || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
-        {
-            return Err(EngineError::Illegal(
-                "that program Choose branch is no longer legal",
-            ));
-        }
         Ok(branch)
     }
 
@@ -1144,6 +1157,10 @@ impl GameEngine {
                                 rv1::ResolutionBranchCostKind::Blight,
                                 format!("Blight {count}"),
                             ),
+                            ResolutionCost::SacrificePermanent { .. } => (
+                                rv1::ResolutionBranchCostKind::SacrificePermanent,
+                                "sacrifice a matching permanent".to_string(),
+                            ),
                             _ => return None,
                         };
                         let label = branch.fallback_label();
@@ -1176,6 +1193,7 @@ impl GameEngine {
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
             crate::state::PendingProgramChooseStage::PayingHandCard { .. }
             | crate::state::PendingProgramChooseStage::PayingBlight { .. }
+            | crate::state::PendingProgramChooseStage::PayingSacrificePermanent { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
                 return None
             }
@@ -2669,6 +2687,801 @@ mod invariant_rollback_tests {
         );
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.stack.is_empty());
+    }
+
+    fn controller_sacrifice_choose_fixture(
+        source_only: bool,
+    ) -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+        ObjectId,
+    ) {
+        use crate::state::{TriggerAbilityOrigin, TriggerUseKey};
+
+        let card = format!(
+            r#"(
+            id: "controller_sacrifice_program_fixture",
+            name: "Controller Sacrifice Program Fixture",
+            face_id: "controller_sacrifice_program_fixture",
+            types: ["Creature"], power: 2, toughness: 2,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "choose", kind: Choose(
+                        choice: "sacrifice", chooser: Controller, optional: true,
+                        branches: [(
+                            branch_id: "sacrifice_source", presentation: Fallback,
+                            cost: SacrificePermanent(
+                                filter: (kind: AnyPermanent, controller: You),
+                                source_only: {source_only},
+                            ), requirement: Always,
+                            body: (steps: [(id: "branch_gain", kind: Perform(GainLife(amount: 2)))], yields: []),
+                        )],
+                        otherwise: (steps: [(id: "otherwise_gain", kind: Perform(GainLife(amount: 7)))], yields: []),
+                    )),
+                    (id: "tail_gain", kind: Perform(GainLife(amount: 3))),
+                ], yields: []), target_bindings: [])),
+            )],
+        )"#
+        );
+        let card_id = "controller_sacrifice_program_fixture";
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card.as_str()], &[])
+                .expect("Controller sacrifice Program fixture compiles"),
+        ));
+        let decks = Some(vec![
+            vec![card_id.to_string(); 30],
+            vec![card_id.to_string(); 30],
+            vec![card_id.to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, 91_209, &[0, 1, 2], 20, decks, true)
+            .expect("three-player Controller sacrifice fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let source = *engine.state.players[1]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("fixture source is owned by player one");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("fixture source enters under player zero's control");
+        let borrowed = *engine.state.players[1]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("a second player-one copy is available as a controlled permanent");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            borrowed,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("the borrowed permanent enters under player zero's control");
+
+        let face = registry
+            .get(card_id)
+            .and_then(|definition| definition.face(0))
+            .expect("fixture face");
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("fixture triggered ability")
+            .clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: card_id.into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(source, 0);
+        top.id = engine.state.next_object_id.saturating_add(1);
+        top.controller = 0;
+        top.card_id = card_id.into();
+        top.ability_text = Some("Controller Sacrifice Program Fixture trigger".into());
+        top.source_permanent_id = Some(source);
+        top.source_owner = Some(engine.state.objects[&source].owner);
+        top.source_zone_change = generation;
+        top.ability_index = Some(0);
+        top.triggered_ability = Some(ability);
+        top.trigger_use_key = Some(TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::Printed(definition),
+        });
+        top.is_triggered = true;
+        top.is_copy = false;
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("trigger program owner lookup")
+            .expect("fixture ability has a compiled Program");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners, source, borrowed)
+    }
+
+    #[test]
+    fn program_choose_sacrifice_permanent_cost_is_offered_to_controller() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, _borrowed) =
+            controller_sacrifice_choose_fixture(true);
+        let starting_life = engine.state.players[0].life;
+        assert_eq!(engine.state.objects[&source].owner, 1);
+        assert_eq!(engine.state.objects[&source].controller, 0);
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+
+        let (pending, _, _) = parked_program(&engine);
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::ResolutionBranch
+        );
+        let offer = engine
+            .program_choose_choice_event()
+            .expect("the sacrifice branch offer is rendered");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(offer)) = offer.ev.as_ref() else {
+            panic!("Controller receives the ordinary Program Choose offer");
+        };
+        let [branch] = offer.resolution_branches.as_slice() else {
+            panic!("the single sacrifice branch is offered");
+        };
+        assert_eq!(branch.branch_index, 0);
+        assert_eq!(
+            branch.cost_kind,
+            rv1::ResolutionBranchCostKind::SacrificePermanent as i32
+        );
+        assert_eq!(branch.label, "Sacrifice a permanent");
+        assert_eq!(branch.cost_text, "sacrifice a matching permanent");
+        assert!(branch.selectable);
+
+        let payment_batch = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let cost_offers = payment_batch
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(cost_offers.len(), 1);
+        assert_eq!(
+            cost_offers[0].choice_kind,
+            rv1::ChoiceKind::CostObjects as i32
+        );
+        assert_eq!((cost_offers[0].min, cost_offers[0].max), (0, 1));
+        assert_eq!(cost_offers[0].candidate_object_ids, vec![source]);
+        let payment = &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("sacrifice object payment is pending")
+            .presentation;
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            0
+        );
+        assert_eq!(payment.choice_kind, rv1::ChoiceKind::CostObjects);
+        assert_eq!((payment.min, payment.max), (0, 1));
+        assert_eq!(payment.candidates, vec![source]);
+        let payment_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+
+        let completed = nested_select_objects(&mut engine, vec![source]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = completed
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![2, 3],
+            "branch and parent tail each resolve once"
+        );
+        assert_eq!(
+            completed
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log)) if log.text.starts_with("P0 sacrifices ")
+                ))
+                .count(),
+            1,
+            "the exact sacrifice receipt is emitted once"
+        );
+        assert_eq!(
+            engine.state.players[1]
+                .graveyard
+                .iter()
+                .filter(|object_id| **object_id == source)
+                .count(),
+            1,
+            "the source is sacrificed once"
+        );
+        assert!(!engine.state.players[0].graveyard.contains(&source));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+
+        let replay = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: payment_prompt_id,
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(
+            engine.apply_scenario_command(0, &replay).is_err(),
+            "the completed payment occurrence cannot be replayed"
+        );
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        assert_eq!(
+            engine.state.players[1]
+                .graveyard
+                .iter()
+                .filter(|object_id| **object_id == source)
+                .count(),
+            1,
+            "a replay cannot commit the sacrifice twice"
+        );
+        assert!(!engine.state.players[0].graveyard.contains(&source));
+    }
+
+    #[test]
+    fn program_choose_sacrifice_cost_decline_and_empty_selection_use_otherwise_once() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        for explicit_decline in [false, true] {
+            let (mut engine, top, owners, source, _borrowed) =
+                controller_sacrifice_choose_fixture(true);
+            let starting_life = engine.state.players[0].life;
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+
+            let completed = if explicit_decline {
+                let pending = engine.state.pending_resolution.as_ref().unwrap();
+                let actor = pending.deciding_player;
+                let command = RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: pending.resolution_prompt_id.get(),
+                            decision: Decision::Decline as i32,
+                            ..Default::default()
+                        },
+                    )),
+                };
+                engine
+                    .apply_scenario_command(actor, &command)
+                    .expect("an optional sacrifice cost can be declined")
+            } else {
+                nested_select_objects(&mut engine, Vec::new())
+            };
+            assert_eq!(engine.state.players[0].life, starting_life + 10);
+            let life_deltas = completed
+                .events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(life_deltas, vec![7, 3]);
+            assert!(engine.state.objects[&source].zone == Zone::Battlefield);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+        }
+    }
+
+    #[test]
+    fn program_choose_sacrifice_with_no_legal_candidate_enters_otherwise_once() {
+        let (mut engine, top, owners, source, _borrowed) =
+            controller_sacrifice_choose_fixture(true);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the source leaves before its trigger resolves");
+        let starting_life = engine.state.players[0].life;
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("the retained trigger Program starts from its stack object");
+        let mut events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut events,
+                )
+                .expect("no legal sacrifice branch enters Otherwise and its parent tail"),
+            ResolutionProgress::Completed
+        );
+        assert_eq!(engine.state.players[0].life, starting_life + 10);
+        let life_deltas = events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![7, 3]);
+        assert!(!events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn program_choose_sacrifice_payment_rejects_wrong_and_duplicate_objects_atomically() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, borrowed) = controller_sacrifice_choose_fixture(true);
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+
+        let wrong_player = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(1, &wrong_player).is_err());
+
+        for chosen in [vec![borrowed], vec![source, source]] {
+            let command = RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: prompt_id,
+                        chosen_object_ids: chosen,
+                        ..Default::default()
+                    },
+                )),
+            };
+            assert!(engine.apply_scenario_command(0, &command).is_err());
+            assert_eq!(engine.state.players[0].life, starting_life);
+            assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+            assert!(engine.state.pending_resolution.is_some());
+        }
+    }
+
+    #[test]
+    fn program_choose_sacrifice_payment_refreshes_returned_candidate_generation() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, borrowed) =
+            controller_sacrifice_choose_fixture(false);
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let old_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+        let old_generation = engine.state.zone_change_generation[&source];
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the selected permanent leaves before payment");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("the same physical card returns as a new permanent incarnation");
+        let current_generation = engine.state.zone_change_generation[&source];
+        assert_ne!(old_generation, current_generation);
+
+        let stale_answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: old_prompt_id,
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &stale_answer).is_err());
+        assert_eq!(engine.state.players[0].life, starting_life);
+        assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+        assert!(engine.state.pending_resolution.is_some());
+
+        let mut refreshed = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut refreshed)
+            .expect("the payment offer refreshes against current object generations");
+        engine
+            .publish_resolution_prompt_ids(&mut refreshed)
+            .expect("the changed generation gets a fresh prompt ID");
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_ne!(pending.resolution_prompt_id.get(), old_prompt_id);
+        assert_eq!(pending.presentation.candidates.len(), 2);
+        assert!(pending.presentation.candidates.contains(&source));
+        assert!(pending.presentation.candidates.contains(&borrowed));
+        let crate::state::ResolutionContinuation::ProgramChoose { choose, .. } =
+            &pending.continuation
+        else {
+            panic!("the refreshed sacrifice occurrence stays parked");
+        };
+        let crate::state::PendingProgramChooseStage::PayingSacrificePermanent {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("the refreshed payment retains its exact Program stage");
+        };
+        assert!(candidate_generations.contains(&(source, current_generation)));
+
+        let paid = nested_select_objects(&mut engine, vec![source]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![2, 3]);
+    }
+
+    #[test]
+    fn program_choose_sacrifice_source_theft_routes_to_otherwise() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, _borrowed) =
+            controller_sacrifice_choose_fixture(true);
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the source leaves before payment");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("the source returns under the opponent's control");
+
+        let mut refreshed = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut refreshed)
+            .expect("a source-only cost loses its stolen source candidate");
+        assert_eq!(engine.state.objects[&source].controller, 1);
+        assert_eq!(engine.state.players[0].life, starting_life + 10);
+        let life_deltas = refreshed
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![7, 3]);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn program_choose_sacrifice_departure_drops_payer_but_not_surviving_payer_otherwise() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut payer_engine, payer_top, payer_owners, payer_source, _payer_borrowed) =
+            controller_sacrifice_choose_fixture(true);
+        let payer_starting_life = payer_engine.state.players[0].life;
+        nested_start(
+            &mut payer_engine,
+            &payer_top,
+            payer_owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut payer_engine, Decision::SelectBranch, 0, Vec::new());
+        payer_engine.state.players[0].has_lost = true;
+        let mut payer_departure = Vec::new();
+        payer_engine
+            .refresh_program_choose_departure(&mut payer_departure)
+            .expect("a departed Controller payer loses its owning resolution");
+        assert!(payer_engine.state.pending_resolution.is_none());
+        assert_eq!(payer_engine.state.players[0].life, payer_starting_life);
+        assert_eq!(
+            payer_engine.state.objects[&payer_source].zone,
+            Zone::Battlefield
+        );
+        assert!(!payer_departure
+            .iter()
+            .any(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_)))));
+
+        let (mut owner_engine, owner_top, owner_owners, owner_source, owner_borrowed) =
+            controller_sacrifice_choose_fixture(true);
+        let owner_starting_life = owner_engine.state.players[0].life;
+        nested_start(
+            &mut owner_engine,
+            &owner_top,
+            owner_owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut owner_engine, Decision::SelectBranch, 0, Vec::new());
+        assert_eq!(owner_engine.state.objects[&owner_source].owner, 1);
+        assert_eq!(owner_engine.state.objects[&owner_source].controller, 0);
+        owner_engine.state.players[1].has_lost = true;
+        for object_id in [owner_source, owner_borrowed] {
+            if owner_engine.state.objects[&object_id].zone == Zone::Battlefield {
+                move_object_to_zone(
+                    &mut owner_engine.state,
+                    owner_engine.registry,
+                    object_id,
+                    Zone::Exile,
+                    None,
+                )
+                .expect("a departed owner's permanent leaves the game");
+            }
+        }
+        let mut owner_departure = Vec::new();
+        owner_engine
+            .refresh_program_choose_departure(&mut owner_departure)
+            .expect("the surviving payer's candidates are pruned after owner departure");
+        assert_eq!(owner_engine.state.players[0].life, owner_starting_life + 10);
+        let life_deltas = owner_departure
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![7, 3]);
+        assert!(owner_engine.state.pending_resolution.is_none());
+        assert_eq!(owner_engine.state.objects[&owner_source].owner, 1);
+        assert_eq!(owner_engine.state.objects[&owner_source].zone, Zone::Exile);
+        assert_eq!(owner_engine.state.objects[&owner_source].controller, 1);
+        assert!(!owner_engine.state.players[0]
+            .graveyard
+            .contains(&owner_source));
+        assert!(!owner_departure.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::Log(log)) if log.text.starts_with("P0 sacrifices ")
+        )));
+    }
+
+    #[test]
+    fn program_choose_sacrifice_prunes_only_departed_owner_candidates_and_reoffers() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, borrowed) =
+            controller_sacrifice_choose_fixture(false);
+        let own_candidate = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| {
+                engine.state.objects[object_id].card_id == "controller_sacrifice_program_fixture"
+            })
+            .expect("player zero owns another eligible permanent");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            own_candidate,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("player zero's own permanent enters under player zero's control");
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+
+        let old_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("sacrifice payment is offered")
+            .resolution_prompt_id
+            .get();
+        let offered = &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates;
+        assert_eq!(offered.len(), 3);
+        assert!(offered.contains(&source));
+        assert!(offered.contains(&borrowed));
+        assert!(offered.contains(&own_candidate));
+        assert_eq!(engine.state.objects[&source].owner, 1);
+        assert_eq!(engine.state.objects[&source].controller, 0);
+        assert_eq!(engine.state.objects[&borrowed].owner, 1);
+        assert_eq!(engine.state.objects[&borrowed].controller, 0);
+        assert_eq!(engine.state.objects[&own_candidate].owner, 0);
+        assert_eq!(engine.state.objects[&own_candidate].controller, 0);
+
+        engine.state.players[1].has_lost = true;
+        for object_id in [source, borrowed] {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                object_id,
+                Zone::Exile,
+                None,
+            )
+            .expect("a departed owner's permanent leaves the game");
+        }
+        let mut departure = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut departure)
+            .expect(
+                "the surviving payer keeps the chooser and loses only departed-owner candidates",
+            );
+        engine
+            .publish_resolution_prompt_ids(&mut departure)
+            .expect("the narrowed offer receives a new prompt ID");
+
+        assert!(!engine.state.players[0].has_lost);
+        assert!(engine.state.players[1].has_lost);
+        assert!(!engine.state.players[2].has_lost);
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("player zero receives the surviving candidate");
+        assert_eq!(pending.deciding_player, 0);
+        assert_ne!(pending.resolution_prompt_id.get(), old_prompt_id);
+        assert_eq!(pending.presentation.candidates, vec![own_candidate]);
+
+        let stale_answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: old_prompt_id,
+                    chosen_object_ids: vec![own_candidate],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &stale_answer).is_err());
+        assert_eq!(engine.state.players[0].life, starting_life);
+        assert!(engine.state.pending_resolution.is_some());
+
+        assert_eq!(engine.state.objects[&source].zone, Zone::Exile);
+        assert_eq!(engine.state.objects[&borrowed].zone, Zone::Exile);
+        let paid = nested_select_objects(&mut engine, vec![own_candidate]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        assert_eq!(engine.state.objects[&own_candidate].zone, Zone::Graveyard);
+        assert!(!engine.state.objects.contains_key(&source));
+        assert!(!engine.state.objects.contains_key(&borrowed));
+        assert!(engine.state.pending_resolution.is_none());
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![2, 3]);
+        assert_eq!(
+            paid.events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log))
+                        if log.text.starts_with("P0 sacrifices ")
+                ))
+                .count(),
+            1,
+            "the surviving candidate is paid once"
+        );
+        assert!(!paid.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.object_id == source || moved.object_id == borrowed
+        )));
+        assert_eq!(
+            paid.events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                        if moved.object_id == own_candidate
+                            && moved.destination
+                                == rv1::permanent_moved::Destination::Graveyard as i32
+                ))
+                .count(),
+            1,
+            "the one sacrifice log corresponds to the surviving payer's chosen physical object"
+        );
+        assert!(!engine.state.players[0].has_lost);
+        assert!(!engine.state.players[2].has_lost);
     }
 
     fn source_controller_paid_choose_fixture() -> (

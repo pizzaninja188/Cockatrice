@@ -3,7 +3,8 @@ use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
-    ruled_command::Cmd, ChoiceKind, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
+    dev_command::Dev, ruled_command::Cmd, ChoiceKind, DevCommand, DevMoveCard, DevZone,
+    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
 
 fn disappear_engine(seed: u64, cards: &[&str]) -> GameEngine {
@@ -257,4 +258,144 @@ fn west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined() {
             );
         }
     }
+}
+
+#[test]
+fn west_wind_finality_replacement_keeps_sacrifice_paid_and_exiles_land() {
+    let mut engine = disappear_engine(189_320, &["west_wind_avatar", "forest"]);
+    let land = relocate_to_battlefield(&mut engine, 0, "forest", false);
+    engine
+        .state
+        .objects
+        .get_mut(&land)
+        .expect("battlefield land")
+        .add_counters(CounterKind::Finality, 1, 0);
+
+    ensure_card_in_hand(&mut engine, 0, "west_wind_avatar");
+    grant_pool(&mut engine, 0);
+    let avatar = hand_index_for_card(&engine, 0, "west_wind_avatar");
+    engine
+        .apply_scenario_command(0, &cast_spell(avatar, vec![]))
+        .expect("cast West Wind Avatar");
+    pass_both_players(&mut engine);
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the sacrifice branch");
+
+    let paid = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
+        .expect("Finality replaces the destination, not the sacrifice payment");
+    assert_eq!(engine.state.objects[&land].zone, Zone::Exile);
+    assert_eq!(engine.state.players[0].life, 23);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        paid.events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.object_id == land
+                        && moved.destination
+                            == tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32
+            ))
+            .count(),
+        1,
+        "the paid land has one pinned Exile move event"
+    );
+    assert_eq!(
+        paid.events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::LifeChanged(change)) => {
+                    Some(change.delta)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![3],
+        "the sacrifice branch applies its life gain exactly once"
+    );
+}
+
+#[test]
+fn west_wind_entry_trigger_can_pay_with_land_after_source_leaves() {
+    let mut engine = disappear_engine(189_321, &["west_wind_avatar", "forest"]);
+    let land = relocate_to_battlefield(&mut engine, 0, "forest", false);
+    ensure_card_in_hand(&mut engine, 0, "west_wind_avatar");
+    grant_pool(&mut engine, 0);
+    let avatar = hand_index_for_card(&engine, 0, "west_wind_avatar");
+    engine
+        .apply_scenario_command(0, &cast_spell(avatar, vec![]))
+        .expect("cast West Wind Avatar");
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.stack.len(), 1, "entry trigger on the stack");
+    let avatar = *engine.state.players[0]
+        .battlefield
+        .iter()
+        .find(|object_id| engine.state.objects[object_id].card_id == "west_wind_avatar")
+        .expect("West Wind Avatar resolved before its trigger");
+
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 0,
+                    dev: Some(Dev::MoveCard(DevMoveCard {
+                        card_name: "West Wind Avatar".into(),
+                        zone: DevZone::Graveyard as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("move the trigger source away while its ETB trigger remains on the stack");
+    assert_eq!(engine.state.objects[&avatar].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the retained trigger still offers its sacrifice choice")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the land sacrifice branch after the source leaves");
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("land payment remains available")
+            .presentation
+            .candidates,
+        vec![land]
+    );
+    let paid = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
+        .expect("pay the retained ETB trigger with its controlled land");
+    assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[0].life, 23);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        paid.events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::LifeChanged(change)) => {
+                    Some(change.delta)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![3],
+        "the trigger's paid body resolves once after its source leaves"
+    );
 }

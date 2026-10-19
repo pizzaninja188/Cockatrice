@@ -1,4 +1,5 @@
-// Oracle, 2026-01-27 ruling, and CR 400.7/603.4/603.10a/701.17 checked 2026-09-01.
+// Oracle and rulings checked 2026-10-18 against the pinned source set.
+// CR 701.21a defines the optional sacrifice; CR 400.7/603.4/603.10a apply to Disappear.
 (
   id: "west_wind_avatar",
   name: "West Wind Avatar",
@@ -13,42 +14,63 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "sacrifice_a_token_or_land",
-          presentation: OracleLines([2]),
-          cost: SacrificePermanent(filter: (any_of: Some([
-            (kind: AnyPermanent, controller: You, token: Some(true)),
-            (kind: AnyPermanent, controller: You, permanent_types: [Land]),
-          ]))),
-          effects: [GainLife(amount: 3)],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_sacrifice", kind: Choose(
+          choice: "sacrifice",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "sacrifice_a_token_or_land",
+            presentation: OracleLines([2]),
+            cost: SacrificePermanent(filter: (any_of: Some([
+              (kind: AnyPermanent, controller: You, token: Some(true)),
+              (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+            ]))),
+            requirement: Always,
+            body: (steps: [
+              (id: "gain_life", kind: Perform(GainLife(amount: 3))),
+            ], yields: []),
+          )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [(
-          branch_id: "sacrifice_a_token_or_land",
-          presentation: OracleLines([2]),
-          cost: SacrificePermanent(filter: (any_of: Some([
-            (kind: AnyPermanent, controller: You, token: Some(true)),
-            (kind: AnyPermanent, controller: You, permanent_types: [Land]),
-          ]))),
-          effects: [GainLife(amount: 3)],
-        )],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_sacrifice", kind: Choose(
+          choice: "sacrifice",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "sacrifice_a_token_or_land",
+            presentation: OracleLines([2]),
+            cost: SacrificePermanent(filter: (any_of: Some([
+              (kind: AnyPermanent, controller: You, token: Some(true)),
+              (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+            ]))),
+            requirement: Always,
+            body: (steps: [
+              (id: "gain_life", kind: Perform(GainLife(amount: 3))),
+            ], yields: []),
+          )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
     (
       ability_id: "triggered_03",
       presentation: OracleLines([3]),
       trigger: AtBeginningOfEndStep(player: Controller),
       intervening_if: Some(PermanentLeftBattlefieldThisTurn(controllers: Controller)),
-      effect: [Draw(count: 1)],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw", kind: Perform(Draw(count: 1))),
+      ], yields: []))),
     ),
   ],
 )

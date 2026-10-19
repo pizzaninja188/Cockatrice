@@ -181,12 +181,16 @@ authored functions. `Choose` consumes no prior result and requires at least one 
 is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
 either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
-`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, and a
-fixed positive-count `Blight` on a `Controller`-chosen ability branch. The payment selects one
-creature that
-player controls and that can receive the counters; Blight is not admitted on spell programs or
-with other chooser shapes. The hand-bottom cost is not admitted for ability programs. `Always`,
-supported
+`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, a fixed positive-count
+`Blight` on a `Controller`-chosen ability branch, and a one-permanent `SacrificePermanent` cost on
+a `Controller`-chosen ability branch. Blight selects one creature that player controls and that
+can receive the counters; it is not admitted on spell programs or with other chooser shapes. The
+hand-bottom cost is not admitted for ability programs. A Program
+sacrifice filter requires every terminal leaf to select a `Creature` or `AnyPermanent` controlled
+by `You`; `source_only: true` remains bound to the exact source and cannot use exclusions. With
+`source_only: false`, flat filter-level `excluded_objects` remains supported, but exclusions on
+`any_of` branches are rejected by typed Programs. Legacy `ChooseResolutionBranch` retains its own
+filter validation. `Always`, supported
 controller-state `GameCondition`, and exact owning spell face/mode `CastCostReceipt` requirements
 are admitted; flat-list applicability and card-result requirements are rejected. Branch and
 Otherwise bodies use the same recursive finite-program subset, and a binding may join only
@@ -229,6 +233,21 @@ when a branch answer is validated. A mandatory choice with exactly one live cost
 it automatically and logs the selection; optional choices and paid branches still receive prompts.
 For `PutHandCardOnLibraryBottom`, the chooser privately
 selects one current hand card; if it is a declared Commander, its owner chooses Command zone or Library.
+For `SacrificePermanent`, the parked occurrence retains its original `Controller` payer and the
+candidate ObjectIds with their zone-change generations. The engine revalidates the selected
+candidate's incarnation, filter, and control before committing one shared cost transaction; a
+source-only payment remains tied to that exact source incarnation. Declining the optional branch or
+declining/submitting an empty paid-cost selection follows `Otherwise` once. A cost with no current
+candidate is omitted; if no branch remains selectable, `Otherwise` runs once. A departed candidate
+owner loses their objects under CR 800.4a, after which the
+surviving payer receives a refreshed candidate offer. If the ability controller/payer leaves while
+their triggered ability is resolving, CR 800.4a removes that stack object; neither the cost nor its
+branch body or `Otherwise` resolves. A Finality counter can replace the graveyard destination with
+Exile (CR 122.1h) without undoing the selected sacrifice payment or preventing its paid body. If a
+declared Commander is sacrificed into a graveyard, the search branch and parent tail finish before
+the CR 903.9a state-based action is checked (CR 704.4). If a hand-bound library search finds a
+Commander, its owner makes the CR 903.9b Command-zone-or-Hand choice before movement, then the same
+search continuation completes.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
 recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. The test

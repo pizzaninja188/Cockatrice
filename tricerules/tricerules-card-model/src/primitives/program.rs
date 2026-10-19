@@ -337,6 +337,7 @@ impl CompiledChooseBranch {
         match &self.cost {
             ResolutionCost::Waterbend(cost) => format!("Waterbend {cost}"),
             ResolutionCost::Mana(cost) => format!("Pay {cost}"),
+            ResolutionCost::SacrificePermanent { .. } => "Sacrifice a permanent".into(),
             ResolutionCost::None if self.body.steps.is_empty() => "Continue".into(),
             ResolutionCost::None => {
                 let effects = self
@@ -825,6 +826,30 @@ impl Compiler {
                                     && self.context == EffectContext::Ability
                                     && *count > 0 =>
                             {
+                                has_paid_branch = true;
+                            }
+                            ResolutionCost::SacrificePermanent {
+                                filter,
+                                source_only,
+                            } if *chooser == PlayerRecipient::Controller
+                                && self.context == EffectContext::Ability =>
+                            {
+                                if program_sacrifice_has_any_of_branch_exclusions(filter) {
+                                    return Err(format!(
+                                        "Choose instruction '{}' branch '{}' sacrifice cost uses excluded_objects inside any_of, which typed Program does not support",
+                                        instruction.id, branch.branch_id
+                                    ));
+                                }
+                                super::effects::validate_resolution_sacrifice_cost(
+                                    filter,
+                                    *source_only,
+                                )
+                                .map_err(|reason| {
+                                    format!(
+                                        "Choose instruction '{}' branch '{}' sacrifice cost: {reason}",
+                                        instruction.id, branch.branch_id
+                                    )
+                                })?;
                                 has_paid_branch = true;
                             }
                             unsupported => {
@@ -2183,6 +2208,17 @@ fn validate_program_choice_filter(filter: &TargetFilter) -> Result<(), String> {
         }
     }
     filter.validate_characteristic_constraints()
+}
+
+fn program_sacrifice_has_any_of_branch_exclusions(filter: &TargetFilter) -> bool {
+    let Some(branches) = &filter.any_of else {
+        return false;
+    };
+
+    branches.iter().any(|branch| {
+        !branch.excluded_objects.is_empty()
+            || program_sacrifice_has_any_of_branch_exclusions(branch)
+    })
 }
 
 fn validate_program_target_filter(filter: &TargetFilter, role: &str) -> Result<(), String> {

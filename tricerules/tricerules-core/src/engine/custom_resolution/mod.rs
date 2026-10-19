@@ -1046,6 +1046,18 @@ impl GameEngine {
         ) {
             return self.select_program_choose(pending, answer, decision);
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::PayingSacrificePermanent { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.finish_program_choose_sacrifice_object(pending, answer, decision);
+        }
         if let ResolutionContinuation::BattlefieldReturn { pending: plan } = &pending.continuation {
             if matches!(
                 plan.stage.as_ref(),

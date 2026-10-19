@@ -428,6 +428,183 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
 }
 
 #[test]
+fn issue_171_servant_search_commander_uses_903_9b_hand_or_command_zone() {
+    for commander_to_command_zone in [true, false] {
+        let (mut e, servant, _) = servant_combat_trigger(true);
+        let atraxa = inject_library_card(&mut e, 0, "atraxa,_praetors_voice");
+        // This scenario explicitly designates the injected physical Atraxa as P0's commander;
+        // it does not claim to validate a Commander deck list.
+        e.state.players[0]
+            .declared_commander_object_ids
+            .push(atraxa);
+        let library_before = e.state.players[0].library.len();
+        let atraxa_generation_before = e
+            .state
+            .zone_change_generation
+            .get(&atraxa)
+            .copied()
+            .unwrap_or(0);
+
+        pass_both_players(&mut e);
+        e.apply_scenario_command(0, &select_branch(0))
+            .expect("choose Servant's optional sacrifice branch");
+        let payment_prompt_id = e
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("optional sacrifice payment")
+            .resolution_prompt_id
+            .get();
+        let paid = e
+            .apply_scenario_command(0, &submit_resolution_choice(vec![servant]))
+            .expect("pay Servant's Program sacrifice cost");
+        assert_eq!(
+            e.state.objects[&servant].zone,
+            tricerules_core::Zone::Graveyard
+        );
+        let search_prompt_id = e
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("single-card library search")
+            .resolution_prompt_id
+            .get();
+        let search = &e.state.pending_resolution.as_ref().unwrap().presentation;
+        assert_eq!(search.choice_kind, ChoiceKind::LibrarySearch);
+        assert_eq!((search.min, search.max), (1, 1));
+        assert!(search.candidates.contains(&atraxa));
+
+        let searched = e
+            .apply_scenario_command(0, &submit_resolution_choice(vec![atraxa]))
+            .expect("search Atraxa and receive the CR 903.9b replacement choice");
+        let commander_prompt = find_resolution_choice(&searched)
+            .expect("the commander replacement is offered before moving Atraxa to hand");
+        assert_eq!(commander_prompt.choice_kind(), ChoiceKind::ResolutionBranch);
+        assert_eq!(commander_prompt.deciding_player_id, 0);
+        assert_eq!((commander_prompt.min, commander_prompt.max), (1, 1));
+        assert_eq!(commander_prompt.resolution_branches.len(), 2);
+        for (index, label) in ["Command zone", "Hand"].into_iter().enumerate() {
+            let branch = &commander_prompt.resolution_branches[index];
+            assert_eq!(branch.branch_index, index as u32);
+            assert_eq!(branch.label, label);
+            assert!(branch.selectable);
+        }
+        assert_eq!(
+            e.state.objects[&atraxa].zone,
+            tricerules_core::Zone::Library
+        );
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&atraxa)
+                .copied()
+                .unwrap_or(0),
+            atraxa_generation_before,
+            "Atraxa remains in the library until its owner chooses a destination"
+        );
+        let commander_prompt_id = e
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the commander replacement is pending")
+            .resolution_prompt_id
+            .get();
+
+        let mut destination = submit_resolution_choice(Vec::new());
+        let Some(Cmd::SubmitResolutionChoice(answer)) = destination.cmd.as_mut() else {
+            unreachable!()
+        };
+        answer.resolution_prompt_id = commander_prompt_id;
+        answer.decision = ResolutionChoiceDecision::SelectBranch as i32;
+        answer.selected_branch_index = if commander_to_command_zone { 0 } else { 1 };
+        let moved = e
+            .apply_scenario_command(0, &destination)
+            .expect("choose Atraxa's CR 903.9b destination");
+
+        let expected_zone = if commander_to_command_zone {
+            tricerules_core::Zone::Command
+        } else {
+            tricerules_core::Zone::Hand
+        };
+        assert_eq!(e.state.objects[&atraxa].zone, expected_zone);
+        assert_eq!(e.state.players[0].library.len(), library_before - 1);
+        assert_eq!(
+            e.state.zone_change_generation.get(&atraxa).copied(),
+            Some(atraxa_generation_before + 1)
+        );
+        assert!(e.state.pending_resolution.is_none());
+        assert_eq!(e.state.stack.len(), 0);
+
+        let batches = [&paid, &searched, &moved];
+        assert_eq!(
+            batches
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                        if log.text == "P0 shuffles their library."
+                ))
+                .count(),
+            1,
+            "Servant's search and shuffle resolve once"
+        );
+        assert_eq!(
+            batches
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(moved))
+                        if (moved.object_id == servant
+                            && moved.destination
+                                == tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32)
+                            || (moved.object_id == atraxa
+                                && moved.destination
+                                    == if commander_to_command_zone {
+                                        tricerules_proto::ruled::v1::permanent_moved::Destination::Command as i32
+                                    } else {
+                                        tricerules_proto::ruled::v1::permanent_moved::Destination::Hand as i32
+                                    })
+                ))
+                .count(),
+            2,
+            "the sacrifice and Atraxa destination each emit one physical move"
+        );
+        assert_eq!(
+            batches
+                .iter()
+                .flat_map(|batch| &batch.events)
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                        if log.text.starts_with("P0 sacrifices Servant of the Stinger")
+                ))
+                .count(),
+            1,
+            "the sacrifice receipt is emitted once"
+        );
+
+        let state_before_replay = format!("{:?}", e.state);
+        let mut replay = submit_resolution_choice(vec![atraxa]);
+        let Some(Cmd::SubmitResolutionChoice(answer)) = replay.cmd.as_mut() else {
+            unreachable!()
+        };
+        answer.resolution_prompt_id = search_prompt_id;
+        assert!(e.apply_scenario_command(0, &replay).is_err());
+        assert_eq!(format!("{:?}", e.state), state_before_replay);
+        assert!(e.state.players[0]
+            .declared_commander_object_ids
+            .contains(&atraxa));
+        assert_eq!(
+            e.state.objects[&atraxa].zone, expected_zone,
+            "a stale search answer cannot move the commander a second time"
+        );
+        assert_ne!(payment_prompt_id, search_prompt_id);
+    }
+}
+
+#[test]
 fn issue_171_servant_can_decline_its_optional_sacrifice_payment() {
     let (mut e, servant, _) = servant_combat_trigger(true);
     let hand_before = e.state.players[0].hand.len();

@@ -8523,6 +8523,182 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
 }
 
 #[test]
+fn program_choose_admits_controller_ability_sacrifice_permanent_cost() {
+    let body = |chooser: &str, cost: &str| {
+        format!(
+            r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+                choice: "sacrifice", chooser: {chooser}, optional: true,
+                branches: [(
+                    branch_id: "pay_sacrifice", presentation: Fallback,
+                    cost: {cost}, requirement: Always,
+                    body: (steps: [], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+    let servant_cost =
+        "SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true)";
+    let west_wind_cost = "SacrificePermanent(filter: (any_of: Some([
+        (kind: AnyPermanent, controller: You, token: Some(true)),
+        (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+    ])))";
+
+    for (card_id, cost, expected_cost) in [
+        ("servant_sacrifice_fixture", servant_cost, servant_cost),
+        (
+            "west_wind_sacrifice_fixture",
+            west_wind_cost,
+            west_wind_cost,
+        ),
+    ] {
+        let compiled =
+            ability_program_fixture(card_id, &body("Controller", cost)).unwrap_or_else(|error| {
+                panic!("the fixed Controller ability cost is admitted: {error}")
+            });
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the sacrifice cost remains inside one typed Choose instruction")
+        };
+        let crate::primitives::CompiledInstructionKind::Choose {
+            chooser, branches, ..
+        } = &choose.kind
+        else {
+            panic!("the sacrifice payment remains a Choose branch cost")
+        };
+        assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+        let [branch] = branches.as_slice() else {
+            panic!("the authored sacrifice branch remains unique")
+        };
+        let expected: crate::primitives::ResolutionCost =
+            ron::from_str(expected_cost).expect("the exact owner cost is valid RON");
+        assert_eq!(branch.cost, expected, "{card_id}");
+    }
+
+    let source_controller = ability_program_fixture(
+        "source_controller_sacrifice_fixture",
+        &body("SourceController", servant_cost),
+    )
+    .expect_err("SourceController is outside the fixed ability cost contract");
+    assert!(
+        source_controller.contains("does not support resolution cost"),
+        "the failure comes from the narrow cost admission: {source_controller}"
+    );
+
+    let opponent_filter = ability_program_fixture(
+        "opponent_sacrifice_filter_fixture",
+        &body(
+            "Controller",
+            "SacrificePermanent(filter: (kind: AnyPermanent, controller: Opponent), source_only: false)",
+        ),
+    )
+    .expect_err("a resolution sacrifice cannot select an opponent's permanent");
+    assert!(
+        opponent_filter.contains("resolution sacrifice cost must select a permanent you control"),
+        "the shared sacrifice filter validation rejects opponent-controlled permanents: {opponent_filter}"
+    );
+
+    let source_only_exclusion = ability_program_fixture(
+        "source_only_sacrifice_exclusion_fixture",
+        &body(
+            "Controller",
+            "SacrificePermanent(filter: (kind: AnyPermanent, controller: You, excluded_objects: [Source]), source_only: true)",
+        ),
+    )
+    .expect_err("a source-only sacrifice cannot exclude its source");
+    assert!(
+        source_only_exclusion.contains("source-only sacrifice cannot exclude its source"),
+        "the shared sacrifice validation preserves the source-only exclusion rule: {source_only_exclusion}"
+    );
+
+    let spell = program_fixture(&body("Controller", servant_cost));
+    let spell_error = match crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]) {
+        Err(crate::registry::RegistryError::InvalidCard { reason, .. }) => reason,
+        Err(other) => panic!("spell fixture failed before semantic validation: {other}"),
+        Ok(_) => panic!("the ability-only sacrifice cost was admitted in a spell program"),
+    };
+    assert!(
+        spell_error.contains("does not support resolution cost"),
+        "the failure comes from the narrow ability-only cost admission: {spell_error}"
+    );
+}
+
+#[test]
+fn program_sacrifice_rejects_any_of_branch_exclusions_but_keeps_supported_filters() {
+    let body = |cost: &str| {
+        format!(
+            r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+                choice: "sacrifice", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "pay_sacrifice", presentation: Fallback,
+                    cost: {cost}, requirement: Always,
+                    body: (steps: [], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+
+    for (card_suffix, exclusion) in [("source", "Source"), ("attached_object", "AttachedObject")] {
+        let cost = format!(
+            "SacrificePermanent(filter: (any_of: Some([\
+                (kind: AnyPermanent, controller: You, excluded_objects: [{exclusion}]),\
+                (kind: AnyPermanent, controller: You, permanent_types: [Land]),\
+            ])), source_only: false)"
+        );
+        let error = ability_program_fixture(
+            &format!("program_any_of_{card_suffix}_exclusion_fixture"),
+            &body(&cost),
+        )
+        .expect_err("Program sacrifice filters reject exclusions on any_of branches");
+        let diagnostic = error.to_ascii_lowercase();
+        assert!(
+            diagnostic.contains("program")
+                && diagnostic.contains("any_of")
+                && diagnostic.contains("excluded_objects"),
+            "the typed Program rejection identifies the unsupported branch exclusion: {error}"
+        );
+
+        let legacy: crate::primitives::SpellEffectKind = ron::from_str(&format!(
+            r#"ChooseResolutionBranch(optional: true, branches: [(
+                branch_id: "pay_sacrifice", presentation: Fallback,
+                cost: {cost}, requirement: Always,
+                effects: [Draw(who: Controller, count: 1)],
+            )], otherwise: [])"#
+        ))
+        .expect("the matching legacy branch syntax remains readable");
+        legacy
+            .validate(crate::primitives::EffectContext::Ability)
+            .unwrap_or_else(|error| {
+                panic!("legacy sacrifice filters retain their existing contract: {error}")
+            });
+    }
+
+    for (card_suffix, exclusion) in [("source", "Source"), ("attached_object", "AttachedObject")] {
+        let cost = format!(
+            "SacrificePermanent(filter: (kind: AnyPermanent, controller: You, excluded_objects: [{exclusion}]), source_only: false)"
+        );
+        let compiled = ability_program_fixture(
+            &format!("program_flat_{card_suffix}_exclusion_fixture"),
+            &body(&cost),
+        )
+        .unwrap_or_else(|error| panic!("flat {exclusion} exclusions remain supported: {error}"));
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the flat sacrifice filter remains in one Choose instruction")
+        };
+        let crate::primitives::CompiledInstructionKind::Choose { branches, .. } = &choose.kind
+        else {
+            panic!("the flat sacrifice filter remains a Choose branch cost")
+        };
+        let [branch] = branches.as_slice() else {
+            panic!("the flat sacrifice branch remains unique")
+        };
+        let expected: crate::primitives::ResolutionCost =
+            ron::from_str(&cost).expect("the flat sacrifice cost parses");
+        assert_eq!(branch.cost, expected, "flat {exclusion} filter");
+    }
+}
+
+#[test]
 fn program_choose_admits_fixed_blight_only_for_controller_ability_programs() {
     use crate::primitives::{CompiledProgram, EffectContext};
 

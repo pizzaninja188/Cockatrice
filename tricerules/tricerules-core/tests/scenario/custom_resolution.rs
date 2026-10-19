@@ -1810,6 +1810,248 @@ fn authored_copy_reprompts_when_final_targets_violate_group_uniqueness_or_distin
 }
 
 #[test]
+fn synthetic_legendary_sacrifice_program_finishes_search_and_tail_before_903_9a() {
+    // This test-only Legendary fixture is a legal commander type; Servant of the Stinger is not
+    // legendary and cannot stand in for a commander when checking the post-resolution SBA.
+    let fixture = r#"(
+        id: "synthetic_legendary_sacrifice_program_commander",
+        name: "Synthetic Legendary Sacrifice Program Commander",
+        face_id: "synthetic_legendary_sacrifice_program_commander",
+        mana_cost: "{0}",
+        types: ["Legendary", "Creature", "Human"],
+        power: 1,
+        toughness: 1,
+        triggered_abilities: [(
+            ability_id: "triggered_01",
+            presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "choose_sacrifice", kind: Choose(
+                    choice: "sacrifice",
+                    chooser: Controller,
+                    optional: true,
+                    branches: [(
+                        branch_id: "sacrifice_commander",
+                        presentation: Fallback,
+                        cost: SacrificePermanent(
+                            filter: (kind: AnyPermanent, controller: You),
+                            source_only: true,
+                        ),
+                        requirement: Always,
+                        body: (steps: [
+                            (id: "search_library", kind: Perform(SearchLibrary(
+                                filter: None,
+                                destination: Hand,
+                                shuffle: true,
+                                reveal: false,
+                                selection_bounds: Some((min: 1, max: 1)),
+                            ))),
+                        ], yields: []),
+                    )],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "parent_tail", kind: Perform(GainLife(amount: 3))),
+            ], yields: []))),
+        )],
+    )"#;
+    let card_id = "synthetic_legendary_sacrifice_program_commander";
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture,
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+            ],
+            &[],
+        )
+        .expect("the synthetic Legendary sacrifice Program fixture compiles"),
+    ));
+    let decks = Some(vec![
+        deck_with("forest", &[card_id]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(registry, 2026_1018, &[0, 1], 20, decks, true)
+        .expect("two-player synthetic Legendary Program engine");
+    advance_to_main1_from_game_start(&mut e);
+    inject_card_into_hand(&mut e, 0, card_id);
+    let hand_index = hand_index_for_card(&e, 0, card_id);
+    e.apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
+        .expect("cast the zero-cost Legendary fixture");
+    pass_both_players(&mut e);
+    let commander = *e.state.players[0]
+        .battlefield
+        .iter()
+        .find(|object_id| e.state.objects[object_id].card_id == card_id)
+        .expect("the Legendary fixture resolved to the battlefield");
+    e.state.players[0]
+        .declared_commander_object_ids
+        .push(commander);
+
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes for the fixture trigger");
+    let trigger_offer = e
+        .apply_scenario_command(1, &pass())
+        .expect("the fixture trigger offers its Program sacrifice branch");
+    let choice = find_resolution_choice(&trigger_offer).expect("optional sacrifice branch");
+    assert_eq!(choice.deciding_player_id, 0);
+    let branch_prompt_id = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("branch choice is pending")
+        .resolution_prompt_id
+        .get();
+    let mut choose = submit_resolution_choice(Vec::new());
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        choose.cmd.as_mut()
+    else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = branch_prompt_id;
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 0;
+    e.apply_scenario_command(0, &choose)
+        .expect("choose the Program's source-sacrifice branch");
+
+    let payment_prompt_id = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the commander is offered as the sacrifice cost")
+        .resolution_prompt_id
+        .get();
+    let paid = e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![commander]))
+        .expect("pay the source-only sacrifice cost");
+    assert_eq!(
+        e.state.objects[&commander].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let search_prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the branch body searches before commander SBA");
+    assert_eq!(
+        search_prompt.presentation.choice_kind,
+        ChoiceKind::LibrarySearch
+    );
+    assert_eq!(
+        (
+            search_prompt.presentation.min,
+            search_prompt.presentation.max
+        ),
+        (1, 1)
+    );
+    let search_prompt_id = search_prompt.resolution_prompt_id.get();
+    let searched_card = search_prompt.presentation.candidates[0];
+    let starting_life = e.state.players[0].life;
+    let searched = e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![searched_card]))
+        .expect("finish the branch search and its parent tail");
+
+    assert_eq!(e.state.players[0].life, starting_life + 3);
+    assert!(e.state.players[0].hand.contains(&searched_card));
+    assert_eq!(
+        e.state.objects[&commander].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let commander_sba = find_resolution_choice(&searched)
+        .expect("only after the search and parent tail does CR 903.9a ask the owner");
+    assert_eq!(commander_sba.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_eq!(commander_sba.deciding_player_id, 0);
+    let commander_prompt_id = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the commander SBA choice is pending")
+        .resolution_prompt_id
+        .get();
+    let life_event_index = searched
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::LifeChanged(change))
+                    if change.delta == 3
+            )
+        })
+        .expect("the Program parent tail completed");
+    let searched_card_event_index = searched
+        .events
+        .iter()
+        .position(|event| matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.object_id == searched_card
+                    && moved.destination
+                        == tricerules_proto::ruled::v1::permanent_moved::Destination::Hand as i32
+        ))
+        .expect("the library-search result reached the hand before the tail");
+    let shuffle_event_index = searched
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                    if log.text == "P0 shuffles their library."
+            )
+        })
+        .expect("the search shuffle completes before the tail");
+    let sba_event_index = searched
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                    if choice.choice_kind == ChoiceKind::ResolutionBranch as i32
+                        && choice.deciding_player_id == 0
+            )
+        })
+        .expect("the commander SBA choice is presented after resolution");
+    assert!(searched_card_event_index < life_event_index);
+    assert!(shuffle_event_index < life_event_index);
+    assert!(life_event_index < sba_event_index);
+
+    let mut leave_in_graveyard = submit_resolution_choice(Vec::new());
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        leave_in_graveyard.cmd.as_mut()
+    else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = commander_prompt_id;
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32;
+    answer.selected_branch_index = 1;
+    e.apply_scenario_command(0, &leave_in_graveyard)
+        .expect("leave the commander in its graveyard");
+    assert_eq!(
+        e.state.objects[&commander].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(e.state.pending_resolution.is_none());
+
+    let batches = [&paid, &searched];
+    assert_eq!(
+        batches
+            .iter()
+            .flat_map(|batch| &batch.events)
+            .filter(|event| matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+                    if log.text == "P0 shuffles their library."
+            ))
+            .count(),
+        1,
+        "the Program search completes once before the SBA choice"
+    );
+    assert_ne!(payment_prompt_id, search_prompt_id);
+}
+
+#[test]
 fn authored_soft_counter_resumes_at_its_following_discard_after_declined_payment() {
     let counter = r#"(
         id: "program_counter_then_loot_decline",

@@ -2909,6 +2909,23 @@ fn counter_move_destination_target_filter() -> &'static TargetFilter {
     &FILTER
 }
 
+pub(super) fn validate_resolution_sacrifice_cost(
+    filter: &TargetFilter,
+    source_only: bool,
+) -> Result<(), String> {
+    filter.validate_target_constraints()?;
+    if source_only && filter.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
+        return Err("source-only sacrifice cannot exclude its source".into());
+    }
+    if !filter.all_terminal_filters_match(|leaf| {
+        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+            && leaf.controller == TargetController::You
+    }) {
+        return Err("resolution sacrifice cost must select a permanent you control".into());
+    }
+    Ok(())
+}
+
 impl SpellEffectKind {
     /// Inspect a conditional consumer without changing its outer result context.
     pub(crate) fn result_consuming_amount(&self) -> Option<&Amount> {
@@ -5540,25 +5557,7 @@ impl SpellEffectKind {
                             filter,
                             source_only,
                         } => {
-                            filter.validate_target_constraints()?;
-                            if *source_only
-                                && filter.any_terminal_filter_matches(|leaf| {
-                                    !leaf.excluded_objects.is_empty()
-                                })
-                            {
-                                return Err(
-                                    "source-only sacrifice cannot exclude its source".into()
-                                );
-                            }
-                            if !filter.all_terminal_filters_match(|leaf| {
-                                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                                    && leaf.controller == TargetController::You
-                            }) {
-                                return Err(
-                                    "resolution sacrifice cost must select a permanent you control"
-                                        .into(),
-                                );
-                            }
+                            validate_resolution_sacrifice_cost(filter, *source_only)?;
                         }
                         ResolutionCost::TapPermanents { count, filter, .. } => {
                             if *count == 0 {

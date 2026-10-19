@@ -1,12 +1,12 @@
 //! Exact authored owners for the reusable Scry, search, and Proliferate operations.
 
 use tricerules_cards::primitives::{
-    Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef,
-    CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
-    CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
-    DiscardResultOutcome, PlayerRecipient, ResultType, SearchDestination, SearchSelectionBounds,
-    SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter, TargetKind,
-    ZoneCardFilter,
+    Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer,
+    CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
+    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
+    DiscardResultOutcome, GameCondition, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
+    ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds, SearchZoneSelection,
+    SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -437,4 +437,237 @@ fn authored_karns_bastion_keeps_mana_and_program_proliferate_separate() {
         panic!("Karn's Bastion's second ability is one Proliferate operation");
     };
     assert_perform(proliferate, SpellEffectKind::Proliferate);
+}
+
+fn assert_single_sacrifice_choose<'a>(
+    program: &'a CompiledProgram,
+    expected_branch_id: &str,
+    expected_filter: TargetFilter,
+    expected_source_only: bool,
+) -> &'a CompiledChooseBranch {
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.slots.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [step] = program.body.steps.as_slice() else {
+        panic!("the triggered ability is one Program Choose");
+    };
+    assert_eq!(step.id, "choose_sacrifice");
+    assert!(step.input.is_none());
+    assert!(step.outputs.is_empty());
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &step.kind
+    else {
+        panic!("the triggered ability uses Program Choose");
+    };
+    assert_eq!(choice.as_str(), "sacrifice");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("the Program has one optional sacrifice branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), expected_branch_id);
+    assert_eq!(branch.requirement, CompiledChooseRequirement::Always);
+    assert!(branch.body.yields.is_empty());
+    assert_eq!(
+        branch.cost,
+        ResolutionCost::SacrificePermanent {
+            filter: expected_filter,
+            source_only: expected_source_only,
+        }
+    );
+    branch
+}
+
+#[test]
+fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
+    let registry = tricerules_cards::registry::global();
+    let servant_face = registry
+        .get("servant_of_the_stinger")
+        .expect("Servant of the Stinger")
+        .primary_face();
+    assert_eq!(servant_face.power, Some(1));
+    assert_eq!(servant_face.toughness, Some(3));
+    assert_eq!(
+        servant_face.keywords.as_slice(),
+        &[tricerules_cards::primitives::Keyword::Deathtouch]
+    );
+    let [servant] = servant_face.triggered_abilities.as_slice() else {
+        panic!("Servant keeps its single combat-damage trigger");
+    };
+    assert_eq!(servant.ability_id.as_str(), "triggered_01");
+    assert_eq!(
+        servant.trigger,
+        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer
+    );
+    assert_eq!(
+        servant.intervening_if,
+        Some(GameCondition::CrimesCommittedThisTurn {
+            players: RelativePlayerSet::Controller,
+            min: Some(1),
+            max: None,
+        })
+    );
+    let servant_program = ability_program("servant_of_the_stinger", 0, false);
+    let servant_filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        ..Default::default()
+    };
+    let servant_branch = assert_single_sacrifice_choose(
+        servant_program,
+        "sacrifice_servant_of_the_stinger",
+        servant_filter,
+        true,
+    );
+    let [search] = servant_branch.body.steps.as_slice() else {
+        panic!("a paid sacrifice searches the library");
+    };
+    assert_eq!(search.id, "search_library");
+    assert!(search.input.is_none() && search.outputs.is_empty());
+    let CompiledInstructionKind::Perform(effect) = &search.kind else {
+        panic!("Servant performs its library search after payment");
+    };
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        result_id,
+        selection_bounds,
+    } = effect.as_ref()
+    else {
+        panic!("Servant searches for a card");
+    };
+    assert_eq!(*who, PlayerRecipient::Controller);
+    assert!(!optional);
+    assert_eq!(*count, 1);
+    assert!(count_by_cast_cost.is_none());
+    assert!(filter.is_none());
+    assert!(selection_constraint.is_none());
+    assert!(slots.is_empty());
+    assert_eq!(
+        zones,
+        &SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+    );
+    assert_eq!(*destination, SearchDestination::Hand);
+    assert!(conditional_destination.is_none());
+    assert!(*shuffle);
+    assert!(!reveal);
+    assert!(result_id.is_none());
+    assert_eq!(
+        selection_bounds.as_ref(),
+        Some(&SearchSelectionBounds { min: 1, max: 1 })
+    );
+
+    let avatar_face = registry
+        .get("west_wind_avatar")
+        .expect("West Wind Avatar")
+        .primary_face();
+    assert_eq!(avatar_face.power, Some(7));
+    assert_eq!(avatar_face.toughness, Some(7));
+    assert_eq!(
+        avatar_face.keywords.as_slice(),
+        &[tricerules_cards::primitives::Keyword::Trample]
+    );
+    let [entry, attack, disappear] = avatar_face.triggered_abilities.as_slice() else {
+        panic!("West Wind keeps its two sacrifice triggers and Disappear trigger");
+    };
+    assert_eq!(entry.ability_id.as_str(), "triggered_01");
+    assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert!(entry.intervening_if.is_none());
+    assert_eq!(attack.ability_id.as_str(), "triggered_02");
+    assert_eq!(
+        attack.trigger,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0,
+        }
+    );
+    assert!(attack.intervening_if.is_none());
+    assert_eq!(disappear.ability_id.as_str(), "triggered_03");
+    assert_eq!(
+        disappear.trigger,
+        TriggerCondition::AtBeginningOfEndStep {
+            player: CastTriggerPlayer::Controller,
+        }
+    );
+    assert_eq!(
+        disappear.intervening_if,
+        Some(GameCondition::PermanentLeftBattlefieldThisTurn {
+            controllers: RelativePlayerSet::Controller,
+        })
+    );
+
+    let avatar_filter = TargetFilter {
+        any_of: Some(vec![
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                token: Some(true),
+                ..Default::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                permanent_types: vec![PermanentTypeFilter::Land],
+                ..Default::default()
+            },
+        ]),
+        ..Default::default()
+    };
+    for (index, ability_id) in [(0, "triggered_01"), (1, "triggered_02")] {
+        assert_eq!(
+            avatar_face.triggered_abilities[index].ability_id.as_str(),
+            ability_id
+        );
+        let program = ability_program("west_wind_avatar", index, false);
+        let branch = assert_single_sacrifice_choose(
+            program,
+            "sacrifice_a_token_or_land",
+            avatar_filter.clone(),
+            false,
+        );
+        let [gain_life] = branch.body.steps.as_slice() else {
+            panic!("paying the sacrifice cost gains three life");
+        };
+        assert_eq!(gain_life.id, "gain_life");
+        assert_perform(
+            gain_life,
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            },
+        );
+    }
+
+    let draw_program = ability_program("west_wind_avatar", 2, false);
+    assert_eq!(draw_program.context, EffectContext::Ability);
+    assert!(draw_program.required_inputs.is_empty());
+    assert!(draw_program.target_bindings.is_empty());
+    assert!(draw_program.slots.is_empty());
+    let [draw] = draw_program.body.steps.as_slice() else {
+        panic!("Disappear is one direct draw operation");
+    };
+    assert_eq!(draw.id, "draw");
+    assert_perform(
+        draw,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    );
 }
