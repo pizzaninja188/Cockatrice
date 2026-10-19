@@ -6605,6 +6605,104 @@ fn program_accepts_resultless_proliferate_leaf() {
 }
 
 #[test]
+fn program_admits_only_exact_private_chosen_library_look() {
+    let valid = program_fixture(
+        r#"(steps: [
+            (id: "look", bind: [], input: None,
+             kind: Perform(LookChooseToHand(
+                count: 3, filter: None, min: 2, max: 2,
+                reveal: false, bottom_order: Chosen,
+             ))),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("the fixed private chosen library look is a resultless spell-program leaf");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact spell face retains its compiled program");
+    assert_eq!(program.context, crate::EffectContext::Spell);
+    assert!(program.slots.is_empty());
+    let [step] = program.body.steps.as_slice() else {
+        panic!("the program has one library-look instruction");
+    };
+    assert!(step.input.is_none());
+    assert!(step.outputs.is_empty());
+    assert!(matches!(
+        &step.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::LookChooseToHand {
+                count: 3,
+                filter: None,
+                min: 2,
+                max: 2,
+                reveal: false,
+                bottom_order: crate::primitives::LibraryBottomOrder::Chosen,
+            })
+    ));
+
+    for (label, effect) in [
+        (
+            "filtered",
+            "count: 3, filter: Some((card_type: Some(Instant))), min: 2, max: 2, reveal: false, bottom_order: Chosen",
+        ),
+        (
+            "revealed",
+            "count: 3, filter: None, min: 2, max: 2, reveal: true, bottom_order: Chosen",
+        ),
+        (
+            "random-bottom",
+            "count: 3, filter: None, min: 2, max: 2, reveal: false, bottom_order: Random",
+        ),
+        (
+            "optional",
+            "count: 3, filter: None, min: 0, max: 1, reveal: false, bottom_order: Chosen",
+        ),
+        (
+            "non-exact",
+            "count: 3, filter: None, min: 1, max: 2, reveal: false, bottom_order: Chosen",
+        ),
+    ] {
+        let definition = program_fixture(&format!(
+            r#"(steps: [(id: "look", bind: [], input: None,
+                kind: Perform(LookChooseToHand({effect})) )], yields: [])"#
+        ));
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+            "{label} library-look program shape must remain outside the admitted subset"
+        );
+    }
+
+    let result_binding = program_fixture(
+        r#"(steps: [(id: "look", bind: ["looked"], input: None,
+            kind: Perform(LookChooseToHand(
+                count: 3, filter: None, min: 2, max: 2,
+                reveal: false, bottom_order: Chosen,
+            )))], yields: [])"#,
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&result_binding], &[]).is_err(),
+        "the resultless library-look leaf cannot publish a result binding"
+    );
+
+    let ability = ability_program_fixture(
+        "look_choose_ability_fixture",
+        r#"(steps: [(id: "look", bind: [], input: None,
+            kind: Perform(LookChooseToHand(
+                count: 3, filter: None, min: 2, max: 2,
+                reveal: false, bottom_order: Chosen,
+            )))], yields: [])"#,
+    );
+    assert!(
+        ability.is_err(),
+        "the private library-look program leaf is spell-only"
+    );
+}
+
+#[test]
 fn program_accepts_only_supported_resultless_reflexive_trigger_shapes() {
     let body = |effect: &str| {
         format!(

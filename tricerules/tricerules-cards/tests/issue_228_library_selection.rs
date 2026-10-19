@@ -1,7 +1,8 @@
 use tricerules_cards::primitives::{
-    EffectContext, LibraryBottomOrder, SpellEffectKind, ZoneCardFilter,
+    CompiledInstructionKind, CompiledProgramCondition, EffectContext, GameCondition,
+    LibraryBottomOrder, SpellEffectKind, ZoneCardFilter,
 };
-use tricerules_cards::AbilityPresentation;
+use tricerules_cards::ProgramOwnerId;
 
 #[test]
 fn issue_228_bounds_and_unfiltered_selection_are_validated() {
@@ -44,21 +45,48 @@ fn issue_228_cards_and_existing_revealed_consumers_are_complete() {
         assert_eq!(card.primary_face().mana_cost.to_string(), mana);
         assert_eq!(card.primary_face().types, ["Sorcery"]);
     }
-    let [SpellEffectKind::ChooseResolutionBranch { branches, .. }] = registry
-        .get("flow_state")
-        .unwrap()
-        .primary_face()
-        .spell_effect
-        .as_slice()
-    else {
-        panic!("automatic conditional choice")
+    let flow_face = registry.get("flow_state").unwrap().primary_face();
+    assert!(flow_face.spell_effect.is_empty());
+    let flow_owner = ProgramOwnerId::face("flow_state", flow_face.face_id.clone());
+    let flow_program = registry
+        .compiled_program_for_owner(&flow_owner)
+        .expect("Flow State has a compiled face-owned Program");
+    assert_eq!(flow_program.owner, flow_owner);
+    let [gate] = flow_program.body.steps.as_slice() else {
+        panic!("Flow State checks its graveyard when the spell resolves");
     };
-    assert_eq!(branches.len(), 2);
-    for branch in branches {
-        assert_eq!(
-            branch.presentation,
-            AbilityPresentation::OracleLines(vec![1])
-        );
+    let CompiledInstructionKind::If { condition, yes, no } = &gate.kind else {
+        panic!("Flow State uses an automatic ProgramIf");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        CompiledProgramCondition::Game(GameCondition::AllOf(conditions))
+            if conditions.len() == 2
+    ));
+    assert!(yes.yields.is_empty() && no.yields.is_empty());
+    for (block, expected_count) in [(yes, 2), (no, 1)] {
+        let [look] = block.steps.as_slice() else {
+            panic!("each Flow State branch performs one library look");
+        };
+        let CompiledInstructionKind::Perform(operation) = &look.kind else {
+            panic!("each Flow State branch performs its private library look");
+        };
+        let SpellEffectKind::LookChooseToHand {
+            count,
+            filter,
+            min,
+            max,
+            reveal,
+            bottom_order,
+        } = operation.as_ref()
+        else {
+            panic!("each Flow State branch performs its private library look");
+        };
+        assert_eq!(*count, 3);
+        assert!(filter.is_none());
+        assert_eq!((*min, *max), (expected_count, expected_count));
+        assert!(!reveal);
+        assert_eq!(*bottom_order, LibraryBottomOrder::Chosen);
     }
     for id in [
         "commune_with_nature",

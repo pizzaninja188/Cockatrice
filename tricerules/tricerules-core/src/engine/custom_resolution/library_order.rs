@@ -598,7 +598,7 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
         }
 
         let PendingLibraryLookStage::ChooseToHand {
@@ -644,7 +644,7 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
         }
 
         if remaining.len() <= 1 {
@@ -654,7 +654,7 @@ impl GameEngine {
             for &oid in &remaining {
                 self.state.players[idx].library.push_back(oid);
             }
-            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
         }
 
         let n = remaining.len() as u32;

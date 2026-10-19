@@ -6130,6 +6130,7 @@ pub(super) fn look_choose_to_hand(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let parked_stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let controller = cx.controller;
     let Some(idx) = engine.state.player_idx(controller) else {
@@ -6229,7 +6230,7 @@ pub(super) fn look_choose_to_hand(
             choice_kind: custom::ChoiceKind::LibraryLook,
         },
         continuation: ResolutionContinuation::LibraryLook {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: parked_stack,
             candidates: looked
                 .iter()
                 .map(|&oid| {

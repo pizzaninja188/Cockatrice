@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "05a039ad-1689-4d13-b393-6c1219583b5d",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "sleight_of_hand",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/LookChooseToHand"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/LookChooseToHand"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_sleight_of_hand_uses_exact_private_library_look_program",
+      "covers": "Exact Sleight of Hand owner uses one unfiltered, unrevealed exact-one selection from the top two."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_sleight_requires_one_private_card",
+      "covers": "The controller privately chooses exactly one of the top two and the other card goes to the library bottom."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_short_libraries_do_as_much_as_possible_without_drawing",
+      "covers": "Flow State and Sleight of Hand handle empty and short libraries without drawing."
+    }
+  ]
+}

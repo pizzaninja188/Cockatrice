@@ -121,6 +121,146 @@ fn assert_no_public_library_names(batch: &RuledEventBatch) {
     }
 }
 
+/// Synthetic-only fixture for proving a parked program resumes after its private library choice.
+/// The life-gain tail is not part of either Oracle owner definition.
+fn look_choose_tail_fixture(card_id: &str, card_name: &str, count: u32) -> String {
+    format!(
+        r#"(
+          id: "{card_id}", name: "{card_name}", face_id: "{card_id}",
+          mana_cost: "{{0}}", types: ["Instant"],
+          spell_program: Some((body: (steps: [
+            (id: "private_look", bind: [], input: None,
+             kind: Perform(LookChooseToHand(
+                count: {count}, filter: None, min: 1, max: 1,
+                reveal: false, bottom_order: Chosen,
+             ))),
+            (id: "tail_life", bind: [], input: None,
+             kind: Perform(GainLife(amount: 7))),
+          ], yields: []))),
+        )"#
+    )
+}
+
+fn look_choose_tail_engine(seed: u64, card_id: &str) -> GameEngine {
+    let three = look_choose_tail_fixture(
+        "look_choose_tail_three_fixture",
+        "Look Choose Tail Three Fixture",
+        3,
+    );
+    let two = look_choose_tail_fixture(
+        "look_choose_tail_two_fixture",
+        "Look Choose Tail Two Fixture",
+        2,
+    );
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                three.as_str(),
+                two.as_str(),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .expect("the private library-look tail fixtures compile"),
+    ));
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("forest", &[card_id]),
+            vec!["island".into(); 20],
+        ]),
+        true,
+    )
+    .expect("the private library-look tail fixture engine starts");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, card_id);
+    engine
+}
+
+#[test]
+fn issue_92_program_library_look_resumes_tail_after_chosen_bottom_order() {
+    let card = "look_choose_tail_three_fixture";
+    let mut engine = look_choose_tail_engine(22831, card);
+    let top = seat_on_top(&mut engine, 0, &["forest", "island", "mountain"]);
+    let life_before = engine.state.players[0].life;
+    let batch = cast_instant_and_resolve(&mut engine, 0, card, ManaGift::default());
+    let pick = find_resolution_choice(&batch).expect("the private selection prompt is offered");
+    assert_eq!((pick.min, pick.max), (1, 1));
+    assert_eq!(pick.candidate_object_ids, top);
+    assert_no_public_library_names(&batch);
+    assert_eq!(engine.state.players[0].life, life_before);
+
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
+        .expect("the selected card moves to hand");
+    assert_no_public_library_names(&batch);
+    let order = find_resolution_choice(&batch).expect("two remaining cards need chosen order");
+    assert!(order.ordered);
+    assert_eq!((order.min, order.max), (2, 2));
+    assert_eq!(order.candidate_object_ids, vec![top[1], top[2]]);
+    assert_eq!(engine.state.players[0].life, life_before);
+
+    let bottom_order = vec![top[2], top[1]];
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(bottom_order.clone()))
+        .expect("the chosen remainder order completes the library look");
+    assert_no_public_library_names(&batch);
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.players[0].hand.contains(&top[0]));
+    let library: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+    assert_eq!(&library[library.len() - 2..], bottom_order.as_slice());
+    assert_eq!(engine.state.players[0].life, life_before + 7);
+}
+
+#[test]
+fn issue_92_program_library_look_resumes_tail_with_one_card_to_bottom() {
+    let card = "look_choose_tail_two_fixture";
+    let mut engine = look_choose_tail_engine(22832, card);
+    let top = seat_on_top(&mut engine, 0, &["forest", "island"]);
+    let life_before = engine.state.players[0].life;
+    let batch = cast_instant_and_resolve(&mut engine, 0, card, ManaGift::default());
+    let pick = find_resolution_choice(&batch).expect("the private selection prompt is offered");
+    assert_eq!((pick.min, pick.max), (1, 1));
+    assert_eq!(pick.candidate_object_ids, top);
+    assert_no_public_library_names(&batch);
+    assert_eq!(engine.state.players[0].life, life_before);
+
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
+        .expect("the selected card moves to hand and the lone remainder is bottomed");
+    assert_no_public_library_names(&batch);
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.players[0].hand.contains(&top[0]));
+    assert_eq!(engine.state.players[0].library.back(), Some(&top[1]));
+    assert_eq!(engine.state.players[0].life, life_before + 7);
+}
+
+#[test]
+fn issue_92_program_library_look_with_empty_library_continues_tail_once() {
+    let card = "look_choose_tail_three_fixture";
+    let mut engine = look_choose_tail_engine(22833, card);
+    engine.state.players[0].library.clear();
+    let life_before = engine.state.players[0].life;
+
+    let batch = cast_instant_and_resolve(&mut engine, 0, card, ManaGift::default());
+
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.players[0].library.is_empty());
+    assert!(!engine.state.players[0].has_lost);
+    assert_eq!(engine.state.players[0].life, life_before + 7);
+}
+
 #[test]
 fn issue_228_flow_state_checks_each_graveyard_type_and_orders_the_remaining_cards() {
     for (instant, sorcery) in [(false, false), (true, false), (false, true), (true, true)] {
@@ -255,6 +395,12 @@ fn issue_228_illegal_and_stale_choices_are_atomic_in_both_stages() {
     let mut e = issue_228_engine("flow_state");
     let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"]);
     issue_228_resolve(&mut e, "flow_state");
+    let before = serde_json::to_string(&e.state).unwrap();
+    assert!(matches!(
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![top[0]])),
+        Err(tricerules_core::EngineError::Illegal(_))
+    ));
+    assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     let mut decline = submit_resolution_choice(vec![]);
     let Some(Cmd::SubmitResolutionChoice(answer)) = &mut decline.cmd else {
         unreachable!()
@@ -280,6 +426,12 @@ fn issue_228_illegal_and_stale_choices_are_atomic_in_both_stages() {
     *e.state.zone_change_generation.get_mut(&top[2]).unwrap() -= 1;
     e.apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .unwrap();
+    let before = serde_json::to_string(&e.state).unwrap();
+    assert!(matches!(
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![top[1], top[2]])),
+        Err(tricerules_core::EngineError::Illegal(_))
+    ));
+    assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     for chosen in [vec![top[1]], vec![top[1], top[1]], vec![top[0], top[2]]] {
         let before = serde_json::to_string(&e.state).unwrap();
         assert!(e

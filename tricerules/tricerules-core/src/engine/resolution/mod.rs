@@ -9129,8 +9129,58 @@ mod attached_subject_tests {
     #[test]
     fn issue_228_dual_type_card_and_third_seat_resume_the_tail_once() {
         for dual_type in [false, true] {
+            // This synthetic spell copies Flow State's graveyard gate and private look,
+            // then adds a life-gain tail so both completion paths prove cursor resumption.
+            let registry = Box::leak(Box::new(
+                CardRegistry::from_chunks_and_tokens(
+                    &[
+                        r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+                        r#"(id: "dual", name: "Dual", face_id: "dual", mana_cost: "{U}", types: ["Instant", "Sorcery"])"#,
+                        r#"(
+                            id: "flow_state_tail_fixture",
+                            name: "Flow State tail fixture",
+                            face_id: "flow_state_tail_fixture",
+                            mana_cost: "{1}{U}",
+                            types: ["Sorcery"],
+                            spell_program: Some((body: (steps: [
+                                (id: "graveyard_gate", bind: [], input: None,
+                                 kind: If(
+                                   condition: AllOf([
+                                     GraveyardAggregate(
+                                       owners: Controller, aggregate: CardCount,
+                                       filter: Some((card_type: Some(Instant))), min: Some(1), max: None,
+                                     ),
+                                     GraveyardAggregate(
+                                       owners: Controller, aggregate: CardCount,
+                                       filter: Some((card_type: Some(Sorcery))), min: Some(1), max: None,
+                                     ),
+                                   ]),
+                                   yes: (steps: [
+                                     (id: "take_two", bind: [], input: None,
+                                      kind: Perform(LookChooseToHand(
+                                        count: 3, filter: None, min: 2, max: 2,
+                                        reveal: false, bottom_order: Chosen,
+                                      ))),
+                                   ], yields: []),
+                                   no: (steps: [
+                                     (id: "take_one", bind: [], input: None,
+                                      kind: Perform(LookChooseToHand(
+                                        count: 3, filter: None, min: 1, max: 1,
+                                        reveal: false, bottom_order: Chosen,
+                                      ))),
+                                   ], yields: []),
+                                 )),
+                                (id: "tail_gain", bind: [], input: None,
+                                 kind: Perform(GainLife(amount: 2))),
+                            ], yields: []))),
+                        )"#,
+                    ],
+                    &[],
+                )
+                .expect("synthetic Flow State Program fixture compiles"),
+            ));
             let mut engine = GameEngine::new(
-                tricerules_cards::registry::global(),
+                registry,
                 22803,
                 &[10, 20],
                 20,
@@ -9140,24 +9190,25 @@ mod attached_subject_tests {
             .unwrap();
             engine.state.players.push(PlayerState::new(30, 20));
             engine.state.active_player_idx = 1;
-            let mut effects = engine
-                .registry
-                .get("flow_state")
-                .unwrap()
-                .primary_face()
-                .spell_effect
-                .clone();
-            effects.push(SpellEffectKind::GainLife {
-                amount: Amount::Fixed(2),
-            });
             // A single fixture card with both printed types must satisfy both graveyard
             // predicates. It is deliberately not a new supported real card.
-            engine.registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
-                r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
-                r#"(id: "dual", name: "Dual", face_id: "dual", mana_cost: "{U}", types: ["Instant", "Sorcery"])"#,
-                r#"(id: "source", name: "Source", face_id: "source", types: ["Creature"], power: 1, toughness: 1)"#,
-            ], &[]).unwrap()));
-            let source = add_battlefield_object(&mut engine, 30, "source");
+            let source = add_battlefield_object(&mut engine, 30, "flow_state_tail_fixture");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Hand,
+                Some(30),
+            )
+            .unwrap();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Stack,
+                None,
+            )
+            .unwrap();
             let mut library = Vec::new();
             for _ in 0..3 {
                 let oid = add_battlefield_object(&mut engine, 30, "forest");
@@ -9176,14 +9227,34 @@ mod attached_subject_tests {
                 )
                 .unwrap();
             }
-            let mut item = quantity_item(source, effects);
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0);
+            let mut item = engine.observer_return_item(source, 0);
+            item.id = source;
             item.controller = 30;
             item.source_owner = Some(30);
-            item.card_id = "source".into();
-            let (effects, label) = engine.build_resolution_effects(&item);
-            engine
-                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
-                .unwrap();
+            item.card_id = "flow_state_tail_fixture".into();
+            item.ability_text = None;
+            item.is_triggered = false;
+            item.is_copy = false;
+            item.face_index = 0;
+            item.source_permanent_id = None;
+            item.cast_by = Some(30);
+            item.cast_occurrence = Some(crate::state::StackObjectRef {
+                object_id: source,
+                zone_change_generation: Some(generation),
+            });
+            engine.state.stack.push(item);
+            assert_eq!(
+                engine
+                    .resolve_top_of_stack(&mut Vec::new())
+                    .expect("synthetic Flow State Program reaches its library choice"),
+                ResolutionProgress::Parked
+            );
             let pending = engine.state.pending_resolution.as_ref().unwrap();
             assert_eq!(pending.deciding_player, 30);
             let count = if dual_type { 2 } else { 1 };
@@ -9222,6 +9293,7 @@ mod attached_subject_tests {
                 engine.state.players[2].life, 22,
                 "duplicate submission cannot replay the tail"
             );
+            assert!(engine.state.stack.is_empty());
         }
     }
 

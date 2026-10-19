@@ -14,10 +14,10 @@
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
     CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
-    EffectSubject, GameCondition, LifeAmount, PlayerRecipient, RelativePlayerSet,
-    ResolutionBranchRequirement, ResolutionCost, SearchDestination, SearchSelectionBounds,
-    SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind,
-    TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
+    EffectSubject, GameCondition, LibraryBottomOrder, LifeAmount, PlayerRecipient,
+    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, SearchDestination,
+    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
+    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -1399,6 +1399,30 @@ fn validate_and_result_types(
             // Keep the ordinary validator for positive counts and preserve its context checks.
             if !matches!(count, Amount::Fixed(0)) {
                 effect.validate(context)?;
+            }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::LookChooseToHand {
+            filter,
+            min,
+            max,
+            reveal,
+            bottom_order,
+            ..
+        } => {
+            effect.validate(context)?;
+            if context != EffectContext::Spell {
+                return Err("LookChooseToHand in spell_program is spell-only".into());
+            }
+            if filter.is_some()
+                || *reveal
+                || *bottom_order != LibraryBottomOrder::Chosen
+                || *min == 0
+                || min != max
+            {
+                return Err(
+                    "LookChooseToHand in spell_program requires an exact positive unfiltered, unrevealed, chosen-order selection".into(),
+                );
             }
             Ok(Vec::new())
         }

@@ -78,6 +78,16 @@ filter, and control before committing the shared cost transaction; optional decl
 offer with no selectable branch follows `Otherwise`, and the paid body and parent cursor resume
 once. Other legacy sacrifice callers remain on their existing path. This adds no card admission or
 protocol or client change.
+The bounded 2026-10-19 `LookChooseToHand` increment adds a resultless leaf only to spell Programs
+with no filter, no reveal, chosen bottom ordering, and a fixed positive exact selection. Sleight of
+Hand uses the two-card, choose-one form; Flow State uses `ProgramIf` to choose its two-card or
+one-card form after checking the controller's graveyard for an instant and a sorcery when that
+instruction resolves. The branch remains fixed while the private library choice suspends. Moving
+cards to hand is not drawing (CR 121.5); the owner orders cards placed together on the library bottom
+(CR 401.4). Empty libraries continue without a choice, and a zero- or one-card remainder skips the
+order prompt. The existing private `LIBRARY_LOOK` flow and physical candidate binding are reused;
+filtered, revealed, optional, random-bottom, and ability-owned forms remain on the legacy effect-list
+path. This adds no card admission or protocol or client change (CR 608.2c, 608.2h).
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

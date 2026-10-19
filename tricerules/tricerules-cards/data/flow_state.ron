@@ -6,21 +6,33 @@
   face_id: "flow_state",
   mana_cost: "{1}{U}",
   types: ["Sorcery"],
-  spell_effect: [ChooseResolutionBranch(
-    selection: FirstApplicable,
-    branches: [
-      (
-        branch_id: "take_two", presentation: OracleLines([1]), cost: None,
-        requirement: GameCondition(AllOf([
-          GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((card_type: Some(Instant))), min: Some(1)),
-          GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((card_type: Some(Sorcery))), min: Some(1)),
-        ])),
-        effects: [LookChooseToHand(count: 3, min: 2, max: 2, reveal: false, bottom_order: Chosen)],
-      ),
-      (
-        branch_id: "take_one", presentation: OracleLines([1]), cost: None, requirement: Always,
-        effects: [LookChooseToHand(count: 3, min: 1, max: 1, reveal: false, bottom_order: Chosen)],
-      ),
-    ],
-  )],
+  spell_program: Some((body: (steps: [
+    (id: "graveyard_gate", bind: [], input: None,
+     kind: If(
+       condition: AllOf([
+         GraveyardAggregate(
+           owners: Controller, aggregate: CardCount,
+           filter: Some((card_type: Some(Instant))), min: Some(1), max: None,
+         ),
+         GraveyardAggregate(
+           owners: Controller, aggregate: CardCount,
+           filter: Some((card_type: Some(Sorcery))), min: Some(1), max: None,
+         ),
+       ]),
+       yes: (steps: [
+         (id: "take_two", bind: [], input: None,
+          kind: Perform(LookChooseToHand(
+            count: 3, filter: None, min: 2, max: 2,
+            reveal: false, bottom_order: Chosen,
+          ))),
+       ], yields: []),
+       no: (steps: [
+         (id: "take_one", bind: [], input: None,
+          kind: Perform(LookChooseToHand(
+            count: 3, filter: None, min: 1, max: 1,
+            reveal: false, bottom_order: Chosen,
+          ))),
+       ], yields: []),
+     )),
+  ], yields: []))),
 )

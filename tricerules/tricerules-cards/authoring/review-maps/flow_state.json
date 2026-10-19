@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "oracle_id": "e7194bca-0cf4-4a86-8b84-d2f9219a08b3",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "flow_state",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/If/condition",
+        "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If"
+    },
+    {
+      "symbol": "GameCondition::AllOf",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/condition/AllOf"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/condition/AllOf/0/GraveyardAggregate"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/condition/AllOf/1/GraveyardAggregate"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/LookChooseToHand"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0/kind/Perform/LookChooseToHand"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_flow_state_uses_resolution_time_graveyard_program_if",
+      "covers": "Exact Flow State owner, controller graveyard Instant and Sorcery checks, and the two-card versus one-card ProgramIf branches."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_flow_state_checks_each_graveyard_type_and_orders_the_remaining_cards",
+      "covers": "Each graveyard type independently selects the one-card branch; both types select two, and the owner orders the remaining cards."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_flow_state_condition_is_evaluated_at_resolution_and_then_locked",
+      "covers": "The condition uses graveyard state at resolution and remains fixed while the private library choice is pending."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_short_libraries_do_as_much_as_possible_without_drawing",
+      "covers": "Flow State and Sleight of Hand handle empty and short libraries without drawing."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_illegal_and_stale_choices_are_atomic_in_both_stages",
+      "covers": "Wrong-actor, illegal, and stale answers at both the private selection and bottom-order stages leave serialized state unchanged."
+    },
+    {
+      "test": "scenario issue_92_library_choice::issue_228_two_card_selection_rejects_duplicates_and_replays_deterministically",
+      "covers": "The two-card branch rejects duplicate physical objects and accepted choice order replays deterministically."
+    }
+  ]
+}

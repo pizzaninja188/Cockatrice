@@ -282,6 +282,18 @@ no input result and binds or yields no output. The reviewed owners are Cavern St
 trigger and Greedy Freebooter's Scry 1 followed by its Treasure creation. This bounded Program subset
 does not add trigger-observer support for `Whenever you scry`, change who can see or answer the
 existing private prompt, or admit additional card definitions.
+`LookChooseToHand` is a resultless leaf only for spell Programs with `filter: None`,
+`reveal: false`, `bottom_order: Chosen`, and a fixed positive exact selection (`min == max`)
+within the looked count. It offers the controller the existing private `LIBRARY_LOOK` choice,
+then completes the chosen bottom-order prompt before resuming the same Program cursor. A zero- or
+one-card remainder completes without the order prompt; an empty library continues without a choice
+or draw. Moving a library card to its owner's hand without the word “draw” is not a draw (CR
+121.5), and the owner may order cards placed at the same library position (CR 401.4). Flow State's
+`ProgramIf` checks the controller's current graveyard for both card types when that instruction
+resolves and keeps that branch through the private look (CR 608.2c, 608.2h). Filtered, revealed,
+optional, random-bottom, and ability-owned `LookChooseToHand` forms remain available on the legacy
+effect-list path only; this Program subset does not widen those forms or the existing private
+candidate projection.
 `Proliferate` is an accepted resultless leaf: Ezuri, Stalker of Spheres uses it twice in one
 paid branch, with each instruction retaining its own recipient choice and trigger event.
 `CreateReflexiveTrigger` is accepted as a resultless leaf in an ability-owned Program when its
@@ -910,12 +922,13 @@ hand. This uses the private hand picker and discard continuation, not `ChooseRes
 The one-card alternative is a resolution-time cost (CR 118.12a); Library of Leng cannot replace
 it, while madness still applies. The ordinary discard instruction retains effect replacements.
 
-Use `LookChooseToHand(count: 2, min: 1, max: 1, reveal: false, bottom_order: Chosen)`
-for Sleight of Hand's mandatory private selection. Omit `filter` to allow any card, or use
-`filter: Some((...))` for a printed-card predicate. Bounds clamp to available matches; these
-cards are put into hand, not drawn. Existing omitted bounds and reveal fields retain optional
-selection of one revealed card. Flow State uses costless `FirstApplicable` branches with an
-`AllOf` condition for the two graveyard types, evaluated once as the instruction resolves.
+Use a direct Program `Perform(LookChooseToHand(count: 2, filter: None, min: 1, max: 1,
+reveal: false, bottom_order: Chosen))` for Sleight of Hand's mandatory private selection.
+Flow State uses a `ProgramIf` to select the exact two-card or one-card pick after checking the
+controller's graveyard for both card types at resolution. The Program-only shape and its limits
+are specified above. These cards are put into hand, not drawn; the owner orders any multi-card
+remainder. Existing effect-list callers retain filtered, revealed, optional, and random-bottom
+forms, which are not admitted as Program leaves.
 
 1. Name two real cards or two mechanics supported by the proposed shape.
 2. Put the variant in the appropriate `tricerules-card-model/src/primitives/` module.

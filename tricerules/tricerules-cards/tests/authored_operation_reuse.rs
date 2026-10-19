@@ -4,10 +4,10 @@ use tricerules_cards::primitives::{
     Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer,
     CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
     CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, DiscardQuantity,
-    DiscardResultOutcome, GameCondition, LifeAmount, PermanentTypeFilter, PlayerRecipient,
-    RelativePlayerSet, ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds,
-    SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter, TargetKind,
-    TriggerCondition, ZoneCardFilter,
+    DiscardResultOutcome, GameCondition, GraveyardAggregate, LibraryBottomOrder, LifeAmount,
+    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost, ResultType,
+    SearchDestination, SearchSelectionBounds, SearchZoneSelection, SpellEffectKind,
+    TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -92,6 +92,23 @@ fn assert_perform_effect(step: &CompiledInstruction, expected: SpellEffectKind) 
 fn assert_perform(step: &CompiledInstruction, expected: SpellEffectKind) {
     assert!(step.outputs.is_empty());
     assert_perform_effect(step, expected);
+}
+
+fn assert_single_look_choose(steps: &[CompiledInstruction], count: u32, min: u32, max: u32) {
+    let [step] = steps else {
+        panic!("the block has one direct library-look operation");
+    };
+    assert_perform(
+        step,
+        SpellEffectKind::LookChooseToHand {
+            count,
+            filter: None,
+            min,
+            max,
+            reveal: false,
+            bottom_order: LibraryBottomOrder::Chosen,
+        },
+    );
 }
 
 fn assert_single_search(
@@ -210,6 +227,60 @@ fn assert_flaring_cinder_optional_discard_program(
             count: Amount::Fixed(1),
         },
     );
+}
+
+#[test]
+fn authored_sleight_of_hand_uses_exact_private_library_look_program() {
+    let program = face_program("sleight_of_hand");
+    assert_spell_program(program);
+    assert_single_look_choose(&program.body.steps, 2, 1, 1);
+}
+
+#[test]
+fn authored_flow_state_uses_resolution_time_graveyard_program_if() {
+    let program = face_program("flow_state");
+    assert_spell_program(program);
+    assert!(program.body.yields.is_empty());
+    let [gate] = program.body.steps.as_slice() else {
+        panic!("Flow State has one automatic graveyard condition");
+    };
+    assert!(gate.input.is_none());
+    assert!(gate.outputs.is_empty());
+    let CompiledInstructionKind::If { condition, yes, no } = &gate.kind else {
+        panic!("Flow State uses ProgramIf rather than a player-selected branch");
+    };
+    let CompiledProgramCondition::Game(GameCondition::AllOf(conditions)) = condition.as_ref()
+    else {
+        panic!("Flow State checks both graveyard card types at resolution");
+    };
+    assert_eq!(conditions.len(), 2);
+    for (condition, expected_type) in conditions
+        .iter()
+        .zip([CardTypeFilter::Instant, CardTypeFilter::Sorcery])
+    {
+        let GameCondition::GraveyardAggregate {
+            owners,
+            aggregate,
+            filter,
+            min,
+            max,
+        } = condition
+        else {
+            panic!("each Flow State condition counts cards in a graveyard");
+        };
+        assert_eq!(*owners, RelativePlayerSet::Controller);
+        assert_eq!(*aggregate, GraveyardAggregate::CardCount);
+        assert_eq!(
+            filter.as_ref().and_then(|filter| filter.card_type),
+            Some(expected_type)
+        );
+        assert_eq!(*min, Some(1));
+        assert_eq!(*max, None);
+    }
+    assert!(yes.yields.is_empty());
+    assert!(no.yields.is_empty());
+    assert_single_look_choose(&yes.steps, 3, 2, 2);
+    assert_single_look_choose(&no.steps, 3, 1, 1);
 }
 
 #[test]
