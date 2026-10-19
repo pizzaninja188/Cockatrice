@@ -128,6 +128,37 @@ choice. When the captured spell or ability is already absent, the payment option
 CR 118.12a and the counter attempt is impossible under CR 609.3; applying that rule to an absent
 stack object is an inference rather than a direct ruling. This ports existing owners only and adds
 no card admissions or protobuf, relay, or client changes.
+The bounded 2026-10-19 Gearbane Orangutan port authors both siblings of its triggered modal
+ability as resultless Programs. Mode 1 binds the exact `Destroy(Chosen(AnyPermanent, Artifact))`
+subject to its own zero-or-one target group; mode 2 keeps a mandatory controller `Choose` with a
+`SacrificePermanent(AnyPermanent, You, Artifact)` cost and one `PutCounters(PlusOnePlusOne, 2,
+Source)` body. The compiler admits no other Program Destroy filter or subject. The shared resolution
+pipeline applies its stack-wide target-legality check before dispatch (CR 608.2b), then the common
+Destroy operation follows CR 701.8a-c. The payer controls the sacrificed permanent (CR 701.21a),
+and the tail checks whether payment began, independent of the resulting event (CR 118.12); the
++1/+1 counters follow CR 122.1a. The source-counter tail addresses the original battlefield
+incarnation; a card that leaves and returns is a new object and gets no old counters (CR 400.7).
+The existing Destroy and sacrifice operations are reused. The shared Program cost offer now honors
+`Choose.optional`: Gearbane's mandatory payment requires one current artifact and rejects Decline
+or an empty answer atomically. No protobuf, relay, or client change is needed. Abrade and Ancient
+Grudge remain existing Destroy operation users. Reuse the shared destruction proofs in
+`destruction_tests.rs`:
+`issue_196_destroy_receipts_and_public_moves_use_the_actual_destination_and_owner` and
+`issue_196_survivors_keep_identity_and_only_regeneration_consumes_a_shield`. The generic paid
+branch proofs in `resolution/program.rs` include
+`program_choose_sacrifice_permanent_cost_is_offered_to_controller` and
+`program_choose_sacrifice_payment_rejects_wrong_and_duplicate_objects_atomically`. The synthetic
+`synthetic_program_choose_required_permanent_payment_restores_after_observer_return` fixture saves
+the mandatory cost offer across an observer-return restoration with its candidates unchanged; it
+checks the fresh prompt ID, mandatory min/no-decline offer, atomic rejection of Decline/empty
+submissions, and that payment plus both program tails run once. It is an internal continuation
+fixture, not a naturally reachable Gearbane interaction: Myr Retriever's observer trigger queues
+after the destroy Program completes. The separate
+`program_choose_sacrifice_payment_refreshes_returned_candidate_generation` fixture checks that a
+changed permanent generation refreshes the candidates and prompt. The existing
+`synthetic_legendary_sacrifice_program_finishes_search_and_tail_before_903_9a` remains the
+post-Program Commander SBA ordering reference: its Commander choice follows Program completion.
+Gearbane's scenarios cover its exact printed modes.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

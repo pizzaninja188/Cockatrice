@@ -6787,6 +6787,185 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn authored_program_destroy_resumes_its_sentinel_after_immediate_aura_return() {
+        let program_source = r#"(
+            id: "authored_program_destroy_tail",
+            name: "Authored Program Destroy Tail",
+            face_id: "authored_program_destroy_tail",
+            mana_cost: "{0}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield,
+                effect: [],
+                program: Some((body: (steps: [
+                    (id: "destroy_artifact", kind: Perform(Destroy(subject: Chosen(
+                        (kind: AnyPermanent, permanent_types: [Artifact])
+                    )))),
+                    (id: "sentinel_life", kind: Perform(GainLife(amount: 1))),
+                ], yields: []), target_bindings: [
+                    (instruction_id: "destroy_artifact", role: Subject, target_group_index: 0),
+                ])),
+                modal: None,
+                targeting: Some((groups: [(min: 1, max: 1,
+                    prompt: "Choose target artifact", effect_indices: [])])),
+                may: false,
+                intervening_if: None,
+                triggers_only_once: false,
+                max_triggers_per_turn: None,
+            )]
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    program_source,
+                    include_str!("../../../../tricerules-cards/data/banishing_light.ron"),
+                    include_str!("../../../../tricerules-cards/data/pacifism.ron"),
+                    include_str!("../../../../tricerules-cards/data/grizzly_bears.ron"),
+                ],
+                &[],
+            )
+            .expect("the exact targeted Destroy Program fixture compiles"),
+        ));
+        let decks = Some(vec![vec!["grizzly_bears".into(); 10]; 2]);
+        let mut engine = GameEngine::new(registry, 38_132, &[0, 1], 20, decks, true)
+            .expect("Destroy observer-boundary engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        clear_observer_restore_starting_zones(&mut engine);
+
+        let target = add_battlefield_object(&mut engine, 0, "banishing_light");
+        let timestamp = engine.state.command_index;
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(target),
+                kind: tricerules_cards::ContinuousEffectKind::Layer4AddTypes(
+                    tricerules_cards::TypeLineAddition {
+                        card_types: vec![tricerules_cards::PermanentTypeFilter::Artifact],
+                        ..Default::default()
+                    },
+                ),
+                condition: None,
+                duration: tricerules_cards::EffectDuration::Indefinite,
+                timestamp,
+            });
+        assert!(engine
+            .characteristics(target)
+            .expect("Artifact target characteristics")
+            .has_type("Artifact"));
+        let creature = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let aura = exile_for_fixture(&mut engine, 1, "pacifism");
+        // This synthetic immediate observer action isolates the instruction-boundary resume
+        // contract; it does not assert that Destroy itself created the Aura-return event.
+        queue_observer_aura_return(&mut engine, aura);
+
+        let source = add_battlefield_object(&mut engine, 0, "authored_program_destroy_tail");
+        let mut item =
+            captured_printed_trigger_item(&engine, source, "authored_program_destroy_tail");
+        item.targets.push(crate::state::StackTarget {
+            object_id: target,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&target)
+                    .copied()
+                    .unwrap_or(0),
+            ),
+            required_controller: None,
+        });
+        let owners = engine
+            .compiled_resolution_program_owners(&item)
+            .expect("resolve the test trigger's compiled Program owner")
+            .expect("the test trigger owns a Program");
+        let program = engine
+            .begin_program_run(&item, owners)
+            .expect("begin the targeted Destroy Program");
+        let mut events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut events,
+                )
+                .expect("Destroy parks at the immediate Aura-return boundary"),
+            ResolutionProgress::Parked
+        );
+        assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
+        assert_eq!(engine.state.players[0].life, 20);
+        assert!(engine.state.pending_triggers.is_empty());
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Aura return suspends between the Destroy and sentinel leaves");
+        assert_eq!(pending.deciding_player, 1);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::AuraPermanent
+        );
+        assert!(pending.presentation.candidates.contains(&creature));
+        let ResolutionContinuation::AuraReturn {
+            stack: Some(stack), ..
+        } = &pending.continuation
+        else {
+            panic!("the Aura-return choice retains the parked Program stack");
+        };
+        let saved_program = stack
+            .program
+            .as_ref()
+            .expect("the in-flight Program cursor is retained");
+        assert_eq!(saved_program.frames.len(), 1);
+        assert_eq!(saved_program.frames[0].next_instruction, 1);
+        assert!(saved_program.in_flight.is_none());
+
+        let resumed = engine
+            .submit_resolution_choice(
+                1,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![creature],
+                    ..Default::default()
+                },
+            )
+            .expect("choose the legal Aura recipient and resume the next Program leaf");
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(creature))
+        );
+        assert_eq!(engine.state.players[0].life, 21);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_observer_return_batch.is_none());
+        assert!(engine.state.pending_triggers.is_empty());
+        assert_eq!(
+            resumed
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    event.ev.as_ref(),
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) if change.player_id == 0 && change.delta == 1
+                ))
+                .count(),
+            1,
+            "the post-Destroy sentinel runs exactly once after the Aura choice"
+        );
+    }
+
+    #[test]
     fn linked_land_entry_replacement_resumes_the_remaining_cohort_and_tail_once() {
         use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
 

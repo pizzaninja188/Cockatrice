@@ -490,6 +490,7 @@ impl GameEngine {
         pending: &PendingResolution,
         candidates: &[ObjectId],
         cost: &ResolutionCost,
+        optional: bool,
     ) -> Result<rv1::RuledEvent, EngineError> {
         let action = match cost {
             ResolutionCost::TapPermanents { .. } => "tap",
@@ -506,11 +507,15 @@ impl GameEngine {
                     resolution_prompt_id: pending.resolution_prompt_id.get(),
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
-                    prompt_text: format!("Choose a permanent to {action}, or decline."),
+                    prompt_text: if optional {
+                        format!("Choose a permanent to {action}, or decline.")
+                    } else {
+                        format!("Choose a permanent to {action}.")
+                    },
                     choice_kind: rv1::ChoiceKind::CostObjects as i32,
                     candidate_object_ids: candidates.to_vec(),
                     candidate_names: self.object_names(candidates),
-                    min: 0,
+                    min: u32::from(!optional),
                     max: 1,
                     ..Default::default()
                 },
@@ -1116,6 +1121,12 @@ impl GameEngine {
             ));
         }
         if decision == rv1::ResolutionChoiceDecision::Decline {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required permanent-cost payment cannot be declined",
+                ));
+            }
             if !answer.chosen_object_ids.is_empty() {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
@@ -1138,6 +1149,12 @@ impl GameEngine {
             ));
         }
         if answer.chosen_object_ids.is_empty() {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required permanent-cost payment needs one permanent",
+                ));
+            }
             return self.complete_program_choose_otherwise_from_parts(
                 stack,
                 choose,
@@ -1846,15 +1863,18 @@ impl GameEngine {
                 pending.deciding_player = payer;
                 pending.presentation.choice_kind = rv1::ChoiceKind::CostObjects;
                 pending.presentation.candidates = candidates.clone();
-                pending.presentation.min = 0;
+                pending.presentation.min = u32::from(!choose_state.optional);
                 pending.presentation.max = 1;
                 let action = match &cost {
                     ResolutionCost::TapPermanents { .. } => "tap",
                     ResolutionCost::SacrificePermanent { .. } => "sacrifice",
                     _ => unreachable!("validated Program Choose permanent cost"),
                 };
-                pending.presentation.prompt =
-                    format!("Choose a permanent to {action}, or decline.");
+                pending.presentation.prompt = if choose_state.optional {
+                    format!("Choose a permanent to {action}, or decline.")
+                } else {
+                    format!("Choose a permanent to {action}.")
+                };
                 let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
                 let ResolutionContinuation::ProgramChoose { choose, .. } =
                     &mut pending.continuation
@@ -1866,8 +1886,12 @@ impl GameEngine {
                     branch_id: branch.branch_id,
                     candidate_generations,
                 };
-                let event =
-                    self.program_choose_permanent_cost_choice_event(&pending, &candidates, &cost)?;
+                let event = self.program_choose_permanent_cost_choice_event(
+                    &pending,
+                    &candidates,
+                    &cost,
+                    choose_state.optional,
+                )?;
                 self.state.pending_resolution = Some(pending);
                 events.push(event);
                 Ok(finish_with_events(self, events))
@@ -2619,6 +2643,18 @@ impl GameEngine {
             let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
             let candidates_changed = candidate_generations != *previous_candidates;
             let prompt_was_reset = pending.resolution_prompt_id.get() == 0;
+            let action = match &branch.cost {
+                ResolutionCost::TapPermanents { .. } => "tap",
+                ResolutionCost::SacrificePermanent { .. } => "sacrifice",
+                _ => unreachable!("validated Program Choose permanent cost"),
+            };
+            pending.presentation.min = u32::from(!choose.optional);
+            pending.presentation.max = 1;
+            pending.presentation.prompt = if choose.optional {
+                format!("Choose a permanent to {action}, or decline.")
+            } else {
+                format!("Choose a permanent to {action}.")
+            };
             if candidates_changed {
                 pending.presentation.candidates = candidates.clone();
                 pending.resolution_prompt_semantics = None;
@@ -2652,6 +2688,7 @@ impl GameEngine {
                     pending,
                     &candidates,
                     &branch.cost,
+                    choose.optional,
                 )?);
             }
             return Ok(());

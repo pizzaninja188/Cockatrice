@@ -554,6 +554,12 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
             ProgramTargetRole::Subject,
         )
         | (
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(_),
+            },
+            ProgramTargetRole::Subject,
+        )
+        | (
             SpellEffectKind::ChooseCohortPartition {
                 chooser: PlayerRecipient::TargetedPlayer { .. },
                 ..
@@ -1565,6 +1571,23 @@ fn validate_and_result_types(
     context: EffectContext,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
+        SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(filter),
+        } if context == EffectContext::Ability
+            && filter.as_ref()
+                == &(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![super::PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                }) =>
+        {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Destroy target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::Destroy { .. } => Err(
+            "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
+        ),
         SpellEffectKind::Draw { who, count } => {
             effect.validate(context)?;
             validate_program_recipient(*who, context, "Draw recipient")?;

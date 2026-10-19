@@ -326,42 +326,126 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
 
 #[test]
 fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice() {
-    let orangutan = modal("gearbane_orangutan");
-    assert_eq!(
-        orangutan.modes[0].effects,
-        [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                permanent_types: vec![PermanentTypeFilter::Artifact],
-                ..TargetFilter::default()
-            })),
-        }]
-    );
-    let group = &orangutan.modes[0]
+    use tricerules_cards::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, ProgramTargetProjection,
+    };
+
+    let registry = tricerules_cards::registry::global();
+    let ability = modal_ability("gearbane_orangutan");
+    let orangutan = ability.modal.expect("Gearbane has its two triggered modes");
+    assert_eq!(orangutan.modes.len(), 2);
+    let ability_id = tricerules_cards::AbilityDefinitionId {
+        card_id: "gearbane_orangutan".into(),
+        face_id: tricerules_cards::CardFaceId::new("gearbane_orangutan").unwrap(),
+        ability_path: vec![tricerules_cards::AbilityId::new("triggered_01").unwrap()],
+    };
+
+    for mode in &orangutan.modes {
+        assert!(
+            mode.effects.is_empty(),
+            "{} has no legacy effects",
+            mode.mode_id
+        );
+        let owner = tricerules_cards::ProgramOwnerId::ability_mode(
+            ability_id.clone(),
+            mode.mode_id.clone(),
+        );
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .unwrap_or_else(|| panic!("missing compiled Program owner {owner:?}"));
+        assert_eq!(program.owner, owner);
+        assert_eq!(
+            program.target_projection,
+            ProgramTargetProjection::ModeLocal {
+                mode_id: mode.mode_id.clone(),
+            }
+        );
+        assert!(program.body.yields.is_empty());
+        TargetSchema::compile_program(program, mode.targeting.as_ref())
+            .unwrap_or_else(|error| panic!("{} target schema: {error}", mode.mode_id));
+    }
+
+    let destroy_mode = &orangutan.modes[0];
+    assert_eq!(destroy_mode.mode_id.as_str(), "mode_01");
+    let group = &destroy_mode
         .targeting
         .as_ref()
         .expect("up-to-one artifact group")
         .groups[0];
     assert_eq!((group.min, group.max), (0, 1));
     assert_eq!(group.prompt, "Choose up to one target artifact");
+    assert!(group.effect_indices.is_empty());
+    let destroy_owner = tricerules_cards::ProgramOwnerId::ability_mode(
+        ability_id.clone(),
+        destroy_mode.mode_id.clone(),
+    );
+    let destroy_program = registry
+        .compiled_program_for_owner(&destroy_owner)
+        .expect("mode 01 owns its resultless Destroy Program");
+    let [destroy] = destroy_program.body.steps.as_slice() else {
+        panic!("mode 01 performs one Destroy operation");
+    };
+    assert!(destroy.outputs.is_empty());
+    let artifact_filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        permanent_types: vec![PermanentTypeFilter::Artifact],
+        ..TargetFilter::default()
+    };
+    assert!(matches!(
+        &destroy.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(filter)
+            } if filter.as_ref() == &artifact_filter)
+    ));
+    assert_eq!(destroy_program.target_bindings.len(), 1);
+    assert_eq!(
+        destroy_program.target_bindings[0].instruction_address,
+        destroy.instruction_address
+    );
+    assert_eq!(destroy_program.target_bindings[0].target_group_index, 0);
+    assert_eq!(destroy_program.target_bindings[0].role_index, 0);
 
-    let [SpellEffectKind::ChooseResolutionBranch {
+    let sacrifice_mode = &orangutan.modes[1];
+    assert_eq!(sacrifice_mode.mode_id.as_str(), "mode_02");
+    assert!(sacrifice_mode.targeting.is_none());
+    let sacrifice_owner =
+        tricerules_cards::ProgramOwnerId::ability_mode(ability_id, sacrifice_mode.mode_id.clone());
+    let sacrifice_program = registry
+        .compiled_program_for_owner(&sacrifice_owner)
+        .expect("mode 02 owns its mandatory sacrifice Program");
+    let [choice] = sacrifice_program.body.steps.as_slice() else {
+        panic!("mode 02 has one mandatory sacrifice choice");
+    };
+    let CompiledInstructionKind::Choose {
+        choice: choice_id,
+        chooser,
         optional,
-        selection,
         branches,
         otherwise,
-        ..
-    }] = orangutan.modes[1].effects.as_slice()
+    } = &choice.kind
     else {
-        panic!("the sacrifice mode emits one authored resolution branch")
+        panic!("mode 02 compiles to a resultless Choose instruction");
     };
+    assert_eq!(choice_id.as_str(), "sacrifice_an_artifact");
+    assert_eq!(
+        *chooser,
+        tricerules_cards::primitives::PlayerRecipient::Controller
+    );
     assert!(!optional, "the printed sacrifice is mandatory when legal");
-    assert_eq!(*selection, ResolutionBranchSelection::PlayerChoice);
-    assert!(otherwise.is_empty());
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
     let [branch] = branches.as_slice() else {
         panic!("the sacrifice mode has exactly one branch")
     };
     assert_eq!(branch.branch_id.as_str(), "sacrifice_an_artifact");
+    assert_eq!(
+        branch.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(vec![4])
+    );
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::Always
+    ));
     assert_eq!(
         branch.cost,
         ResolutionCost::SacrificePermanent {
@@ -375,15 +459,20 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
         },
         "the mandatory artifact sacrifice keeps its payer-scoped filter"
     );
-    assert_eq!(
-        branch.effects,
-        [SpellEffectKind::PutCounters {
-            counter: CounterKind::PlusOnePlusOne,
-            count: Amount::Fixed(2),
-            subject: EffectSubject::Source,
-        }]
-    );
-    assert_modal_schema("gearbane_orangutan", &orangutan);
+    assert!(branch.body.yields.is_empty());
+    let [put_counters] = branch.body.steps.as_slice() else {
+        panic!("the paid branch performs one counter instruction")
+    };
+    assert!(put_counters.outputs.is_empty());
+    assert!(matches!(
+        &put_counters.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(2),
+                subject: EffectSubject::Source,
+            })
+    ));
 }
 
 #[test]

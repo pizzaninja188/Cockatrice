@@ -1,0 +1,104 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f3e7420-86aa-4847-bc2d-21f6bae470c8",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "gearbane_orangutan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "gearbane_orangutan",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger"
+      ]
+    },
+    {
+      "face_id": "gearbane_orangutan",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/0",
+        "/faces/0/triggered_abilities/0/modal/modes/0/program/body/steps/0/kind/Perform/Destroy",
+        "/faces/0/triggered_abilities/0/modal/modes/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "gearbane_orangutan",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/1",
+        "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/PutCounters"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CardFaceDef.keywords",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/triggered_abilities/0/modal"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/program/body/steps/0/kind/Perform/Destroy"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/program/body/steps/0/kind/Perform/Destroy/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/targeting"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/PutCounters"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::issue_424_triggered_modal_etb::issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice",
+      "covers": "both exact mode-local Program owners, target binding, controller-only mandatory artifact payment, and exact counter body"
+    },
+    {
+      "test": "scenario issue_424_triggered_modal_etb::issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_one",
+      "covers": "printed modes resolve; mandatory payment rejects decline, foreign, empty, duplicate, and replayed answers while preserving the offer"
+    },
+    {
+      "test": "scenario issue_424_triggered_modal_etb::issue_424_gearbane_destroy_program_rechecks_optional_targets_at_resolution",
+      "covers": "mode 01 accepts zero targets and skips a target that changes type or leaves its zone before resolution"
+    },
+    {
+      "test": "scenario issue_424_triggered_modal_etb::issue_424_gearbane_destroy_program_keeps_indestructible_and_observer_continuations",
+      "covers": "indestructible artifact remains; destroying Myr Retriever publishes and resolves its graveyard observer trigger after the Program completes"
+    },
+    {
+      "test": "scenario issue_424_triggered_modal_etb::issue_424_gearbane_program_source_generation_controls_counter_tail",
+      "covers": "old trigger source cannot counter a new incarnation; an artifact source can pay for itself without receiving counters after it leaves"
+    }
+  ]
+}

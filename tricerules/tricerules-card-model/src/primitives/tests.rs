@@ -8368,6 +8368,142 @@ fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
 }
 
 #[test]
+fn chosen_artifact_destroy_ability_mode_requires_exact_subject_binding() {
+    const EXACT_DESTROY: &str = r#"(id: "destroy_artifact", bind: [], input: None,
+        kind: Perform(Destroy(subject: Chosen((kind: AnyPermanent,
+            permanent_types: [Artifact])))))"#;
+    const TARGETING: &str = r#"Some((groups: [(min: 0, max: 1,
+        prompt: "Choose up to one target artifact", effect_indices: [])]))"#;
+
+    fn ability_mode_card(step: &str, bindings: &str, targeting: &str) -> String {
+        format!(
+            r#"(id: "gear_destroy_mode_fixture", name: "Gear Destroy Mode Fixture",
+                face_id: "gear_destroy_mode_fixture", types: ["Creature"], power: 2, toughness: 2,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [], program: None,
+                    modal: Some((min_modes: 1, max_modes: 1, modes: [(
+                        mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None,
+                        effects: [], program: Some((body: (steps: [{step}], yields: []),
+                            target_bindings: [{bindings}])), targeting: {targeting}
+                    )])), targeting: None, may: false, intervening_if: None,
+                    triggers_only_once: false, max_triggers_per_turn: None)])"#
+        )
+    }
+
+    let exact = ability_mode_card(
+        EXACT_DESTROY,
+        r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+        TARGETING,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&exact], &[])
+        .expect("the exact resultless chosen-Artifact Destroy mode is admitted");
+    let owner = crate::ProgramOwnerId::ability_mode(
+        crate::AbilityDefinitionId {
+            card_id: "gear_destroy_mode_fixture".into(),
+            face_id: crate::CardFaceId::new("gear_destroy_mode_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        },
+        crate::ModeId::new("mode_01").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the mode keeps its exact ability-mode owner");
+    assert_eq!(compiled.owner, owner);
+    assert_eq!(compiled.context, crate::primitives::EffectContext::Ability);
+    assert_eq!(
+        compiled.target_projection,
+        crate::primitives::ProgramTargetProjection::ModeLocal {
+            mode_id: crate::ModeId::new("mode_01").unwrap(),
+        }
+    );
+    assert!(compiled.body.yields.is_empty());
+    let [destroy] = compiled.body.steps.as_slice() else {
+        panic!("the mode has exactly one Destroy instruction");
+    };
+    assert!(destroy.outputs.is_empty(), "Destroy is resultless here");
+    let expected_filter = crate::primitives::TargetFilter {
+        kind: crate::primitives::TargetKind::AnyPermanent,
+        permanent_types: vec![crate::primitives::PermanentTypeFilter::Artifact],
+        ..crate::primitives::TargetFilter::default()
+    };
+    assert!(matches!(
+        &destroy.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Destroy {
+                subject: crate::primitives::EffectSubject::Chosen(filter)
+            } if filter.as_ref() == &expected_filter)
+    ));
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(
+        compiled.target_bindings[0].instruction_address,
+        destroy.instruction_address
+    );
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(compiled.target_bindings[0].role_index, 0);
+
+    for (label, step, bindings) in [
+        (
+            "broad permanent filter",
+            r#"(id: "destroy_artifact", bind: [], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: AnyPermanent)))))"#,
+            r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+        ),
+        (
+            "non-Artifact filter",
+            r#"(id: "destroy_artifact", bind: [], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: AnyPermanent,
+                    permanent_types: [Creature])))))"#,
+            r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+        ),
+        (
+            "non-Chosen subject",
+            r#"(id: "destroy_artifact", bind: [], input: None,
+                kind: Perform(Destroy(subject: Source)))"#,
+            r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+        ),
+        (
+            "result binding",
+            r#"(id: "destroy_artifact", bind: ["destroyed"], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: AnyPermanent,
+                    permanent_types: [Artifact])))))"#,
+            r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+        ),
+        ("missing binding", EXACT_DESTROY, ""),
+        (
+            "wrong role",
+            EXACT_DESTROY,
+            r#"(instruction_id: "destroy_artifact", role: Target, target_group_index: 0)"#,
+        ),
+        (
+            "wrong target group",
+            EXACT_DESTROY,
+            r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 1)"#,
+        ),
+    ] {
+        let rejected = ability_mode_card(step, bindings, TARGETING);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&rejected], &[]).is_err(),
+            "the authored Destroy mode must reject {label}"
+        );
+    }
+
+    let spell = format!(
+        r#"(id: "gear_destroy_mode_fixture", name: "Gear Destroy Mode Fixture",
+            face_id: "gear_destroy_mode_fixture", mana_cost: "{{0}}", types: ["Instant"],
+            spell_effect: [], modal_spell: Some((min_modes: 1, max_modes: 1, modes: [(
+                mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None,
+                effects: [], program: Some((body: (steps: [{EXACT_DESTROY}], yields: []),
+                    target_bindings: [(instruction_id: "destroy_artifact", role: Subject,
+                        target_group_index: 0)])), targeting: {TARGETING}
+            )])))"#
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]).is_err(),
+        "the narrow chosen-Artifact Destroy leaf is ability-only"
+    );
+}
+
+#[test]
 fn ward_program_admission_is_ability_owned_and_requires_its_exact_trigger_producer() {
     fn triggered_definition(trigger: &str, cost: &str) -> String {
         format!(

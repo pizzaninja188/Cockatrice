@@ -2,13 +2,16 @@
 //!
 //! Oracle and the current Comprehensive Rules were checked 2026-09-19 against the pinned
 //! Scryfall snapshot. CR 603.3c/700.2b (mode announcement), CR 122 (counters), CR 400.7/701.13
-//! (graveyard return and exile), CR 701.7 (destroy), CR 118.12/701.17 (mandatory sacrifice),
+//! (graveyard return and exile), CR 701.8a-c (destroy), CR 118.12/701.21a (mandatory sacrifice),
 //! CR 701.26 (tap/untap), and CR 701.18 (scry) govern the exercised behavior.
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_cards::CounterKind;
-use tricerules_core::Zone;
+use tricerules_cards::{
+    ContinuousEffectKind, CounterKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
+    TypeLineReplacement,
+};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChoiceKind, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
     RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, TargetRef, TargetRefKind,
@@ -122,6 +125,96 @@ fn mark_damaged(engine: &mut GameEngine, object_id: u32) {
         .push((object_id, generation));
 }
 
+fn add_artifact_type(engine: &mut GameEngine, object_id: u32) {
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            card_types: vec![PermanentTypeFilter::Artifact],
+            ..TypeLineAddition::default()
+        }),
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: engine.state.command_index,
+    });
+}
+
+fn replace_type_line(
+    engine: &mut GameEngine,
+    object_id: u32,
+    card_types: Vec<PermanentTypeFilter>,
+) {
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            card_types,
+            creature_types: Vec::new(),
+            land_types: Vec::new(),
+        }),
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: engine.state.command_index,
+    });
+}
+
+fn move_battlefield_card_to_hand_for_fixture(
+    engine: &mut GameEngine,
+    owner: usize,
+    object_id: u32,
+) {
+    engine.state.players[owner]
+        .battlefield
+        .retain(|candidate| *candidate != object_id);
+    engine.state.players[owner].hand.push(object_id);
+    engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Hand;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(object_id)
+        .or_default() += 1;
+}
+
+fn blink_for_fixture(engine: &mut GameEngine, owner: usize, object_id: u32) {
+    engine.state.players[owner]
+        .battlefield
+        .retain(|candidate| *candidate != object_id);
+    engine.state.players[owner].graveyard.push(object_id);
+    engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(object_id)
+        .or_default() += 1;
+
+    engine.state.players[owner]
+        .graveyard
+        .retain(|candidate| *candidate != object_id);
+    engine.state.players[owner].battlefield.push(object_id);
+    engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Battlefield;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(object_id)
+        .or_default() += 1;
+}
+
+fn choose_myr_retriever_graveyard_target(object_id: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+            targets: vec![TargetRef {
+                object_id,
+                group_index: 0,
+                kind: TargetRefKind::Graveyard as i32,
+                ..Default::default()
+            }],
+            ..Default::default()
+        })),
+    }
+}
+
 fn counters(engine: &GameEngine, object_id: u32) -> u32 {
     engine.state.objects[&object_id].counter_count(CounterKind::PlusOnePlusOne)
 }
@@ -217,6 +310,8 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
 
     let mut sacrifice_engine = modal_engine(424_021);
     let artifact = inject_permanent_on_battlefield(&mut sacrifice_engine, 0, "short_sword");
+    let opponent_artifact =
+        inject_permanent_on_battlefield(&mut sacrifice_engine, 1, "short_sword");
     cast_and_announce(&mut sacrifice_engine, "gearbane_orangutan");
     let source = battlefield_object_for_card(&sacrifice_engine, 0, "gearbane_orangutan");
     sacrifice_engine
@@ -226,14 +321,75 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
     let branch = find_resolution_choice(&branch_batch).expect("mandatory branch selection");
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (1, 1));
+    let mut decline_branch = select_branch(0);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = decline_branch.cmd.as_mut() {
+        answer.decision = ResolutionChoiceDecision::Decline as i32;
+    }
+    assert!(
+        sacrifice_engine
+            .apply_scenario_command(0, &decline_branch)
+            .is_err(),
+        "the payable mandatory branch cannot be declined"
+    );
     let payment_batch = sacrifice_engine
         .apply_scenario_command(0, &select_branch(0))
         .expect("select the mandatory sacrifice branch");
     let payment = find_resolution_choice(&payment_batch).expect("mandatory sacrifice payment");
+    assert_eq!((payment.min, payment.max), (1, 1));
+    assert_eq!(payment.prompt_text, "Choose a permanent to sacrifice.");
     assert!(payment.candidate_object_ids.contains(&artifact));
+    assert!(!payment.candidate_object_ids.contains(&opponent_artifact));
     assert!(
         !payment.candidate_object_ids.contains(&source),
         "the Ape is not an artifact"
+    );
+    let prompt_id = payment.resolution_prompt_id;
+    let state_before_invalid_answers = format!("{:#?}", sacrifice_engine.state);
+    for (label, invalid_selection) in [
+        ("foreign artifact", vec![opponent_artifact]),
+        ("empty payment", Vec::new()),
+        ("duplicate artifact", vec![artifact, artifact]),
+    ] {
+        let result = sacrifice_engine
+            .apply_scenario_command(0, &submit_resolution_choice(invalid_selection.clone()));
+        assert!(
+            result.is_err(),
+            "{label} selection {invalid_selection:?} must be rejected; accepted result: {result:?}"
+        );
+        assert_eq!(
+            format!("{:#?}", sacrifice_engine.state),
+            state_before_invalid_answers,
+            "{label} rejection preserves the full game state and pending prompt"
+        );
+        let pending = sacrifice_engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("invalid payment answers preserve the offered choice");
+        assert_eq!(pending.resolution_prompt_id.get(), prompt_id);
+        assert_eq!((pending.presentation.min, pending.presentation.max), (1, 1));
+        assert_eq!(
+            pending.presentation.prompt,
+            "Choose a permanent to sacrifice."
+        );
+        assert!(pending.presentation.candidates.contains(&artifact));
+    }
+    let explicit_decline = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: prompt_id,
+            decision: ResolutionChoiceDecision::Decline as i32,
+            ..Default::default()
+        })),
+    };
+    let decline_result = sacrifice_engine.apply_scenario_command(0, &explicit_decline);
+    assert!(
+        decline_result.is_err(),
+        "an explicit decline cannot answer the mandatory sacrifice payment: {decline_result:?}"
+    );
+    assert_eq!(
+        format!("{:#?}", sacrifice_engine.state),
+        state_before_invalid_answers,
+        "decline rejection preserves the full game state and pending prompt"
     );
     sacrifice_engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
@@ -247,6 +403,13 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
         2,
         "if you do, two counters land on the source"
     );
+    assert!(
+        sacrifice_engine
+            .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
+            .is_err(),
+        "the completed payment cannot be replayed"
+    );
+    assert_eq!(counters(&sacrifice_engine, source), 2);
 
     // With no artifact available the mandatory branch is skipped and no counters are placed.
     let mut empty_engine = modal_engine(424_022);
@@ -257,6 +420,157 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
         .expect("announce the sacrifice mode with nothing to sacrifice");
     pass_both_players(&mut empty_engine);
     assert_eq!(counters(&empty_engine, source), 0);
+}
+
+#[test]
+fn issue_424_gearbane_destroy_program_rechecks_optional_targets_at_resolution() {
+    let mut zero_target = modal_engine(424_023);
+    let sword = inject_permanent_on_battlefield(&mut zero_target, 1, "short_sword");
+    cast_and_announce(&mut zero_target, "gearbane_orangutan");
+    zero_target
+        .apply_scenario_command(0, &choose_trigger_mode(0, Vec::new()))
+        .expect("choose zero targets for the optional artifact mode");
+    pass_both_players(&mut zero_target);
+    assert_eq!(zero_target.state.objects[&sword].zone, Zone::Battlefield);
+
+    let mut changed_type = modal_engine(424_024);
+    let sword = inject_permanent_on_battlefield(&mut changed_type, 1, "short_sword");
+    cast_and_announce(&mut changed_type, "gearbane_orangutan");
+    changed_type
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(sword)))
+        .expect("the target is an artifact when mode 01 is announced");
+    replace_type_line(
+        &mut changed_type,
+        sword,
+        vec![PermanentTypeFilter::Enchantment],
+    );
+    assert!(!changed_type
+        .characteristics(sword)
+        .expect("the current target characteristics")
+        .has_type("Artifact"));
+    pass_both_players(&mut changed_type);
+    assert_eq!(changed_type.state.objects[&sword].zone, Zone::Battlefield);
+
+    let mut stale = modal_engine(424_025);
+    let sword = inject_permanent_on_battlefield(&mut stale, 1, "short_sword");
+    cast_and_announce(&mut stale, "gearbane_orangutan");
+    stale
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(sword)))
+        .expect("the target is legal when mode 01 is announced");
+    move_battlefield_card_to_hand_for_fixture(&mut stale, 1, sword);
+    pass_both_players(&mut stale);
+    assert_eq!(stale.state.objects[&sword].zone, Zone::Hand);
+    assert!(stale.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_424_gearbane_destroy_program_keeps_indestructible_and_observer_continuations() {
+    let mut indestructible_engine = modal_engine(424_026);
+    let myr = inject_creature_on_battlefield(&mut indestructible_engine, 1, "darksteel_myr");
+    cast_and_announce(&mut indestructible_engine, "gearbane_orangutan");
+    indestructible_engine
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(myr)))
+        .expect("Darksteel Myr is an artifact target");
+    pass_both_players(&mut indestructible_engine);
+    assert_eq!(
+        indestructible_engine.state.objects[&myr].zone,
+        Zone::Battlefield
+    );
+    assert!(indestructible_engine.state.pending_resolution.is_none());
+
+    let mut observer_engine = modal_engine(424_027);
+    let recoverable = inject_graveyard_card(&mut observer_engine, 1, "short_sword");
+    let retriever = inject_creature_on_battlefield(&mut observer_engine, 1, "myr_retriever");
+    cast_and_announce(&mut observer_engine, "gearbane_orangutan");
+    observer_engine
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(retriever)))
+        .expect("destroy the artifact creature with a dies observer");
+    pass_both_players(&mut observer_engine);
+    assert_eq!(
+        observer_engine.state.objects[&retriever].zone,
+        Zone::Graveyard
+    );
+    assert!(observer_engine.state.pending_resolution.is_none());
+    assert_eq!(observer_engine.state.pending_triggers.len(), 1);
+    let legal = observer_engine.initial_response_batch();
+    let ability_key = u64::from(retriever) << 32;
+    assert!(
+        legal.legal_by_player[&1].valid_targets_by_ability[&ability_key].groups[0]
+            .valid_graveyard_ids
+            .contains(&recoverable)
+    );
+    observer_engine
+        .apply_scenario_command(1, &choose_myr_retriever_graveyard_target(recoverable))
+        .expect("the dies observer selects the other artifact card");
+    resolve_entire_stack_two_player(&mut observer_engine);
+    assert_eq!(observer_engine.state.objects[&recoverable].zone, Zone::Hand);
+}
+
+#[test]
+fn issue_424_gearbane_program_source_generation_controls_counter_tail() {
+    let mut blinked_source = modal_engine(424_028);
+    let artifact = inject_permanent_on_battlefield(&mut blinked_source, 0, "short_sword");
+    cast_and_announce(&mut blinked_source, "gearbane_orangutan");
+    let source = battlefield_object_for_card(&blinked_source, 0, "gearbane_orangutan");
+    let old_generation = blinked_source
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or(0);
+    blinked_source
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
+        .expect("choose the mandatory sacrifice mode");
+    blink_for_fixture(&mut blinked_source, 0, source);
+    let branch_batch = resolve_top_stack(&mut blinked_source);
+    find_resolution_choice(&branch_batch).expect("the mandatory branch choice");
+    let payment_batch = blinked_source
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("select the branch after the source changed incarnation");
+    let payment = find_resolution_choice(&payment_batch).expect("the own artifact payment");
+    assert!(payment.candidate_object_ids.contains(&artifact));
+    blinked_source
+        .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
+        .expect("pay while the old trigger source is absent");
+    assert_eq!(
+        blinked_source.state.objects[&source].zone,
+        Zone::Battlefield
+    );
+    assert!(
+        blinked_source
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0)
+            >= old_generation + 2
+    );
+    assert_eq!(counters(&blinked_source, source), 0);
+
+    let mut self_sacrifice = modal_engine(424_029);
+    cast_and_announce(&mut self_sacrifice, "gearbane_orangutan");
+    let source = battlefield_object_for_card(&self_sacrifice, 0, "gearbane_orangutan");
+    add_artifact_type(&mut self_sacrifice, source);
+    assert!(self_sacrifice
+        .characteristics(source)
+        .expect("the current source characteristics")
+        .has_type("Artifact"));
+    self_sacrifice
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
+        .expect("choose the mandatory sacrifice mode");
+    let branch_batch = resolve_top_stack(&mut self_sacrifice);
+    find_resolution_choice(&branch_batch).expect("the mandatory branch choice");
+    let payment_batch = self_sacrifice
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("select the legal source-sacrifice branch");
+    let payment = find_resolution_choice(&payment_batch).expect("the artifact payment");
+    assert_eq!(payment.candidate_object_ids, vec![source]);
+    self_sacrifice
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
+        .expect("sacrifice the Artifact source");
+    assert_eq!(self_sacrifice.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(counters(&self_sacrifice, source), 0);
+    assert!(self_sacrifice.state.pending_resolution.is_none());
 }
 
 #[test]

@@ -2858,6 +2858,19 @@ mod invariant_rollback_tests {
         ObjectId,
         ObjectId,
     ) {
+        controller_sacrifice_choose_fixture_with_optionality(source_only, true)
+    }
+
+    fn controller_sacrifice_choose_fixture_with_optionality(
+        source_only: bool,
+        optional: bool,
+    ) -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+        ObjectId,
+    ) {
         use crate::state::{TriggerAbilityOrigin, TriggerUseKey};
 
         let card = format!(
@@ -2871,7 +2884,7 @@ mod invariant_rollback_tests {
                 trigger: WhenSelfEntersBattlefield, effect: [],
                 program: Some((body: (steps: [
                     (id: "choose", kind: Choose(
-                        choice: "sacrifice", chooser: Controller, optional: true,
+                    choice: "sacrifice", chooser: Controller, optional: {optional},
                         branches: [(
                             branch_id: "sacrifice_source", presentation: Fallback,
                             cost: SacrificePermanent(
@@ -4521,6 +4534,175 @@ mod invariant_rollback_tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(life_deltas, vec![2, 3]);
+    }
+
+    #[test]
+    fn synthetic_program_choose_required_permanent_payment_restores_after_observer_return() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, source, borrowed) =
+            controller_sacrifice_choose_fixture_with_optionality(false, false);
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let initial_offer = initial_payment
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("mandatory permanent-cost payment offer");
+        assert_eq!((initial_offer.min, initial_offer.max), (1, 1));
+        assert!(!initial_offer.prompt_text.contains("decline"));
+        let original_prompt_id = initial_offer.resolution_prompt_id;
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("the permanent-cost payment is saved during observer return");
+        let crate::state::ResolutionContinuation::ProgramChoose { stack, choose } =
+            &original_pending.continuation
+        else {
+            panic!("the saved payment retains its Program Choose continuation");
+        };
+        assert!(!choose.optional, "the fixture is a mandatory Choose");
+        let original_program = format!("{:?}", stack.program);
+        let old_generation = engine.state.zone_change_generation[&borrowed];
+        let crate::state::PendingProgramChooseStage::PayingPermanentCost {
+            candidate_generations: original_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("the saved continuation retains its permanent-cost stage");
+        };
+        assert!(original_generations.contains(&(borrowed, old_generation)));
+        let saved_generations = original_generations.to_vec();
+
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+        let observer = engine
+            .state
+            .pending_observer_return_batch
+            .take()
+            .expect("synthetic observer-return fixture");
+        let mut restored = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                observer.suspended_resolution,
+                observer.suspended_replacement_event,
+                &mut restored,
+            )
+            .expect("restore the saved permanent-cost offer"));
+        engine
+            .publish_resolution_prompt_ids(&mut restored)
+            .expect("restoration publishes a fresh permanent-cost prompt");
+
+        let restored_offer = restored
+            .iter()
+            .rev()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("restored mandatory payment offer");
+        assert_ne!(restored_offer.resolution_prompt_id, original_prompt_id);
+        assert_eq!((restored_offer.min, restored_offer.max), (1, 1));
+        assert_eq!(
+            restored_offer.prompt_text,
+            "Choose a permanent to sacrifice."
+        );
+        assert!(restored_offer.candidate_object_ids.contains(&source));
+        assert!(restored_offer.candidate_object_ids.contains(&borrowed));
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("restored payment remains pending");
+        assert_eq!(
+            pending.resolution_prompt_id.get(),
+            restored_offer.resolution_prompt_id
+        );
+        assert_eq!((pending.presentation.min, pending.presentation.max), (1, 1));
+        assert_eq!(
+            pending.presentation.prompt,
+            "Choose a permanent to sacrifice."
+        );
+        let crate::state::ResolutionContinuation::ProgramChoose { stack, choose } =
+            &pending.continuation
+        else {
+            panic!("restored payment retains its Program Choose continuation");
+        };
+        assert!(!choose.optional);
+        assert_eq!(format!("{:?}", stack.program), original_program);
+        let crate::state::PendingProgramChooseStage::PayingPermanentCost {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("restored payment retains its permanent-cost stage");
+        };
+        assert_eq!(candidate_generations, &saved_generations);
+
+        let decline = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: restored_offer.resolution_prompt_id,
+                    decision: Decision::Decline as i32,
+                    ..Default::default()
+                },
+            )),
+        };
+        let before_decline = command_snapshot(&engine);
+        assert!(engine.apply_scenario_command(0, &decline).is_err());
+        assert!(
+            command_snapshot(&engine) == before_decline,
+            "a mandatory permanent cost must reject Decline atomically"
+        );
+        let empty = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: restored_offer.resolution_prompt_id,
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &empty).is_err());
+        assert!(
+            command_snapshot(&engine) == before_decline,
+            "a mandatory permanent cost must reject an empty payment atomically"
+        );
+
+        let paid = nested_select_objects(&mut engine, vec![borrowed]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![2, 3],
+            "paid body and parent tail run once"
+        );
+        assert_eq!(engine.state.objects[&borrowed].zone, Zone::Graveyard);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
     }
 
     #[test]

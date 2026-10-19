@@ -272,9 +272,10 @@ For `SacrificePermanent` and the one-permanent `TapPermanents` cost, the parked 
 its original `Controller` payer and candidate ObjectIds with their zone-change generations. The
 engine revalidates the selected candidate's incarnation, filter, and control before committing the
 shared cost transaction; a source-only sacrifice or `exclude_source` tap remains tied to that exact
-source incarnation. Declining the optional branch or
-declining/submitting an empty paid-cost selection follows `Otherwise` once. A cost with no current
-candidate is omitted; if no branch remains selectable, `Otherwise` runs once. A departed candidate
+source incarnation. `Choose.optional` controls both branch selection and permanent-cost payment. A
+mandatory (`optional: false`) permanent-cost offer requires its one object and rejects Decline or
+an empty selection; an optional cost may be declined and then follows `Otherwise` once. A cost with
+no current candidate is omitted; if no branch remains selectable, `Otherwise` runs once. A departed candidate
 owner loses their objects under CR 800.4a, after which the
 surviving payer receives a refreshed candidate offer. If the ability controller/payer leaves while
 their triggered ability is resolving, CR 800.4a removes that stack object; neither the cost nor its
@@ -318,6 +319,16 @@ the current condition evaluator and adds no runtime operation.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
+`Destroy` has one ability-Program shape: resultless `Destroy` of a `Chosen` permanent with exactly
+`kind: AnyPermanent`, `permanent_types: [Artifact]`, and all other `TargetFilter` fields at their
+defaults. Bind its `ProgramTargetRole::Subject` to the matching target group owned by that ability
+or selected modal mode. The target remains subject to resolution-time legality checks (CR 608.2b),
+and the shared destroy operation applies the normal destruction and replacement rules (CR
+701.8a-c). Gearbane Orangutan uses this shape for its zero-or-one target artifact mode. This reuses
+the existing Destroy operation used by Abrade and Ancient Grudge; no other Destroy filter or
+subject, DestroyPreventingRegeneration, or spell-Program form is admitted. A source that has left
+uses last-known information where applicable (CR 608.2h, 608.2m), while a returned card is a new
+object (CR 400.7).
 Two additional leaves are restricted to ability-owned Programs and are resultless: `Sacrifice` may
 use only `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.

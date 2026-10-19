@@ -2827,24 +2827,22 @@ fn match_modal_exile_artifact_or_enchantment(
         })
 }
 
-/// Issue #424 / CR 701.7: the exact "up to one" artifact destruction. The exactly-one
+/// Issue #424 / CR 701.8a-c: the exact "up to one" artifact destruction. The exactly-one
 /// `modal_mode.destroy.artifact` recipe keeps its own form.
 fn match_modal_destroy_up_to_one_artifact(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Destroy up to one target artifact.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    permanent_types: vec![PermanentTypeFilter::Artifact],
-                    ..TargetFilter::default()
-                })),
-            }],
-            modal_targeting_range("Choose up to one target artifact", 0, 1, vec![0], false),
+        modal_program(
+            authored_program(
+                r#"(id: "destroy_artifact", kind: Perform(Destroy(subject:
+                    Chosen((kind: AnyPermanent, permanent_types: [Artifact])))))"#,
+                r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+            ),
+            modal_targeting_range("Choose up to one target artifact", 0, 1, Vec::new(), false),
         )
     })
 }
 
-/// Issue #424 / CR 118.12 / 701.17: the mandatory artifact sacrifice and its "if you do"
+/// Issue #424 / CR 118.12 / 701.21a: the mandatory artifact sacrifice and its "if you do"
 /// counters. The branch is mandatory, so a legal artifact is sacrificed without a decline
 /// option; with no legal artifact the branch is skipped and no counters are placed.
 fn match_modal_sacrifice_artifact_two_counters(
@@ -2853,34 +2851,33 @@ fn match_modal_sacrifice_artifact_two_counters(
 ) -> Option<RecipeEmission> {
     (text == "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature.").then(
         || {
-            modal_mode(
-                vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: false,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("sacrifice_an_artifact")
-                            .expect("closed sacrifice branch uses a valid choice ID"),
-                        presentation: context.presentation.clone(),
-                        runtime_fallback: None,
-                        cost: ResolutionCost::SacrificePermanent {
-                            filter: TargetFilter {
-                                kind: TargetKind::AnyPermanent,
-                                controller: TargetController::You,
-                                permanent_types: vec![PermanentTypeFilter::Artifact],
-                                ..TargetFilter::default()
-                            },
-                            source_only: false,
-                        },
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::PutCounters {
-                            counter: CounterKind::PlusOnePlusOne,
-                            count: Amount::Fixed(2),
-                            subject: EffectSubject::Source,
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                }],
+            modal_program(
+                authored_program(
+                    &format!(
+                        r#"(id: "sacrifice_artifact", kind: Choose(
+                            choice: "sacrifice_an_artifact", chooser: Controller, optional: false,
+                            branches: [(branch_id: "sacrifice_an_artifact",
+                                presentation: {presentation},
+                                cost: SacrificePermanent(
+                                    filter: (kind: AnyPermanent, controller: You,
+                                        permanent_types: [Artifact]),
+                                    source_only: false,
+                                ),
+                                requirement: Always,
+                                body: (steps: [(id: "put_counters", kind: Perform(PutCounters(
+                                    counter: PlusOnePlusOne, count: 2, subject: Source
+                                )))], yields: []))],
+                            otherwise: (steps: [], yields: []),
+                        ))"#,
+                        presentation = match &context.presentation {
+                            AbilityPresentation::OracleLines(lines) => {
+                                format!("OracleLines({lines:?})")
+                            }
+                            AbilityPresentation::Fallback => "Fallback".to_owned(),
+                        }
+                    ),
+                    "",
+                ),
                 None,
             )
         },
@@ -50114,6 +50111,23 @@ mod tests {
         emission
     }
 
+    fn issue_424_modal_program(
+        source_name: &str,
+        clause: &str,
+        expected_id: &str,
+    ) -> (CardProgram, Option<TargetingDef>) {
+        let mut test_context = context();
+        test_context.source_name = source_name.into();
+        let matched = match_modal_mode(clause, &test_context)
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+        assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        let RecipeEmission::ModalProgram { program, targeting } = matched.emission else {
+            panic!("{expected_id} must emit a modal Program mode");
+        };
+        (program, targeting)
+    }
+
     const ISSUE_424_PUFF_PIECE: &str =
         "Puff Piece — Put a +1/+1 counter on each of up to two target creatures.";
     const ISSUE_424_INVESTIGATIVE: &str = "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand.";
@@ -50273,6 +50287,47 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing issue #424 recipe {recipe_id}"));
             assert_eq!(recipe.surface, RecipeSurface::ModalMode, "{recipe_id}");
         }
+
+        for (clause, recipe_id) in [
+            (
+                ISSUE_424_GEARBANE_DESTROY,
+                "modal_mode.destroy.up_to_one_artifact",
+            ),
+            (
+                ISSUE_424_GEARBANE_SACRIFICE,
+                "modal_mode.sacrifice_artifact.two_counters_source",
+            ),
+        ] {
+            let (program, targeting) =
+                issue_424_modal_program("Gearbane Orangutan", clause, recipe_id);
+            assert!(program.body.yields.is_empty(), "{recipe_id}");
+            if recipe_id == "modal_mode.destroy.up_to_one_artifact" {
+                assert_eq!(program.body.steps.len(), 1, "{recipe_id}");
+                assert_eq!(program.target_bindings.len(), 1, "{recipe_id}");
+                assert_eq!(
+                    program.target_bindings[0].instruction_id,
+                    "destroy_artifact"
+                );
+                assert_eq!(
+                    program.target_bindings[0].role,
+                    tricerules_cards::primitives::ProgramTargetRole::Subject
+                );
+                assert_eq!(program.target_bindings[0].target_group_index, 0);
+                assert_eq!(
+                    targeting,
+                    modal_targeting_range(
+                        "Choose up to one target artifact",
+                        0,
+                        1,
+                        Vec::new(),
+                        false,
+                    )
+                );
+            } else {
+                assert!(program.target_bindings.is_empty(), "{recipe_id}");
+                assert!(targeting.is_none(), "{recipe_id}");
+            }
+        }
     }
 
     #[test]
@@ -50375,65 +50430,51 @@ mod tests {
             }
         );
 
-        let artifact = TargetFilter {
-            kind: TargetKind::AnyPermanent,
-            permanent_types: vec![PermanentTypeFilter::Artifact],
-            ..TargetFilter::default()
-        };
+        let (destroy_program, destroy_targeting) = issue_424_modal_program(
+            "Gearbane Orangutan",
+            ISSUE_424_GEARBANE_DESTROY,
+            "modal_mode.destroy.up_to_one_artifact",
+        );
         assert_eq!(
-            issue_424_modal_mode(
-                "Gearbane Orangutan",
-                ISSUE_424_GEARBANE_DESTROY,
-                "modal_mode.destroy.up_to_one_artifact",
-            ),
-            ModalModeEmission {
-                effects: vec![SpellEffectKind::Destroy {
-                    subject: EffectSubject::Chosen(Box::new(artifact.clone())),
-                }],
-                targeting: modal_targeting_range(
-                    "Choose up to one target artifact",
-                    0,
-                    1,
-                    vec![0],
-                    false,
-                ),
-            }
+            destroy_program,
+            authored_program(
+                r#"(id: "destroy_artifact", kind: Perform(Destroy(subject:
+                    Chosen((kind: AnyPermanent, permanent_types: [Artifact])))))"#,
+                r#"(instruction_id: "destroy_artifact", role: Subject, target_group_index: 0)"#,
+            )
+        );
+        assert_eq!(
+            destroy_targeting,
+            modal_targeting_range("Choose up to one target artifact", 0, 1, Vec::new(), false,)
         );
 
-        assert_eq!(
-            issue_424_modal_mode(
-                "Gearbane Orangutan",
-                ISSUE_424_GEARBANE_SACRIFICE,
-                "modal_mode.sacrifice_artifact.two_counters_source",
-            ),
-            ModalModeEmission {
-                effects: vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: false,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("sacrifice_an_artifact").unwrap(),
-                        presentation: AbilityPresentation::OracleLines(vec![1]),
-                        runtime_fallback: None,
-                        cost: ResolutionCost::SacrificePermanent {
-                            filter: TargetFilter {
-                                controller: TargetController::You,
-                                ..artifact
-                            },
-                            source_only: false,
-                        },
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::PutCounters {
-                            counter: CounterKind::PlusOnePlusOne,
-                            count: Amount::Fixed(2),
-                            subject: EffectSubject::Source,
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                }],
-                targeting: None,
-            }
+        let (sacrifice_program, sacrifice_targeting) = issue_424_modal_program(
+            "Gearbane Orangutan",
+            ISSUE_424_GEARBANE_SACRIFICE,
+            "modal_mode.sacrifice_artifact.two_counters_source",
         );
+        assert_eq!(
+            sacrifice_program,
+            authored_program(
+                r#"(id: "sacrifice_artifact", kind: Choose(
+                    choice: "sacrifice_an_artifact", chooser: Controller, optional: false,
+                    branches: [(branch_id: "sacrifice_an_artifact",
+                        presentation: OracleLines([1]),
+                        cost: SacrificePermanent(
+                            filter: (kind: AnyPermanent, controller: You,
+                                permanent_types: [Artifact]),
+                            source_only: false,
+                        ),
+                        requirement: Always,
+                        body: (steps: [(id: "put_counters", kind: Perform(PutCounters(
+                            counter: PlusOnePlusOne, count: 2, subject: Source
+                        )))], yields: []))],
+                    otherwise: (steps: [], yields: []),
+                ))"#,
+                "",
+            )
+        );
+        assert!(sacrifice_targeting.is_none());
 
         let nonland = TargetFilter {
             kind: TargetKind::AnyPermanent,
