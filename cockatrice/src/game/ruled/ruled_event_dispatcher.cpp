@@ -2153,9 +2153,8 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
     state->engineOidHaste.clear();
     state->engineOidTrample.clear();
     state->engineOidCreature.clear();
-    state->engineOidMarkedDamage.clear();
-    state->engineOidBattlefieldPower.clear();
-    state->engineOidBattlefieldToughness.clear();
+    // Combat damage and battlefield P/T are ZoneView-owned; this identity map may include stack
+    // rows and carries no zone-change generation, so do not clear or prune that projection here.
     QSet<quint32> validOids;
     for (const auto &entry : map.entries()) {
         validOids.insert(entry.engine_object_id());

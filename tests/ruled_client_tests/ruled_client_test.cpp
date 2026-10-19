@@ -6932,6 +6932,147 @@ TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsU
     EXPECT_TRUE(state->activatedAbilitiesForOid(100).isEmpty());
 }
 
+TEST_F(RuledClientTest, SerializedZoneViewThenIdentityMapPreservesDamageForCombatAllocation)
+{
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kLocalPlayer));
+
+    // This matches the public ruled-batch order: the engine's full battlefield projection is
+    // serialized before Servatrice's physical-card identity map.
+    ruled::v1::RuledEventBatch fullSnapshot;
+    auto *zoneView = fullSnapshot.add_events()->mutable_zone_view();
+    auto *local = zoneView->add_per_player();
+    local->set_player_id(kLocalPlayer);
+    auto *attackerView = local->add_battlefield_objects();
+    attackerView->set_object_id(100);
+    attackerView->set_zone_change_generation(8);
+    attackerView->set_power(5);
+    attackerView->set_toughness(5);
+    auto *opponent = zoneView->add_per_player();
+    opponent->set_player_id(kOpponent);
+    auto *blockerView = opponent->add_battlefield_objects();
+    blockerView->set_object_id(200);
+    blockerView->set_zone_change_generation(4);
+    blockerView->set_power(2);
+    blockerView->set_toughness(5);
+    blockerView->set_damage(3);
+
+    auto *objectMap = fullSnapshot.add_events();
+    addPermanent(objectMap, kLocalPlayer, 100, 1)->add_keywords("Trample");
+    addPermanent(objectMap, kOpponent, 200, 2);
+    auto *blockers = fullSnapshot.add_events()->mutable_blockers_declared();
+    auto *pair = blockers->add_block_pairs();
+    pair->set_attacker_id(100);
+    pair->set_blocker_id(200);
+    apply(fullSnapshot);
+
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 3);
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(200), 4u);
+    EXPECT_EQ(state->combatPowerForCreatureOid(100), 5);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 5);
+    // Damage already marked on the blocker reduces the lethal assignment from five to two;
+    // the remaining three trample damage goes to the defending player (CR 702.19).
+    EXPECT_EQ(state->assignedCombatDamageForBlocker(200), 2u);
+    EXPECT_EQ(state->localCombatDamagePlayerDamage(), 3);
+
+    // An unchanged battlefield view omits the object projection but may still be followed by a
+    // complete identity-map refresh. That map must preserve the same (ObjectId, generation) data.
+    ruled::v1::RuledEventBatch unchangedSnapshot;
+    auto *unchanged = unchangedSnapshot.add_events()->mutable_zone_view();
+    unchanged->set_battlefields_unchanged(true);
+    unchanged->add_per_player()->set_player_id(kLocalPlayer);
+    unchanged->add_per_player()->set_player_id(kOpponent);
+    auto *unchangedMap = unchangedSnapshot.add_events();
+    addPermanent(unchangedMap, kLocalPlayer, 100, 1)->add_keywords("Trample");
+    addPermanent(unchangedMap, kOpponent, 200, 2);
+    apply(unchangedSnapshot);
+
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 3);
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(200), 4u);
+    EXPECT_EQ(state->combatPowerForCreatureOid(100), 5);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 5);
+    EXPECT_EQ(state->assignedCombatDamageForBlocker(200), 2u);
+    EXPECT_EQ(state->localCombatDamagePlayerDamage(), 3);
+}
+
+TEST_F(RuledClientTest, IdentityMapRebindPreservesCombatProjectionForTheSameObjectGeneration)
+{
+    ruled::v1::RuledEventBatch fullSnapshot;
+    auto *zoneView = fullSnapshot.add_events()->mutable_zone_view();
+    auto *opponent = zoneView->add_per_player();
+    opponent->set_player_id(kOpponent);
+    auto *object = opponent->add_battlefield_objects();
+    object->set_object_id(200);
+    object->set_zone_change_generation(4);
+    object->set_power(2);
+    object->set_toughness(5);
+    object->set_damage(3);
+    addPermanent(fullSnapshot.add_events(), kOpponent, 200, 2);
+    apply(fullSnapshot);
+
+    // The server-card binding can be refreshed independently of the engine projection. This
+    // map-only rebind intentionally keeps ObjectId and generation fixed while changing both
+    // physical owner and Server_Card.id.
+    ruled::v1::RuledEventBatch rebind;
+    auto *map = rebind.add_events();
+    addPermanent(map, kLocalPlayer, 200, 22);
+    apply(rebind);
+
+    EXPECT_EQ(state->playerIdForEngineOid(200), kLocalPlayer);
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, 22), 200u);
+    EXPECT_EQ(state->engineOidForCardId(kOpponent, 2), 0u);
+    EXPECT_EQ(state->cardIdForEngineOid(200), 22);
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(200), 4u);
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 3);
+    EXPECT_EQ(state->combatPowerForCreatureOid(200), 2);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 5);
+}
+
+TEST_F(RuledClientTest, CombatProjectionDoesNotSurviveObjectLeaveOrZoneChangeGeneration)
+{
+    auto publishFullBattlefield = [&](bool includeObject,
+                                      quint64 generation,
+                                      quint32 power,
+                                      quint32 toughness,
+                                      quint32 damage) {
+        ruled::v1::RuledEventBatch batch;
+        auto *view = batch.add_events()->mutable_zone_view();
+        view->add_per_player()->set_player_id(kLocalPlayer);
+        auto *opponent = view->add_per_player();
+        opponent->set_player_id(kOpponent);
+        if (includeObject) {
+            auto *object = opponent->add_battlefield_objects();
+            object->set_object_id(200);
+            object->set_zone_change_generation(generation);
+            object->set_power(power);
+            object->set_toughness(toughness);
+            object->set_damage(damage);
+            addPermanent(batch.add_events(), kOpponent, 200, 2);
+        } else {
+            // A full empty projection and an empty identity map are the serialized leave event.
+            batch.add_events()->mutable_battlefield_object_map();
+        }
+        apply(batch);
+    };
+
+    publishFullBattlefield(true, 4, 2, 5, 3);
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 3);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 5);
+
+    // The same ObjectId can be reintroduced as a new battlefield object. Its new generation and
+    // fresh projection replace every characteristic from the prior object incarnation.
+    publishFullBattlefield(true, 9, 4, 6, 1);
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 1);
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(200), 9u);
+    EXPECT_EQ(state->combatPowerForCreatureOid(200), 4);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 6);
+
+    publishFullBattlefield(false, 0, 0, 0, 0);
+    EXPECT_EQ(state->markedDamageForEngineOid(200), 0);
+    EXPECT_FALSE(state->battlefieldGenerationByOid.contains(200));
+    EXPECT_EQ(state->combatPowerForCreatureOid(200), 0);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(200), 1);
+}
+
 // ---------------------------------------------------------------------------------------
 // Simultaneous trigger ordering (CR 603.3b)
 // ---------------------------------------------------------------------------------------
