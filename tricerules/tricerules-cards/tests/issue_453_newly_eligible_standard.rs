@@ -813,11 +813,22 @@ fn issue_453_etb_triggers_keep_exact_shapes() {
             source_controller: CastTriggerPlayer::Opponent,
         }
     );
+    assert!(ward.effect.is_empty(), "Archive Dragon Ward is a Program");
+    let program = ward.program.as_ref().expect("Archive Dragon Ward Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Archive Dragon Ward has one Program leaf");
+    };
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("Archive Dragon Ward is a Perform leaf");
+    };
     assert_eq!(
-        ward.effect,
-        [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+        **effect,
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
             cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
-        }]
+        }
     );
     assert_eq!(scry.ability_id.as_str(), "triggered_02");
     assert_eq!(scry.presentation, AbilityPresentation::OracleLines(vec![3]));

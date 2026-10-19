@@ -1475,6 +1475,15 @@ fn validate_program_unit_inputs(
 ) -> Result<(), EngineError> {
     if compiled
         .required_inputs
+        .contains(&ProgramRequiredInput::TriggerTargetingStackObject)
+        && top.trigger_context.targeting_stack_object.is_none()
+    {
+        return Err(EngineError::ProgramInvariant(
+            "resolution program is missing its captured targeting stack object",
+        ));
+    }
+    if compiled
+        .required_inputs
         .contains(&ProgramRequiredInput::TriggerAffectedPlayer)
         && top.trigger_context.affected_player.is_none()
     {
@@ -2294,6 +2303,64 @@ mod invariant_rollback_tests {
         top.trigger_context.affected_player = Some(1);
         validate_program_unit_inputs(&engine, &top, compiled)
             .expect("the captured draw-step actor satisfies the input guard");
+    }
+
+    #[test]
+    fn ward_program_requires_both_captured_inputs_but_not_a_live_targeting_object() {
+        let engine = program_resolution_fixture();
+        let compiled = CompiledProgram {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "ward_input_guard_fixture",
+                tricerules_card_model::CardFaceId::new("front").unwrap(),
+            ),
+            context: tricerules_card_model::primitives::EffectContext::Ability,
+            target_projection:
+                tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal,
+            required_inputs: vec![
+                ProgramRequiredInput::TriggerAffectedPlayer,
+                ProgramRequiredInput::TriggerTargetingStackObject,
+            ],
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: Vec::new(),
+        };
+        let mut top = engine
+            .state
+            .stack
+            .last()
+            .expect("fixture stack item")
+            .clone();
+        top.trigger_context.targeting_stack_object = Some(crate::state::StackObjectRef {
+            object_id: u32::MAX,
+            zone_change_generation: Some(u64::MAX),
+        });
+
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "resolution program is missing its captured affected player"
+            ))
+        ));
+
+        top.trigger_context.affected_player = Some(1);
+        top.trigger_context.targeting_stack_object = None;
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "resolution program is missing its captured targeting stack object"
+            ))
+        ));
+
+        top.trigger_context.targeting_stack_object = Some(crate::state::StackObjectRef {
+            object_id: u32::MAX,
+            zone_change_generation: Some(u64::MAX),
+        });
+        validate_program_unit_inputs(&engine, &top, &compiled)
+            .expect("an exact captured reference remains valid after its stack object leaves");
     }
 
     #[test]

@@ -8,5 +8,5 @@
   power: 5,
   toughness: 5,
   cost_modifiers: [GenericReduction(amount:Count(GraveyardCards(owners:Controller,filter:Some((any_of:None,exact_name:None,card_type:Some(InstantOrSorcery),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)))))],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfBecomesTarget(source:SpellOrAbility,source_controller:Opponent),effect:[CounterTriggeringStackObjectUnlessPays(cost:Mana("{2}"))],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfBecomesTarget(source:SpellOrAbility,source_controller:Opponent),effect:[],program:Some((body:(steps:[(id:"ward",bind:[],input:None,kind:Perform(CounterTriggeringStackObjectUnlessPays(cost:Mana("{2}"))))],yields:[]))),modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
 )

@@ -891,6 +891,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
             ..Default::default()
         },
     }];
+    ability.program = None;
     effect(
         &mut engine,
         source,

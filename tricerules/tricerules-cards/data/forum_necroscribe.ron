@@ -15,9 +15,12 @@
         source: SpellOrAbility,
         source_controller: Opponent,
       ),
-      effect: [CounterTriggeringStackObjectUnlessPays(
-        cost: DiscardCard(filter: None),
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(
+          cost: DiscardCard(filter: None),
+        ))),
+      ], yields: []))),
     ),
     (
       ability_id: "triggered_02",

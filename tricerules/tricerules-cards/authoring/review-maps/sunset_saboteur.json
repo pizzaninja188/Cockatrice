@@ -15,7 +15,8 @@
       "start_line": 2,
       "end_line": 2,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0"
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
       ]
     },
     {
@@ -39,11 +40,11 @@
     },
     {
       "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
     },
     {
       "symbol": "ResolutionCost::DiscardCard",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/CounterTriggeringStackObjectUnlessPays/cost"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays/cost"
     },
     {
       "symbol": "TriggerCondition::WheneverSelfAttacks",

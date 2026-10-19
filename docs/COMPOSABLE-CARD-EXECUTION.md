@@ -109,6 +109,25 @@ trigger remains unconditional; the pinned Oracle record `55ede1d4-593d-433c-943a
 ability resolves, so power added in response qualifies and a qualifying creature removed before
 resolution does not (CR 603.4, 608.2c, 608.2h). This reuses the current condition evaluator and leaves
 the registered Dinosaur unchanged. Its complete definition and updated review map have independent semantic approval. It adds no card admission or runtime, protocol, or client change.
+The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
+resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
+nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and
+hand-authored RON use the same leaf, while exact `ability_id` ownership and unrelated face clauses
+remain intact. Registry admission retires the legacy Ward leaf recursively through legacy triggered
+effects, conditional/choice trees, modal modes, and static or dynamic grants; it cannot bypass the
+Program's `TriggerAffectedPlayer` and retained `TriggerTargetingStackObject` inputs. The captured
+`StackObjectRef` keeps its `ObjectId` and optional zone-change generation, preserving the generation
+when present; nonphysical abilities and copies may legitimately have no generation. A missing outer
+reference is malformed and distinct from a valid captured reference whose object is no longer live.
+Both required inputs are checked before instruction zero. Payment suspends and resumes the same Program owner, frames,
+in-flight Ward operation, input context, previous result, and cursor. Observer restoration rebuilds
+current mana/discard offers with a fresh prompt ID and current physical-card generations. A begun
+ability continues after its source or controller leaves (CR 608.2m); a payer who leaves has not paid
+(CR 800.4f), so the captured target receives the unpaid counter attempt without delegating the
+choice. When the captured spell or ability is already absent, the payment option still applies under
+CR 118.12a and the counter attempt is impossible under CR 609.3; applying that rule to an absent
+stack object is an inference rather than a direct ruling. This ports existing owners only and adds
+no card admissions or protobuf, relay, or client changes.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

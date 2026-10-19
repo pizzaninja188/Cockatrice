@@ -321,9 +321,6 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
     let Some(target) = cx.top.trigger_context.targeting_stack_object else {
         return Ok(EffectOutcome::Continue);
     };
-    if !stack_object_ref_present(cx.engine, target) {
-        return Ok(EffectOutcome::Continue);
-    }
     let deciding_player = cx
         .top
         .trigger_context
@@ -332,6 +329,17 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             "Ward payer missing from trigger context",
         ))?;
     let ward_text = cx.top.ability_text.as_deref().unwrap_or("Ward").to_string();
+    if cx
+        .engine
+        .state
+        .player_idx(deciding_player)
+        .is_none_or(|index| cx.engine.state.players[index].has_lost)
+    {
+        counter_stack_object_ref(cx.engine, target, &ward_text, cx.events)?;
+        cx.effect_result.counter_payment_outcome =
+            Some(tricerules_card_model::primitives::CounterPaymentOutcome::ForcedUnpaid);
+        return Ok(EffectOutcome::Continue);
+    }
     let prompt = match &cost {
         ResolutionCost::Mana(mana) => format!("Pay {mana} for {ward_text}?"),
         ResolutionCost::DiscardCard { .. } => {
@@ -514,7 +522,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         deciding_player,
         presentation,
         continuation: ResolutionContinuation::WardPayment {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: cx.parked_stack(),
             ward: PendingWardPayment { target, stage },
         },
     });

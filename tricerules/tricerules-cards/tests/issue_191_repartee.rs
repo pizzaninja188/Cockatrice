@@ -56,12 +56,27 @@ fn forum_necroscribe_keeps_ward_and_oracle_line_identity() {
         forum.triggered_abilities[0].presentation,
         AbilityPresentation::OracleLines(vec![1])
     );
-    assert!(matches!(
-        forum.triggered_abilities[0].effect.as_slice(),
-        [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
-            cost: ResolutionCost::DiscardCard { filter: None }
-        }]
-    ));
+    let ward = &forum.triggered_abilities[0];
+    assert!(
+        ward.effect.is_empty(),
+        "Ward is owned by a resultless Program"
+    );
+    let program = ward.program.as_ref().expect("Forum Ward Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Forum Ward has one Program leaf");
+    };
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("Forum Ward is a Perform leaf");
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+            cost: ResolutionCost::DiscardCard { filter: None },
+        }
+    );
     assert_eq!(
         forum.triggered_abilities[1].presentation,
         AbilityPresentation::OracleLines(vec![2])

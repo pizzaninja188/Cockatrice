@@ -64,11 +64,22 @@ fn issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger() {
             source_controller: CastTriggerPlayer::Opponent,
         }
     );
+    assert!(ward.effect.is_empty(), "Sunset Saboteur Ward is a Program");
+    let program = ward.program.as_ref().expect("Sunset Saboteur Ward Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Sunset Saboteur Ward has one Program leaf");
+    };
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("Sunset Saboteur Ward is a Perform leaf");
+    };
     assert_eq!(
-        ward.effect,
-        [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+        **effect,
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
             cost: ResolutionCost::DiscardCard { filter: None },
-        }]
+        }
     );
     assert!(ward.targeting.is_none());
 

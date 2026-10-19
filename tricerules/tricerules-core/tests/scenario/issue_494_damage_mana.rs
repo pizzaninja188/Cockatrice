@@ -47,6 +47,64 @@ fn activate_mana_option(
         .expect("selected mana ability resolves")
 }
 
+fn begin_three_player_ward_talisman_replacement(seed: u64) -> (GameEngine, u32, u32, u32) {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        None,
+        true,
+    )
+    .expect("new three-player Ward/Talisman engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let talisman = inject_permanent_on_battlefield(&mut engine, 0, "talisman_of_impulse");
+    let island = inject_permanent_on_battlefield(&mut engine, 0, "island");
+    let ward_creature =
+        inject_permanent_on_battlefield(&mut engine, 1, "dirgur_island_dragon_skimming_strike");
+    engine.state.add_damage_prevention_shield(0, 1);
+    engine.state.add_damage_prevention_shield(0, 1);
+    inject_card_into_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    let spell_id = engine.state.players[0].hand[unsummon];
+    engine
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(ward_creature)))
+        .expect("cast Unsummon and trigger Ward");
+    pass_priority_round(&mut engine);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.continuation.mana_payment().is_some()));
+
+    activate_mana_option(&mut engine, 0, island, 0, 0);
+    activate_mana_option(&mut engine, 0, talisman, 1, 1);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Talisman damage replacement choice");
+    assert_eq!(pending.deciding_player, 0);
+    let ResolutionContinuation::ManaAbilityDamageReplacement {
+        resume_resolution: Some(parent),
+        ..
+    } = &pending.continuation
+    else {
+        panic!("Talisman damage retains the interrupted Ward payment")
+    };
+    assert_eq!(parent.deciding_player, 0);
+    assert!(parent.continuation.mana_payment().is_some());
+    (engine, talisman, island, spell_id)
+}
+
 fn begin_spell_payment(engine: &mut GameEngine, player: i32, card_id: &str) -> u64 {
     inject_card_into_hand(engine, player as usize, card_id);
     let slot = hand_index_for_card(engine, player as usize, card_id);
@@ -524,11 +582,19 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         .apply_scenario_command(0, &cast_spell(unsummon, target_object(ward_creature)))
         .expect("cast Unsummon and trigger Ward");
     pass_both_players(&mut engine);
-    assert!(engine
+    let original_ward_pending = engine
         .state
         .pending_resolution
         .as_ref()
-        .is_some_and(|pending| pending.continuation.mana_payment().is_some()));
+        .expect("Ward payment prompt");
+    let original_ward_prompt_id = original_ward_pending.resolution_prompt_id.get();
+    assert_ne!(
+        original_ward_prompt_id, 0,
+        "the live Ward offer has a prompt ID"
+    );
+    assert!(original_ward_pending.continuation.mana_payment().is_some());
+    let original_ward_payer = original_ward_pending.deciding_player;
+    let original_ward_continuation = format!("{:?}", original_ward_pending.continuation);
 
     activate_mana_option(&mut engine, 0, island, 0, 0);
     let activation = activate_mana_option(&mut engine, 0, source, 1, 1);
@@ -545,6 +611,12 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         panic!("damage choice retains the interrupted resolution payment")
     };
     assert!(parent.continuation.mana_payment().is_some());
+    assert_eq!(parent.deciding_player, original_ward_payer);
+    assert_eq!(
+        format!("{:?}", parent.continuation),
+        original_ward_continuation,
+        "the nested replacement preserves the exact Ward target, cursor, and mana checkpoint"
+    );
     let choice_id = pending.presentation.candidates[0];
     let resolved_damage = engine
         .apply_scenario_command(
@@ -569,6 +641,24 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         .as_ref()
         .expect("Ward payment is restored");
     assert!(pending.continuation.mana_payment().is_some());
+    assert_eq!(pending.deciding_player, original_ward_payer);
+    assert_eq!(
+        format!("{:?}", pending.continuation),
+        original_ward_continuation,
+        "returning from the nested choice preserves the exact Ward continuation"
+    );
+    let restored_prompt_id = pending.resolution_prompt_id.get();
+    assert_ne!(restored_prompt_id, 0);
+    assert_ne!(
+        restored_prompt_id, original_ward_prompt_id,
+        "observer restoration publishes a fresh choice identity"
+    );
+    assert!(
+        find_resolution_choice(&resolved_damage).is_some_and(|choice| {
+            choice.resolution_prompt_id == restored_prompt_id
+                && choice.choice_kind == rv1::ChoiceKind::ManaPayment as i32
+        })
+    );
     assert_eq!(engine.state.players[0].life, 20);
     assert!(engine
         .state
@@ -601,6 +691,67 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         "dirgur_island_dragon_skimming_strike"
     );
     assert!(engine.state.objects[&island].tapped);
+}
+
+#[test]
+fn issue_494_nested_talisman_payer_departure_does_not_republish_to_the_departed_decider() {
+    let (mut engine, _, _, spell_id) = begin_three_player_ward_talisman_replacement(494_060);
+    let concession = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the Ward payer and nested damage-choice decider may leave");
+    assert!(concession.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::ResolutionChoiceRequired(choice)) if choice.deciding_player_id == 0
+    )));
+    assert!(engine.state.players[0].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(!engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+#[test]
+fn issue_494_nested_talisman_ward_controller_departure_keeps_the_live_payers_choice() {
+    let (mut engine, _, _, spell_id) = begin_three_player_ward_talisman_replacement(494_061);
+    engine
+        .apply_scenario_command(1, &concede())
+        .expect("the Ward controller may leave during Talisman's nested choice");
+    assert!(engine.state.players[1].has_lost);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the live damage choice remains with the Ward payer");
+    assert_eq!(pending.deciding_player, 0);
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::ManaAbilityDamageReplacement {
+            resume_resolution: Some(parent),
+            ..
+        } if parent.deciding_player == 0 && parent.continuation.mana_payment().is_some()
+    ));
+    let choice_id = pending.presentation.candidates[0];
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
+                    chosen_object_ids: vec![choice_id],
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("resolve Talisman's damage choice after Ward controller departure");
+    let ward_payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the surviving payer receives the original Ward payment");
+    assert_eq!(ward_payment.deciding_player, 0);
+    assert!(ward_payment.continuation.mana_payment().is_some());
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay the original Ward payment after the controller leaves");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
 }
 
 #[test]

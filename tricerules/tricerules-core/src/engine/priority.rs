@@ -106,6 +106,15 @@ impl GameEngine {
             .as_ref()
             .and_then(|batch| batch.suspended_resolution.as_ref())
             .and_then(|pending| {
+                if matches!(
+                    &pending.continuation,
+                    ResolutionContinuation::WardPayment { .. }
+                ) {
+                    // A begun Ward transaction survives its ability controller or physical
+                    // source owner leaving. If its payer left too, reconcile it after removal
+                    // when this exact saved continuation is restored.
+                    return None;
+                }
                 let stack = pending.continuation.stack()?;
                 let discard = match &pending.continuation {
                     ResolutionContinuation::PlayerSetDiscard { discard, .. } => Some(discard),
@@ -284,6 +293,12 @@ impl GameEngine {
                 | ResolutionContinuation::PlayerSetSacrifice { .. } => {
                     // CR 608.2m: an instant, sorcery, or ability that leaves the stack after
                     // starting to resolve still continues fully. Keep its parked continuation.
+                    preserve = true;
+                }
+                ResolutionContinuation::WardPayment { .. } => {
+                    // CR 608.2m: a Ward payment that began resolving survives its ability
+                    // controller or physical source owner leaving. A departed payer is settled
+                    // only after their objects have been removed.
                     preserve = true;
                 }
                 ResolutionContinuation::PlayerSetDiscard { stack, discard }
@@ -926,6 +941,7 @@ impl GameEngine {
         self.refresh_program_library_cohort_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
+        self.refresh_departed_ward_payment(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }

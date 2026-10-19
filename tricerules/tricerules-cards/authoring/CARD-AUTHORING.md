@@ -333,6 +333,40 @@ no input result and binds or yields no output. The reviewed owners are Cavern St
 trigger and Greedy Freebooter's Scry 1 followed by its Treasure creation. This bounded Program subset
 does not add trigger-observer support for `Whenever you scry`, change who can see or answer the
 existing private prompt, or admit additional card definitions.
+`CounterTriggeringStackObjectUnlessPays` is a resultless `Perform` leaf only in a triggered ability
+Program. Its cost must be either a fixed, nonempty `Mana` cost with no X or
+`DiscardCard(filter: None)`. The exact trigger owner must provide both `TriggerAffectedPlayer` and
+the retained `TriggerTargetingStackObject` inputs; registry admission checks those producers and the
+runtime validates both before instruction zero. The captured `StackObjectRef` retains its optional
+zone-change generation, preserving it whenever present; nonphysical abilities and copies may
+legitimately have no generation. A missing outer reference is malformed and fails input validation;
+it is distinct from a valid captured reference whose object is no longer live. The leaf cannot own a
+target group or bind/yield a result. For example, a Ward `{2}` trigger has this direct leaf shape:
+
+```ron
+effect: [],
+program: Some((body: (steps: [
+  (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(
+    cost: Mana("{2}")
+  ))),
+], yields: []))),
+```
+
+Keep the operation on the exact triggered-ability owner whose Oracle text contains Ward, retaining
+its ability ID when authoring or generating the definition. Other legacy Ward effect-list owners,
+including nested or modal children and granted triggered abilities, are rejected so they cannot
+bypass the captured-input contract.
+
+Ward means “Whenever this permanent becomes the target of a spell or ability an opponent controls,
+counter that spell or ability unless its controller pays [cost]” (CR 702.21a). The counter attempt
+uses the captured stack-object reference's `ObjectId` and, when present, its generation, not Oracle
+display text. If that exact spell or ability has already left the stack, the payer still receives
+the payment option; the counter attempt then does nothing because the action is impossible. The
+payment-before-counter order comes from CR 118.12a and applying CR 609.3 to the absent object is an
+inference, not a direct ruling about this case. Once Ward begins resolving, its ability continues if its source or controller
+leaves (CR 608.2m); a payer who leaves before answering has not paid (CR 800.4f). Saved mana/discard
+choices retain the same Program cursor; observer restoration rebuilds current offers with a fresh
+prompt ID and current card generations.
 `LookChooseToHand` is a resultless leaf only for spell Programs with `filter: None`,
 `reveal: false`, `bottom_order: Chosen`, and a fixed positive exact selection (`min == max`)
 within the looked count. It offers the controller the existing private `LIBRARY_LOOK` choice,

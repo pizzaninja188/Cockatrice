@@ -3380,6 +3380,34 @@ impl SpellEffectKind {
         )
     }
 
+    /// Find the retired legacy Ward leaf throughout an ordinary triggered-effect tree. Ward now
+    /// needs the exact triggered-ability Program owner and its captured targeting-stack input;
+    /// accepting it through a nested legacy wrapper would bypass that contract.
+    pub(crate) fn contains_legacy_ward_payment(&self) -> bool {
+        match self {
+            Self::CounterTriggeringStackObjectUnlessPays { .. } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_legacy_ward_payment()
+            }
+            Self::MayBehold { if_beheld, .. } => {
+                if_beheld.iter().any(Self::contains_legacy_ward_payment)
+            }
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::contains_legacy_ward_payment)
+                }) || otherwise.iter().any(Self::contains_legacy_ward_payment)
+            }
+            _ => false,
+        }
+    }
+
     pub fn needs_target(&self) -> bool {
         !self.target_roles().is_empty()
     }
@@ -3969,6 +3997,16 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_ward_payment)
+        {
+            return Err(
+                "CounterTriggeringStackObjectUnlessPays in a legacy effect list requires an authored Program"
+                    .into(),
+            );
+        }
+
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum ProducedObjectCardinality {
             None,

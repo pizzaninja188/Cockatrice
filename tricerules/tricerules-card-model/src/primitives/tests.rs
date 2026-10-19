@@ -8368,6 +8368,246 @@ fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
 }
 
 #[test]
+fn ward_program_admission_is_ability_owned_and_requires_its_exact_trigger_producer() {
+    fn triggered_definition(trigger: &str, cost: &str) -> String {
+        format!(
+            r#"(id: "ward_program_admission_fixture", name: "Ward Program Admission Fixture",
+                face_id: "ward_program_admission_fixture", types: ["Creature"], power: 2, toughness: 2,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger}, effect: [], program: Some((body: (steps: [
+                        (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: {cost})))
+                    ], yields: []))), modal: None, targeting: None, may: false,
+                    intervening_if: None, triggers_only_once: false, max_triggers_per_turn: None
+                )])"#
+        )
+    }
+
+    let targeting_trigger =
+        "WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent)";
+    for cost in ["Mana(\"{2}\")", "DiscardCard(filter: None)"] {
+        let definition = triggered_definition(targeting_trigger, cost);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| panic!("supported Ward Program cost {cost} rejected: {error}"));
+        let face_id = crate::CardFaceId::new("ward_program_admission_fixture").unwrap();
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "ward_program_admission_fixture".into(),
+            face_id,
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the exact Ward ability owner has its program");
+        assert_eq!(
+            compiled.required_inputs,
+            vec![
+                crate::ProgramRequiredInput::TriggerAffectedPlayer,
+                crate::ProgramRequiredInput::TriggerTargetingStackObject,
+            ],
+            "Ward must capture its payer and exact targeting stack object"
+        );
+    }
+
+    for cost in [
+        "Mana(\"{X}\")",
+        "Mana(\"{0}\")",
+        "Waterbend(\"{2}\")",
+        "DiscardCard(filter: Some(Creature))",
+    ] {
+        let _: crate::primitives::ResolutionCost = ron::from_str(cost).unwrap_or_else(|error| {
+            panic!("unsupported Ward cost fixture {cost} is malformed: {error}")
+        });
+        let definition = triggered_definition(targeting_trigger, cost);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+            "unsupported Ward Program cost {cost} must fail closed"
+        );
+    }
+
+    let affected_player_only_trigger =
+        triggered_definition("AtBeginningOfDrawStep(player: AnyPlayer)", "Mana(\"{2}\")");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&affected_player_only_trigger], &[])
+        .expect_err("a draw-step trigger cannot supply Ward's exact targeting object");
+    assert!(
+        error.to_string().contains("TriggerTargetingStackObject"),
+        "the Ward input rejection should name its unsupplied captured reference: {error}"
+    );
+
+    let spell_program = r#"(id: "ward_spell_program_fixture", name: "Ward Spell Program Fixture",
+        face_id: "ward_spell_program_fixture", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))))
+        ], yields: [])))"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[spell_program], &[]).is_err(),
+        "Ward is an ability-owned leaf, not a spell operation"
+    );
+
+    let activated_program = r#"(id: "ward_activated_program_fixture", name: "Ward Activated Program Fixture",
+        face_id: "ward_activated_program_fixture", types: ["Creature"], power: 2, toughness: 2,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [], effect: [],
+            program: Some((body: (steps: [
+                (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))))
+            ], yields: []))), targeting: None, timing: Normal, conditions: [], activation_limit: None
+        )])"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[activated_program], &[]).is_err(),
+        "an activated ability cannot claim a targeting trigger's captured inputs"
+    );
+}
+
+#[test]
+fn legacy_flat_ward_trigger_requires_an_authored_program() {
+    let definition = r#"(id: "legacy_flat_ward_fixture", name: "Legacy Flat Ward Fixture",
+        face_id: "legacy_flat_ward_fixture", types: ["Creature"], power: 2, toughness: 2,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+            effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
+            program: None, modal: None, targeting: None, may: false,
+            intervening_if: None, triggers_only_once: false, max_triggers_per_turn: None
+        )])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect_err("a supported legacy Ward effect list must be retired");
+    assert!(
+        error
+            .to_string()
+            .to_lowercase()
+            .contains("authored program"),
+        "legacy Ward rejection should identify the missing authored Program, got {error}"
+    );
+}
+
+#[test]
+fn legacy_flat_spell_ward_requires_an_authored_program() {
+    let definition = r#"(id: "legacy_flat_spell_ward_fixture", name: "Legacy Flat Spell Ward Fixture",
+        face_id: "legacy_flat_spell_ward_fixture", mana_cost: "{1}{U}", types: ["Instant"],
+        spell_effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect_err("a legacy spell effect list cannot own Ward");
+    assert!(
+        error
+            .to_string()
+            .to_lowercase()
+            .contains("authored program"),
+        "legacy spell Ward rejection should name the Program requirement, got {error}"
+    );
+}
+
+#[test]
+fn legacy_flat_activated_ward_requires_an_authored_program() {
+    let definition = r#"(id: "legacy_flat_activated_ward_fixture", name: "Legacy Flat Activated Ward Fixture",
+        face_id: "legacy_flat_activated_ward_fixture", mana_cost: "{2}",
+        types: ["Artifact", "Creature"], power: 2, toughness: 2,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [Tap],
+            effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
+            targeting: None, timing: Normal, conditions: [], activation_limit: None
+        )])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect_err("a legacy activated effect list cannot own Ward");
+    assert!(
+        error
+            .to_string()
+            .to_lowercase()
+            .contains("authored program"),
+        "legacy activated Ward rejection should name the Program requirement, got {error}"
+    );
+}
+
+#[test]
+fn legacy_ward_nested_choice_modal_and_grant_owners_require_programs() {
+    const WARD: &str = "CounterTriggeringStackObjectUnlessPays(cost: Mana(\"{2}\"))";
+
+    fn triggered_card(resolution: &str) -> String {
+        format!(
+            r#"(id: "nested_legacy_ward_fixture", name: "Nested Legacy Ward Fixture",
+                face_id: "nested_legacy_ward_fixture", types: ["Creature"], power: 2, toughness: 2,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+                    {resolution}
+                )])"#
+        )
+    }
+
+    fn assert_retired(definition: &str, owner_shape: &str) {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .to_lowercase()
+                .contains("authored program"),
+            "{owner_shape} must reach the retired-Ward admission boundary, got {error}"
+        );
+    }
+
+    // This legacy branch was otherwise valid before Ward Program migration. Its nested
+    // GameCondition requirement must not hide the Ward leaf from owner validation.
+    let choose = triggered_card(&format!(
+        r#"effect: [ChooseResolutionBranch(
+            chooser: Controller,
+            optional: true,
+            selection: PlayerChoice,
+            branches: [(
+                branch_id: "ward_if_storied",
+                presentation: Fallback,
+                cost: None,
+                requirement: GameCondition(HasEnduringStory(players: Controller)),
+                effects: [{WARD}],
+            )],
+            otherwise: [],
+        )], program: None, modal: None, targeting: None, may: false,
+        intervening_if: None, triggers_only_once: false, max_triggers_per_turn: None"#
+    ));
+    assert_retired(&choose, "conditional Choose branch");
+
+    let modal = triggered_card(&format!(
+        r#"effect: [], program: None,
+        modal: Some((min_modes: 1, max_modes: 1, modes: [(
+            mode_id: "ward",
+            presentation: Fallback,
+            linked_cast_cost: None,
+            effects: [{WARD}],
+            program: None,
+            targeting: None,
+        )])), targeting: None, may: false, intervening_if: None,
+        triggers_only_once: false, max_triggers_per_turn: None"#
+    ));
+    assert_retired(&modal, "modal mode");
+
+    let static_grant = format!(
+        r#"(id: "static_legacy_ward_fixture", name: "Static Legacy Ward Fixture",
+            face_id: "static_legacy_ward_fixture", types: ["Creature"], power: 2, toughness: 2,
+            static_abilities: [(ability_id: "static_02", presentation: Fallback,
+                definition: GrantTriggeredAbilityToPermanents(
+                    filter: (kind: Creature, controller: You),
+                    condition: Some(HasEnduringStory(players: Controller)),
+                    triggered_abilities: [(
+                        ability_id: "triggered_01", presentation: Fallback,
+                        trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+                        effect: [{WARD}], program: None, modal: None, targeting: None,
+                    )],
+                ))])"#
+    );
+    assert_retired(&static_grant, "conditional static grant");
+
+    let dynamic_grant = format!(
+        r#"(id: "dynamic_legacy_ward_fixture", name: "Dynamic Legacy Ward Fixture",
+            face_id: "dynamic_legacy_ward_fixture", mana_cost: "{{0}}", types: ["Instant"],
+            spell_effect: [GrantTriggeredAbility(
+                subject: Chosen((kind: Creature)),
+                ability: (
+                    ability_id: "granted", presentation: Fallback,
+                    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+                    effect: [{WARD}], program: None, modal: None, targeting: None,
+                ),
+            )],
+            targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature",
+                effect_indices: [0])])) )"#
+    );
+    assert_retired(&dynamic_grant, "resolving-created trigger grant");
+}
+
+#[test]
 fn all_legacy_modal_spell_owners_stay_on_legacy_dispatch() {
     let definition = r#"(id: "all_legacy_modal_fixture", name: "All Legacy Modal Fixture",
         face_id: "all_legacy_modal_fixture", mana_cost: "{0}", types: ["Instant"],

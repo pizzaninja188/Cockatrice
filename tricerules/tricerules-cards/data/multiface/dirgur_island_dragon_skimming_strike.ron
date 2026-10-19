@@ -19,7 +19,10 @@
           source: SpellOrAbility,
           source_controller: Opponent,
         ),
-        effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
+        effect: [],
+        program: Some((body: (steps: [
+          (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}")))),
+        ], yields: []))),
       )],
     ),
     (

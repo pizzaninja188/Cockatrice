@@ -5379,11 +5379,35 @@ mod tests {
                 source_controller: CastTriggerPlayer::Opponent,
             }
         );
+        let ward = &raw.triggered_abilities[0];
+        assert!(
+            ward.effect.is_empty(),
+            "generated Ward does not keep a legacy effect"
+        );
+        let program = ward
+            .program
+            .as_ref()
+            .expect("generated Ward is emitted as an ability Program");
+        assert!(
+            program.body.yields.is_empty(),
+            "generated Ward is resultless"
+        );
+        let [instruction] = program.body.steps.as_slice() else {
+            panic!("generated Ward has one Program leaf");
+        };
+        assert!(instruction.bind.is_empty());
+        assert!(instruction.input.is_none());
+        let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind
+        else {
+            panic!("generated Ward is a direct Perform leaf");
+        };
         assert_eq!(
-            raw.triggered_abilities[0].effect,
-            [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
-                cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
-            }]
+            **effect,
+            SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+                cost: tricerules_cards::primitives::ResolutionCost::Mana(
+                    ManaCost::parse("{2}").unwrap(),
+                ),
+            }
         );
 
         let changeling = normal_card(

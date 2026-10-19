@@ -1744,6 +1744,17 @@ impl GameEngine {
                     stack: Box::new(stack.clone()),
                 }
             }
+            ResolutionContinuation::ManaAbilityDamageReplacement {
+                actor,
+                source_object_id,
+                source_zone_change_generation,
+                resume_resolution,
+            } => DamageBatchContinuation::ManaAbility {
+                actor: *actor,
+                source_object_id: *source_object_id,
+                source_zone_change_generation: *source_zone_change_generation,
+                resume_resolution: resume_resolution.clone(),
+            },
             _ => return Ok(()),
         };
         let Some(super::replacement::PendingReplacementEvent::Damage(mut batch)) =
@@ -1824,25 +1835,32 @@ impl GameEngine {
                     events,
                 );
             }
-            DamageBatchProgress::Complete(completed) => {
-                self.commit_completed_damage_batch(&completed, events)?;
-                match completion {
-                    DamageBatchContinuation::Combat => {
-                        self.state.combat_damage_priority_pending = true
-                    }
-                    DamageBatchContinuation::Stack { stack } => {
-                        let completed = self.complete_parked_stack_with_previous(
-                            *stack,
-                            EffectResult::default(),
-                            Vec::new(),
-                        )?;
-                        events.extend(completed.events);
-                    }
-                    DamageBatchContinuation::ManaAbility { .. } => {
-                        unreachable!("departure refresh excludes mana abilities")
-                    }
+            DamageBatchProgress::Complete(completed) => match completion {
+                DamageBatchContinuation::Combat => {
+                    self.commit_completed_damage_batch(&completed, events)?;
+                    self.state.combat_damage_priority_pending = true
                 }
-            }
+                DamageBatchContinuation::Stack { stack } => {
+                    self.commit_completed_damage_batch(&completed, events)?;
+                    let completed = self.complete_parked_stack_with_previous(
+                        *stack,
+                        EffectResult::default(),
+                        Vec::new(),
+                    )?;
+                    events.extend(completed.events);
+                }
+                completion @ DamageBatchContinuation::ManaAbility { .. } => {
+                    let damage_triggers =
+                        self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
+                    let finished = self.finish_damage_batch_continuation(
+                        completion,
+                        &completed,
+                        damage_triggers,
+                        std::mem::take(events),
+                    )?;
+                    events.extend(finished.events);
+                }
+            },
         }
         Ok(())
     }
@@ -2045,10 +2063,12 @@ impl GameEngine {
                         crate::state::ResolutionPromptId::UNASSIGNED;
                     resume_resolution.resolution_prompt_semantics = None;
                     self.state.pending_resolution = Some(*resume_resolution);
-                    events.push(
-                        self.resolution_payment_choice_event()
-                            .expect("suspended resolution payment has a prompt"),
-                    );
+                    if !self.refresh_suspended_ward_payment(&mut events)? {
+                        events.push(
+                            self.resolution_payment_choice_event()
+                                .expect("suspended resolution payment has a prompt"),
+                        );
+                    }
                 }
                 Ok(finish_with_events(self, events))
             }

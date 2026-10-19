@@ -14,7 +14,10 @@
       ability_id: "ward",
       presentation: OracleLines([1]),
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
-      effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}"))],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}")))),
+      ], yields: []))),
     ),
     (
       ability_id: "opus",

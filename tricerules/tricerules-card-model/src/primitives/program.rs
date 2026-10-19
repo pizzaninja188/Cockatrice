@@ -75,6 +75,9 @@ pub enum ProgramRequiredInput {
     /// observed-object snapshot, this reference may be stale or absent from its former zone when
     /// the delayed ability resolves; only the captured identity must have been supplied.
     CapturedTriggerObjectRef,
+    /// Exact spell or ability reference that chose a permanent carrying a Ward ability. The
+    /// captured identity remains present even when that stack object has since left the stack.
+    TriggerTargetingStackObject,
 }
 
 impl ProgramOwnerId {
@@ -744,6 +747,15 @@ impl Compiler {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let result_types = validate_and_result_types(effect, self.context)?;
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+                    ) {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerAffectedPlayer);
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerTargetingStackObject);
+                    }
                     if matches!(
                         effect.as_ref(),
                         SpellEffectKind::CreateTokenCopies {
@@ -1963,6 +1975,31 @@ fn validate_and_result_types(
             && from.as_slice() == [super::EventZone::Exile]
             && entry_counters.is_empty() =>
         {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => {
+            if context != EffectContext::Ability {
+                return Err(
+                    "CounterTriggeringStackObjectUnlessPays in a resolution program requires an ability-owned trigger"
+                        .into(),
+                );
+            }
+            match cost {
+                ResolutionCost::Mana(mana)
+                    if !mana.pips.is_empty()
+                        && mana.mana_value() > 0
+                        && !mana.pips.iter().any(|pip| matches!(pip, crate::ManaSymbol::X)) =>
+                {
+                }
+                ResolutionCost::DiscardCard { filter: None } => {}
+                _ => {
+                    return Err(
+                        "CounterTriggeringStackObjectUnlessPays in a resolution program supports only fixed nonempty no-X mana or an unfiltered discard-card cost"
+                            .into(),
+                    )
+                }
+            }
             effect.validate(context)?;
             Ok(Vec::new())
         }

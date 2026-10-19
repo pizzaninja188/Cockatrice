@@ -6,7 +6,7 @@ use tricerules_cards::primitives::{
     StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, Keyword,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, Keyword, ManaCost,
     SearchDestination, TriggerCondition,
 };
 
@@ -303,11 +303,24 @@ fn issue_192_uses_generic_trigger_combat_and_token_shapes() {
         punk_frogs.triggered_abilities[0].trigger,
         TriggerCondition::WheneverSelfBecomesTarget { .. }
     ));
-    assert!(matches!(
-        punk_frogs.triggered_abilities[0].effect.as_slice(),
-        [SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost: ResolutionCost::Mana(cost) }]
-            if cost.to_string() == "{3}"
-    ));
+    let ward = &punk_frogs.triggered_abilities[0];
+    assert!(ward.effect.is_empty(), "Punk Frogs Ward is a Program");
+    let program = ward.program.as_ref().expect("Punk Frogs Ward Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Punk Frogs Ward has one Program leaf");
+    };
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("Punk Frogs Ward is a Perform leaf");
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+            cost: ResolutionCost::Mana(ManaCost::parse("{3}").unwrap()),
+        }
+    );
 
     let feather = registry
         .get("featherbrained_filcher")

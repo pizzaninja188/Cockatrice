@@ -9474,16 +9474,20 @@ fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
 }
 
 fn match_mana_ward(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
-    let cost = exact_mana_cost(text.strip_prefix("Ward ")?)?;
-    Some(triggered_ability_with(
+    let cost = text.strip_prefix("Ward ")?;
+    exact_mana_cost(cost)?;
+    Some(triggered_program_ability(
         context,
         TriggerCondition::WheneverSelfBecomesTarget {
             source: TargetingSourceFilter::SpellOrAbility,
             source_controller: CastTriggerPlayer::Opponent,
         },
-        vec![SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
-            cost: ResolutionCost::Mana(cost),
-        }],
+        authored_program(
+            &format!(
+                "(id: \"ward\", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana(\"{cost}\"))))"
+            ),
+            "",
+        ),
     ))
 }
 
@@ -31095,11 +31099,26 @@ mod tests {
                 source_controller: CastTriggerPlayer::Opponent,
             }
         );
+        assert!(
+            ability.effect.is_empty(),
+            "Ward is emitted as a Program owner"
+        );
+        let program = ability.program.as_ref().expect("Ward Program");
+        assert!(program.body.yields.is_empty(), "Ward is resultless");
+        let [instruction] = program.body.steps.as_slice() else {
+            panic!("Ward has one Program leaf");
+        };
+        assert!(instruction.bind.is_empty());
+        assert!(instruction.input.is_none());
+        let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind
+        else {
+            panic!("Ward is a direct Perform leaf");
+        };
         assert_eq!(
-            ability.effect,
-            [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+            **effect,
+            SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
                 cost: ResolutionCost::Mana(ManaCost::parse("{2}{U}").unwrap()),
-            }]
+            }
         );
     }
 

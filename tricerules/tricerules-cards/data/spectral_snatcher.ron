@@ -12,7 +12,10 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
-    effect: [CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None))],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None)))),
+    ], yields: []))),
   )],
   activated_abilities: [(
     ability_id: "activated_01",

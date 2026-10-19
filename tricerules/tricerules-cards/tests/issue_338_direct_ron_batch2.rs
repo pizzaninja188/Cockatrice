@@ -19,7 +19,7 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
     TargetingSourceFilter, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CastTriggerPlayer, ChoiceId, Color, Layout};
+use tricerules_cards::{AbilityPresentation, CastTriggerPlayer, ChoiceId, Color, Layout, ManaCost};
 
 const FANATICAL_OFFERING_FINGERPRINT: &str =
     "ee269ff8f501988afe34a6477933bdaac72133a43de77710ea07ce30565cd210";
@@ -263,13 +263,23 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
             source_controller: CastTriggerPlayer::Opponent,
         }
     );
-    assert_eq!(ward.effect.len(), 1);
-    match &ward.effect[0] {
+    assert!(ward.effect.is_empty(), "Dusk Rose Ward is a Program");
+    let program = ward.program.as_ref().expect("Dusk Rose Ward Program");
+    assert!(program.body.yields.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Dusk Rose Ward has one Program leaf");
+    };
+    assert!(instruction.bind.is_empty());
+    assert!(instruction.input.is_none());
+    let tricerules_cards::primitives::InstructionKind::Perform(effect) = &instruction.kind else {
+        panic!("Dusk Rose Ward is a Perform leaf");
+    };
+    assert_eq!(
+        **effect,
         SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
-            cost: ResolutionCost::Mana(cost),
-        } => assert_eq!(cost.to_string(), "{2}"),
-        other => panic!("Ward {{2}} must be a mana payment, got {other:?}"),
-    }
+            cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
+        }
+    );
     assert!(ward.targeting.is_none());
 
     assert_eq!(entry.ability_id.as_str(), "triggered_02");

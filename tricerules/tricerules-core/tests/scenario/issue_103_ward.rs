@@ -43,6 +43,138 @@ fn cast_unsummon_at_dirgur(seed: u64) -> (GameEngine, u32, u32) {
     (engine, dirgur, spell_id)
 }
 
+fn remove_spell_from_stack(engine: &mut GameEngine, spell_id: u32) {
+    engine.state.stack.retain(|item| item.id != spell_id);
+    engine.state.players[0].graveyard.push(spell_id);
+    engine
+        .state
+        .objects
+        .get_mut(&spell_id)
+        .expect("targeting spell")
+        .zone = tricerules_core::Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(spell_id)
+        .or_default() += 1;
+}
+
+fn cast_unsummon_at_dirgur_three_player(seed: u64) -> (GameEngine, u32, u32) {
+    let decks = vec![
+        deck_with("island", &["unsummon"]),
+        deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
+        deck_with("swamp", &[]),
+    ];
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    let dirgur = relocate_to_battlefield(
+        &mut engine,
+        1,
+        "dirgur_island_dragon_skimming_strike",
+        false,
+    );
+    ensure_in_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    let spell_id = engine.state.players[0].hand[unsummon];
+    engine
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .expect("cast Unsummon targeting Dirgur");
+    (engine, dirgur, spell_id)
+}
+
+fn cast_unsummon_at_foreign_controlled_ward(
+    seed: u64,
+    ward_card_id: &str,
+) -> (GameEngine, u32, u32, Option<u32>) {
+    assert!(matches!(
+        ward_card_id,
+        "dirgur_island_dragon_skimming_strike" | "spectral_snatcher"
+    ));
+    let decks = vec![
+        deck_with("island", &["unsummon", "grizzly_bears"]),
+        deck_with("swamp", &[]),
+        deck_with("island", &[]),
+    ];
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    let ward_source = inject_creature_under_foreign_control(&mut engine, 1, 2, ward_card_id);
+    let discard = if ward_card_id == "spectral_snatcher" {
+        Some(relocate_to_hand(&mut engine, 0, "grizzly_bears"))
+    } else {
+        None
+    };
+    ensure_in_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    let spell_id = engine.state.players[0].hand[unsummon];
+    engine
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(ward_source)))
+        .expect("cast Unsummon at an actual foreign-owned Ward source");
+    (engine, ward_source, spell_id, discard)
+}
+
+fn synthetic_ward_program_engine(seed: u64, cost: &str) -> GameEngine {
+    let definition = format!(
+        r#"(id: "synthetic_ward_program_tail", name: "Synthetic Ward Program Tail",
+            face_id: "synthetic_ward_program_tail", mana_cost: "{{0}}",
+            types: ["Creature"], power: 2, toughness: 2,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+                effect: [], program: Some((body: (steps: [
+                    (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: {cost}))),
+                    (id: "tail_gain", kind: Perform(GainLife(who: Controller, amount: 1)))
+                ], yields: []))), modal: None, targeting: None, may: false,
+                intervening_if: None, triggers_only_once: false, max_triggers_per_turn: None
+            )])"#
+    );
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                &definition,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/unsummon.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("synthetic Ward Program tail fixture is admitted"),
+    ));
+    let decks = Some(vec![vec!["island".into(); 30], vec!["island".into(); 30]]);
+    GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+        .expect("synthetic Ward Program tail engine")
+}
+
 fn cast_unsummon_at_spectral_snatcher(seed: u64) -> (GameEngine, u32, u32, u32) {
     let decks = vec![
         deck_with("island", &["unsummon", "grizzly_bears"]),
@@ -286,23 +418,403 @@ fn ward_persists_after_its_source_leaves_the_battlefield() {
 }
 
 #[test]
-fn ward_skips_payment_when_the_bound_stack_object_is_already_absent() {
-    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur(103_008);
-    engine.state.stack.retain(|item| item.id != spell_id);
-    engine.state.players[0].graveyard.push(spell_id);
+fn begun_ward_payment_survives_its_controller_and_source_owner_conceding() {
+    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur_three_player(103_071);
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Ward starts its payment")
+            .deciding_player,
+        0
+    );
+
     engine
+        .apply_scenario_command(1, &concede())
+        .expect("Ward controller and source owner may concede during the begun payment");
+    let pending = engine
         .state
-        .objects
-        .get_mut(&spell_id)
-        .expect("Unsummon")
-        .zone = tricerules_core::Zone::Graveyard;
-    *engine
+        .pending_resolution
+        .as_ref()
+        .expect("the started Ward transaction remains with its payer");
+    assert_eq!(pending.deciding_player, 0);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("payer completes Ward after its controller leaves");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        engine.state.stack.iter().any(|item| item.id == spell_id),
+        "paying the preserved Ward transaction keeps the exact targeting spell"
+    );
+}
+
+#[test]
+fn departed_ward_payer_does_not_leave_a_stale_payment_for_an_absent_target() {
+    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur_three_player(103_072);
+    pass_priority_round(&mut engine);
+    assert!(engine.state.pending_resolution.is_some());
+
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("the Ward payer may concede while the payment is open");
+    assert!(
+        !engine.state.stack.iter().any(|item| item.id == spell_id),
+        "the departing payer's owned targeting spell leaves the stack"
+    );
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "departure forces the payment outcome and never retains a stale Ward prompt"
+    );
+}
+
+#[test]
+fn ward_forces_unpaid_when_its_payer_leaves_before_resolution_begins() {
+    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur_three_player(103_078);
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("the spell controller may leave before Ward begins resolving");
+    assert!(!engine.state.stack.iter().any(|item| item.id == spell_id));
+
+    pass_priority_round(&mut engine);
+    assert!(engine.state.players[0].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn foreign_owned_mana_ward_survives_controller_departure_during_payment() {
+    let (mut engine, _, spell_id, _) =
+        cast_unsummon_at_foreign_controlled_ward(103_073, "dirgur_island_dragon_skimming_strike");
+    pass_priority_round(&mut engine);
+    assert!(engine
         .state
-        .zone_change_generation
-        .entry(spell_id)
-        .or_default() += 1;
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.choice_kind == ChoiceKind::ManaPayment));
+
+    engine
+        .apply_scenario_command(2, &concede())
+        .expect("the Ward controller may leave while its begun payment is parked");
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.deciding_player == 0));
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("the payer completes Ward after its distinct controller leaves");
+    assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+#[test]
+fn foreign_owned_mana_ward_survives_source_owner_departure_during_payment() {
+    let (mut engine, _, spell_id, _) =
+        cast_unsummon_at_foreign_controlled_ward(103_074, "dirgur_island_dragon_skimming_strike");
+    pass_priority_round(&mut engine);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.choice_kind == ChoiceKind::ManaPayment));
+
+    engine
+        .apply_scenario_command(1, &concede())
+        .expect("the physical Ward source owner may leave while its controller remains");
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.deciding_player == 0));
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("the payer completes Ward after its distinct source owner leaves");
+    assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+#[test]
+fn foreign_owned_discard_ward_survives_controller_departure_during_payment() {
+    let (mut engine, _, spell_id, discard) =
+        cast_unsummon_at_foreign_controlled_ward(103_075, "spectral_snatcher");
+    let discard = discard.expect("Spectral Snatcher discard payment card");
+    pass_priority_round(&mut engine);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.choice_kind == ChoiceKind::HandCards));
+
+    engine
+        .apply_scenario_command(2, &concede())
+        .expect("the Ward controller may leave while its begun discard payment is parked");
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.deciding_player == 0));
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
+        .expect("the payer completes discard Ward after its distinct controller leaves");
+    assert_eq!(
+        engine.state.objects[&discard].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+#[test]
+fn foreign_owned_discard_ward_survives_source_owner_departure_during_payment() {
+    let (mut engine, _, spell_id, discard) =
+        cast_unsummon_at_foreign_controlled_ward(103_076, "spectral_snatcher");
+    let discard = discard.expect("Spectral Snatcher discard payment card");
+    pass_priority_round(&mut engine);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.choice_kind == ChoiceKind::HandCards));
+
+    engine
+        .apply_scenario_command(1, &concede())
+        .expect("the physical Ward source owner may leave while its controller remains");
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.deciding_player == 0));
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
+        .expect("the payer completes discard Ward after its distinct source owner leaves");
+    assert_eq!(
+        engine.state.objects[&discard].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+#[test]
+fn departed_discard_ward_payer_does_not_leave_a_stale_choice_for_an_absent_target() {
+    let (mut engine, _, spell_id, _) =
+        cast_unsummon_at_foreign_controlled_ward(103_077, "spectral_snatcher");
+    pass_priority_round(&mut engine);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.choice_kind == ChoiceKind::HandCards));
+
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("the discard Ward payer may concede while the choice is open");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(!engine.state.stack.iter().any(|item| item.id == spell_id));
+}
+
+fn run_synthetic_ward_program_tail(case: &str, cost: &str) {
+    let mut engine = synthetic_ward_program_engine(103_100, cost);
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_creature_on_battlefield(&mut engine, 1, "synthetic_ward_program_tail");
+    let discard = if case.starts_with("discard") {
+        Some(inject_card_into_hand(&mut engine, 0, "grizzly_bears"))
+    } else {
+        None
+    };
+    inject_card_into_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    let spell_id = engine.state.players[0].hand[unsummon];
+    engine
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
+        .unwrap_or_else(|error| panic!("{case}: cast targeting spell: {error}"));
+    pass_both_players(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap_or_else(|| panic!("{case}: Ward Program payment is open"));
+    let choice_kind = pending.presentation.choice_kind;
+    if case.starts_with("mana") {
+        assert_eq!(choice_kind, ChoiceKind::ManaPayment, "{case}");
+        if case == "mana_pay" {
+            give_mana(
+                &mut engine,
+                0,
+                ManaGift {
+                    c: 2,
+                    ..Default::default()
+                },
+            );
+            submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+                .unwrap_or_else(|error| panic!("{case}: pay Ward: {error}"));
+        } else {
+            engine
+                .apply_scenario_command(
+                    0,
+                    &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+                )
+                .unwrap_or_else(|error| panic!("{case}: decline Ward: {error}"));
+        }
+    } else {
+        assert_eq!(choice_kind, ChoiceKind::HandCards, "{case}");
+        if case == "discard_pay" {
+            let discard = discard.expect("discard fixture object");
+            assert!(pending.presentation.candidates.contains(&discard));
+            engine
+                .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
+                .unwrap_or_else(|error| panic!("{case}: discard to pay Ward: {error}"));
+            assert_eq!(
+                engine.state.objects[&discard].zone,
+                tricerules_core::Zone::Graveyard,
+                "the exact physical payment card leaves hand"
+            );
+        } else {
+            engine
+                .apply_scenario_command(
+                    0,
+                    &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+                )
+                .unwrap_or_else(|error| panic!("{case}: decline Ward: {error}"));
+        }
+    }
+
+    assert!(engine.state.pending_resolution.is_none(), "{case}");
+    assert_eq!(
+        engine.state.players[1].life, 21,
+        "{case}: the Program tail runs exactly once after the Ward payment"
+    );
+    assert_eq!(
+        engine.state.stack.iter().any(|item| item.id == spell_id),
+        case.ends_with("pay"),
+        "{case}: payment preserves the exact targeting spell; declining counters it"
+    );
+}
+
+#[test]
+fn synthetic_ward_program_tail_resumes_once_after_mana_pay() {
+    run_synthetic_ward_program_tail("mana_pay", "Mana(\"{2}\")");
+}
+
+#[test]
+fn synthetic_ward_program_tail_resumes_once_after_mana_decline() {
+    run_synthetic_ward_program_tail("mana_decline", "Mana(\"{2}\")");
+}
+
+#[test]
+fn synthetic_ward_program_tail_resumes_once_after_discard_pay() {
+    run_synthetic_ward_program_tail("discard_pay", "DiscardCard(filter: None)");
+}
+
+#[test]
+fn synthetic_ward_program_tail_resumes_once_after_discard_decline() {
+    run_synthetic_ward_program_tail("discard_decline", "DiscardCard(filter: None)");
+}
+
+#[test]
+fn ward_mana_decline_remains_available_when_the_bound_stack_object_is_absent() {
+    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur(103_008);
+    remove_spell_from_stack(&mut engine, spell_id);
 
     pass_both_players(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("an absent captured target does not skip the Ward offer")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ManaPayment
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline Ward while its captured target is absent");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn ward_mana_payment_remains_available_when_the_bound_stack_object_is_absent() {
+    let (mut engine, _, spell_id) = cast_unsummon_at_dirgur(103_079);
+    remove_spell_from_stack(&mut engine, spell_id);
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("an absent captured target does not skip the Ward offer")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ManaPayment
+    );
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
+        .expect("pay Ward while its captured target is absent");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn ward_discard_payment_remains_available_when_the_bound_stack_object_is_absent() {
+    let (mut engine, _, spell_id, discard) = cast_unsummon_at_spectral_snatcher(103_080);
+    remove_spell_from_stack(&mut engine, spell_id);
+    pass_both_players(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("an absent captured target does not skip the discard Ward offer");
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::HandCards);
+    assert!(pending.presentation.candidates.contains(&discard));
+
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
+        .expect("pay Ward while its captured target is absent");
+    assert_eq!(
+        engine.state.objects[&discard].zone,
+        tricerules_core::Zone::Graveyard
+    );
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
 }

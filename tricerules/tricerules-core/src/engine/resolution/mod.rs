@@ -2538,6 +2538,9 @@ impl GameEngine {
         suspended_resolution.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         self.state.pending_resolution = Some(suspended_resolution);
         self.state.pending_replacement_event = suspended_replacement_event;
+        if self.refresh_suspended_ward_payment(events)? {
+            return Ok(true);
+        }
         if matches!(
             self.state
                 .pending_resolution
@@ -4615,6 +4618,560 @@ mod attached_subject_tests {
                 },
             )),
         }
+    }
+
+    #[test]
+    fn synthetic_ward_discard_observer_restore_rebuilds_candidates_and_keeps_cursor() {
+        // This deliberately stages the internal observer-return continuation. A live discard-only
+        // Ward offer does not grant priority to activate a mana ability; the fixture isolates the
+        // saved-choice restore boundary without claiming that interaction is reachable in a game.
+        let mut engine = observer_restore_test_engine(494_036);
+        let ward_source = add_battlefield_object(&mut engine, 1, "spectral_snatcher");
+        let initial_candidate =
+            add_observer_restore_zone_card(&mut engine, 0, "grizzly_bears", Zone::Hand);
+        let target = add_battlefield_object(&mut engine, 0, "unsummon");
+        let target_generation = 1;
+        let target_owner_index = engine.state.player_idx(0).expect("target owner");
+        engine.state.players[target_owner_index]
+            .battlefield
+            .retain(|candidate| *candidate != target);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .expect("targeting spell object")
+            .zone = Zone::Stack;
+        engine
+            .state
+            .zone_change_generation
+            .insert(target, target_generation);
+        let mut target_item = triggered_item(target, target_generation);
+        target_item.id = target;
+        target_item.controller = 0;
+        target_item.card_id = "unsummon".into();
+        target_item.source_permanent_id = None;
+        target_item.source_owner = Some(0);
+        target_item.triggered_ability = None;
+        target_item.is_triggered = false;
+        engine.state.stack.push(target_item);
+
+        let mut ward_item =
+            captured_printed_trigger_item(&engine, ward_source, "spectral_snatcher");
+        ward_item.controller = 1;
+        ward_item.trigger_context.affected_player = Some(0);
+        ward_item.trigger_context.targeting_stack_object = Some(crate::state::StackObjectRef {
+            object_id: target,
+            zone_change_generation: Some(target_generation),
+        });
+        let owners = engine
+            .compiled_resolution_program_owners(&ward_item)
+            .expect("resolve printed Spectral Snatcher Program owners")
+            .expect("printed Spectral Snatcher Ward owns a Program");
+        let program = engine
+            .begin_program_run(&ward_item, owners)
+            .expect("begin the printed Ward Program");
+        let mut started = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &ward_item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut started,
+                )
+                .expect("run the printed discard Ward Program"),
+            ResolutionProgress::Parked
+        );
+        engine
+            .publish_resolution_prompt_ids(&mut started)
+            .expect("publish the initial Ward discard prompt");
+        let original_offer = resolution_choice_offer(&started);
+        let original_prompt_id = original_offer.resolution_prompt_id;
+        assert_ne!(original_prompt_id, 0);
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("Ward discard choice is saved for observer return");
+        let original_payer = original_pending.deciding_player;
+        let ResolutionContinuation::WardPayment { stack, ward } = &original_pending.continuation
+        else {
+            panic!("saved observer fixture retains its Ward continuation");
+        };
+        let original_target = ward.target;
+        let original_program_debug = format!("{:?}", stack.program);
+        let original_previous_result_debug = format!("{:?}", stack.previous_result);
+        let original_stack_id = stack.item.id;
+        let original_source_card_id = stack.item.card_id.clone();
+        let original_source_controller = stack.item.controller;
+        let original_source_owner = stack.item.source_owner;
+        let original_source_permanent_id = stack.item.source_permanent_id;
+        let original_source_generation = stack.item.source_zone_change;
+        let original_trigger_use_key = format!("{:?}", stack.item.trigger_use_key);
+        let original_trigger_context = stack.item.trigger_context;
+        let original_resume_effect_index = stack.resume_effect_index;
+        assert_eq!(original_resume_effect_index, None);
+        assert!(stack.program.is_some(), "Ward parks its Program cursor");
+        let crate::state::PendingWardPaymentStage::Discard {
+            candidate_generations: original_generations,
+        } = &ward.stage
+        else {
+            panic!("printed Spectral Snatcher uses discard Ward");
+        };
+        assert_eq!(original_generations.len(), 1);
+        assert_eq!(original_generations[0].0, initial_candidate);
+
+        let original_generation = engine
+            .state
+            .zone_change_generation
+            .get(&initial_candidate)
+            .copied()
+            .unwrap_or(0);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            initial_candidate,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("temporarily move the saved candidate out of hand");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            initial_candidate,
+            Zone::Hand,
+            None,
+        )
+        .expect("return the physical card as a new hand incarnation");
+        let refreshed_candidate =
+            add_observer_restore_zone_card(&mut engine, 0, "island", Zone::Hand);
+        let refreshed_generation = engine
+            .state
+            .zone_change_generation
+            .get(&initial_candidate)
+            .copied()
+            .unwrap_or(0);
+        assert!(refreshed_generation > original_generation);
+
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+        let observer = engine
+            .state
+            .pending_observer_return_batch
+            .take()
+            .expect("synthetic observer batch fixture");
+        let mut restored = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                observer.suspended_resolution,
+                observer.suspended_replacement_event,
+                &mut restored,
+            )
+            .expect("restore the saved Ward choice"));
+        engine
+            .publish_resolution_prompt_ids(&mut restored)
+            .expect("restoration must publish a fresh, current Ward choice");
+        let restored_offer = resolution_choice_offer(&restored);
+        assert_ne!(restored_offer.resolution_prompt_id, original_prompt_id);
+        assert_eq!(
+            restored_offer.candidate_object_ids,
+            [initial_candidate, refreshed_candidate]
+        );
+        let restored_pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("restored Ward payment remains pending");
+        assert_eq!(restored_pending.deciding_player, original_payer);
+        assert_eq!(
+            restored_pending.resolution_prompt_id.get(),
+            restored_offer.resolution_prompt_id
+        );
+        assert_eq!(
+            restored_pending.presentation.candidates,
+            [initial_candidate, refreshed_candidate]
+        );
+        let ResolutionContinuation::WardPayment { stack, ward } = &restored_pending.continuation
+        else {
+            panic!("restored observer fixture retains its Ward continuation");
+        };
+        assert_eq!(ward.target, original_target);
+        assert_eq!(stack.item.id, original_stack_id);
+        assert_eq!(stack.item.card_id, original_source_card_id);
+        assert_eq!(stack.item.controller, original_source_controller);
+        assert_eq!(stack.item.source_owner, original_source_owner);
+        assert_eq!(stack.item.source_permanent_id, original_source_permanent_id);
+        assert_eq!(stack.item.source_zone_change, original_source_generation);
+        assert_eq!(
+            format!("{:?}", stack.item.trigger_use_key),
+            original_trigger_use_key
+        );
+        assert_eq!(stack.item.trigger_context, original_trigger_context);
+        assert_eq!(format!("{:?}", stack.program), original_program_debug);
+        assert_eq!(
+            format!("{:?}", stack.previous_result),
+            original_previous_result_debug
+        );
+        assert_eq!(stack.resume_effect_index, original_resume_effect_index);
+        let crate::state::PendingWardPaymentStage::Discard {
+            candidate_generations,
+        } = &ward.stage
+        else {
+            panic!("restored Ward continuation retains its discard payment");
+        };
+        assert_eq!(candidate_generations.len(), 2);
+        assert_eq!(candidate_generations[0].0, initial_candidate);
+        assert_eq!(candidate_generations[0].1, refreshed_generation);
+        assert_eq!(candidate_generations[1].0, refreshed_candidate);
+        assert_eq!(
+            candidate_generations[1].1,
+            engine
+                .state
+                .zone_change_generation
+                .get(&refreshed_candidate)
+                .copied()
+                .unwrap_or(0)
+        );
+    }
+
+    fn synthetic_saved_spectral_ward_observer_batch(
+        seed: u64,
+        ward_controller: PlayerId,
+        source_owner: PlayerId,
+        payer: PlayerId,
+    ) -> (
+        GameEngine,
+        ObjectId,
+        ObjectId,
+        ObjectId,
+        ObjectId,
+        ObjectId,
+        String,
+    ) {
+        // Internal observer staging intentionally tests a saved Ward branch across concession.
+        // This does not claim a live discard-only Ward prompt grants priority for mana abilities.
+        let mut engine = observer_restore_test_engine(seed);
+        let ward_source = add_battlefield_object(&mut engine, source_owner, "spectral_snatcher");
+        let original_candidate =
+            add_observer_restore_zone_card(&mut engine, payer, "grizzly_bears", Zone::Hand);
+        let target = add_battlefield_object(&mut engine, payer, "unsummon");
+        let target_generation = 1;
+        let target_owner_index = engine.state.player_idx(payer).expect("target owner");
+        engine.state.players[target_owner_index]
+            .battlefield
+            .retain(|candidate| *candidate != target);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .expect("targeting spell object")
+            .zone = Zone::Stack;
+        engine
+            .state
+            .zone_change_generation
+            .insert(target, target_generation);
+        let mut target_item = triggered_item(target, target_generation);
+        target_item.id = target;
+        target_item.controller = payer;
+        target_item.card_id = "unsummon".into();
+        target_item.source_permanent_id = None;
+        target_item.source_owner = Some(payer);
+        target_item.triggered_ability = None;
+        target_item.is_triggered = false;
+        engine.state.stack.push(target_item);
+
+        let mut ward_item =
+            captured_printed_trigger_item(&engine, ward_source, "spectral_snatcher");
+        ward_item.controller = ward_controller;
+        ward_item.trigger_context.affected_player = Some(payer);
+        ward_item.trigger_context.targeting_stack_object = Some(crate::state::StackObjectRef {
+            object_id: target,
+            zone_change_generation: Some(target_generation),
+        });
+        let ward_stack_id = ward_item.id;
+        let owners = engine
+            .compiled_resolution_program_owners(&ward_item)
+            .expect("resolve printed Spectral Snatcher Program owners")
+            .expect("printed Spectral Snatcher Ward owns a Program");
+        let program = engine
+            .begin_program_run(&ward_item, owners)
+            .expect("begin the printed Ward Program");
+        let mut started = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &ward_item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut started,
+                )
+                .expect("run the printed discard Ward Program"),
+            ResolutionProgress::Parked
+        );
+        engine
+            .publish_resolution_prompt_ids(&mut started)
+            .expect("publish the initial Ward discard prompt");
+        let original_offer = resolution_choice_offer(&started);
+        let original_prompt_id = original_offer.resolution_prompt_id;
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("Ward discard choice is saved for observer return");
+        assert_eq!(original_pending.deciding_player, payer);
+        let ResolutionContinuation::WardPayment { stack, ward } = &original_pending.continuation
+        else {
+            panic!("saved observer fixture retains its Ward continuation");
+        };
+        assert_eq!(ward.target.object_id, target);
+        assert!(
+            stack.program.is_some(),
+            "saved Ward keeps its Program cursor"
+        );
+        let original_program = format!("{:?}", stack.program);
+        let original_generation = engine
+            .state
+            .zone_change_generation
+            .get(&original_candidate)
+            .copied()
+            .unwrap_or(0);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            original_candidate,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("temporarily move the saved candidate out of hand");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            original_candidate,
+            Zone::Hand,
+            None,
+        )
+        .expect("return the physical card as a new hand incarnation");
+        let refreshed_candidate =
+            add_observer_restore_zone_card(&mut engine, payer, "island", Zone::Hand);
+        assert!(
+            engine.state.zone_change_generation[&original_candidate] > original_generation,
+            "the re-entered candidate has a fresh incarnation"
+        );
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+        (
+            engine,
+            ward_source,
+            target,
+            original_candidate,
+            refreshed_candidate,
+            ward_stack_id,
+            format!("{original_prompt_id}:{original_program}"),
+        )
+    }
+
+    // Keep expected identity, cursor, prompt, and candidate values explicit in this focused test.
+    #[allow(clippy::too_many_arguments)]
+    fn assert_saved_spectral_ward_prompt_after_concession(
+        engine: &GameEngine,
+        events: &[rv1::RuledEvent],
+        payer: PlayerId,
+        ward_controller: PlayerId,
+        source_owner: PlayerId,
+        source: ObjectId,
+        target: ObjectId,
+        original_candidate: ObjectId,
+        refreshed_candidate: ObjectId,
+        ward_stack_id: ObjectId,
+        original_prompt_and_program: &str,
+    ) {
+        let original_prompt_id = original_prompt_and_program
+            .split_once(':')
+            .expect("fixture prompt/program separator")
+            .0
+            .parse::<u64>()
+            .expect("fixture prompt ID");
+        let original_program = original_prompt_and_program
+            .split_once(':')
+            .expect("fixture prompt/program separator")
+            .1;
+        let offer = resolution_choice_offer(events);
+        assert_ne!(offer.resolution_prompt_id, original_prompt_id);
+        assert_eq!(offer.deciding_player_id, payer);
+        assert_eq!(
+            offer.candidate_object_ids,
+            [original_candidate, refreshed_candidate]
+        );
+        assert!(engine.state.pending_observer_return_batch.is_none());
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("concession restores the saved Ward offer");
+        assert_eq!(pending.deciding_player, payer);
+        assert_eq!(
+            pending.presentation.candidates,
+            [original_candidate, refreshed_candidate]
+        );
+        assert_eq!(
+            pending.resolution_prompt_id.get(),
+            offer.resolution_prompt_id
+        );
+        let ResolutionContinuation::WardPayment { stack, ward } = &pending.continuation else {
+            panic!("restored continuation remains on its Ward payment");
+        };
+        assert_eq!(ward.target.object_id, target);
+        assert!(stack.program.is_some());
+        // ProgramRunState's debug snapshot includes frames, instruction cursor, and in-flight op.
+        assert_eq!(format!("{:?}", stack.program), original_program);
+        assert_eq!(stack.resume_effect_index, None);
+        assert_eq!(stack.item.controller, ward_controller);
+        assert_eq!(stack.item.source_owner, Some(source_owner));
+        assert_eq!(stack.item.source_permanent_id, Some(source));
+        assert_eq!(stack.item.trigger_context.affected_player, Some(payer));
+        assert_eq!(
+            stack
+                .item
+                .trigger_context
+                .targeting_stack_object
+                .as_ref()
+                .map(|object| object.object_id),
+            Some(target)
+        );
+        let crate::state::PendingWardPaymentStage::Discard {
+            candidate_generations,
+        } = &ward.stage
+        else {
+            panic!("restored Ward offer remains a discard payment");
+        };
+        assert_eq!(
+            candidate_generations
+                .iter()
+                .map(|(object_id, _)| *object_id)
+                .collect::<Vec<_>>(),
+            [original_candidate, refreshed_candidate]
+        );
+        assert_eq!(
+            candidate_generations[0].1,
+            engine
+                .state
+                .zone_change_generation
+                .get(&original_candidate)
+                .copied()
+                .unwrap_or(0)
+        );
+        assert_eq!(
+            candidate_generations[1].1,
+            engine
+                .state
+                .zone_change_generation
+                .get(&refreshed_candidate)
+                .copied()
+                .unwrap_or(0)
+        );
+        assert_eq!(stack.item.id, ward_stack_id);
+    }
+
+    #[test]
+    fn synthetic_saved_spectral_ward_controller_concedes_and_keeps_program_choice() {
+        let (mut engine, source, target, original, refreshed, ward_stack, saved) =
+            synthetic_saved_spectral_ward_observer_batch(494_037, 1, 2, 0);
+        let batch = engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("Ward controller concedes during the synthetic saved observer batch");
+        assert!(engine.state.players[engine.state.player_idx(1).unwrap()].has_lost);
+        assert!(engine.state.objects.contains_key(&source));
+        assert!(engine.state.objects.contains_key(&target));
+        assert_saved_spectral_ward_prompt_after_concession(
+            &engine,
+            &batch.events,
+            0,
+            1,
+            2,
+            source,
+            target,
+            original,
+            refreshed,
+            ward_stack,
+            &saved,
+        );
+    }
+
+    #[test]
+    fn synthetic_saved_spectral_ward_source_owner_concedes_and_keeps_program_choice() {
+        let (mut engine, source, target, original, refreshed, ward_stack, saved) =
+            synthetic_saved_spectral_ward_observer_batch(494_038, 2, 1, 0);
+        let batch = engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("physical Ward source owner concedes during saved observer batch");
+        assert!(engine.state.players[engine.state.player_idx(1).unwrap()].has_lost);
+        assert!(!engine.state.objects.contains_key(&source));
+        assert!(engine.state.objects.contains_key(&target));
+        assert_saved_spectral_ward_prompt_after_concession(
+            &engine,
+            &batch.events,
+            0,
+            2,
+            1,
+            source,
+            target,
+            original,
+            refreshed,
+            ward_stack,
+            &saved,
+        );
+    }
+
+    #[test]
+    fn synthetic_saved_spectral_ward_payer_concedes_without_restoring_choice_or_parent() {
+        let (mut engine, source, target, original, refreshed, ward_stack, _saved) =
+            synthetic_saved_spectral_ward_observer_batch(494_039, 1, 2, 0);
+        let batch = engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("Ward payer concedes after their objects leave");
+        assert!(engine.state.players[engine.state.player_idx(0).unwrap()].has_lost);
+        assert!(!engine.state.objects.contains_key(&target));
+        assert!(!engine.state.objects.contains_key(&original));
+        assert!(!engine.state.objects.contains_key(&refreshed));
+        assert!(engine.state.objects.contains_key(&source));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_observer_return_batch.is_none());
+        assert!(batch.events.iter().all(|event| !matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert!(engine
+            .state
+            .stack
+            .iter()
+            .all(|item| item.id != target && item.id != ward_stack));
     }
 
     fn begin_linked_play_fixture(
