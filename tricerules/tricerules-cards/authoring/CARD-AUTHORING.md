@@ -295,16 +295,21 @@ unrestricted search uses bounds 1..1 when candidates exist. Both preserve the au
 Fountainport Bell, Campus Guide and Spider-Bot use `TopOfLibrary`; Environmental Scientist,
 Strixhaven Skycoach and Tempest Hawk use `Hand`. Demonic Tutor is an unrestricted private Hand
 search, and Fierce Empath uses the Creature/minimum-mana-value filter. The `Battlefield` form remains
-limited to `BasicLand`, bounds 0..1, tapped entry, and no reveal; Lumbering Worldwagon's ETB and
-attack triggers and Solemn Simulacrum's ETB use it. These direct resultless forms bind and yield no
-search result, so finding no card, including when the library is empty, still shuffles and continues
-the program (CR 701.23b, 701.24e). A declared Commander selected for the Hand form stays in the
-library while its owner chooses Command zone or Hand, then the exact selected incarnation moves,
-the remaining library shuffles once, and the caller resumes at its next instruction (CR 903.9b). A
-selected Battlefield card follows the normal entry-replacement and entry-trigger pipeline before
-the search resumes its caller (CR 614.12, 616.1, 608.2m). Embermouth Sentinel's `triggered_01` is
-the current conditional-destination use: its optional controller `Choose` has one free `Always`
-branch, whose resultless search checks one `BasicLand` with bounds 0..1, reveals the selection, and
+limited to `BasicLand`, tapped entry, and no reveal. It supports the existing bounds 0..1 used by
+Lumbering Worldwagon's ETB and attack triggers and Solemn Simulacrum's ETB, and bounds 0..2 for
+Larval Scoutlander's ETB search. For bounded searches, publish `min(bounds.max, count)` as the
+maximum without shrinking it to the live eligible-candidate count; candidate generation and
+submitted selections remain filter-validated. This prevents the eligible count from changing the
+offer maximum, but does not establish full library-identity secrecy. These direct resultless forms
+bind and yield no search result, so finding no card, including when the library is empty, still
+shuffles and continues the program (CR 701.23b, 701.24e). A declared Commander selected for the
+Hand form stays in the library while its owner chooses Command zone or Hand, then the exact
+selected incarnation moves, the remaining library shuffles once, and the caller resumes at its next
+instruction (CR 903.9b). A selected Battlefield card follows the normal entry-replacement and
+entry-trigger pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m).
+Embermouth Sentinel's `triggered_01` is the current conditional-destination use: its optional
+controller `Choose` has one free `Always` branch, whose resultless search checks one
+`BasicLand` with bounds 0..1, reveals the selection, and
 shuffles; the base destination is the top of the library, changing to tapped Battlefield when the
 controller's battlefield contains at least one Dragon of any permanent type. The filter has no
 Creature restriction, so a noncreature Kindred Dragon qualifies (CR 109.2, 205.3m). This conditional

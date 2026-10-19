@@ -6600,7 +6600,8 @@ pub(in crate::engine) fn park_zone_search_choice(
         .collect::<Vec<_>>()
         .join(" / ");
     let max = if let Some(bounds) = selection_bounds {
-        bounds.max.min(count).min(candidates.len() as u32)
+        // Preserve authored capacity; candidate count can reveal hidden Library contents.
+        bounds.max.min(count)
     } else if heterogeneous {
         slots.len() as u32
     } else {

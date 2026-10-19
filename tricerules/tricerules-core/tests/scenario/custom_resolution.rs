@@ -6381,8 +6381,8 @@ fn intuition_comparator_reverses_the_typed_partition_without_unique_names() {
     }
 
     // The Intuition template asks for three cards (bounds 3/3) without a DifferentNames rule.
-    // With only two physical copies of the same name in P0's library, the actual runtime search
-    // clamps both ends to two and admits both copies before reversing the destination partition.
+    // With only two physical copies of the same name in P0's library, the runtime clamps the
+    // minimum to two but retains the authored maximum of three; both candidates still must be used.
     let mut e = make_engine(79, true);
     assert_eq!(e.state.players[0].library.len(), 2, "short-library fixture");
     let short = e.state.players[0]
@@ -6409,9 +6409,18 @@ fn intuition_comparator_reverses_the_typed_partition_without_unique_names() {
         target_player(1),
     );
     let search = find_resolution_choice(&batch).expect("clamped short-library search");
-    assert_eq!((search.min, search.max), (2, 2));
+    assert_eq!((search.min, search.max), (2, 3));
     assert_eq!(search.candidate_object_ids, short);
     assert!(!search.unique_names);
+    assert!(
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![short[0]]))
+            .is_err(),
+        "the minimum still requires both available cards"
+    );
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "search remains pending after under-minimum submission"
+    );
     let after_search = e
         .apply_scenario_command(0, &submit_resolution_choice(short.clone()))
         .expect("submit all available library cards");

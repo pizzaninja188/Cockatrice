@@ -112,6 +112,23 @@ fn issue_423_engine(seed: u64, card_id: &str) -> GameEngine {
     engine
 }
 
+fn larval_search_privacy_engine(seed: u64) -> GameEngine {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("grizzly_bears", &["larval_scoutlander"]),
+            deck_with("grizzly_bears", &["grizzly_bears"]),
+        ]),
+        true,
+    )
+    .unwrap_or_else(|error| panic!("Larval Scoutlander privacy fixture must be valid: {error}"));
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
 fn deploy(engine: &mut GameEngine, card_id: &str) -> u32 {
     move_ready_to_battlefield(engine, 0, card_id)
 }
@@ -123,6 +140,43 @@ fn settle_entry(engine: &mut GameEngine) {
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.pending_triggers.is_empty());
     assert!(engine.state.staged_trigger_groups.is_empty());
+}
+
+fn resolve_larval_scoutlander_entry_trigger(engine: &mut GameEngine) -> (u32, RuledEventBatch) {
+    let larval = deploy(engine, "larval_scoutlander");
+    answer_trigger_order_in_engine_order(engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes priority");
+    let branch_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Larval Scoutlander's entry trigger");
+    (larval, branch_batch)
+}
+
+fn shuffle_log_count(batch: &RuledEventBatch, player: i32) -> usize {
+    batch
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == format!("P{player} shuffles their library.")
+            )
+        })
+        .count()
+}
+
+fn assert_no_search_reveal(batch: &RuledEventBatch) {
+    assert!(batch
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+}
+
+fn assert_one_search_observer(engine: &GameEngine, wan: u32) {
+    assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
 }
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
@@ -504,6 +558,343 @@ fn issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped
     assert!(animated.has_type("Creature"));
     assert_eq!((animated.power, animated.toughness), (Some(3), Some(3)));
     assert!(animated.has_keyword(Keyword::Flying));
+}
+
+#[test]
+fn issue_423_larval_scoutlander_may_pay_with_lander_and_searches_only_its_controllers_library() {
+    let mut engine = issue_423_engine(423_041, "larval_scoutlander");
+    let controller_land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
+    let controller_lander = inject_permanent_on_battlefield(&mut engine, 0, "lander");
+    let opponent_land = inject_permanent_on_battlefield(&mut engine, 1, "forest");
+    let opponent_lander = inject_permanent_on_battlefield(&mut engine, 1, "lander");
+    let selected_basic = inject_library_card(&mut engine, 0, "island");
+    let other_basic = inject_library_card(&mut engine, 0, "mountain");
+    let nonbasic = inject_library_card(&mut engine, 0, "grizzly_bears");
+    let opponent_basic = inject_library_card(&mut engine, 1, "island");
+    let wan = inject_permanent_on_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
+    let (larval, branch_batch) = resolve_larval_scoutlander_entry_trigger(&mut engine);
+
+    let branch = find_resolution_choice(&branch_batch).expect("optional entry branch");
+    assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_eq!(
+        branch.deciding_player_id, 0,
+        "the controller chooses whether to pay"
+    );
+    assert_eq!((branch.min, branch.max), (0, 1));
+
+    let payment_batch = engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the optional sacrifice branch");
+    let payment = find_resolution_choice(&payment_batch).expect("Land-or-Lander payment choice");
+    assert_eq!(
+        payment.deciding_player_id, 0,
+        "the controller chooses the sacrifice"
+    );
+    assert!(payment.candidate_object_ids.contains(&controller_land));
+    assert!(payment.candidate_object_ids.contains(&controller_lander));
+    assert!(!payment.candidate_object_ids.contains(&opponent_land));
+    assert!(!payment.candidate_object_ids.contains(&opponent_lander));
+    assert!(!payment.candidate_object_ids.contains(&larval));
+
+    let rejected =
+        engine.apply_scenario_command(1, &submit_resolution_choice(vec![controller_lander]));
+    assert!(
+        rejected.is_err(),
+        "an opponent cannot make the controller's payment choice"
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| pending.deciding_player),
+        Some(0),
+        "the rejected command preserves the controller's pending offer"
+    );
+
+    let search_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![controller_lander]))
+        .expect("sacrifice the Lander token");
+    assert_eq!(
+        engine.state.objects[&controller_lander].zone,
+        Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.objects[&controller_land].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(engine.state.objects[&opponent_land].zone, Zone::Battlefield);
+    assert_eq!(
+        engine.state.objects[&opponent_lander].zone,
+        Zone::Battlefield
+    );
+    let search = find_resolution_choice(&search_batch).expect("private BasicLand search");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!(
+        search.deciding_player_id, 0,
+        "only the searching controller decides"
+    );
+    assert_eq!((search.min, search.max), (0, 2));
+    assert!(search.candidate_object_ids.contains(&selected_basic));
+    assert!(search.candidate_object_ids.contains(&other_basic));
+    assert!(!search.candidate_object_ids.contains(&nonbasic));
+    assert!(!search.candidate_object_ids.contains(&opponent_basic));
+    assert_no_search_reveal(&search_batch);
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected_basic]))
+        .expect("find one Basic Land");
+    assert_eq!(
+        engine.state.objects[&selected_basic].zone,
+        Zone::Battlefield
+    );
+    assert!(engine.state.objects[&selected_basic].tapped);
+    assert_eq!(engine.state.objects[&other_basic].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&nonbasic].zone, Zone::Library);
+    assert_eq!(shuffle_log_count(&completion, 0), 1);
+    assert_no_search_reveal(&completion);
+    assert_one_search_observer(&engine, wan);
+}
+
+#[test]
+fn issue_423_larval_scoutlander_can_choose_no_basic_land_after_sacrificing() {
+    let mut engine = issue_423_engine(423_042, "larval_scoutlander");
+    let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
+    let selected_basic = inject_library_card(&mut engine, 0, "island");
+    let nonbasic = inject_library_card(&mut engine, 0, "grizzly_bears");
+    let wan = inject_permanent_on_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
+    let (_, branch_batch) = resolve_larval_scoutlander_entry_trigger(&mut engine);
+    assert!(find_resolution_choice(&branch_batch).is_some());
+
+    let payment_batch = engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the optional sacrifice branch");
+    let payment = find_resolution_choice(&payment_batch).expect("sacrifice payment choice");
+    assert_eq!(payment.deciding_player_id, 0);
+    let search_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
+        .expect("sacrifice the Land");
+    assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
+    let search = find_resolution_choice(&search_batch).expect("BasicLand search with matches");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!(search.deciding_player_id, 0);
+    assert_eq!((search.min, search.max), (0, 2));
+    assert!(search.candidate_object_ids.contains(&selected_basic));
+    assert!(!search.candidate_object_ids.contains(&nonbasic));
+    assert_no_search_reveal(&search_batch);
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .expect("choose zero cards");
+    assert_eq!(engine.state.objects[&selected_basic].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&nonbasic].zone, Zone::Library);
+    assert_eq!(shuffle_log_count(&completion, 0), 1);
+    assert_no_search_reveal(&completion);
+    assert_one_search_observer(&engine, wan);
+}
+
+#[test]
+fn issue_423_larval_scoutlander_search_prompt_hides_eligible_basic_count() {
+    const EXPECTED_PROMPT: &str = "P0: search Library for up to 2 matching card(s).";
+    let mut expected_library_size = None;
+
+    for eligible_count in 0..=2 {
+        let mut engine = larval_search_privacy_engine(423_045);
+        let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
+        let wan = inject_permanent_on_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
+        let (larval, branch_batch) = resolve_larval_scoutlander_entry_trigger(&mut engine);
+        let branch = find_resolution_choice(&branch_batch).expect("optional entry branch");
+        assert_eq!(branch.deciding_player_id, 0);
+        let payment_batch = engine
+            .apply_scenario_command(0, &select_branch(0))
+            .expect("choose the optional sacrifice branch");
+        let payment =
+            find_resolution_choice(&payment_batch).expect("Land-or-Lander payment choice");
+        assert!(payment.candidate_object_ids.contains(&land));
+        assert!(!payment.candidate_object_ids.contains(&larval));
+
+        let mut basics = Vec::new();
+        let mut nonbasics = Vec::new();
+        for position in 0..2 {
+            let card_id = match (eligible_count, position) {
+                (2, 0) => "island",
+                (2, 1) => "mountain",
+                (1, 0) => "island",
+                _ => "grizzly_bears",
+            };
+            let object_id = inject_library_card(&mut engine, 0, card_id);
+            if card_id != "grizzly_bears" {
+                basics.push(object_id);
+            } else {
+                nonbasics.push(object_id);
+            }
+        }
+        let own_nonbasic = inject_library_card(&mut engine, 0, "grizzly_bears");
+        nonbasics.push(own_nonbasic);
+        let opponent_basic = inject_library_card(&mut engine, 1, "island");
+        let library_size = engine.state.players[0].library.len();
+        assert!(library_size > 0, "the controller's Library is nonempty");
+        if let Some(expected) = expected_library_size {
+            assert_eq!(library_size, expected, "public Library size is constant");
+        } else {
+            expected_library_size = Some(library_size);
+        }
+
+        let search_batch = engine
+            .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
+            .expect("sacrifice the Forest");
+        assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
+        assert_eq!(engine.state.players[0].library.len(), library_size);
+        let search = find_resolution_choice(&search_batch).expect("nonempty-library search offer");
+        assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+        assert_eq!(search.deciding_player_id, 0);
+        assert_eq!((search.min, search.max), (0, 2));
+        assert_eq!(search.candidate_object_ids, basics);
+        assert!(!search.candidate_object_ids.contains(&own_nonbasic));
+        assert!(!search.candidate_object_ids.contains(&opponent_basic));
+        assert_eq!(search.prompt_text.as_str(), EXPECTED_PROMPT);
+        let public_search_logs = search_batch
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(Ev::Log(log)) if log.text.starts_with("P0: search ") => {
+                    Some(log.text.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(public_search_logs, vec![EXPECTED_PROMPT]);
+        assert_no_search_reveal(&search_batch);
+
+        let invalid_candidate = if eligible_count == 1 {
+            opponent_basic
+        } else {
+            own_nonbasic
+        };
+        let pending_before = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the search offer remains pending");
+        let pending_prompt_id = pending_before.resolution_prompt_id;
+        let pending_decider = pending_before.deciding_player;
+        let pending_candidates = pending_before.presentation.candidates.clone();
+        let pending_bounds = (
+            pending_before.presentation.min,
+            pending_before.presentation.max,
+        );
+        let pending_prompt = pending_before.presentation.prompt.clone();
+        let pending_choice_kind = pending_before.presentation.choice_kind;
+        let rejected =
+            engine.apply_scenario_command(0, &submit_resolution_choice(vec![invalid_candidate]));
+        assert!(
+            rejected.is_err(),
+            "an ineligible card cannot satisfy the search"
+        );
+        let pending_after = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("rejection preserves the pending search offer");
+        assert_eq!(pending_after.resolution_prompt_id, pending_prompt_id);
+        assert_eq!(pending_after.deciding_player, pending_decider);
+        assert_eq!(pending_after.presentation.candidates, pending_candidates);
+        assert_eq!(
+            (
+                pending_after.presentation.min,
+                pending_after.presentation.max
+            ),
+            pending_bounds
+        );
+        assert_eq!(pending_after.presentation.prompt, pending_prompt);
+        assert_eq!(pending_after.presentation.choice_kind, pending_choice_kind);
+
+        let selected = engine
+            .apply_scenario_command(0, &submit_resolution_choice(basics.clone()))
+            .expect("choose zero, one, or two eligible Basic Lands");
+        let mut completion_batches = vec![selected];
+        if eligible_count == 2 {
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("two entries require timestamp order")
+                    .presentation
+                    .choice_kind,
+                ChoiceKind::SimultaneousEntryOrder
+            );
+            let entry_answers = answer_simultaneous_entry_order_in_engine_order(&mut engine);
+            assert!(!entry_answers.is_empty());
+            completion_batches.extend(entry_answers.into_iter().map(|(_, _, batch)| batch));
+        }
+
+        for basic in &basics {
+            assert_eq!(engine.state.objects[basic].zone, Zone::Battlefield);
+            assert!(engine.state.objects[basic].tapped);
+        }
+        for nonbasic in &nonbasics {
+            assert_eq!(engine.state.objects[nonbasic].zone, Zone::Library);
+        }
+        assert_eq!(
+            basics.len(),
+            eligible_count,
+            "the submitted selection matches the available eligible count"
+        );
+        assert_eq!(
+            completion_batches
+                .iter()
+                .map(|batch| shuffle_log_count(batch, 0))
+                .sum::<usize>(),
+            1,
+            "the completed search shuffles exactly once"
+        );
+        for batch in &completion_batches {
+            assert_no_search_reveal(batch);
+        }
+        assert_one_search_observer(&engine, wan);
+    }
+}
+
+#[test]
+fn issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search() {
+    let mut declined = issue_423_engine(423_043, "larval_scoutlander");
+    let land = inject_permanent_on_battlefield(&mut declined, 0, "forest");
+    let (_, branch_batch) = resolve_larval_scoutlander_entry_trigger(&mut declined);
+    let library_before_decline = declined.state.players[0].library.clone();
+    let branch = find_resolution_choice(&branch_batch).expect("optional entry branch");
+    assert_eq!(branch.deciding_player_id, 0);
+    let decline_batch = declined
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline the optional sacrifice branch");
+    assert_eq!(declined.state.objects[&land].zone, Zone::Battlefield);
+    assert_eq!(declined.state.players[0].library, library_before_decline);
+    assert!(declined.state.pending_resolution.is_none());
+    assert_eq!(shuffle_log_count(&decline_batch, 0), 0);
+    assert_no_search_reveal(&decline_batch);
+
+    let mut no_cost = issue_423_engine(423_044, "larval_scoutlander");
+    let library_before_no_cost = no_cost.state.players[0].library.clone();
+    let (no_cost_larval, no_cost_batch) = resolve_larval_scoutlander_entry_trigger(&mut no_cost);
+    let library_without_deployed_larval = library_before_no_cost
+        .into_iter()
+        .filter(|object_id| *object_id != no_cost_larval)
+        .collect::<Vec<_>>();
+    assert!(
+        find_resolution_choice(&no_cost_batch).is_none(),
+        "a Land-or-Lander branch without a controlled candidate is not offered"
+    );
+    assert!(no_cost.state.pending_resolution.is_none());
+    assert!(no_cost.state.stack.is_empty());
+    assert_eq!(
+        no_cost.state.players[0].library,
+        library_without_deployed_larval
+    );
+    assert_eq!(shuffle_log_count(&no_cost_batch, 0), 0);
+    assert_no_search_reveal(&no_cost_batch);
 }
 
 #[test]

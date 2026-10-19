@@ -4475,7 +4475,8 @@ mod invariant_rollback_tests {
                 &pending.continuation,
                 ResolutionContinuation::SearchLibrary { .. }
             ));
-            assert_eq!((pending.presentation.min, pending.presentation.max), (0, 0));
+            // Keep the published maximum at authored capacity even when no candidate is eligible.
+            assert_eq!((pending.presentation.min, pending.presentation.max), (0, 1));
             assert!(pending.presentation.candidates.is_empty());
             assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
             assert_eq!(run.in_flight, Some(Vec::new()));

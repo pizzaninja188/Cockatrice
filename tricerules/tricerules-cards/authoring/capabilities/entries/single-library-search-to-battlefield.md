@@ -1,4 +1,4 @@
-# Single library search result to battlefield
+# Library search to battlefield
 
 ## Identity
 
@@ -8,23 +8,33 @@
 
 ## Behavior and limits
 
-- **Behavior:** A resolving spell offers up to one card from its controller's library that matches
-  an authored filter; a selected card goes onto the battlefield tapped, then the library is
-  shuffled.
+- **Behavior:** A resolving spell or triggered Program can offer one or two cards from its
+  controller's library that match an authored filter; selected cards go onto the battlefield
+  tapped, then the library is shuffled.
 - **Composition and prerequisites:** One `SearchLibrary` effect with a static card filter, a
-  battlefield destination whose `tapped` value is true, and `shuffle: true`. The cited scenarios
-  observe a zero-to-one choice bound but exercise selecting one result.
-- **Boundaries:** The two scenarios cover a `BasicLand` filter and an OR of four land subtypes; the
-  latter admits a nonbasic land carrying one of those subtypes. Both select at most one card, put
-  it onto the battlefield tapped, and assert the shuffle log.
-- **Near misses:** These scenarios do not cover multiple results, split destinations, a hand or
-  library destination, untapped entry, reveal requirements, or a conditional destination. They do
-  not submit an ineligible choice or test a zero-card choice.
+  battlefield destination whose `tapped` value is true, and `shuffle: true`. The spell scenarios
+  observe a zero-to-one choice bound and select one result. Larval Scoutlander's ETB Program
+  observes a zero-to-two bound and also covers choosing no result after paying its sacrifice cost.
+- **Boundaries:** Existing spell scenarios cover a `BasicLand` filter and an OR of four land
+  subtypes; the latter admits a nonbasic land carrying one of those subtypes. Larval Scoutlander
+  covers a `BasicLand` filter, up to two tapped results, controller-only library selection, an
+  eligible land-or-Lander sacrifice, and decline/no-eligible-cost paths that skip the search. A
+  privacy fixture holds the nonempty controller Library's size constant across zero, one, and two
+  eligible Basics: the 0..2 offer and public up-to-two prompt stay fixed, while ineligible candidates
+  remain rejected. The maximum reflects authored capacity (capped by `count`), not the eligible
+  candidate count; candidates and submitted selections remain filter-validated. This does not claim
+  full library-identity secrecy. A combined resultless-search fixture selects two cards with
+  serial entry choices and verifies that the caller resumes after both choices, the remaining
+  instruction runs once, and one shuffle and one search-observer event complete the search.
+- **Near misses:** These scenarios do not cover split destinations, a hand or library destination,
+  untapped entry, reveal requirements, or a conditional destination. The Larval scenarios reject
+  wrong-actor and ineligible-candidate answers, but do not prove full library-identity secrecy or
+  shuffle randomness.
 
 ## Runtime support
 
-- **Status:** `Supported` for the one-result, tapped-battlefield behavior and the two tested filter
-  shapes described above.
+- **Status:** `Supported` for one-result spell searches and the two-result triggered-Program form,
+  all with tapped battlefield entry and the tested filters described above.
 - **Typed symbols:** `SpellEffectKind::SearchLibrary`, `SearchDestination::Battlefield`, and
   `ZoneCardFilter` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`;
@@ -32,18 +42,24 @@
   engine choice producer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#search_library`;
   selection and destination consumer:
   `tricerules/tricerules-core/src/engine/custom_resolution/library_search.rs#finish_library_search`.
-- **Evidence and limits:** The scenarios inspect candidate IDs, choose one legal card, and assert
-  the chosen card's battlefield zone and tapped state, an excluded card remaining in the library,
-  and a shuffle log. They do not prove shuffle randomness or invalid-choice rejection.
+- **Evidence and limits:** The Larval privacy scenario holds the controller Library's public size
+  constant while varying eligible Basic Lands from zero to two. It checks the same 0..2 offer and
+  public up-to-two prompt/log, filter-bound candidates, rejection of nonmatching and opponent-library
+  selections without changing the pending offer, tapped results, one shuffle, and one observer. This
+  checks bound/prompt capacity only; it does not prove full library-identity secrecy or shuffle
+  randomness.
 
 ## Generator recognition
 
 - **Status:** `Partial`.
 - **Recipe and input shapes:** Recipe `spell.search_library.basic_land.battlefield_tapped` recognizes
-  the exact single-basic-land, tapped-battlefield, then-shuffle clause.
+  the exact single-basic-land, tapped-battlefield, then-shuffle spell clause. Recipe
+  `station.etb.sac_land_search_two` recognizes Larval Scoutlander's exact optional land-or-Lander
+  sacrifice followed by a search for up to two Basic Lands tapped and a shuffle.
 - **References and limits:** `tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs#match_spell_search_basic_land_battlefield_tapped`
-  implements that exact matcher. This entry's subtype-OR example is outside that recipe's exact
-  input shape; other generator routes for that wording were not assessed.
+  implements the spell matcher; the issue-specific station recipe is in the same file. This entry's
+  subtype-OR example is outside the spell recipe's exact input shape; other generator routes for
+  that wording were not assessed.
 
 ## Shipped card evidence
 
@@ -51,8 +67,10 @@
   [map](../../review-maps/rampant_growth.json).
 - `farseek` — definition: [Farseek](../../../data/farseek.ron) — review map:
   [map](../../review-maps/farseek.json).
-- **Whole-card readiness:** `Unassessed` for both named cards in this index entry; their linked
-  maps record earlier complete-definition reviews.
+- `larval_scoutlander` — definition: [Larval Scoutlander](../../../data/generated/l/larval_scoutlander.ron) —
+  review map: [map](../../review-maps/larval_scoutlander.json).
+- **Whole-card readiness:** `Unassessed` in this navigation entry. The linked maps record independent
+  complete-definition reviews; capability evidence does not replace applicable delivery gates.
 
 ## Semantic test coverage
 
@@ -60,14 +78,27 @@
   `tricerules/tricerules-core/tests/scenario/deck_coverage_search_lands.rs#rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_tapped` — `Exercised`: the offered candidates include a basic land but exclude a nonbasic land; after choosing the basic land, it is on the battlefield tapped, the excluded card remains in the library, and a shuffle log is emitted.
 - `scenario deck_coverage_search_lands::farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapped` —
   `tricerules/tricerules-core/tests/scenario/deck_coverage_search_lands.rs#farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapped` — `Exercised`: the offered candidates include each listed subtype and a matching nonbasic land, exclude a land with none of those subtypes, then put the selected card onto the battlefield tapped and emit a shuffle log.
-- **Uncovered behavior:** Multiple selected results, split destinations, destination alternatives, reveal/privacy presentation, ineligible-choice rejection, and shuffle randomness.
-- **Inapplicable cases:** `N/A` — trigger behavior; both cited definitions are sorceries with spell effects.
+- `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped` —
+  `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped` — `Exercised`: the ETB trigger permits a land sacrifice and puts two selected Basic Lands onto the battlefield tapped.
+- `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_may_pay_with_lander_and_searches_only_its_controllers_library` —
+  `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_may_pay_with_lander_and_searches_only_its_controllers_library` — `Exercised`: a Lander may be sacrificed; the controller's search offer excludes an opponent's library card, rejects a wrong-actor answer, selects one result, and emits no explicit reveal event.
+- `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_can_choose_no_basic_land_after_sacrificing` —
+  `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_can_choose_no_basic_land_after_sacrificing` — `Exercised`: the cost is paid, zero cards are selected, and the resultless search still shuffles and resumes.
+- `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_search_prompt_hides_eligible_basic_count` —
+  `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_search_prompt_hides_eligible_basic_count` — `Exercised`: same-sized nonempty controller Libraries with zero, one, or two eligible Basics retain the 0..2 offer and public up-to-two prompt/log; nonmatching and opponent-library answers are rejected without replacing the pending offer, then selected cards enter tapped and the search emits one shuffle and one observer.
+- `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search` —
+  `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search` — `Exercised`: declining or lacking an eligible sacrifice skips the search branch.
+- `scenario resultless_battlefield_search::resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices` —
+  `tricerules/tricerules-core/tests/scenario/resultless_battlefield_search.rs#resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices` — `Exercised`: two selected cards each receive an entry choice; after both answers, the search resumes at its tail, shuffles once, and emits one search-observer event.
+- **Uncovered behavior:** Split destinations, destination alternatives, reveal presentation, and shuffle randomness.
+- **Inapplicable cases:** `N/A` — the two existing spell definitions do not have trigger behavior; Larval Scoutlander is a triggered Program search.
 
 ## Presentation prerequisites
 
-- Both review maps link the spell's Oracle line to its typed search effect. The scenarios check the
-  `LibrarySearch` choice kind, but do not establish client rendering, privacy presentation, or
-  manual play acceptance.
+- The spell review maps link the Oracle lines to their typed search effects; Larval Scoutlander's
+  map links its ETB, Station, and threshold lines to typed paths. Scenarios inspect the
+  `LibrarySearch` choice kind and relevant private-search outcomes, but do not establish client
+  rendering or manual play acceptance.
 
 ## Review provenance
 

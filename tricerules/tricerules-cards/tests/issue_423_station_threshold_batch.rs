@@ -411,31 +411,112 @@ fn issue_423_companion_abilities_are_registered_exactly() {
     let [entry] = larval.triggered_abilities.as_slice() else {
         panic!("Larval Scoutlander has one entry trigger");
     };
-    let [SpellEffectKind::ChooseResolutionBranch {
-        optional, branches, ..
-    }] = entry.effect.as_slice()
-    else {
-        panic!("Larval's entry offers its printed optional sacrifice branch");
-    };
-    assert!(optional);
-    assert_eq!(branches.len(), 1);
-    assert_eq!(branches[0].branch_id.as_str(), "sacrifice_a_land_or_lander");
-    let [SpellEffectKind::SearchLibrary {
-        count,
-        zones,
-        destination,
-        shuffle,
-        ..
-    }] = branches[0].effects.as_slice()
-    else {
-        panic!("Larval's branch searches for basic lands");
-    };
-    assert_eq!((*count, *shuffle), (2, true));
-    assert_eq!(zones, &SearchZoneSelection::default());
+    assert_eq!(entry.ability_id.as_str(), "triggered_01");
     assert_eq!(
-        destination,
-        &SearchDestination::Battlefield { tapped: true }
+        entry.presentation,
+        AbilityPresentation::OracleLines(vec![1])
     );
+    assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert!(
+        entry.effect.is_empty(),
+        "Larval's trigger uses its Program body"
+    );
+    assert!(entry.program.is_some());
+
+    let owner = tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+        card_id: "larval_scoutlander".to_owned(),
+        face_id: larval.face_id.clone(),
+        ability_path: vec![entry.ability_id.clone()],
+    });
+    let program = tricerules_cards::registry::global()
+        .compiled_program_for_owner(&owner)
+        .expect("Larval's exact triggered ability owns a compiled Program");
+    assert_eq!(program.owner, owner);
+    assert!(program.body.yields.is_empty());
+    let [choice] = program.body.steps.as_slice() else {
+        panic!("Larval's compiled trigger has one optional sacrifice choice");
+    };
+    let tricerules_cards::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choice.kind
+    else {
+        panic!("Larval's optionality remains on the compiled Choose");
+    };
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Larval has exactly one sacrifice branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "sacrifice_a_land_or_lander");
+    assert_eq!(
+        branch.presentation,
+        AbilityPresentation::OracleLines(vec![1])
+    );
+    assert_eq!(
+        branch.cost,
+        tricerules_cards::primitives::ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        controller: TargetController::You,
+                        permanent_types: vec![
+                            tricerules_cards::primitives::PermanentTypeFilter::Land
+                        ],
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        controller: TargetController::You,
+                        required_subtypes: vec!["Lander".into()],
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            },
+            source_only: false,
+        }
+    );
+    assert!(branch.body.yields.is_empty());
+    let [search] = branch.body.steps.as_slice() else {
+        panic!("Larval's sacrifice branch performs one library search");
+    };
+    assert!(search.outputs.is_empty(), "the direct search has no result");
+    let tricerules_cards::primitives::CompiledInstructionKind::Perform(effect) = &search.kind
+    else {
+        panic!("Larval's branch performs the direct search");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 2,
+            count_by_cast_cost: None,
+            filter: Some(filter),
+            selection_constraint: None,
+            slots,
+            zones,
+            destination: SearchDestination::Battlefield { tapped: true },
+            conditional_destination: None,
+            shuffle: true,
+            reveal: false,
+            result_id: None,
+            selection_bounds: Some(
+                tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 2 },
+            ),
+        } if filter == &ZoneCardFilter {
+            card_type: Some(CardTypeFilter::BasicLand),
+            ..ZoneCardFilter::default()
+        } && zones == &SearchZoneSelection::default()
+            && slots.is_empty()
+            && filter.validate().is_ok()
+    ));
 
     let sledge = registered_face("sledge-class_seedship");
     let [attack] = sledge.triggered_abilities.as_slice() else {

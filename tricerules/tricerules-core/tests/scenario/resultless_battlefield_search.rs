@@ -227,10 +227,32 @@ fn choose_branch_for_prompt(prompt_id: u64, index: u32) -> RuledCommand {
 }
 
 fn test_engine(seed: u64) -> GameEngine {
+    test_engine_with_search_fixture(seed, DIRECT_BATTLEFIELD_SEARCH_FIXTURE)
+}
+
+fn direct_battlefield_search_fixture_with_bounds(count: u32, max: u32) -> String {
+    let fixture = DIRECT_BATTLEFIELD_SEARCH_FIXTURE
+        .replace(
+            "count: 1, count_by_cast_cost: None",
+            &format!("count: {count}, count_by_cast_cost: None"),
+        )
+        .replace(
+            "selection_bounds: Some((min: 0, max: 1))",
+            &format!("selection_bounds: Some((min: 0, max: {max}))"),
+        );
+    assert_eq!(
+        (count, max),
+        (2, 2),
+        "this fixture helper is reserved for the combined two-entry case"
+    );
+    fixture
+}
+
+fn test_engine_with_search_fixture(seed: u64, search_fixture: &str) -> GameEngine {
     let registry = Box::leak(Box::new(
         CardRegistry::from_chunks_and_tokens(
             &[
-                DIRECT_BATTLEFIELD_SEARCH_FIXTURE,
+                search_fixture,
                 TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE,
                 include_str!("../../../tricerules-cards/data/forest.ron"),
                 include_str!("../../../tricerules-cards/data/island.ron"),
@@ -265,6 +287,26 @@ fn test_engine(seed: u64) -> GameEngine {
         .expect("two-player resultless Battlefield-search engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
+}
+
+fn shuffle_log_count(batch: &tricerules_proto::ruled::v1::RuledEventBatch, player: i32) -> usize {
+    batch
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == format!("P{player} shuffles their library.")
+            )
+        })
+        .count()
+}
+
+fn assert_no_search_reveal(batch: &tricerules_proto::ruled::v1::RuledEventBatch) {
+    assert!(batch
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
 }
 
 fn conditional_search_tail_engine(seed: u64) -> GameEngine {
@@ -1158,6 +1200,157 @@ fn resultless_battlefield_search_entry_choice_retains_cursor_until_entry_commits
         1
     );
     assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
+}
+
+#[test]
+fn resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices() {
+    let search_fixture = direct_battlefield_search_fixture_with_bounds(2, 2);
+    let mut engine = test_engine_with_search_fixture(284_206, &search_fixture);
+    let wan = install_search_observer(&mut engine);
+    let first = inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let second = inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let generations_before = [first, second].map(|selected| {
+        engine
+            .state
+            .zone_change_generation
+            .get(&selected)
+            .copied()
+            .unwrap_or(0)
+    });
+    cast_fixture(&mut engine);
+    let search_batch = engine
+        .apply_scenario_command(0, &choose_branch(0))
+        .expect("choose the mandatory two-card search branch");
+    let search = find_resolution_choice(&search_batch).expect("private two-card BasicLand search");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!(search.deciding_player_id, 0);
+    assert_eq!((search.min, search.max), (0, 2));
+    assert!(search.candidate_object_ids.contains(&first));
+    assert!(search.candidate_object_ids.contains(&second));
+    assert_no_search_reveal(&search_batch);
+
+    let entry_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first, second]))
+        .expect("select both Basic Land Creatures");
+    let first_type_choice =
+        find_resolution_choice(&entry_batch).expect("first as-enters creature-type choice");
+    assert_eq!(
+        first_type_choice.choice_kind(),
+        ChoiceKind::ResolutionBranch
+    );
+    assert_eq!(first_type_choice.deciding_player_id, 0);
+    let first_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the first entry replacement is parked");
+    let serialized_first_pending =
+        serde_json::to_value(first_pending).expect("first continuation is serializable");
+    assert!(
+        !serialized_first_pending["continuation"]["EntryChooseCreatureType"]["stack"]["program"]
+            .is_null(),
+        "the first ZoneEntryBatch choice retains the typed program cursor"
+    );
+    assert_eq!(
+        treasure_count(&engine),
+        0,
+        "the typed tail waits for both entries"
+    );
+
+    let human = tricerules_card_model::CREATURE_TYPES
+        .iter()
+        .position(|creature_type| *creature_type == "Human")
+        .expect("Human is a legal creature type") as u32;
+    let first_entry_completion = engine
+        .apply_scenario_command(0, &choose_branch(human))
+        .expect("choose Human for the first entrant");
+    let second_type_choice = find_resolution_choice(&first_entry_completion)
+        .expect("the second entrant receives its own as-enters choice");
+    assert_eq!(
+        second_type_choice.choice_kind(),
+        ChoiceKind::ResolutionBranch
+    );
+    assert_eq!(second_type_choice.deciding_player_id, 0);
+    assert!(
+        first_entry_completion.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::Log(log)) if log.text == "P0 chooses Human for this permanent."
+        )),
+        "the first replacement applies to its own entrant"
+    );
+    let second_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the second entry replacement is parked");
+    let serialized_second_pending =
+        serde_json::to_value(second_pending).expect("second continuation is serializable");
+    assert!(
+        !serialized_second_pending["continuation"]["EntryChooseCreatureType"]["stack"]["program"]
+            .is_null(),
+        "the second ZoneEntryBatch choice still retains the typed program cursor"
+    );
+    assert_eq!(
+        treasure_count(&engine),
+        0,
+        "the typed tail has not run while the second replacement is pending"
+    );
+
+    let elf = tricerules_card_model::CREATURE_TYPES
+        .iter()
+        .position(|creature_type| *creature_type == "Elf")
+        .expect("Elf is a legal creature type") as u32;
+    let second_entry_completion = engine
+        .apply_scenario_command(0, &choose_branch(elf))
+        .expect("choose Elf for the second entrant");
+    assert!(
+        second_entry_completion.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::Log(log)) if log.text == "P0 chooses Elf for this permanent."
+        )),
+        "the second replacement applies to its own entrant"
+    );
+    assert_no_search_reveal(&entry_batch);
+    assert_no_search_reveal(&first_entry_completion);
+    assert_no_search_reveal(&second_entry_completion);
+    let entry_order_answers = answer_simultaneous_entry_order_in_engine_order(&mut engine);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.objects[&first].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&second].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&first].tapped);
+    assert!(engine.state.objects[&second].tapped);
+    assert_eq!(
+        engine.state.zone_change_generation[&first],
+        generations_before[0] + 1
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&second],
+        generations_before[1] + 1
+    );
+    assert_eq!(
+        treasure_count(&engine),
+        1,
+        "the typed tail runs once after both entries"
+    );
+
+    let shuffle_count = [
+        shuffle_log_count(&search_batch, 0),
+        shuffle_log_count(&entry_batch, 0),
+        shuffle_log_count(&first_entry_completion, 0),
+        shuffle_log_count(&second_entry_completion, 0),
+    ]
+    .into_iter()
+    .sum::<usize>()
+        + entry_order_answers
+            .iter()
+            .map(|(_, _, batch)| shuffle_log_count(batch, 0))
+            .sum::<usize>();
+    assert_eq!(
+        shuffle_count, 1,
+        "the search shuffles once after both entries commit"
+    );
     assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
     assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
 }

@@ -8283,63 +8283,39 @@ fn match_station_etb_sac_land_search_two(
         && text
             == "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("sacrifice_a_land_or_lander")
-                            .expect("closed sacrifice branch uses a valid choice ID"),
-                        presentation: context.presentation.clone(),
-                        runtime_fallback: None,
-                        cost: ResolutionCost::SacrificePermanent {
-                            // A pure OR node owns both printed alternatives; the payer-scoped
-                            // permanent selection comes from the branch cost itself.
-                            filter: TargetFilter {
-                                any_of: Some(vec![
-                                    TargetFilter {
-                                        kind: TargetKind::AnyPermanent,
-                                        controller: TargetController::You,
-                                        permanent_types: vec![PermanentTypeFilter::Land],
-                                        ..TargetFilter::default()
-                                    },
-                                    TargetFilter {
-                                        kind: TargetKind::AnyPermanent,
-                                        controller: TargetController::You,
-                                        required_subtypes: vec!["Lander".into()],
-                                        ..TargetFilter::default()
-                                    },
-                                ]),
-                                ..TargetFilter::default()
-                            },
-                            source_only: false,
-                        },
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::SearchLibrary {
-                            who: PlayerRecipient::Controller,
-                            optional: false,
-                            count: 2,
-                            count_by_cast_cost: None,
-                            selection_bounds: None,
-                            filter: Some(ZoneCardFilter {
-                                card_type: Some(CardTypeFilter::BasicLand),
-                                ..ZoneCardFilter::default()
-                            }),
-                            slots: Vec::new(),
-                            zones: SearchZoneSelection::default(),
-                            destination: SearchDestination::Battlefield { tapped: true },
-                            conditional_destination: None,
-                            shuffle: true,
-                            reveal: false,
-                            selection_constraint: None,
-                            result_id: None,
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                }],
+                authored_program(
+                    r#"(id: "choose_sacrifice", kind: Choose(
+                        choice: "sacrifice", chooser: Controller, optional: true,
+                        branches: [(
+                            branch_id: "sacrifice_a_land_or_lander",
+                            presentation: OracleLines([1]),
+                            cost: SacrificePermanent(
+                                filter: (any_of: Some([
+                                    (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+                                    (kind: AnyPermanent, controller: You, required_subtypes: ["Lander"]),
+                                ])),
+                                source_only: false,
+                            ),
+                            requirement: Always,
+                            body: (steps: [(id: "search_basics", kind: Perform(SearchLibrary(
+                                who: Controller, optional: false, count: 2,
+                                count_by_cast_cost: None,
+                                filter: Some((card_type: Some(BasicLand))),
+                                selection_constraint: None, slots: [],
+                                zones: Fixed([Library]),
+                                destination: Battlefield(tapped: true),
+                                conditional_destination: None,
+                                shuffle: true, reveal: false, result_id: None,
+                                selection_bounds: Some((min: 0, max: 2)),
+                            )))], yields: []),
+                        )],
+                        otherwise: (steps: [], yields: []),
+                    ))"#,
+                    "",
+                ),
             )
         })
 }
@@ -48992,17 +48968,49 @@ mod tests {
         let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
             panic!("Larval ETB must emit a triggered ability")
         };
-        let [SpellEffectKind::ChooseResolutionBranch {
-            optional, branches, ..
-        }] = ability.effect.as_slice()
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(
+            ability.effect.is_empty(),
+            "Larval ETB uses its Program body"
+        );
+        assert!(ability.modal.is_none());
+        assert!(ability.targeting.is_none());
+        let program = ability
+            .program
+            .as_ref()
+            .expect("Larval ETB emits a typed Program");
+        assert!(program.target_bindings.is_empty());
+        assert!(program.body.yields.is_empty());
+        let [choice] = program.body.steps.as_slice() else {
+            panic!("Larval ETB has one optional sacrifice choice")
+        };
+        let tricerules_cards::primitives::InstructionKind::Choose {
+            chooser,
+            optional,
+            branches,
+            otherwise,
+            ..
+        } = &choice.kind
         else {
             panic!("Larval ETB must offer its printed optional branch")
         };
-        assert!(optional);
+        assert_eq!(*chooser, PlayerRecipient::Controller);
+        assert!(*optional);
+        assert!(otherwise.steps.is_empty());
         let [branch] = branches.as_slice() else {
             panic!("Larval ETB has exactly one printed branch")
         };
         assert_eq!(branch.branch_id.as_str(), "sacrifice_a_land_or_lander");
+        assert_eq!(
+            branch.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(branch.requirement, ResolutionBranchRequirement::Always);
         assert_eq!(
             branch.cost,
             ResolutionCost::SacrificePermanent {
@@ -49026,19 +49034,35 @@ mod tests {
                 source_only: false,
             }
         );
-        let [SpellEffectKind::SearchLibrary {
+        assert!(branch.body.yields.is_empty());
+        let [search] = branch.body.steps.as_slice() else {
+            panic!("Larval's branch has one library search")
+        };
+        let tricerules_cards::primitives::InstructionKind::Perform(effect) = &search.kind else {
+            panic!("Larval's branch performs its library search")
+        };
+        let SpellEffectKind::SearchLibrary {
+            who,
             count,
+            count_by_cast_cost,
             filter,
+            selection_constraint,
+            slots,
             zones,
             destination,
+            conditional_destination,
             shuffle,
+            reveal,
+            result_id,
+            selection_bounds,
             optional,
-            ..
-        }] = branch.effects.as_slice()
+        } = effect.as_ref()
         else {
             panic!("Larval's branch searches its library")
         };
+        assert_eq!(*who, PlayerRecipient::Controller);
         assert_eq!((*count, *optional, *shuffle), (2, false, true));
+        assert!(count_by_cast_cost.is_none());
         assert_eq!(
             filter,
             &Some(ZoneCardFilter {
@@ -49046,10 +49070,19 @@ mod tests {
                 ..ZoneCardFilter::default()
             })
         );
+        assert!(selection_constraint.is_none());
+        assert!(slots.is_empty());
         assert_eq!(zones, &SearchZoneSelection::default());
         assert_eq!(
             destination,
             &SearchDestination::Battlefield { tapped: true }
+        );
+        assert!(conditional_destination.is_none());
+        assert!(!*reveal);
+        assert!(result_id.is_none());
+        assert_eq!(
+            *selection_bounds,
+            Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 2 })
         );
 
         let sledge = issue_423_context(

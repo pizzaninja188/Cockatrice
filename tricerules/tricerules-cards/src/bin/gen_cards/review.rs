@@ -900,19 +900,36 @@ fn resolve_batch_review_draft(draft_directory: &Path, map_path: &Path) -> Result
         .join("multiface")
         .join(stem)
         .with_extension("ron");
-    match (root_draft.is_file(), multiface_draft.is_file()) {
-        (true, false) => Ok(root_draft),
-        (false, true) => Ok(multiface_draft),
-        (false, false) => Err(format!(
-            "no review draft at either expected location: {} or {}",
-            root_draft.display(),
-            multiface_draft.display()
+    let stem_text = stem.to_string_lossy();
+    let generated_draft = draft_directory
+        .join("generated")
+        .join(super::bucket(&stem_text).to_string())
+        .join(stem)
+        .with_extension("ron");
+    let candidates = [root_draft, multiface_draft, generated_draft];
+    let existing = candidates
+        .iter()
+        .filter(|candidate| candidate.is_file())
+        .cloned()
+        .collect::<Vec<_>>();
+    match existing.as_slice() {
+        [candidate] => Ok(candidate.clone()),
+        [] => Err(format!(
+            "no review draft at any expected location: {}",
+            candidates
+                .iter()
+                .map(|candidate| candidate.display().to_string())
+                .collect::<Vec<_>>()
+                .join(" or ")
         )),
-        (true, true) => Err(format!(
-            "ambiguous review draft path for {}: both {} and {} exist",
-            stem.to_string_lossy(),
-            root_draft.display(),
-            multiface_draft.display()
+        _ => Err(format!(
+            "ambiguous review draft path for {}: multiple candidates exist: {}",
+            stem_text,
+            existing
+                .iter()
+                .map(|candidate| candidate.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )),
     }
 }
@@ -1277,6 +1294,107 @@ mod tests {
         .unwrap_err();
         assert!(missing.contains("no review draft at"), "{missing}");
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn batch_existing_review_resolves_generated_bucket_drafts_and_rejects_ambiguity() {
+        let root = std::env::temp_dir().join(format!(
+            "card-review-generated-bucket-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let drafts = root.join("drafts");
+        let stem = "larval_scoutlander";
+        let map_path = root.join("maps").join(format!("{stem}.json"));
+        let root_draft = drafts.join(format!("{stem}.ron"));
+        let multiface_draft = drafts.join("multiface").join(format!("{stem}.ron"));
+        let generated_draft = drafts
+            .join("generated")
+            .join(super::super::bucket(stem).to_string())
+            .join(format!("{stem}.ron"));
+        fs::create_dir_all(generated_draft.parent().unwrap()).unwrap();
+        fs::write(&generated_draft, draft("Larval Scoutlander", 2)).unwrap();
+
+        let generated = resolve_batch_review_draft(&drafts, &map_path);
+
+        fs::write(&root_draft, draft("Larval Scoutlander", 2)).unwrap();
+        let root_and_generated = resolve_batch_review_draft(&drafts, &map_path);
+        fs::remove_file(&root_draft).unwrap();
+
+        fs::create_dir_all(multiface_draft.parent().unwrap()).unwrap();
+        fs::write(&multiface_draft, draft("Larval Scoutlander", 2)).unwrap();
+        let multiface_and_generated = resolve_batch_review_draft(&drafts, &map_path);
+        fs::remove_file(&multiface_draft).unwrap();
+
+        fs::remove_file(&generated_draft).unwrap();
+        let missing = resolve_batch_review_draft(&drafts, &map_path);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(generated.unwrap(), generated_draft);
+        assert!(
+            root_and_generated
+                .unwrap_err()
+                .contains("ambiguous review draft path"),
+            "a root draft must be ambiguous with its generated-bucket counterpart"
+        );
+        assert!(
+            multiface_and_generated
+                .unwrap_err()
+                .contains("ambiguous review draft path"),
+            "a multiface draft must be ambiguous with its generated-bucket counterpart"
+        );
+        assert!(
+            missing.unwrap_err().contains("no review draft at"),
+            "missing root, multiface, and generated drafts are an error"
+        );
+    }
+
+    #[test]
+    fn batch_existing_review_generated_bucket_uses_ascii_letter_and_empty_fallback() {
+        let root = std::env::temp_dir().join(format!(
+            "card-review-generated-bucket-controls-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let drafts = root.join("drafts");
+        let cases = [("3d_artifact", 'd'), ("12345", '_')];
+        let mut resolutions = Vec::new();
+
+        for (stem, expected_bucket) in cases {
+            assert_eq!(super::super::bucket(stem), expected_bucket);
+            let generated_draft = drafts
+                .join("generated")
+                .join(expected_bucket.to_string())
+                .join(format!("{stem}.ron"));
+            fs::create_dir_all(generated_draft.parent().unwrap()).unwrap();
+            fs::write(
+                &generated_draft,
+                format!("(id: {stem:?}, name: {stem:?}, face_id: {stem:?})"),
+            )
+            .unwrap();
+            let map_path = root.join("maps").join(format!("{stem}.json"));
+            resolutions.push((
+                stem,
+                generated_draft.clone(),
+                resolve_batch_review_draft(&drafts, &map_path),
+            ));
+            fs::remove_file(&generated_draft).unwrap();
+        }
+        fs::remove_dir_all(&root).unwrap();
+
+        for (stem, expected, resolved) in resolutions {
+            assert_eq!(
+                resolved.unwrap(),
+                expected,
+                "generated review lookup uses the established bucket for {stem}"
+            );
+        }
     }
 
     fn source(oracle_id: &str, name: &str, oracle_text: &str) -> Value {

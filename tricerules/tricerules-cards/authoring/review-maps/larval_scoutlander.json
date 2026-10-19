@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "oracle_id": "b3f3d55c-a3f6-441b-a380-60c0734dc514",
+  "spans": [
+    {
+      "face_id": "larval_scoutlander",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+      ]
+    },
+    {
+      "face_id": "larval_scoutlander",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "larval_scoutlander",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped",
+      "covers": "the ETB trigger can sacrifice a land and select two Basic Lands for tapped battlefield entry"
+    },
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_larval_scoutlander_may_pay_with_lander_and_searches_only_its_controllers_library",
+      "covers": "the alternative Lander cost, controller-owned library, wrong-actor rejection, and no explicit reveal event"
+    },
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_larval_scoutlander_can_choose_no_basic_land_after_sacrificing",
+      "covers": "the optional zero-result search after paying the sacrifice cost still shuffles and resumes"
+    },
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_larval_scoutlander_search_prompt_hides_eligible_basic_count",
+      "covers": "same-sized nonempty controller Libraries with zero, one, or two eligible Basics retain the 0..2 offer and public up-to-two prompt/log; nonmatching and opponent-library answers are rejected without replacing the pending offer"
+    },
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search",
+      "covers": "declining or having no eligible sacrifice skips the search branch"
+    },
+    {
+      "test": "scenario resultless_battlefield_search::resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices",
+      "covers": "two found cards receive serial entry choices; the search tail resumes after both, with one shuffle and one observer event"
+    },
+    {
+      "test": "scenario issue_423_station_thresholds::issue_423_station_crews_with_the_tapped_creatures_power_at_sorcery_speed",
+      "covers": "generic Station tap-power, timing, and threshold behavior used by Larval Scoutlander's registered Station definition"
+    },
+    {
+      "test": "mechanic_registry::issue_423_station_threshold_batch::issue_423_spacecraft_faces_have_exact_station_activation_and_thresholds",
+      "covers": "registered Larval Scoutlander identity, Station activation, threshold, and ability structure"
+    },
+    {
+      "test": "mechanic_registry::issue_423_station_threshold_batch::issue_423_companion_abilities_are_registered_exactly",
+      "covers": "registered companion ability structures and exact per-card ability counts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

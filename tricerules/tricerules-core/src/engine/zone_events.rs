@@ -374,17 +374,6 @@ impl GameEngine {
             .map(Some)
     }
 
-    pub(super) fn commit_zone_entry_batch_ready(
-        &mut self,
-        stack: ParkedStackResolution,
-        batch: crate::state::PendingZoneEntryBatch,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<ParkedStackResolution, EngineError> {
-        Ok(self
-            .commit_zone_entry_batch_ready_with_resume(stack, batch, events)?
-            .stack)
-    }
-
     pub(super) fn commit_zone_entry_batch_ready_with_resume(
         &mut self,
         mut stack: ParkedStackResolution,

@@ -273,13 +273,9 @@ impl GameEngine {
         match batch {
             SimultaneousEntryBatch::Zone(batch) => {
                 let stack = stack.ok_or(EngineError::Illegal("zone entry has no stack"))?;
-                let stack = self.commit_zone_entry_batch_ready(stack, batch, &mut events)?;
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    events,
-                )
+                let completion =
+                    self.commit_zone_entry_batch_ready_with_resume(stack, batch, &mut events)?;
+                self.complete_parked_zone_entry_batch(completion, events)
             }
             SimultaneousEntryBatch::Token(batch) => {
                 let stack = stack.ok_or(EngineError::Illegal("token entry has no stack"))?;

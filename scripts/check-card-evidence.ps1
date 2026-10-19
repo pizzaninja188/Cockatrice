@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-    Validate checked-in direct-RON maps and their non-ignored Cargo test references.
+    Validate checked-in card review maps and their non-ignored Cargo test references.
 .DESCRIPTION
     This checks structure and executable test identity, not semantic equivalence or test success.
     The full Rust gate must also pass on the same content. Only build artifacts are written.
-    Map filenames must equal the canonical handwritten RON filename stem. References use either
+    Map filenames must equal the canonical RON filename stem. Drafts may be at
+    data/<stem>.ron (handwritten), data/multiface/<stem>.ron, or
+    data/generated/<bucket>/<stem>.ron. References use either
     "scenario module::test" (tricerules-core) or "suite::module::test" (tricerules-cards).
 #>
 [CmdletBinding()]

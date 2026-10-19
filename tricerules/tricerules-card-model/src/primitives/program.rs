@@ -1978,16 +1978,33 @@ fn validate_resultless_direct_hand_library_search(
 
 fn is_resultless_direct_battlefield_library_search(effect: &SpellEffectKind) -> bool {
     let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
         filter,
+        selection_constraint,
+        slots,
+        zones,
         destination,
+        conditional_destination,
+        shuffle,
         reveal,
-        ..
+        result_id,
+        selection_bounds,
     } = effect
     else {
         return false;
     };
 
-    is_resultless_direct_search_base(effect)
+    let count_and_bounds_match = (*count == 1
+        && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 }))
+        || (*count == 2 && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 2 }));
+
+    *who == PlayerRecipient::Controller
+        && !*optional
+        && count_and_bounds_match
+        && count_by_cast_cost.is_none()
         && filter.as_ref().is_some_and(|filter| {
             *filter
                 == ZoneCardFilter {
@@ -1995,8 +2012,14 @@ fn is_resultless_direct_battlefield_library_search(effect: &SpellEffectKind) -> 
                     ..ZoneCardFilter::default()
                 }
         })
+        && selection_constraint.is_none()
+        && slots.is_empty()
+        && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
         && *destination == (SearchDestination::Battlefield { tapped: true })
+        && conditional_destination.is_none()
+        && *shuffle
         && !*reveal
+        && result_id.is_none()
 }
 
 fn validate_resultless_direct_battlefield_library_search(
@@ -2005,7 +2028,7 @@ fn validate_resultless_direct_battlefield_library_search(
 ) -> Result<Vec<ResultType>, String> {
     if !is_resultless_direct_battlefield_library_search(effect) {
         return Err(
-            "program direct Battlefield SearchLibrary supports only a resultless controller BasicLand search with fixed count 1, bounds 0..1, tapped destination, no reveal, and shuffle"
+            "program direct Battlefield SearchLibrary supports only a resultless controller BasicLand search with count 1/bounds 0..1 or count 2/bounds 0..2, tapped destination, no reveal, and shuffle"
                 .into(),
         );
     }

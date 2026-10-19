@@ -278,6 +278,7 @@ fn issue_etb_fierce_empath() {
     // Selecting the optional branch with no matching card fails to find and still completes.
     let mut fail_to_find = etb_engine(710_013);
     let small = inject_library_card(&mut fail_to_find, 0, "grizzly_bears");
+    assert!(!fail_to_find.state.players[0].library.is_empty());
     let hand_before = fail_to_find.state.players[0].hand.len();
     let library_before = fail_to_find.state.players[0].library.len();
     cast_creature(&mut fail_to_find, "fierce_empath");
@@ -291,8 +292,19 @@ fn issue_etb_fierce_empath() {
     let search_batch = semantic::accepted(&mut fail_to_find, 0, &submit_branch(0));
     let search = find_resolution_choice(&search_batch).expect("qualified search choice");
     assert!(search.candidate_object_ids.is_empty());
-    // The authored 0..1 bounds are clamped to the empty live candidate set in the prompt.
-    assert_eq!((search.min, search.max), (0, 0));
+    // Keep authored capacity independent of the private eligible-candidate count.
+    assert_eq!((search.min, search.max), (0, 1));
+    const EXPECTED_SEARCH_PROMPT: &str = "P0: search Library for up to 1 matching card(s).";
+    assert_eq!(search.prompt_text.as_str(), EXPECTED_SEARCH_PROMPT);
+    let public_search_logs = search_batch
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::Log(log)) if log.text.starts_with("P0: search ") => Some(log.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(public_search_logs, vec![EXPECTED_SEARCH_PROMPT]);
     semantic::accepted(&mut fail_to_find, 0, &submit_resolution_choice(Vec::new()));
     assert!(fail_to_find.state.pending_resolution.is_none());
     assert_eq!(fail_to_find.state.players[0].library.len(), library_before);
