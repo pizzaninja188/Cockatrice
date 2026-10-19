@@ -28,6 +28,7 @@
 
 #include <QBuffer>
 #include <QJsonArray>
+#include <QRectF>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
@@ -526,6 +527,165 @@ TEST(RuledZoneViewPolicyTest, EmptyReadOnlyRevealUsesItsAuthoritativeEmptyCardLi
     EXPECT_TRUE(ruledZoneViewHasAuthoritativeCardList(true, false));
     EXPECT_FALSE(ruledZoneViewHasAuthoritativeCardList(true, true));
     EXPECT_FALSE(ruledZoneViewHasAuthoritativeCardList(false, false));
+}
+
+TEST(RuledZoneViewPolicyTest, LibrarySearchPickerKeepsPreferredPositionWhenClear)
+{
+    const QRectF stackSceneRect(520.0, 120.0, 300.0, 420.0);
+    const QSizeF pickerSize(340.0, 280.0);
+    const QPointF preferredPosition(40.0, 40.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 1280.0, 900.0);
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+
+    EXPECT_EQ(position, preferredPosition);
+    EXPECT_FALSE(QRectF(position, pickerSize).intersects(stackSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(QRectF(position, pickerSize)));
+}
+
+TEST(RuledZoneViewPolicyTest, LibrarySearchPickerMovesAwayFromMovedAndResizedStack)
+{
+    // This is the stack's current sceneBoundingRect, not its default position: the stack can be
+    // moved and resized while a resolution-time library picker is being prepared.
+    const QRectF stackSceneRect(280.0, 160.0, 440.0, 500.0);
+    const QSizeF pickerSize(360.0, 320.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 1280.0, 900.0);
+    ASSERT_TRUE(QRectF(preferredPosition, pickerSize).intersects(stackSceneRect));
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+
+    EXPECT_NE(position, preferredPosition);
+    EXPECT_FALSE(pickerSceneRect.intersects(stackSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(pickerSceneRect));
+}
+
+TEST(RuledZoneViewPolicyTest, LibrarySearchPickerRespondsToChangedStackGeometry)
+{
+    const QSizeF pickerSize(360.0, 320.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 1280.0, 900.0);
+    const QRectF firstStackSceneRect(280.0, 160.0, 440.0, 500.0);
+    const QRectF movedAndResizedStackSceneRect(600.0, 300.0, 300.0, 200.0);
+
+    const QPointF firstPosition = ruledLibrarySearchPickerPosition(
+        firstStackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QPointF secondPosition = ruledLibrarySearchPickerPosition(
+        movedAndResizedStackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+
+    EXPECT_NE(firstPosition, secondPosition);
+    EXPECT_FALSE(QRectF(firstPosition, pickerSize).intersects(firstStackSceneRect));
+    EXPECT_FALSE(QRectF(secondPosition, pickerSize).intersects(movedAndResizedStackSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(QRectF(firstPosition, pickerSize)));
+    EXPECT_TRUE(viewportSceneRect.contains(QRectF(secondPosition, pickerSize)));
+}
+
+TEST(RuledZoneViewPolicyTest, LibrarySearchPickerMovesFromItsDefaultPositionWhenStackIsThere)
+{
+    const QRectF stackSceneRect(340.0, 80.0, 480.0, 360.0);
+    const QSizeF pickerSize(360.0, 320.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 1280.0, 900.0);
+    ASSERT_TRUE(QRectF(preferredPosition, pickerSize).intersects(stackSceneRect));
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+
+    EXPECT_NE(position, preferredPosition);
+    EXPECT_FALSE(pickerSceneRect.intersects(stackSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(pickerSceneRect));
+}
+
+TEST(RuledZoneViewPolicyTest, AbsentStackClampsOffscreenPreferenceAndEmptyViewportKeepsDefault)
+{
+    const QSizeF pickerSize(340.0, 280.0);
+    const QPointF offscreenPosition(1100.0, 800.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 1280.0, 900.0);
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        QRectF(), pickerSize, offscreenPosition, viewportSceneRect);
+
+    EXPECT_NE(position, offscreenPosition);
+    EXPECT_TRUE(viewportSceneRect.contains(QRectF(position, pickerSize)));
+    EXPECT_EQ(position, QPointF(940.0, 620.0));
+    EXPECT_EQ(ruledLibrarySearchPickerPosition(QRectF(), pickerSize, offscreenPosition, QRectF()),
+              offscreenPosition);
+}
+
+TEST(RuledZoneViewPolicyTest, ConstrainedPickerPrefersReachableNonoverlapWithMostVisibleArea)
+{
+    const QRectF stackSceneRect(100.0, 100.0, 350.0, 250.0);
+    const QSizeF pickerSize(300.0, 300.0);
+    const QPointF preferredPosition(200.0, 60.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 500.0, 400.0);
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+
+    EXPECT_FALSE(viewportSceneRect.contains(pickerSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(position));
+    EXPECT_FALSE(pickerSceneRect.intersects(stackSceneRect));
+    EXPECT_DOUBLE_EQ(pickerSceneRect.intersected(viewportSceneRect).width() *
+                         pickerSceneRect.intersected(viewportSceneRect).height(),
+                     15000.0);
+}
+
+TEST(RuledZoneViewPolicyTest, NearEdgeSliverUsesClampedPlacementWithUsableTitleRegion)
+{
+    const QRectF stackSceneRect(0.0, 0.0, 499.9, 400.0);
+    const QSizeF pickerSize(300.0, 300.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 500.0, 400.0);
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+    // Match ZoneViewWidget's 100-unit minimum visible width and 24-unit title-bar height: a
+    // reachable top-left point alone must not treat a 0.1-unit title sliver as operable.
+    const QRectF visibleTitleBarRect =
+        QRectF(position, QSizeF(pickerSize.width(), 24.0)).intersected(viewportSceneRect);
+
+    EXPECT_EQ(position, QPointF(200.0, 80.0));
+    EXPECT_TRUE(viewportSceneRect.contains(pickerSceneRect));
+    EXPECT_GE(visibleTitleBarRect.width(), qMin(100.0, pickerSize.width()));
+    EXPECT_GE(visibleTitleBarRect.height(), qMin(24.0, pickerSize.height()));
+}
+
+TEST(RuledZoneViewPolicyTest, StackCoveringViewportKeepsConstrainedPickerOperable)
+{
+    const QRectF stackSceneRect(-100.0, -100.0, 700.0, 600.0);
+    const QSizeF pickerSize(360.0, 300.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 500.0, 400.0);
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+
+    EXPECT_TRUE(viewportSceneRect.contains(pickerSceneRect));
+    EXPECT_TRUE(viewportSceneRect.contains(position));
+    EXPECT_TRUE(pickerSceneRect.intersects(stackSceneRect));
+}
+
+TEST(RuledZoneViewPolicyTest, OversizePickerFallbackMaximizesVisibleAreaAndKeepsTitleReachable)
+{
+    const QRectF stackSceneRect(-100.0, -100.0, 700.0, 600.0);
+    const QSizeF pickerSize(700.0, 600.0);
+    const QPointF preferredPosition(340.0, 80.0);
+    const QRectF viewportSceneRect(0.0, 0.0, 500.0, 400.0);
+
+    const QPointF position = ruledLibrarySearchPickerPosition(
+        stackSceneRect, pickerSize, preferredPosition, viewportSceneRect);
+    const QRectF pickerSceneRect(position, pickerSize);
+
+    EXPECT_EQ(position, viewportSceneRect.topLeft());
+    EXPECT_TRUE(viewportSceneRect.contains(position));
+    EXPECT_EQ(pickerSceneRect.intersected(viewportSceneRect), viewportSceneRect);
+    EXPECT_TRUE(pickerSceneRect.intersects(stackSceneRect));
 }
 
 TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)

@@ -8971,6 +8971,32 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
 }
 
 #[test]
+fn flat_spell_graveyard_exile_cost_requires_a_typed_program_choose_branch() {
+    let card = r#"(
+        id: "flat_graveyard_exile_fixture",
+        name: "Flat Graveyard Exile Fixture",
+        face_id: "flat_graveyard_exile_fixture",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [ChooseResolutionBranch(optional: true, branches: [(
+            branch_id: "exile_and_draw",
+            presentation: Fallback,
+            cost: ExileGraveyardCard(filter: None),
+            requirement: Always,
+            effects: [Draw(who: Controller, count: 1)],
+        )], otherwise: [])],
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
+        .expect_err("flat spell graveyard-exile costs require a typed Program Choose branch");
+    assert!(
+        error
+            .to_string()
+            .contains("graveyard-exile costs require a typed Program Choose branch"),
+        "the rejection names the supported graveyard-exile contract: {error}"
+    );
+}
+
+#[test]
 fn program_choose_admits_controller_ability_sacrifice_permanent_cost() {
     let body = |chooser: &str, cost: &str| {
         format!(
@@ -9206,6 +9232,639 @@ fn program_choose_admits_fixed_controller_ability_tap_permanent_cost() {
     assert!(
         mixed_error.contains("cannot mix free and paid sibling branches"),
         "{mixed_error}"
+    );
+}
+
+#[test]
+fn program_choose_admits_optional_controller_spell_graveyard_exile_cost() {
+    let body = |cost: &str| {
+        format!(
+            r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+                choice: "exile_graveyard_card", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "exile_and_draw", presentation: Fallback,
+                    cost: ExileGraveyardCard(filter: {cost}), requirement: Always,
+                    body: (steps: [(id: "draw", bind: [], input: None,
+                        kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+
+    for (filter, expected_filter) in [
+        ("None", None),
+        (
+            "Some((card_type: Some(InstantOrSorcery)))",
+            Some(crate::primitives::ZoneCardFilter {
+                card_type: Some(crate::primitives::CardTypeFilter::InstantOrSorcery),
+                ..Default::default()
+            }),
+        ),
+    ] {
+        let definition = program_fixture(&body(filter));
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| {
+                panic!("the fixed controller spell graveyard-exile cost is admitted: {error}")
+            });
+        let owner = crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        );
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the exact spell face owns its compiled Choose program");
+        let [choose] = program.body.steps.as_slice() else {
+            panic!("graveyard exile remains one structural Choose instruction");
+        };
+        let crate::primitives::CompiledInstructionKind::Choose {
+            chooser,
+            optional,
+            branches,
+            otherwise,
+            ..
+        } = &choose.kind
+        else {
+            panic!("the graveyard exile remains a Choose branch cost");
+        };
+        assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+        assert!(*optional);
+        assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+        let [branch] = branches.as_slice() else {
+            panic!("the spell has one graveyard-exile payment branch");
+        };
+        assert_eq!(
+            branch.cost,
+            crate::primitives::ResolutionCost::ExileGraveyardCard {
+                filter: expected_filter,
+            }
+        );
+        assert_eq!(branch.fallback_label(), "Exile a card from your graveyard");
+        let [draw] = branch.body.steps.as_slice() else {
+            panic!("the paid branch draws exactly one card");
+        };
+        assert!(matches!(
+            &draw.kind,
+            crate::primitives::CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw {
+                    who: crate::primitives::PlayerRecipient::Controller,
+                    count: crate::primitives::Amount::Fixed(1),
+                })
+        ));
+    }
+
+    let mandatory = body("None").replace("optional: true", "optional: false");
+    let mandatory_error = invalid_program_reason(&program_fixture(&mandatory));
+    assert!(
+        mandatory_error.contains("requires an optional Choose"),
+        "graveyard exile is admitted only as an optional payment: {mandatory_error}"
+    );
+}
+
+#[test]
+fn program_spell_graveyard_exile_cost_rejects_bad_context_filters_and_mixed_branches() {
+    let body = |chooser: &str, filter: &str| {
+        format!(
+            r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+                choice: "exile_graveyard_card", chooser: {chooser}, optional: true,
+                branches: [(
+                    branch_id: "exile_and_draw", presentation: Fallback,
+                    cost: ExileGraveyardCard(filter: {filter}), requirement: Always,
+                    body: (steps: [(id: "draw", bind: [], input: None,
+                        kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+    let valid_filter = "Some((card_type: Some(InstantOrSorcery)))";
+
+    let wrong_chooser =
+        invalid_program_reason(&program_fixture(&body("SourceController", valid_filter)));
+    assert!(
+        wrong_chooser.contains("supports Controller"),
+        "the spell cost requires its Controller to choose: {wrong_chooser}"
+    );
+
+    let ability_error = ability_program_fixture(
+        "spell_graveyard_exile_ability_fixture",
+        &body("Controller", "None"),
+    )
+    .expect_err("graveyard-exile resolution payment remains spell-only");
+    assert!(
+        ability_error.contains("does not support resolution cost"),
+        "the ability rejection comes from the cost context gate: {ability_error}"
+    );
+
+    for (label, filter, expected) in [
+        (
+            "one-branch any_of",
+            "Some((any_of: Some([(card_type: Some(Instant))])))",
+            "zone card filter any_of requires at least two branches",
+        ),
+        (
+            "empty exact name",
+            "Some((exact_name: Some(\" \")))",
+            "zone card filter exact name cannot be empty",
+        ),
+    ] {
+        let error = invalid_program_reason(&program_fixture(&body("Controller", filter)));
+        assert!(error.contains(expected), "{label}: {error}");
+    }
+
+    let mixed = r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
+        choice: "exile_graveyard_card", chooser: Controller, optional: true,
+        branches: [
+            (branch_id: "free", presentation: Fallback, cost: None,
+                requirement: Always,
+                body: (steps: [(id: "free_draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: [])),
+            (branch_id: "paid", presentation: Fallback,
+                cost: ExileGraveyardCard(filter: None), requirement: Always,
+                body: (steps: [(id: "paid_draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: [])),
+        ],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let mixed_error = invalid_program_reason(&program_fixture(mixed));
+    assert!(
+        mixed_error.contains("cannot mix free and paid sibling branches"),
+        "the spell Choose keeps its homogeneous cost contract: {mixed_error}"
+    );
+}
+
+#[test]
+fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
+    let compile = |card_id: &str,
+                   context: crate::primitives::EffectContext,
+                   body: &str,
+                   target_bindings: Vec<crate::primitives::ProgramTargetReference>,
+                   targeting: &crate::primitives::TargetingDef| {
+        let program = crate::primitives::CardProgram {
+            body: ron::from_str(body).expect("damage rider program fixture parses"),
+            target_bindings,
+        };
+        let owner = match context {
+            crate::primitives::EffectContext::Spell => {
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+            }
+            crate::primitives::EffectContext::Ability => {
+                crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                    card_id: card_id.into(),
+                    face_id: crate::CardFaceId::new(card_id).unwrap(),
+                    ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                })
+            }
+        };
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner,
+            context,
+            &program,
+            Some(targeting),
+        )
+    };
+    let targeting = |min, max| crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min,
+            max,
+            prompt: "Choose target creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let binding = || {
+        vec![crate::primitives::ProgramTargetReference {
+            instruction_id: "damage_target".into(),
+            role: crate::primitives::ProgramTargetRole::Target,
+            target_group_index: 0,
+        }]
+    };
+    let direct_body =
+        |target_amount: u32, player_amount: &str, recipient: &str, target_kind: &str| {
+            format!(
+                r#"(steps: [
+                (id: "damage_target", kind: Perform(DamageTarget(
+                    amount: {target_amount}, target: (kind: {target_kind}),
+                ))),
+                (id: "damage_player", kind: Perform(DamagePlayer(
+                    amount: {player_amount}, who: {recipient},
+                ))),
+            ], yields: [])"#
+            )
+        };
+    let creature_targeting = targeting(1, 1);
+
+    for (card_id, target_amount, player_amount) in [
+        ("chandras_outrage_spell_shape", 4, 2),
+        ("synthetic_fixed_three_damage_rider", 4, 3),
+    ] {
+        let body = direct_body(
+            target_amount,
+            &player_amount.to_string(),
+            "ControllerOfTargetGroup(group_index: 0)",
+            "Creature",
+        );
+        let compiled = compile(
+            card_id,
+            crate::primitives::EffectContext::Spell,
+            &body,
+            binding(),
+            &creature_targeting,
+        )
+        .unwrap_or_else(|error| {
+            panic!("the fixed {target_amount}+{player_amount} spell shape is admitted: {error}")
+        });
+        assert_eq!(compiled.target_bindings.len(), 1);
+        assert_eq!(compiled.target_bindings[0].instruction_address, 0);
+        assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+        assert_eq!(compiled.target_bindings[0].role_index, 0);
+        assert_eq!(compiled.group_inputs.len(), 1);
+        assert_eq!(
+            compiled.group_inputs[0],
+            crate::primitives::ProgramGroupInput {
+                instruction_address: 1,
+                group_index: 0,
+            }
+        );
+        let schema =
+            crate::primitives::TargetSchema::compile_program(&compiled, Some(&creature_targeting))
+                .expect("only DamageTarget contributes the public target role");
+        assert_eq!(schema.groups.len(), 1);
+        assert_eq!(schema.groups[0].bindings.len(), 1);
+        assert!(schema.effect_is_targeted(0));
+        assert!(!schema.effect_is_targeted(1));
+        let [_, rider] = compiled.body.steps.as_slice() else {
+            panic!("the direct spell shape has target damage followed by one player rider");
+        };
+        assert!(matches!(
+            &rider.kind,
+            crate::primitives::CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
+                    amount: crate::primitives::Amount::Fixed(amount),
+                    who: crate::primitives::PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+                } if *amount == player_amount)
+        ));
+    }
+
+    let heated_body = r#"(steps: [
+        (id: "damage_target", kind: Perform(DamageTarget(
+            amount: 6, target: (kind: Creature),
+        ))),
+        (id: "exile_choice", kind: Choose(
+            choice: "exile_graveyard_card", chooser: Controller, optional: true,
+            branches: [(branch_id: "pay_exile", presentation: Fallback,
+                cost: ExileGraveyardCard(filter: None), requirement: Always,
+                body: (steps: [(id: "damage_controller", kind: Perform(DamagePlayer(
+                    amount: 2, who: ControllerOfTargetGroup(group_index: 0),
+                )))], yields: []))],
+            otherwise: (steps: [], yields: []),
+        )),
+    ], yields: [])"#;
+    let heated = compile(
+        "heated_argument_program_shape",
+        crate::primitives::EffectContext::Spell,
+        heated_body,
+        binding(),
+        &creature_targeting,
+    )
+    .expect("Heated Argument's 6+2 optional-payment program shape is admitted");
+    assert_eq!(heated.target_bindings.len(), 1);
+    assert_eq!(heated.group_inputs.len(), 1);
+    assert_eq!(
+        heated.group_inputs[0],
+        crate::primitives::ProgramGroupInput {
+            instruction_address: 2,
+            group_index: 0,
+        }
+    );
+    let heated_schema =
+        crate::primitives::TargetSchema::compile_program(&heated, Some(&creature_targeting))
+            .expect("Heated Argument keeps one DamageTarget role and no player target role");
+    assert_eq!(heated_schema.groups.len(), 1);
+    assert_eq!(heated_schema.groups[0].bindings.len(), 1);
+    assert!(heated_schema.effect_is_targeted(0));
+    assert!(!heated_schema.effect_is_targeted(2));
+    let [_, choice] = heated.body.steps.as_slice() else {
+        panic!("Heated Argument damages its creature before the optional cost choice");
+    };
+    let crate::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choice.kind
+    else {
+        panic!("the graveyard exile remains an optional Program Choose");
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Heated Argument has one optional graveyard-exile branch");
+    };
+    assert_eq!(
+        branch.cost,
+        crate::primitives::ResolutionCost::ExileGraveyardCard { filter: None }
+    );
+    let [player_damage] = branch.body.steps.as_slice() else {
+        panic!("the paid branch damages the target creature's controller exactly once");
+    };
+    assert!(matches!(
+        &player_damage.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
+                amount: crate::primitives::Amount::Fixed(2),
+                who: crate::primitives::PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+            })
+    ));
+
+    let public_effects = [
+        crate::primitives::SpellEffectKind::DamageTarget {
+            amount: crate::primitives::Amount::Fixed(4),
+            target: crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                ..Default::default()
+            },
+        },
+        crate::primitives::SpellEffectKind::DamagePlayer {
+            amount: crate::primitives::Amount::Fixed(3),
+            who: crate::primitives::PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+        },
+    ];
+    let public_schema = crate::primitives::TargetSchema::compile(&public_effects, None)
+        .expect("public target schema exposes only the DamageTarget role");
+    assert_eq!(public_schema.groups.len(), 1);
+    assert_eq!(public_schema.groups[0].bindings.len(), 1);
+    assert!(public_schema.effect_is_targeted(0));
+    assert!(!public_schema.effect_is_targeted(1));
+
+    let singleton = targeting(1, 1).groups.remove(0);
+    let two_group_targeting = crate::primitives::TargetingDef {
+        groups: vec![singleton.clone(), singleton],
+    };
+    let nonzero_group = compile(
+        "nonzero_owner_local_group_input",
+        crate::primitives::EffectContext::Spell,
+        r#"(steps: [
+            (id: "damage_first", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature),
+            ))),
+            (id: "damage_second", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature),
+            ))),
+            (id: "damage_player", kind: Perform(DamagePlayer(
+                amount: 3, who: ControllerOfTargetGroup(group_index: 1),
+            ))),
+        ], yields: [])"#,
+        vec![
+            crate::primitives::ProgramTargetReference {
+                instruction_id: "damage_first".into(),
+                role: crate::primitives::ProgramTargetRole::Target,
+                target_group_index: 0,
+            },
+            crate::primitives::ProgramTargetReference {
+                instruction_id: "damage_second".into(),
+                role: crate::primitives::ProgramTargetRole::Target,
+                target_group_index: 1,
+            },
+        ],
+        &two_group_targeting,
+    )
+    .expect("the non-targeting group input uses the owner-local second target group");
+    assert_eq!(nonzero_group.group_inputs.len(), 1);
+    assert_eq!(
+        nonzero_group.group_inputs[0],
+        crate::primitives::ProgramGroupInput {
+            instruction_address: 2,
+            group_index: 1,
+        }
+    );
+}
+
+#[test]
+fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
+    let compile = |card_id: &str,
+                   context: crate::primitives::EffectContext,
+                   body: &str,
+                   target_bindings: Vec<crate::primitives::ProgramTargetReference>,
+                   targeting: &crate::primitives::TargetingDef| {
+        let program = crate::primitives::CardProgram {
+            body: ron::from_str(body).expect("damage rider program fixture parses"),
+            target_bindings,
+        };
+        let owner = match context {
+            crate::primitives::EffectContext::Spell => {
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+            }
+            crate::primitives::EffectContext::Ability => {
+                crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                    card_id: card_id.into(),
+                    face_id: crate::CardFaceId::new(card_id).unwrap(),
+                    ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                })
+            }
+        };
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner,
+            context,
+            &program,
+            Some(targeting),
+        )
+    };
+    let targeting = |min, max| crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min,
+            max,
+            prompt: "Choose target creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let body = |amount: &str, recipient: &str, target_kind: &str| {
+        format!(
+            r#"(steps: [
+                (id: "damage_target", kind: Perform(DamageTarget(
+                    amount: 4, target: (kind: {target_kind}),
+                ))),
+                (id: "damage_player", kind: Perform(DamagePlayer(
+                    amount: {amount}, who: {recipient},
+                ))),
+            ], yields: [])"#
+        )
+    };
+    let binding = || {
+        vec![crate::primitives::ProgramTargetReference {
+            instruction_id: "damage_target".into(),
+            role: crate::primitives::ProgramTargetRole::Target,
+            target_group_index: 0,
+        }]
+    };
+    let singleton = targeting(1, 1);
+
+    for recipient in ["Controller", "EachOpponent", "SourceController"] {
+        assert!(
+            compile(
+                "unsupported_damage_recipient_rejected",
+                crate::primitives::EffectContext::Spell,
+                &body("2", recipient, "Creature"),
+                binding(),
+                &singleton,
+            )
+            .is_err(),
+            "the rider recipient must name the selected group's controller, not {recipient}"
+        );
+    }
+
+    for amount in ["X", "Count(CardsInHand(players: Relative(Controller)))"] {
+        assert!(
+            compile(
+                "nonfixed_player_damage_rejected",
+                crate::primitives::EffectContext::Spell,
+                &body(
+                    amount,
+                    "ControllerOfTargetGroup(group_index: 0)",
+                    "Creature"
+                ),
+                binding(),
+                &singleton,
+            )
+            .is_err(),
+            "nonfixed DamagePlayer amount {amount} is outside the fixed rider contract"
+        );
+    }
+
+    assert!(
+        compile(
+            "out_of_range_recipient_group_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body("2", "ControllerOfTargetGroup(group_index: 1)", "Creature"),
+            binding(),
+            &singleton,
+        )
+        .is_err(),
+        "the recipient cannot reference a target group outside the owner schema"
+    );
+    assert!(
+        compile(
+            "nonsingleton_recipient_group_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body("2", "ControllerOfTargetGroup(group_index: 0)", "Creature"),
+            binding(),
+            &targeting(1, 2),
+        )
+        .is_err(),
+        "the recipient requires exactly one target in its group"
+    );
+    assert!(
+        compile(
+            "noncreature_recipient_group_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body(
+                "2",
+                "ControllerOfTargetGroup(group_index: 0)",
+                "AnyPermanent"
+            ),
+            binding(),
+            &singleton,
+        )
+        .is_err(),
+        "the recipient requires a Creature target role rather than any permanent"
+    );
+
+    let one_group = singleton.groups[0].clone();
+    let two_singleton_groups = crate::primitives::TargetingDef {
+        groups: vec![one_group.clone(), one_group],
+    };
+    let wrong_creature_role = compile(
+        "unrelated_creature_role_group_rejected",
+        crate::primitives::EffectContext::Spell,
+        r#"(steps: [
+            (id: "damage_target", kind: Perform(DamageTarget(
+                amount: 4, target: (kind: Creature),
+            ))),
+            (id: "return_target", kind: Perform(ReturnToOwnersHand(
+                subject: Chosen((kind: Creature)),
+            ))),
+            (id: "damage_player", kind: Perform(DamagePlayer(
+                amount: 2, who: ControllerOfTargetGroup(group_index: 1),
+            ))),
+        ], yields: [])"#,
+        vec![
+            crate::primitives::ProgramTargetReference {
+                instruction_id: "damage_target".into(),
+                role: crate::primitives::ProgramTargetRole::Target,
+                target_group_index: 0,
+            },
+            crate::primitives::ProgramTargetReference {
+                instruction_id: "return_target".into(),
+                role: crate::primitives::ProgramTargetRole::Subject,
+                target_group_index: 1,
+            },
+        ],
+        &two_singleton_groups,
+    )
+    .expect_err("a creature group bound to a different role cannot supply DamagePlayer");
+    assert!(
+        wrong_creature_role.contains("Creature DamageTarget role"),
+        "the compiler requires the selected group's own DamageTarget binding: {wrong_creature_role}"
+    );
+
+    assert!(
+        compile(
+            "missing_damage_target_binding_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body("2", "ControllerOfTargetGroup(group_index: 0)", "Creature"),
+            Vec::new(),
+            &singleton,
+        )
+        .is_err(),
+        "the group must bind the existing DamageTarget role"
+    );
+    assert!(
+        compile(
+            "mismatched_damage_player_binding_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body("2", "ControllerOfTargetGroup(group_index: 0)", "Creature"),
+            vec![crate::primitives::ProgramTargetReference {
+                instruction_id: "damage_player".into(),
+                role: crate::primitives::ProgramTargetRole::Target,
+                target_group_index: 0,
+            }],
+            &singleton,
+        )
+        .is_err(),
+        "DamagePlayer does not gain a target role through the recipient reference"
+    );
+    assert!(
+        compile(
+            "out_of_range_target_binding_rejected",
+            crate::primitives::EffectContext::Spell,
+            &body("2", "ControllerOfTargetGroup(group_index: 0)", "Creature"),
+            vec![crate::primitives::ProgramTargetReference {
+                instruction_id: "damage_target".into(),
+                role: crate::primitives::ProgramTargetRole::Target,
+                target_group_index: 1,
+            }],
+            &singleton,
+        )
+        .is_err(),
+        "the existing DamageTarget binding must point at an authored group"
+    );
+    assert!(
+        compile(
+            "ability_damage_rider_rejected",
+            crate::primitives::EffectContext::Ability,
+            &body("2", "ControllerOfTargetGroup(group_index: 0)", "Creature"),
+            binding(),
+            &singleton,
+        )
+        .is_err(),
+        "ControllerOfTargetGroup DamagePlayer remains spell-only"
     );
 }
 

@@ -1058,6 +1058,18 @@ impl GameEngine {
         ) {
             return self.finish_program_choose_permanent_cost(pending, answer, decision);
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::PayingGraveyardCardCost { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.finish_program_choose_graveyard_card_cost(pending, answer, decision);
+        }
         if let ResolutionContinuation::BattlefieldReturn { pending: plan } = &pending.continuation {
             if matches!(
                 plan.stage.as_ref(),
@@ -1295,6 +1307,15 @@ impl GameEngine {
             ResolutionContinuation::AuthoredBranch { .. } => {
                 self.finish_resolution_branch_object(pending, chosen)
             }
+            ResolutionContinuation::ProgramChoose {
+                choose:
+                    crate::state::PendingProgramChoose {
+                        stage:
+                            crate::state::PendingProgramChooseStage::PayingGraveyardCardCost { .. },
+                        ..
+                    },
+                ..
+            } => self.finish_program_choose_graveyard_card_cost(pending, answer, decision),
             ResolutionContinuation::ProgramChoose {
                 choose:
                     crate::state::PendingProgramChoose {

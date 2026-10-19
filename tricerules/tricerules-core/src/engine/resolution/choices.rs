@@ -1437,10 +1437,9 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                     ResolutionCost::PutHandCardOnLibraryBottom => {
                         unreachable!("flat authored branches reject hand-bottom costs")
                     }
-                    ResolutionCost::ExileGraveyardCard { .. } => (
-                        rv1::ResolutionBranchCostKind::ExileGraveyardCard,
-                        "exile a matching card from your graveyard".into(),
-                    ),
+                    ResolutionCost::ExileGraveyardCard { .. } => {
+                        unreachable!("flat authored branches reject graveyard-exile costs")
+                    }
                     ResolutionCost::SacrificePermanent { .. } => (
                         rv1::ResolutionBranchCostKind::SacrificePermanent,
                         "sacrifice a matching permanent".into(),

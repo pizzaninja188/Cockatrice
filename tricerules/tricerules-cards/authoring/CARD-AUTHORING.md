@@ -181,7 +181,8 @@ authored functions. `Choose` consumes no prior result and requires at least one 
 is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
 either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
-`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, a fixed positive-count
+`PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, the one-card
+`ExileGraveyardCard` cost on a `Controller`-chosen optional spell branch, a fixed positive-count
 `Blight` on a `Controller`-chosen ability branch, and one-permanent `SacrificePermanent` or
 `TapPermanents` costs on a `Controller`-chosen ability branch. Blight selects one creature that
 player controls and that
@@ -215,6 +216,24 @@ not have that trigger input. Ability programs also admit `Discard(EachOpponent, 
 opponent may contribute up to one card to the combined `DiscardResult`, whose aggregate upper
 bound is not fixed. Permanent choosers must be `Controller`; draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
+
+A Program `ExileGraveyardCard` cost is admitted only on an optional `Controller`-chosen spell
+branch. It selects exactly one card from that spell controller's graveyard when paid and may carry
+an ordinary validated `ZoneCardFilter`; Heated Argument uses the unfiltered form. The resolving
+  spell controller remains the payer (CR 118.12). This specialized cost does not admit
+ability-owned exile costs or multi-card payments.
+The legacy flat `ChooseResolutionBranch` form of this cost is retired; author it only in the typed
+Program `Choose` shape above.
+
+`DamagePlayer(amount: Fixed(...), who: ControllerOfTargetGroup(g))` is a fixed-amount,
+non-targeting spell-program input. It is admitted only when group `g` is a singleton bound to that
+Program's `Creature` `DamageTarget` role. It adds no target role; while the exact target incarnation
+remains on the battlefield at its expected generation, the recipient is its current controller;
+after it leaves or changes generation, the recipient is its generation-specific last-known
+controller (CR 608.2h). Heated Argument uses this rider. Chandra's Outrage is the exact
+reference-only `DamagePlayer` leaf analogue (4 damage to a target creature, then 2 to that
+creature's controller); it is not ported by this subset. Other target shapes and ability-owned
+forms remain outside this Program subset.
 Ability-program `Choose` may also use `SourceController`. The chooser is captured from the exact
 current source incarnation, or its last-known controller after it leaves, when the offer is made;
 that captured player remains the original chooser throughout the occurrence. A paid branch keeps

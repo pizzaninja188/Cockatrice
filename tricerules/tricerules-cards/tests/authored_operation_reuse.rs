@@ -687,6 +687,102 @@ fn assert_single_tap_choose<'a>(
 }
 
 #[test]
+fn authored_heated_argument_is_exact_typed_optional_graveyard_exile_program() {
+    let registry = tricerules_cards::registry::global();
+    let face = registry
+        .get("heated_argument")
+        .expect("Heated Argument")
+        .primary_face();
+    assert_eq!(face.mana_cost.to_string(), "{4}{R}");
+    assert_eq!(face.types, ["Instant"]);
+    assert!(
+        face.spell_effect.is_empty(),
+        "Heated Argument's exact owner uses its typed Program body"
+    );
+
+    let program = face_program("heated_argument");
+    assert_eq!(program.context, EffectContext::Spell);
+    assert_eq!(
+        program.target_projection,
+        tricerules_cards::primitives::ProgramTargetProjection::OwnerLocal
+    );
+    let [damage_target, choose] = program.body.steps.as_slice() else {
+        panic!("Heated Argument damages one creature before its optional cost choice");
+    };
+    assert_perform(
+        damage_target,
+        SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(6),
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+        },
+    );
+    assert_eq!(program.target_bindings.len(), 1);
+    assert_eq!(
+        program.target_bindings[0].instruction_address,
+        damage_target.instruction_address
+    );
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+    assert_eq!(program.target_bindings[0].role_index, 0);
+
+    let targeting = face
+        .targeting
+        .as_ref()
+        .expect("the exact face owns a target group for DamageTarget");
+    let [group] = targeting.groups.as_slice() else {
+        panic!("Heated Argument has one target group");
+    };
+    assert_eq!((group.min, group.max), (1, 1));
+    assert!(group.effect_indices.is_empty());
+
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("the paid rider is an optional typed Program Choose");
+    };
+    assert_eq!(choice.as_str(), "exile_graveyard_card");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Heated Argument has one optional graveyard-exile branch");
+    };
+    assert_eq!(branch.branch_id.as_str(), "exile_graveyard_card");
+    assert_eq!(branch.requirement, CompiledChooseRequirement::Always);
+    assert_eq!(
+        branch.cost,
+        ResolutionCost::ExileGraveyardCard { filter: None }
+    );
+    let [damage_player] = branch.body.steps.as_slice() else {
+        panic!("the paid branch applies one fixed player-damage rider");
+    };
+    assert_eq!(program.group_inputs.len(), 1);
+    assert_eq!(
+        (
+            program.group_inputs[0].instruction_address,
+            program.group_inputs[0].group_index,
+        ),
+        (damage_player.instruction_address, 0),
+        "the branch rider reads the cast's singleton target group"
+    );
+    assert_perform(
+        damage_player,
+        SpellEffectKind::DamagePlayer {
+            amount: Amount::Fixed(2),
+            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+        },
+    );
+}
+
+#[test]
 fn authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs() {
     let registry = tricerules_cards::registry::global();
     let bridge_face = registry

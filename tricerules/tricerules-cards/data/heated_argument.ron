@@ -1,17 +1,36 @@
-// Oracle and rulings checked 2026-09-10.
+// Oracle and rulings checked 2026-10-19.
 (
   id: "heated_argument",
   name: "Heated Argument",
   face_id: "heated_argument",
   mana_cost: "{4}{R}",
   types: ["Instant"],
-  spell_effect: [
-    DamageTarget(amount: 6, target: (kind: Creature)),
-    ChooseResolutionBranch(optional: true, branches: [(
-      branch_id: "exile_graveyard_card",
-      presentation: Fallback,
-      cost: ExileGraveyardCard(filter: None),
-      effects: [DamagePlayer(amount: 2, who: ControllerOfTargetGroup(group_index: 0))],
-    )]),
-  ],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "damage_target", bind: [], input: None,
+      kind: Perform(DamageTarget(amount: 6, target: (kind: Creature)))),
+    (id: "exile_graveyard_card", bind: [], input: None,
+      kind: Choose(
+        choice: "exile_graveyard_card",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "exile_graveyard_card",
+          presentation: Fallback,
+          cost: ExileGraveyardCard(filter: None),
+          requirement: Always,
+          body: (steps: [
+            (id: "damage_target_controller", bind: [], input: None,
+              kind: Perform(DamagePlayer(
+                amount: 2,
+                who: ControllerOfTargetGroup(group_index: 0),
+              ))),
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+  ], yields: []), target_bindings: [
+    (instruction_id: "damage_target", role: Target, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])])),
 )

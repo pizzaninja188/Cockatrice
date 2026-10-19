@@ -1161,6 +1161,10 @@ impl GameEngine {
                                 rv1::ResolutionBranchCostKind::TapPermanents,
                                 format!("tap {count} matching permanents"),
                             ),
+                            ResolutionCost::ExileGraveyardCard { .. } => (
+                                rv1::ResolutionBranchCostKind::ExileGraveyardCard,
+                                "exile a matching card from your graveyard".to_string(),
+                            ),
                             ResolutionCost::SacrificePermanent { .. } => (
                                 rv1::ResolutionBranchCostKind::SacrificePermanent,
                                 "sacrifice a matching permanent".to_string(),
@@ -1196,6 +1200,7 @@ impl GameEngine {
             }
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
             crate::state::PendingProgramChooseStage::PayingHandCard { .. }
+            | crate::state::PendingProgramChooseStage::PayingGraveyardCardCost { .. }
             | crate::state::PendingProgramChooseStage::PayingBlight { .. }
             | crate::state::PendingProgramChooseStage::PayingPermanentCost { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
@@ -1257,15 +1262,18 @@ fn program_target_context(
     compiled: &CompiledProgram,
     instruction_address: u32,
 ) -> Result<ProgramTargetContext, EngineError> {
-    if compiled.target_bindings.is_empty() {
-        return Ok(ProgramTargetContext::default());
-    }
     let mut bindings = compiled
         .target_bindings
         .iter()
         .filter(|binding| binding.instruction_address == instruction_address)
         .collect::<Vec<_>>();
-    if bindings.is_empty() {
+    let input_group_indices = compiled
+        .group_inputs
+        .iter()
+        .filter(|input| input.instruction_address == instruction_address)
+        .map(|input| input.group_index)
+        .collect::<Vec<_>>();
+    if bindings.is_empty() && input_group_indices.is_empty() {
         return Ok(ProgramTargetContext::default());
     }
     bindings.sort_by_key(|binding| binding.role_index);
@@ -1296,9 +1304,15 @@ fn program_target_context(
         .iter()
         .map(|binding| binding.target_group_index)
         .collect::<Vec<_>>();
+    let mut projected_group_indices = role_group_indices.clone();
+    for group_index in input_group_indices {
+        if !projected_group_indices.contains(&group_index) {
+            projected_group_indices.push(group_index);
+        }
+    }
     let selected_targets = chosen_targets
         .iter()
-        .filter(|target| role_group_indices.contains(&target.group_index))
+        .filter(|target| projected_group_indices.contains(&target.group_index))
         .collect::<Vec<_>>();
     let targets_by_role = bindings
         .iter()
@@ -1311,7 +1325,10 @@ fn program_target_context(
         })
         .collect();
     Ok(ProgramTargetContext {
-        has_bindings: true,
+        // Group inputs supply non-target operands to an instruction. They extend the exact
+        // generation-bound target context used by recipients without turning that instruction
+        // into a targeted effect or changing its role-indexed target bindings.
+        has_bindings: !bindings.is_empty(),
         targets: selected_targets
             .iter()
             .map(|target| target.object_id)
@@ -1733,6 +1750,76 @@ mod invariant_rollback_tests {
     }
 
     #[test]
+    fn mode_local_group_input_projects_only_its_mode_and_group_without_target_role() {
+        use crate::state::{ChosenMode, StackTarget};
+        use tricerules_card_model::primitives::ProgramTargetProjection;
+
+        let engine = program_resolution_fixture();
+        let mut compiled = engine
+            .registry
+            .compiled_program("heated_argument", "heated_argument")
+            .expect("the existing Heated Argument Program has a group input")
+            .clone();
+        let [group_input] = compiled.group_inputs.as_slice() else {
+            panic!("Heated Argument has one target-controller group input");
+        };
+        assert_eq!(group_input.group_index, 0);
+        let rider_address = group_input.instruction_address;
+        let mode_id = tricerules_card_model::ModeId::new("heated_mode").unwrap();
+        compiled.target_projection = ProgramTargetProjection::ModeLocal {
+            mode_id: mode_id.clone(),
+        };
+        compiled.owner = tricerules_card_model::ProgramOwnerId::face_mode(
+            "heated_argument",
+            tricerules_card_model::CardFaceId::new("heated_argument").unwrap(),
+            mode_id.clone(),
+        );
+
+        let flat_group_zero = engine.state.players[0].hand[0];
+        let flat_group_one = engine.state.players[0].hand[1];
+        let selected_mode_group_zero = engine.state.players[0].hand[2];
+        let selected_mode_group_one = engine.state.players[0].hand[3];
+        let other_mode_group_zero = engine.state.players[1].hand[0];
+        let target = |object_id, group_index, damage_amount| StackTarget {
+            object_id,
+            group_index,
+            damage_amount,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: None,
+            required_controller: None,
+        };
+        let mut top = engine.state.stack.last().expect("resolving spell").clone();
+        top.targets = vec![
+            target(flat_group_zero, 0, 10),
+            target(flat_group_one, 1, 11),
+        ];
+        top.chosen_modes = vec![
+            ChosenMode {
+                mode_id: mode_id.clone(),
+                targets: vec![
+                    target(selected_mode_group_zero, 0, 20),
+                    target(selected_mode_group_one, 1, 21),
+                ],
+            },
+            ChosenMode {
+                mode_id: tricerules_card_model::ModeId::new("other_mode").unwrap(),
+                targets: vec![target(other_mode_group_zero, 0, 30)],
+            },
+        ];
+
+        let projected = program_target_context(&top, &compiled, rider_address)
+            .expect("the named mode supplies the target group input");
+        assert_eq!(projected.targets, vec![selected_mode_group_zero]);
+        assert_eq!(projected.target_damage, vec![20]);
+        assert_eq!(projected.target_group_indices, vec![0]);
+        assert!(projected.targets_by_role.is_empty());
+        assert!(
+            !projected.has_bindings,
+            "the target-controller rider consumes a group input without becoming a target role"
+        );
+    }
+
+    #[test]
     fn captured_delayed_object_input_requires_presence_but_not_current_object() {
         let engine = program_resolution_fixture();
         let mut top = engine.state.stack.last().expect("resolving spell").clone();
@@ -1746,6 +1833,7 @@ mod invariant_rollback_tests {
                 tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal,
             required_inputs: vec![ProgramRequiredInput::CapturedTriggerObjectRef],
             target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
             body: CompiledBlock {
                 steps: Vec::new(),
                 yields: Vec::new(),
@@ -2109,6 +2197,7 @@ mod invariant_rollback_tests {
             target_projection: ProgramTargetProjection::OwnerLocal,
             required_inputs: Vec::new(),
             target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
             body: CompiledBlock {
                 steps: Vec::new(),
                 yields: Vec::new(),
@@ -2955,6 +3044,490 @@ mod invariant_rollback_tests {
         engine
             .publish_resolution_prompt_ids(&mut events)
             .expect("Program Choose prompt gets its stable ID");
+    }
+
+    const EXILE_GROUP_INPUT_PROGRAM_FIXTURE: &str = r#"(
+        id: "program_exile_group_input_fixture", name: "Program Exile Group Input Fixture",
+        face_id: "program_exile_group_input_fixture", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "initial_damage", bind: [], input: None, kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature),
+            ))),
+            (id: "choose_exile", bind: [], input: None, kind: Choose(
+                choice: "exile_graveyard_card", chooser: Controller, optional: true,
+                branches: [(
+                    branch_id: "exile_and_damage", presentation: Fallback,
+                    cost: ExileGraveyardCard(filter: None), requirement: Always,
+                    body: (steps: [(id: "damage_controller", bind: [], input: None,
+                        kind: Perform(DamagePlayer(amount: 2,
+                            who: ControllerOfTargetGroup(group_index: 0),
+                        )))], yields: []),
+                )],
+                otherwise: (steps: [(id: "otherwise_gain", kind: Perform(GainLife(amount: 4)))],
+                    yields: []),
+            )),
+            (id: "parent_tail", bind: [], input: None,
+                kind: Perform(GainLife(amount: 3))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "initial_damage", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target creature", effect_indices: [],
+        )]))
+    )"#;
+
+    const RETURN_GROUP_INPUT_PROGRAM_FIXTURE: &str = r#"(
+        id: "program_return_group_input_fixture", name: "Program Return Group Input Fixture",
+        face_id: "program_return_group_input_fixture", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "damage_target", bind: [], input: None, kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature),
+            ))),
+            (id: "return_target", bind: [], input: None, kind: Perform(ReturnToOwnersHand(
+                subject: Chosen((kind: Creature)),
+            ))),
+            (id: "damage_group_controller", bind: [], input: None,
+                kind: Perform(DamagePlayer(amount: 2,
+                    who: ControllerOfTargetGroup(group_index: 1),
+                ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage_target", role: Target, target_group_index: 1),
+            (instruction_id: "return_target", role: Subject, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "Choose the creature to return", effect_indices: []),
+            (min: 1, max: 1, prompt: "Choose the creature to damage", effect_indices: []),
+        ]))
+    )"#;
+
+    type ExileGroupInputFixture = (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+        Option<ObjectId>,
+        Option<ObjectId>,
+        Option<ObjectId>,
+    );
+
+    fn exile_group_input_fixture(
+        card_id: &str,
+        target_groups: &[u32],
+        with_graveyard_candidates: bool,
+    ) -> ExileGroupInputFixture {
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    EXILE_GROUP_INPUT_PROGRAM_FIXTURE,
+                    RETURN_GROUP_INPUT_PROGRAM_FIXTURE,
+                    include_str!("../../../../tricerules-cards/data/island.ron"),
+                    include_str!("../../../../tricerules-cards/data/grizzly_bears.ron"),
+                ],
+                &[],
+            )
+            .expect("graveyard and target-group Program fixtures compile"),
+        ));
+        let player_ids = [10, 20, 30];
+        let decks = Some(vec![
+            vec![card_id.to_string(); 30],
+            vec!["grizzly_bears".to_string(); 30],
+            vec!["grizzly_bears".to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, 91_244, &player_ids, 20, decks, true)
+            .expect("three-player Program fixture engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let target = *engine.state.players[1]
+            .hand
+            .first()
+            .expect("target owner drew a creature");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            target,
+            Zone::Battlefield,
+            Some(player_ids[2]),
+        )
+        .expect("target creature enters under the third player's control");
+        let target_generation = engine.state.zone_change_generation[&target];
+
+        let (own_graveyard, other_graveyard, own_library) = if with_graveyard_candidates {
+            let own = *engine.state.players[0]
+                .library
+                .front()
+                .expect("own library has a candidate");
+            let off_zone = *engine.state.players[0]
+                .library
+                .get(1)
+                .expect("own library has a separate off-zone card");
+            let other = *engine.state.players[1]
+                .library
+                .front()
+                .expect("other player's library has a candidate");
+            for object_id in [own, off_zone, other] {
+                engine.state.objects.get_mut(&object_id).unwrap().card_id = "island".into();
+            }
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                own,
+                Zone::Graveyard,
+                None,
+            )
+            .expect("own Island enters its owner's graveyard");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                other,
+                Zone::Graveyard,
+                None,
+            )
+            .expect("other player's Island enters their graveyard");
+            (Some(own), Some(other), Some(off_zone))
+        } else {
+            (None, None, None)
+        };
+
+        let spell = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("fixture spell is in its controller's hand");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        let source_generation = engine.state.zone_change_generation[&spell];
+        let mut top = engine.observer_return_item(spell, player_ids[0]);
+        top.id = spell;
+        top.controller = player_ids[0];
+        top.card_id = card_id.into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.face_index = 0;
+        top.source_owner = Some(player_ids[0]);
+        top.cast_by = Some(player_ids[0]);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(source_generation),
+        });
+        top.targets = target_groups
+            .iter()
+            .map(|group_index| StackTarget {
+                object_id: target,
+                group_index: *group_index,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                zone_change_generation: Some(target_generation),
+                required_controller: None,
+            })
+            .collect();
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("fixture owner lookup")
+            .expect("fixture has a compiled Program");
+        engine.state.stack.push(top.clone());
+        (
+            engine,
+            top,
+            owners,
+            target,
+            own_graveyard,
+            other_graveyard,
+            own_library,
+        )
+    }
+
+    #[test]
+    fn program_choose_exile_graveyard_pay_decline_empty_and_run_otherwise_tail_once() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut paid, top, owners, _target, own_graveyard, _other_graveyard, _own_library) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], true);
+        let own_graveyard = own_graveyard.unwrap();
+        let offered_generation = paid.state.zone_change_generation[&own_graveyard];
+        nested_start(
+            &mut paid,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let branch_offer = paid
+            .program_choose_choice_event()
+            .expect("optional graveyard-exile branch is offered");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(branch_offer)) =
+            branch_offer.ev.as_ref()
+        else {
+            panic!("Program Choose publishes its branch offer")
+        };
+        assert_eq!(branch_offer.resolution_branches.len(), 1);
+        assert_eq!(
+            branch_offer.resolution_branches[0].cost_kind,
+            rv1::ResolutionBranchCostKind::ExileGraveyardCard as i32
+        );
+        nested_answer(&mut paid, Decision::SelectBranch, 0, Vec::new());
+        let payment = paid
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("graveyard payment is pending");
+        assert_eq!(payment.deciding_player, 10);
+        assert_eq!(
+            payment.presentation.choice_kind,
+            rv1::ChoiceKind::GraveyardCards
+        );
+        assert_eq!(payment.presentation.candidates, vec![own_graveyard]);
+        assert_eq!((payment.presentation.min, payment.presentation.max), (0, 1));
+        let completed = nested_select_objects(&mut paid, vec![own_graveyard]);
+        assert_eq!(paid.state.objects[&own_graveyard].zone, Zone::Exile);
+        assert!(paid.state.zone_change_generation[&own_graveyard] > offered_generation);
+        assert_eq!(
+            paid.state.players[0].life, 23,
+            "the parent tail resolves once"
+        );
+        assert_eq!(
+            paid.state.players[1].life, 20,
+            "the target owner is not the recipient"
+        );
+        assert_eq!(
+            paid.state.players[2].life, 18,
+            "the target controller takes the rider"
+        );
+        let life_deltas = completed
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![-2, 3]);
+        assert!(completed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.object_id == own_graveyard
+                    && moved.destination == rv1::permanent_moved::Destination::Exile as i32
+        )));
+        assert!(paid.state.pending_resolution.is_none());
+        assert!(paid.state.stack.is_empty());
+
+        let (mut declined, top, owners, ..) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], true);
+        let before = declined.state.players[0].life;
+        nested_start(
+            &mut declined,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let declined_batch = nested_answer(&mut declined, Decision::Decline, 0, Vec::new());
+        assert_eq!(declined.state.players[0].life, before + 7);
+        assert_eq!(declined.state.players[2].life, 20);
+        assert_eq!(
+            declined_batch
+                .events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            vec![4, 3],
+            "Otherwise and the parent tail each resolve once"
+        );
+
+        let (mut empty, top, owners, ..) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], false);
+        let before = empty.state.players[0].life;
+        let run = empty
+            .begin_program_run(&top, owners)
+            .expect("Program begins");
+        let mut events = Vec::new();
+        assert_eq!(
+            empty
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut events,
+                )
+                .expect("no own graveyard candidate enters Otherwise and tail"),
+            ResolutionProgress::Completed
+        );
+        assert_eq!(empty.state.players[0].life, before + 7);
+        assert_eq!(
+            events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            vec![4, 3]
+        );
+        assert!(empty.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn program_choose_exile_payment_rejects_wrong_actor_and_unoffered_objects_atomically() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, _target, own_graveyard, other_graveyard, own_library) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], true);
+        let own_graveyard = own_graveyard.unwrap();
+        let other_graveyard = other_graveyard.unwrap();
+        let own_library = own_library.unwrap();
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("graveyard payment is pending")
+            .resolution_prompt_id
+            .get();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            vec![own_graveyard]
+        );
+        let answer = |objects: Vec<ObjectId>| RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids: objects,
+                    ..Default::default()
+                },
+            )),
+        };
+        let reject_atomically =
+            |engine: &mut GameEngine, actor, objects: Vec<ObjectId>, reason: &str| {
+                let before = command_snapshot(engine);
+                assert!(
+                    engine
+                        .apply_scenario_command(actor, &answer(objects))
+                        .is_err(),
+                    "{reason} exile answer is rejected"
+                );
+                assert!(
+                    command_snapshot(engine) == before,
+                    "{reason} rejection preserves the complete pending state"
+                );
+            };
+        reject_atomically(&mut engine, 20, vec![own_graveyard], "wrong actor");
+        reject_atomically(&mut engine, 10, vec![other_graveyard], "other owner");
+        reject_atomically(
+            &mut engine,
+            10,
+            vec![own_library],
+            "wrong zone and unoffered list entry",
+        );
+        reject_atomically(
+            &mut engine,
+            10,
+            vec![own_graveyard, own_graveyard],
+            "duplicate/count",
+        );
+
+        *engine
+            .state
+            .zone_change_generation
+            .entry(own_graveyard)
+            .or_default() += 1;
+        reject_atomically(&mut engine, 10, vec![own_graveyard], "stale generation");
+    }
+
+    #[test]
+    fn program_choose_exile_departed_controller_drops_parked_resolution() {
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, _target, own_graveyard, ..) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], true);
+        let own_graveyard = own_graveyard.unwrap();
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+
+        let stack_before_refresh = engine
+            .state
+            .stack
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>();
+        engine.state.players[0].has_lost = true;
+        let mut events = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut events)
+            .expect("a departed Controller payer loses the parked spell resolution");
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].life, starting_life);
+        assert_eq!(engine.state.objects[&own_graveyard].zone, Zone::Graveyard);
+        assert_eq!(
+            engine
+                .state
+                .stack
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            stack_before_refresh,
+            "private departure refresh preserves the fixture's preexisting stack entries"
+        );
+        assert!(!events
+            .iter()
+            .any(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_)))));
+    }
+
+    #[test]
+    fn program_group_input_uses_nonzero_target_group_lki_after_return_to_owner_hand() {
+        let (mut engine, top, owners, target, ..) =
+            exile_group_input_fixture("program_return_group_input_fixture", &[0, 1], false);
+        let captured_generation = engine.state.zone_change_generation[&target];
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("Program begins");
+        let mut events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut events,
+                )
+                .expect("return and target-group rider resolve in order"),
+            ResolutionProgress::Completed
+        );
+        assert_eq!(engine.state.objects[&target].zone, Zone::Hand);
+        assert!(engine.state.zone_change_generation[&target] > captured_generation);
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "the spell controller is untouched"
+        );
+        assert_eq!(
+            engine.state.players[1].life, 20,
+            "the target owner is untouched"
+        );
+        assert_eq!(
+            engine.state.players[2].life, 18,
+            "the prior target controller takes damage"
+        );
     }
 
     #[test]

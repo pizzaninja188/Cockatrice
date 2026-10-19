@@ -444,6 +444,22 @@ contained mechanism card-specific.
 Wash Out uses the shared owner-hand return continuation for matching mass returns and individual
 returns. Library-return cohort consolidation remains separate and deferred for a later migration.
 
+Heated Argument's exact face owner now uses an authored `spell_program`: deal six damage to the
+target creature, then offer the controller the optional one-card graveyard-exile cost, with the
+paid branch dealing two damage to that target's controller. Its empty `Otherwise` preserves the
+decline/no-candidate path. This is one owner migration and adds no card admission or whole-card
+readiness claim. The scenario coverage exercises a real Ray of Command response, the payer's own
+graveyard and wrong-actor rejection, payer concession while payment is parked, damage-replacement
+suspension and resume, an empty min-zero payment, and a declared Commander exiled as the cost before
+the rider, spell completion and CR 903.9a choice. Generic target-group LKI remains a separate
+engine fixture because Heated Argument has no natural in-resolution zone-change seam. The change
+does not alter protobuf or relay behavior; when a reachable non-overlapping placement fits the
+available viewport, the library picker moves clear of the currently visible canonical stack so
+Heated Argument's true arrow origin remains readable, and a constrained fallback keeps the picker
+operable. The legacy flat `ChooseResolutionBranch` form of
+this graveyard-exile cost is retired; the typed Program `Choose` form is its supported authored
+shape.
+
 Pilot selection and implementation remain separate. Freeze representative existing and later-consumer
 examples before coding. Brainstorm and Faithless Looting exercise sequential draw/hand actions; Gifts
 Ungiven exercises interdependent private/public choices; Eerie Ultimatum exercises selection followed by
@@ -486,7 +502,7 @@ This design governs resolution ordering, choices, targets, replacements, simulta
 identity and private information. Oracle and current official Comprehensive Rules govern every migrated
 operation/card. No rules simplifications or new card admissions are authorized by this design.
 
-Sources checked on 2026-10-12: the [official rules page](https://magic.wizards.com/en/rules) links the
+Sources checked on 2026-10-12, with Heated Argument added 2026-10-19: the [official rules page](https://magic.wizards.com/en/rules) links the
 [Comprehensive Rules effective 2026-09-25](https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.pdf).
 The independent Luna MAX rules reviewer fetched that PDF and the following Wizards card-text/ruling
 references. They establish architectural constraints; they do not replace exact-identity preflight
@@ -498,6 +514,7 @@ and card-specific evidence when the pilot is selected.
 | [Faithless Looting: Strixhaven release notes](https://magic.wizards.com/en/news/feature/strixhaven-school-of-mages-and-commander-2021-edition-release-notes-2021-04-16) | Complete the draw events, then the discard instruction, within one resolution; the flashback cast method remains a separate prerequisite |
 | [Gifts Ungiven: Double Masters 2022 release notes](https://magic.wizards.com/en/news/feature/double-masters-2022-release-notes-2022-06-24) | Targeted opponent, up-to-four distinct names, public found cohort and opponent's subsequent two-card choice are distinct facts; finding one or two forces those cards into the chosen cohort |
 | [Eerie Ultimatum: Tarkir Dragonstorm release notes](https://magic.wizards.com/en/news/feature/tarkir-dragonstorm-release-notes) | Choose the different-name cohort at resolution and return it simultaneously; an entering Aura cannot enchant another member of that same entering cohort |
+| [Heated Argument: Secrets of Strixhaven release notes](https://magic.wizards.com/en/news/feature/secrets-of-strixhaven-release-notes) | Six target damage, an optional graveyard exile, and the conditional two damage follow the printed order; an illegal sole target prevents the whole spell from resolving |
 
 Relevant CR constraints from that version:
 
@@ -517,6 +534,11 @@ Relevant CR constraints from that version:
   APNAP choice ordering remains owned by the applicable operation/rules boundary.
 - **603.8, 117.3b, 704.3:** observe state triggers during resolution when applicable; ordinary
   priority/SBA processing waits for the prescribed priority boundary after resolution.
+- **608.2b-c/h/n, 704.3-4, 903.9a:** Heated Argument checks target legality before following its
+  instructions, uses the target's current or last-known controller for its later rider, and puts
+  the instant into its owner's graveyard as the final resolution step. A declared Commander exiled
+  as the payment remains eligible for its separate CR 903.9a choice after the spell finishes; SBAs
+  do not interrupt resolution.
 - **104.3a, 800.4g, 514.1-3:** concession/player departure and cleanup are independent rules surfaces
   that must survive parked resolution; cleanup/ordinary SBAs are not inserted between instructions.
 

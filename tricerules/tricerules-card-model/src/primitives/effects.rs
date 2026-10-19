@@ -690,7 +690,9 @@ impl ResolutionBranchDef {
             ResolutionCost::Blight { count } => format!("Blight {count}"),
             ResolutionCost::Mana(cost) => format!("Pay {cost}"),
             ResolutionCost::DiscardCard { .. } => "Discard a card".into(),
-            ResolutionCost::ExileGraveyardCard { .. } => "Exile a card from your graveyard".into(),
+            // Flat legacy definitions reject this cost, but keep the public formatter total when
+            // called directly on an invalid definition.
+            ResolutionCost::ExileGraveyardCard { .. } => choice_fallback("Choice", &self.branch_id),
             ResolutionCost::PutHandCardOnLibraryBottom => {
                 "Put a card from your hand on the bottom of your library".into()
             }
@@ -5548,10 +5550,11 @@ impl SpellEffectKind {
                                 "hand-bottom costs require a typed Program Choose branch".into()
                             );
                         }
-                        ResolutionCost::ExileGraveyardCard { filter } => {
-                            if let Some(filter) = filter {
-                                filter.validate()?;
-                            }
+                        ResolutionCost::ExileGraveyardCard { .. } => {
+                            return Err(
+                                "graveyard-exile costs require a typed Program Choose branch"
+                                    .into(),
+                            );
                         }
                         ResolutionCost::SacrificePermanent {
                             filter,

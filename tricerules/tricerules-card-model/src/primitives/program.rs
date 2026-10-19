@@ -306,6 +306,15 @@ pub struct ProgramTargetBinding {
     pub role_index: u32,
 }
 
+/// Non-targeting target-group input consumed by a program instruction, such as resolving the
+/// controller of a selected target group. The group itself is still declared by `TargetingDef`;
+/// this input does not add a target role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProgramGroupInput {
+    pub instruction_address: u32,
+    pub group_index: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompiledInstructionKind {
     Perform(Box<EffectOp>),
@@ -343,6 +352,7 @@ impl CompiledChooseBranch {
             ResolutionCost::TapPermanents { count, .. } => {
                 format!("Tap {count} permanent(s)")
             }
+            ResolutionCost::ExileGraveyardCard { .. } => "Exile a card from your graveyard".into(),
             ResolutionCost::None if self.body.steps.is_empty() => "Continue".into(),
             ResolutionCost::None => {
                 let effects = self
@@ -382,6 +392,9 @@ pub struct CompiledProgram {
     pub required_inputs: Vec<ProgramRequiredInput>,
     #[serde(default)]
     pub target_bindings: Vec<ProgramTargetBinding>,
+    /// Non-targeting target-group operands keyed to their compiled instruction address.
+    #[serde(default)]
+    pub group_inputs: Vec<ProgramGroupInput>,
     pub body: CompiledBlock,
     pub slots: Vec<CompiledSlot>,
 }
@@ -463,7 +476,8 @@ impl CompiledProgram {
         } else if !program.target_bindings.is_empty() {
             return Err("program target binding requires an authored target group".into());
         }
-        TargetSchema::compile_program(&compiled, targeting)?;
+        let schema = TargetSchema::compile_program(&compiled, targeting)?;
+        compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
         Ok(compiled)
     }
 
@@ -508,6 +522,7 @@ impl CompiledProgram {
             target_projection,
             required_inputs: compiler.required_inputs.into_iter().collect(),
             target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
             body,
             slots: compiler.slots,
         })
@@ -584,6 +599,118 @@ fn find_instruction_by_id<'a>(
         }
     }
     None
+}
+
+fn find_effect_by_address(block: &CompiledBlock, address: u32) -> Option<&SpellEffectKind> {
+    for instruction in &block.steps {
+        if instruction.instruction_address == address {
+            if let CompiledInstructionKind::Perform(effect) = &instruction.kind {
+                return Some(effect.as_ref());
+            }
+            return None;
+        }
+        let nested = match &instruction.kind {
+            CompiledInstructionKind::If { yes, no, .. } => {
+                find_effect_by_address(yes, address).or_else(|| find_effect_by_address(no, address))
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => branches
+                .iter()
+                .find_map(|branch| find_effect_by_address(&branch.body, address))
+                .or_else(|| find_effect_by_address(otherwise, address)),
+            CompiledInstructionKind::Perform(_) => None,
+        };
+        if nested.is_some() {
+            return nested;
+        }
+    }
+    None
+}
+
+fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInput>) {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            CompiledInstructionKind::Perform(effect) => {
+                if let SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                } = effect.as_ref()
+                {
+                    inputs.push(ProgramGroupInput {
+                        instruction_address: instruction.instruction_address,
+                        group_index: *group_index,
+                    });
+                }
+            }
+            CompiledInstructionKind::If { yes, no, .. } => {
+                collect_group_inputs(yes, inputs);
+                collect_group_inputs(no, inputs);
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    collect_group_inputs(&branch.body, inputs);
+                }
+                collect_group_inputs(otherwise, inputs);
+            }
+        }
+    }
+}
+
+fn compile_group_inputs(
+    program: &CompiledProgram,
+    context: EffectContext,
+    schema: &TargetSchema<'_, '_>,
+) -> Result<Vec<ProgramGroupInput>, String> {
+    let mut inputs = Vec::new();
+    collect_group_inputs(&program.body, &mut inputs);
+    for input in &inputs {
+        if context != EffectContext::Spell {
+            return Err(
+                "DamagePlayer ControllerOfTargetGroup in spell_program requires a spell owner"
+                    .into(),
+            );
+        }
+        let group = schema
+            .groups
+            .get(input.group_index as usize)
+            .ok_or_else(|| {
+                "DamagePlayer recipient references an unknown target group".to_string()
+            })?;
+        if group.min != 1 || group.max != 1 || group.bindings.len() != 1 {
+            return Err(
+                "DamagePlayer ControllerOfTargetGroup requires one target in a singleton group bound to its DamageTarget role".into(),
+            );
+        }
+        let binding = group.bindings[0];
+        let target_address = u32::try_from(binding.effect_index)
+            .map_err(|_| "target instruction address exceeds u32".to_string())?;
+        let owns_target_role = program.target_bindings.iter().any(|target_binding| {
+            target_binding.instruction_address == target_address
+                && target_binding.target_group_index == input.group_index
+                && target_binding.role_index as usize == binding.role_index
+        });
+        let genuine_creature_damage_target = owns_target_role
+            && matches!(
+                (binding.role, find_effect_by_address(&program.body, target_address)),
+                (
+                    super::TargetRole::Filtered(filter),
+                    Some(SpellEffectKind::DamageTarget { target, .. })
+                ) if filter.kind == TargetKind::Creature && target.kind == TargetKind::Creature
+            );
+        if !genuine_creature_damage_target {
+            return Err(
+                "DamagePlayer ControllerOfTargetGroup requires the singleton group to bind a Creature DamageTarget role".into(),
+            );
+        }
+    }
+    Ok(inputs)
 }
 
 impl Compiler {
@@ -878,6 +1005,27 @@ impl Compiler {
                                         format!(
                                             "Choose instruction '{}' branch '{}' tap cost: {reason}",
                                             instruction.id, branch.branch_id
+                                        )
+                                    },
+                                )?;
+                                has_paid_branch = true;
+                            }
+                            ResolutionCost::ExileGraveyardCard { .. } if !*optional => {
+                                return Err(format!(
+                                    "Choose instruction '{}' graveyard-exile cost requires an optional Choose",
+                                    instruction.id
+                                ));
+                            }
+                            ResolutionCost::ExileGraveyardCard { filter }
+                                if *optional
+                                    && *chooser == PlayerRecipient::Controller
+                                    && self.context == EffectContext::Spell =>
+                            {
+                                filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate).map_err(
+                                    |reason| {
+                                        format!(
+                                            "Choose instruction '{}' graveyard-exile cost: {reason}",
+                                            instruction.id
                                         )
                                     },
                                 )?;
@@ -1665,6 +1813,20 @@ fn validate_and_result_types(
                 }
             }
             validate_program_target_filter(target, "DamageTarget target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::DamagePlayer {
+            amount,
+            who: PlayerRecipient::ControllerOfTargetGroup { .. },
+        } => {
+            if context != EffectContext::Spell {
+                return Err(
+                    "DamagePlayer ControllerOfTargetGroup in spell_program is spell-only".into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_amount(amount)?;
+            validate_fixed_program_amount("DamagePlayer amount", amount)?;
             Ok(Vec::new())
         }
         SpellEffectKind::CounterTargetSpell {

@@ -64,11 +64,26 @@ fn resolve_top_spell(engine: &mut GameEngine) {
 
 #[test]
 fn heated_argument_is_registered_in_the_current_standard_audit() {
-    let definition = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let definition = registry
         .get("heated_argument")
         .expect("Heated Argument is in the current-Standard coverage cohort");
     assert_eq!(definition.name, "Heated Argument");
-    assert_eq!(definition.primary_face().spell_effect.len(), 2);
+    let face = definition.primary_face();
+    assert!(
+        face.spell_effect.is_empty(),
+        "Heated Argument uses its Program body"
+    );
+    assert!(
+        face.spell_program.is_some(),
+        "Heated Argument has an authored Program"
+    );
+    let owner =
+        tricerules_cards::ProgramOwnerId::face(definition.id.as_str(), face.face_id.clone());
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Heated Argument's exact face owns a compiled Program");
+    assert_eq!(program.owner, owner);
 }
 
 #[test]

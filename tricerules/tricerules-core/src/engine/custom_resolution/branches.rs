@@ -443,6 +443,7 @@ impl GameEngine {
         if !matches!(
             cost,
             ResolutionCost::PutHandCardOnLibraryBottom
+                | ResolutionCost::ExileGraveyardCard { .. }
                 | ResolutionCost::Blight { .. }
                 | ResolutionCost::TapPermanents { .. }
                 | ResolutionCost::SacrificePermanent { .. }
@@ -560,6 +561,43 @@ impl GameEngine {
                     candidate_names: self.object_names(candidates),
                     min: pending.presentation.min,
                     max: 1,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn program_choose_graveyard_cost_choice_event(
+        &self,
+        pending: &PendingResolution,
+        candidates: &[ObjectId],
+    ) -> rv1::RuledEvent {
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::GraveyardCards as i32,
+                    candidate_object_ids: candidates.to_vec(),
+                    candidate_card_ids: candidates
+                        .iter()
+                        .map(|object_id| {
+                            self.state
+                                .objects
+                                .get(object_id)
+                                .map(|object| object.card_id.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect(),
+                    candidate_names: self.object_names(candidates),
+                    min: pending.presentation.min,
+                    max: 1,
+                    candidate_source_zones: vec![
+                        rv1::ChoiceCandidateSourceZone::Graveyard as i32;
+                        candidates.len()
+                    ],
                     ..Default::default()
                 },
             )),
@@ -827,6 +865,201 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
         }
         result
+    }
+
+    pub(super) fn finish_program_choose_graveyard_card_cost(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, choose, selected_branch, branch_id, candidate_generations) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
+                    PendingProgramChooseStage::PayingGraveyardCardCost {
+                        selected_branch,
+                        branch_id,
+                        candidate_generations,
+                    } => (
+                        stack.clone(),
+                        choose.clone(),
+                        *selected_branch,
+                        branch_id.clone(),
+                        candidate_generations.clone(),
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "program Choose is not awaiting a graveyard-card payment",
+                        ));
+                    }
+                },
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "program Choose graveyard-cost continuation missing",
+                    ));
+                }
+            };
+        let invalid_fields = !answer.chosen_player_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some();
+        if invalid_fields {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "graveyard-cost payment choice contains unrelated fields",
+            ));
+        }
+        if pending.deciding_player != choose.original_chooser {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "program Choose graveyard-cost payment cannot be delegated",
+            ));
+        }
+        if decision == rv1::ResolutionChoiceDecision::Decline {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required graveyard-cost payment cannot be declined",
+                ));
+            }
+            if !answer.chosen_object_ids.is_empty() {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "declining a graveyard-cost payment cannot include an object",
+                ));
+            }
+            return self.complete_program_choose_otherwise_from_parts(
+                stack,
+                choose,
+                format!(
+                    "P{} declines the program Choose graveyard cost; Otherwise resolves.",
+                    pending.deciding_player
+                ),
+            );
+        }
+        if decision != rv1::ResolutionChoiceDecision::Unspecified {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "graveyard-cost payment requires an object choice or decline",
+            ));
+        }
+        if answer.chosen_object_ids.is_empty() {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required graveyard-cost payment needs one card",
+                ));
+            }
+            return self.complete_program_choose_otherwise_from_parts(
+                stack,
+                choose,
+                format!(
+                    "P{} declines the program Choose graveyard cost; Otherwise resolves.",
+                    pending.deciding_player
+                ),
+            );
+        }
+        if answer.chosen_object_ids.len() != 1 {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "graveyard-cost payment requires one card",
+            ));
+        }
+
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        ) {
+            Ok(branch)
+                if branch.branch_id == branch_id
+                    && matches!(&branch.cost, ResolutionCost::ExileGraveyardCard { .. }) =>
+            {
+                branch
+            }
+            Ok(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose branch became stale"));
+            }
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let object_id = answer.chosen_object_ids[0];
+        let Some(zone_change_generation) = candidate_generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation))
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "graveyard-cost payment choice is stale",
+            ));
+        };
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let source = rv1::CostObjectRef {
+            object_id: stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            zone_change_generation: stack.item.source_zone_change,
+        };
+        let selected = rv1::CostObjectRef {
+            object_id,
+            zone_change_generation,
+        };
+        let legal_candidates = self.resolution_cost_candidates(
+            choose.original_chooser,
+            source.object_id,
+            source.zone_change_generation,
+            &branch.cost,
+        );
+        if current_generation != zone_change_generation
+            || !pending.presentation.candidates.contains(&object_id)
+            || !legal_candidates.contains(&object_id)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "graveyard-cost payment choice became stale",
+            ));
+        }
+        let receipt = match self
+            .plan_resolution_object_costs(
+                choose.original_chooser,
+                source,
+                &branch.cost,
+                &[selected],
+            )
+            .and_then(|plan| self.commit_cost_transaction(plan))
+        {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let mut events = receipt.move_events;
+        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed, &mut events);
+        for cost in receipt.paid_card_costs {
+            if let PaidCardCost::Exile { card_name, .. } = cost {
+                events.push(ev_log(format!(
+                    "P{} exiles {card_name}.",
+                    choose.original_chooser
+                )));
+            }
+        }
+        let mut stack = stack;
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
     pub(super) fn finish_program_choose_permanent_cost(
@@ -1497,6 +1730,48 @@ impl GameEngine {
                 events.push(event);
                 Ok(finish_with_events(self, events))
             }
+            cost @ ResolutionCost::ExileGraveyardCard { .. } => {
+                let payer = choose_state.original_chooser;
+                let candidates = self.resolution_cost_candidates(
+                    payer,
+                    stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    stack.item.source_zone_change,
+                    &cost,
+                );
+                if candidates.is_empty() {
+                    let mut otherwise = self.complete_program_choose_otherwise_from_parts(
+                        stack,
+                        choose_state,
+                        "No card remains in the payer's graveyard for the program Choose cost; Otherwise resolves."
+                            .into(),
+                    )?;
+                    events.extend(otherwise.events);
+                    otherwise.events = events;
+                    return Ok(otherwise);
+                }
+                pending.deciding_player = payer;
+                pending.presentation.choice_kind = rv1::ChoiceKind::GraveyardCards;
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.min = 0;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    "Choose a card from your graveyard to exile, or decline.".into();
+                let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated ProgramChoose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::PayingGraveyardCardCost {
+                    selected_branch: branch_index,
+                    branch_id: branch.branch_id,
+                    candidate_generations,
+                };
+                let event = self.program_choose_graveyard_cost_choice_event(&pending, &candidates);
+                self.state.pending_resolution = Some(pending);
+                events.push(event);
+                Ok(finish_with_events(self, events))
+            }
             ResolutionCost::Blight { count } => {
                 let payer = choose_state.original_chooser;
                 let candidates = self.resolution_cost_candidates(
@@ -1888,14 +2163,17 @@ impl GameEngine {
                     "hand-bottom costs require a typed Program Choose branch",
                 ));
             }
+            ResolutionCost::ExileGraveyardCard { .. } => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "graveyard-exile costs require a typed Program Choose branch",
+                ));
+            }
             ResolutionCost::DiscardCard { .. }
-            | ResolutionCost::ExileGraveyardCard { .. }
             | ResolutionCost::SacrificePermanent { .. }
             | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
                 let is_hand_card = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
-                let is_graveyard_exile =
-                    matches!(branch.cost, ResolutionCost::ExileGraveyardCard { .. });
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
                 let count = match branch.cost {
                     ResolutionCost::TapPermanents { count, .. } => count,
@@ -1903,8 +2181,6 @@ impl GameEngine {
                 };
                 pending.presentation.choice_kind = if is_hand_card {
                     rv1::ChoiceKind::HandCards
-                } else if is_graveyard_exile {
-                    rv1::ChoiceKind::GraveyardCards
                 } else if is_tap
                     || matches!(
                         branch.cost,
@@ -1930,8 +2206,6 @@ impl GameEngine {
                     )
                 } else if matches!(branch.cost, ResolutionCost::DiscardCard { .. }) {
                     "Choose a card to discard, or decline.".into()
-                } else if is_graveyard_exile {
-                    "Choose a card from your graveyard to exile, or decline.".into()
                 } else if is_tap {
                     let plural = if count == 1 { "" } else { "s" };
                     let decline = if branch_state.optional {
@@ -2001,14 +2275,7 @@ impl GameEngine {
                             resolution_branches: Vec::new(),
                             mana_cost: String::new(),
                             public_reveal: None,
-                            candidate_source_zones: if is_graveyard_exile {
-                                vec![
-                                    rv1::ChoiceCandidateSourceZone::Graveyard as i32;
-                                    candidates.len()
-                                ]
-                            } else {
-                                Vec::new()
-                            },
+                            candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
                             selection_slots: Vec::new(),
@@ -2255,6 +2522,17 @@ impl GameEngine {
             .state
             .player_idx(pending.deciding_player)
             .is_some_and(|index| !self.state.players[index].has_lost);
+        if matches!(
+            choose.stage,
+            PendingProgramChooseStage::PayingGraveyardCardCost { .. }
+        ) && choose.original_chooser == controller
+            && !original_chooser_live
+        {
+            // This own-graveyard payment belongs to the resolving controller. Once that player
+            // leaves, their spell's parked resolution ends under CR 800.4a; it does not take
+            // Otherwise or the parent program tail.
+            return Ok(());
+        }
         let delegate_prompt = matches!(
             choose.stage,
             PendingProgramChooseStage::ChoosingDelegate { .. }
@@ -2263,6 +2541,7 @@ impl GameEngine {
             choose.stage,
             PendingProgramChooseStage::PayingMana { .. }
                 | PendingProgramChooseStage::PayingHandCard { .. }
+                | PendingProgramChooseStage::PayingGraveyardCardCost { .. }
                 | PendingProgramChooseStage::PayingBlight { .. }
                 | PendingProgramChooseStage::PayingPermanentCost { .. }
                 | PendingProgramChooseStage::ChoosingCommanderDestination { .. }

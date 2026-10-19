@@ -28,6 +28,7 @@
 #include "../game/ruled/ruled_resume_client.h"
 #include "../game/ruled/ruled_reveal_windows.h"
 #include "../game/ruled/ruled_token_display.h"
+#include "../game/ruled/ruled_zone_view_policy.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
@@ -2700,7 +2701,14 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
     // The deck zone is only a scaffold for the widget; title the window for what it actually shows.
     librarySearchView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(librarySearchView);
-    librarySearchView->setPos(340, 80);
+    const QPointF preferredPosition(340.0, 80.0);
+    librarySearchView->setPos(preferredPosition);
+    const QRectF viewportSceneRect =
+        gameView ? gameView->mapToScene(gameView->viewport()->rect()).boundingRect() : QRectF();
+    const QRectF visibleStackSceneRect =
+        stackView && stackView->isVisible() ? stackView->sceneBoundingRect() : QRectF();
+    librarySearchView->setPos(ruledLibrarySearchPickerPosition(
+        visibleStackSceneRect, librarySearchView->sceneBoundingRect().size(), preferredPosition, viewportSceneRect));
     connect(librarySearchView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
         librarySearchView = nullptr;
         qDeleteAll(librarySearchCards);
