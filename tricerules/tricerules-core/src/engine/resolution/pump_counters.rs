@@ -6,7 +6,7 @@ fn resolve_counter_placements(
 ) -> Result<EffectOutcome, EngineError> {
     let result = cx.engine.begin_counter_placement_batch(
         placements,
-        crate::state::ParkedStackResolution::new(cx.top.clone()),
+        cx.parked_stack(),
         crate::state::CounterPlacementCompletion::StackEffect {
             spell_label: cx.spell_label.to_owned(),
         },

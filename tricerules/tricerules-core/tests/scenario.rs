@@ -690,6 +690,8 @@ mod issue_282_self_tap_loot;
 mod issue_283_generated_graveyard_to_library_bottom;
 #[path = "scenario/issue_284_generated_optional_basic_land_to_top.rs"]
 mod issue_284_generated_optional_basic_land_to_top;
+#[path = "scenario/issue_507_replicating_ring_program.rs"]
+mod issue_507_replicating_ring_program;
 
 #[path = "scenario/issue_285_generated_attack_pump_indestructible.rs"]
 mod issue_285_generated_attack_pump_indestructible;

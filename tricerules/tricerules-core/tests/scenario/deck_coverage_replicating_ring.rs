@@ -339,6 +339,176 @@ fn ring_control_changes_preserve_trigger_controller_and_new_upkeep_scope() {
 }
 
 #[test]
+fn ring_doubled_counter_replacements_resume_program_and_enter_32_tokens_once() {
+    let (mut engine, source) = setup();
+    let first_season = inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let second_season = inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    set_counters(&mut engine, source, CounterKind::Night, 4);
+    set_counters(&mut engine, source, CounterKind::Charge, 3);
+    start_upkeep(&mut engine, 0);
+
+    for _ in 0..2 {
+        engine
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
+            .unwrap();
+    }
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("two Doubling Seasons require counter-replacement ordering");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(pending.deciding_player, 0);
+    // These are replacement-application IDs, distinct from the source permanents they name.
+    let counter_candidates = pending.presentation.candidates.clone();
+    assert_eq!(counter_candidates.len(), 2);
+    let snapshot = engine.diagnostic_snapshot().unwrap();
+    assert!(
+        snapshot["state"]["pending_resolution"]["continuation"]["variant"] == "CounterReplacement"
+    );
+    assert!(
+        snapshot["state"]["pending_resolution"]["continuation"]["value"]["stack"]["program"]
+            .is_object()
+    );
+    assert!(snapshot["state"]["pending_replacement_event"]["variant"] == "Counters");
+    let counter_batch = &snapshot["state"]["pending_replacement_event"]["value"];
+    let applications = counter_batch["applications"]
+        .as_array()
+        .expect("the pending counter batch retains replacement application mappings");
+    assert_eq!(applications.len(), 2);
+    let application_ids = applications
+        .iter()
+        .map(|application| application["choice_id"].as_u64().unwrap() as u32)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        application_ids,
+        counter_candidates.iter().copied().collect()
+    );
+    let replacement_sources = applications
+        .iter()
+        .map(|application| {
+            application["replacement"]["source_object_id"]
+                .as_u64()
+                .unwrap() as u32
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        replacement_sources,
+        [first_season, second_season].into_iter().collect()
+    );
+    assert!(counter_batch["events"][0]["recipient"]["variant"] == "Object");
+    assert_eq!(
+        counter_batch["events"][0]["recipient"]["value"]["object_id"].as_u64(),
+        Some(source as u64)
+    );
+    assert_eq!(
+        counter_batch["events"][0]["original_counters"]["Night"].as_u64(),
+        Some(1)
+    );
+
+    let valid_counter_choice = submit_resolution_choice(vec![counter_candidates[0]]);
+    reject(&mut engine, 1, &valid_counter_choice);
+    let bad_counter_candidate = (0..=counter_candidates.len() as u32)
+        .find(|candidate| !counter_candidates.contains(candidate))
+        .expect("one of three IDs must not be a two-option replacement application");
+    reject(
+        &mut engine,
+        0,
+        &submit_resolution_choice(vec![bad_counter_candidate]),
+    );
+    engine
+        .apply_scenario_command(0, &valid_counter_choice)
+        .unwrap();
+
+    // Counter replacement choices finish before the Program's threshold tail. If a later
+    // replacement choice is published for token creation, answer it before the private entry
+    // order; the current identical token doublers are normally applied synchronously.
+    let mut replacement_prompts = 0;
+    loop {
+        let (choice_kind, actor, candidates) = {
+            let pending = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the 32-token batch must await its private entry order");
+            (
+                pending.presentation.choice_kind,
+                pending.deciding_player,
+                pending.presentation.candidates.clone(),
+            )
+        };
+        if choice_kind == ChoiceKind::SimultaneousEntryOrder {
+            break;
+        }
+        assert_eq!(choice_kind, ChoiceKind::ReplacementEffect);
+        replacement_prompts += 1;
+        assert!(
+            replacement_prompts <= 4,
+            "unexpected replacement prompt loop"
+        );
+        assert!(!candidates.is_empty());
+        engine
+            .apply_scenario_command(actor, &submit_resolution_choice(vec![candidates[0]]))
+            .unwrap();
+    }
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        3
+    );
+    assert!(
+        token_ids(&engine).is_empty(),
+        "tokens remain private until ordered entry"
+    );
+    let pending = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(pending.deciding_player, 0);
+    let order_candidates = pending.presentation.candidates.clone();
+    assert_eq!(order_candidates.len(), 32);
+    assert_eq!(
+        order_candidates
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        32
+    );
+    let valid_order = submit_resolution_choice(order_candidates.clone());
+    reject(&mut engine, 1, &valid_order);
+    reject(
+        &mut engine,
+        0,
+        &submit_resolution_choice(vec![order_candidates[0]; 32]),
+    );
+    reject(
+        &mut engine,
+        0,
+        &submit_resolution_choice(order_candidates[..31].to_vec()),
+    );
+    engine.apply_scenario_command(0, &valid_order).unwrap();
+
+    assert_tokens(&engine, 32, 0);
+    assert!(engine.state.pending_resolution.is_none() && engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        3
+    );
+    reject(&mut engine, 0, &valid_counter_choice);
+    reject(&mut engine, 0, &valid_order);
+    assert_tokens(&engine, 32, 0);
+}
+
+#[test]
 fn ring_token_entry_parks_after_removal_rejects_bad_answers_and_commits_once() {
     let (mut engine, source) = setup();
     set_counters(&mut engine, source, CounterKind::Night, 7);

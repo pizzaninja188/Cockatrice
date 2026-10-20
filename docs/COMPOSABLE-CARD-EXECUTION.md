@@ -109,6 +109,20 @@ trigger remains unconditional; the pinned Oracle record `55ede1d4-593d-433c-943a
 ability resolves, so power added in response qualifies and a qualifying creature removed before
 resolution does not (CR 603.4, 608.2c, 608.2h). This reuses the current condition evaluator and leaves
 the registered Dinosaur unchanged. Its complete definition and updated review map have independent semantic approval. It adds no card admission or runtime, protocol, or client change.
+The bounded 2026-10-19 Replicating Ring migration authors its upkeep trigger as a resultless
+Program: put one Night counter on `Source`, check `SourceCounterCount(Night)` at that instruction,
+remove every Night counter from `Source` when the count reaches eight, then create eight named
+Replicated Ring tokens. Ability Programs admit fixed-positive `PutCounters` and resultless
+`RemoveAllCounters` on `Source` for any validated counter kind, plus a direct `SourceCounterCount`
+condition on `If` at any nesting depth. Ring and Lavabrink Floodgates use source-counter placement
+and threshold checks; Ring and Lightning Coils use removal of every counter of one kind.
+`SourceCounterCount` remains unsupported in `AllOf`/`AnyOf`, `Choose` requirements, conditional
+search predicates, and spell Programs; `EffectsApplicable` remains restricted to a complete fixed
+positive `PlusOnePlusOne` source-counter branch. Replacement choices resume the same Program before
+its threshold tail; two Doubling Seasons turn four Night counters into eight, remove only Night,
+and double the eight-token result to 32. The controller privately orders the simultaneous entrants
+before they become public (CR 608.2c, 608.2h, 616.1e-f, 122.2, 111.4, 205.4g). This adds no card
+admission or protocol or client change.
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

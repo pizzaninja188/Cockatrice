@@ -5,11 +5,12 @@
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals. `If` admits the top-level global `Void` predicate plus controller-scoped hand/library
-//! counts, graveyard CardCount filters, and battlefield Count filters; `Void` is not admitted in
-//! composite conditions, Choose requirements, or conditional search predicates. Permanent choices
-//! cannot use event-bound filters or cross-object constraints. Widening these rules needs a
-//! separately typed context/result contract.
+//! literals. `If` admits the global `Void` predicate and, on ability programs, direct
+//! `SourceCounterCount` conditions at any nesting depth, plus controller-scoped hand/library
+//! counts, graveyard CardCount filters, and battlefield Count filters. These direct predicates
+//! are not admitted in composite conditions, Choose requirements, or conditional search
+//! predicates. Permanent choices cannot use event-bound filters or cross-object constraints.
+//! Widening these rules needs a separately typed context/result contract.
 
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
@@ -818,9 +819,24 @@ impl Compiler {
                             instruction.id
                         ));
                     }
-                    // Void is admitted only as this top-level ProgramIf condition. Keep the shared
-                    // game-condition compiler narrow for Choose and conditional search predicates.
-                    let condition = if matches!(condition.as_ref(), GameCondition::Void) {
+                    // Void and SourceCounterCount are admitted only as direct ProgramIf
+                    // conditions. Keep the shared game-condition compiler narrow for Choose
+                    // requirements and conditional search predicates.
+                    let condition = if matches!(
+                        condition.as_ref(),
+                        GameCondition::SourceCounterCount { .. }
+                    ) {
+                        if self.context != EffectContext::Ability {
+                            return Err(format!(
+                                "If instruction '{}' supports SourceCounterCount only on an ability program",
+                                instruction.id
+                            ));
+                        }
+                        condition.validate_live().map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?;
+                        CompiledProgramCondition::Game(condition.as_ref().clone())
+                    } else if matches!(condition.as_ref(), GameCondition::Void) {
                         condition.validate_live().map_err(|reason| {
                             format!("If instruction '{}': {reason}", instruction.id)
                         })?;
@@ -1980,13 +1996,21 @@ fn validate_and_result_types(
         SpellEffectKind::PutCounters {
             counter,
             count,
-            subject,
-        } if *counter == super::CounterKind::PlusOnePlusOne
+            subject: EffectSubject::Source,
+        } if context == EffectContext::Ability
             && matches!(count, Amount::Fixed(amount) if *amount > 0)
-            && *subject == EffectSubject::Source
-            && context == EffectContext::Ability =>
+        =>
         {
             effect.validate(context)?;
+            counter.validate()?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::RemoveAllCounters {
+            counter,
+            subject: EffectSubject::Source,
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            counter.validate()?;
             Ok(Vec::new())
         }
         SpellEffectKind::Sacrifice {

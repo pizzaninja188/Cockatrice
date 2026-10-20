@@ -6326,7 +6326,7 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
         (
             "SourceCounterCount",
             r#"SourceCounterCount(counter: Quest, min: Some(1))"#,
-            unsupported,
+            "supports SourceCounterCount only on an ability program",
         ),
         (
             "TargetedPlayer at the root",
@@ -11259,7 +11259,7 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
             r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)))], yields: [])"#,
         ),
         (
-            "wrong counter",
+            "unsupported EffectsApplicable counter kind",
             r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: Charge, count: 1, subject: Source)))], yields: [])"#,
         ),
         (
@@ -11329,12 +11329,234 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
 }
 
 #[test]
-fn endure_rejects_unsupported_direct_counter_leaf_shapes_and_spell_context() {
+fn replicating_ring_program_admits_source_night_threshold_remove_and_tokens() {
+    use crate::primitives::{
+        CompiledInstructionKind, CompiledProgram, CompiledProgramCondition, EffectContext,
+        SpellEffectKind,
+    };
+
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "replicating_ring".into(),
+        face_id: crate::CardFaceId::new("replicating_ring").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let ring_body = r#"(steps: [
+        (id: "put_night", kind: Perform(PutCounters(
+            counter: Night, count: 1, subject: Source,
+        ))),
+        (id: "threshold", kind: If(
+            condition: SourceCounterCount(counter: Night, min: Some(8)),
+            yes: (steps: [
+                (id: "remove_night", kind: Perform(RemoveAllCounters(
+                    counter: Night, subject: Source,
+                ))),
+                (id: "make_rings", kind: Perform(CreateTokens(
+                    token: "replicated_ring", count: 8, who: Controller,
+                    tapped: false, sacrifice_timing: None,
+                ))),
+            ], yields: []),
+            no: (steps: [], yields: []),
+        )),
+    ], yields: [])"#;
+    let authored: crate::CardProgram =
+        ron::from_str(&format!("(body: {ring_body})")).expect("Ring body parses");
+    let compiled = CompiledProgram::compile(owner, EffectContext::Ability, &authored)
+        .expect("the exact Replicating Ring threshold program is admitted");
+
+    let [put_night, threshold] = compiled.body.steps.as_slice() else {
+        panic!("Ring increments Night before its source-threshold branch");
+    };
+    assert!(matches!(
+        &put_night.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::PutCounters {
+                counter: crate::primitives::CounterKind::Night,
+                count: crate::primitives::Amount::Fixed(1),
+                subject: crate::primitives::EffectSubject::Source,
+            })
+    ));
+    let CompiledInstructionKind::If { condition, yes, no } = &threshold.kind else {
+        panic!("Ring threshold is a ProgramIf");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        CompiledProgramCondition::Game(crate::primitives::GameCondition::SourceCounterCount {
+            counter: crate::primitives::CounterKind::Night,
+            min: Some(8),
+            max: None,
+        })
+    ));
+    assert!(no.steps.is_empty());
+    assert!(matches!(
+        yes.steps.as_slice(),
+        [remove_night, make_rings]
+            if matches!(
+                &remove_night.kind,
+                CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::RemoveAllCounters {
+                        counter: crate::primitives::CounterKind::Night,
+                        subject: crate::primitives::EffectSubject::Source,
+                    })
+            ) && matches!(
+                &make_rings.kind,
+                CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::CreateTokens {
+                        token,
+                        count: crate::primitives::Amount::Fixed(8),
+                        who: crate::primitives::PlayerRecipient::Controller,
+                        tapped: false,
+                        sacrifice_timing: None,
+                    } if token == "replicated_ring")
+            )
+    ));
+}
+
+#[test]
+fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile = |_label: &str, context, body: &str| {
+        let card_id = "source_counter_fixture";
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        let owner = match context {
+            EffectContext::Spell => {
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+            }
+            EffectContext::Ability => crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                card_id: card_id.into(),
+                face_id: crate::CardFaceId::new(card_id).unwrap(),
+                ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+            }),
+        };
+        CompiledProgram::compile(owner, context, &program)
+    };
+
+    let charge_removal = r#"(steps: [(id: "remove_charge", kind: Perform(RemoveAllCounters(
+        counter: Charge, subject: Source,
+    )))], yields: [])"#;
+    compile(
+        "charge_removal_fixture",
+        EffectContext::Ability,
+        charge_removal,
+    )
+    .expect("the same source-bound removal operation supports Charge counters");
+
+    let ring_program = r#"(steps: [
+        (id: "put_night", kind: Perform(PutCounters(
+            counter: Night, count: 1, subject: Source,
+        ))),
+        (id: "threshold", kind: If(
+            condition: SourceCounterCount(counter: Night, min: Some(8)),
+            yes: (steps: [(id: "remove_night", kind: Perform(RemoveAllCounters(
+                counter: Night, subject: Source,
+            )))], yields: []),
+            no: (steps: [], yields: []),
+        )),
+    ], yields: [])"#;
+    assert!(
+        compile("ring_spell_fixture", EffectContext::Spell, ring_program).is_err(),
+        "the source counter operation and condition require an ability owner"
+    );
+
+    let spell_threshold = r#"(steps: [(id: "threshold", kind: If(
+        condition: SourceCounterCount(counter: Night, min: Some(8)),
+        yes: (steps: [], yields: []), no: (steps: [], yields: []),
+    ))], yields: [])"#;
+    assert!(
+        compile(
+            "ring_condition_spell_fixture",
+            EffectContext::Spell,
+            spell_threshold
+        )
+        .is_err(),
+        "SourceCounterCount is not a context-free spell predicate"
+    );
+
+    let nested_choose_if = r#"(steps: [(id: "choose", kind: Choose(
+        choice: "mode", chooser: Controller, optional: false,
+        branches: [(branch_id: "mode", presentation: Fallback,
+            cost: None, requirement: Always,
+            body: (steps: [(id: "if", kind: If(
+                condition: SourceCounterCount(counter: Night, min: Some(8)),
+                yes: (steps: [], yields: []), no: (steps: [], yields: []),
+            ))], yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    compile(
+        "nested_ring_condition_fixture",
+        EffectContext::Ability,
+        nested_choose_if,
+    )
+    .expect("SourceCounterCount remains available to a direct ProgramIf inside a Choose body");
+
+    for (label, body) in [
+        (
+            "non-source counter placement",
+            r#"(steps: [(id: "put", kind: Perform(PutCounters(
+                counter: Night, count: 1, subject: Chosen((kind: Creature)),
+            )))], yields: [])"#,
+        ),
+        (
+            "zero counter placement",
+            r#"(steps: [(id: "put", kind: Perform(PutCounters(
+                counter: Night, count: 0, subject: Source,
+            )))], yields: [])"#,
+        ),
+        (
+            "dynamic counter placement",
+            r#"(steps: [(id: "put", kind: Perform(PutCounters(
+                counter: Night, count: X, subject: Source,
+            )))], yields: [])"#,
+        ),
+        (
+            "non-source all-counter removal",
+            r#"(steps: [(id: "remove", kind: Perform(RemoveAllCounters(
+                counter: Charge, subject: Chosen((kind: Creature)),
+            )))], yields: [])"#,
+        ),
+        (
+            "missing source-counter bound",
+            r#"(steps: [(id: "if", kind: If(
+                condition: SourceCounterCount(counter: Night),
+                yes: (steps: [], yields: []), no: (steps: [], yields: []),
+            ))], yields: [])"#,
+        ),
+        (
+            "reversed source-counter bounds",
+            r#"(steps: [(id: "if", kind: If(
+                condition: SourceCounterCount(counter: Night, min: Some(8), max: Some(7)),
+                yes: (steps: [], yields: []), no: (steps: [], yields: []),
+            ))], yields: [])"#,
+        ),
+        (
+            "Choose source-counter requirement",
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "mode", chooser: Controller, optional: false,
+                branches: [(branch_id: "mode", presentation: Fallback,
+                    cost: None,
+                    requirement: GameCondition(SourceCounterCount(
+                        counter: Night, min: Some(8),
+                    )),
+                    body: (steps: [], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#,
+        ),
+    ] {
+        assert!(
+            compile(label, EffectContext::Ability, body).is_err(),
+            "unsupported source-counter form was admitted: {label}"
+        );
+    }
+}
+
+#[test]
+fn source_counter_program_rejects_invalid_direct_counter_shapes_and_spell_context() {
     use crate::primitives::{CompiledProgram, EffectContext};
 
     let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "endure_direct_counter_fixture".into(),
-        face_id: crate::CardFaceId::new("endure_direct_counter_fixture").unwrap(),
+        card_id: "source_counter_fixture".into(),
+        face_id: crate::CardFaceId::new("source_counter_fixture").unwrap(),
         ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
     });
     let compile_ability = |leaf: &str| {
@@ -11344,6 +11566,9 @@ fn endure_rejects_unsupported_direct_counter_leaf_shapes_and_spell_context() {
         .expect("direct counter fixture parses");
         CompiledProgram::compile(ability_owner.clone(), EffectContext::Ability, &program)
     };
+
+    compile_ability("PutCounters(counter: Charge, count: 1, subject: Source)")
+        .expect("ability programs admit positive fixed Source counters of any valid kind");
 
     for (label, leaf) in [
         (
@@ -11355,16 +11580,12 @@ fn endure_rejects_unsupported_direct_counter_leaf_shapes_and_spell_context() {
             "PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)",
         ),
         (
-            "wrong counter",
-            "PutCounters(counter: Charge, count: 1, subject: Source)",
-        ),
-        (
             "wrong subject",
             "PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))",
         ),
     ] {
-        let error =
-            compile_ability(leaf).expect_err("only the fixed Source +1/+1 leaf is admitted");
+        let error = compile_ability(leaf)
+            .expect_err("only fixed positive Source counter placements are admitted");
         assert!(
             error.contains("effect is not in the resolution-program operation whitelist"),
             "{label}: {error}"
@@ -11379,13 +11600,13 @@ fn endure_rejects_unsupported_direct_counter_leaf_shapes_and_spell_context() {
     .expect("spell counter fixture parses");
     let spell_error = CompiledProgram::compile(
         crate::ProgramOwnerId::face(
-            "endure_direct_counter_spell_fixture",
-            crate::CardFaceId::new("endure_direct_counter_spell_fixture").unwrap(),
+            "source_counter_spell_fixture",
+            crate::CardFaceId::new("source_counter_spell_fixture").unwrap(),
         ),
         EffectContext::Spell,
         &spell_program,
     )
-    .expect_err("Endure's Source counter leaf remains ability-only");
+    .expect_err("Source counter placement remains ability-only");
     assert!(
         spell_error.contains("effect is not in the resolution-program operation whitelist"),
         "{spell_error}"

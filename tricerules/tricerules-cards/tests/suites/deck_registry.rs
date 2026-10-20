@@ -149,5 +149,7 @@ mod deck_coverage_wizard_class;
 mod deck_coverage_words_of_wisdom;
 #[path = "../deck_coverage_zurs_weirding.rs"]
 mod deck_coverage_zurs_weirding;
+#[path = "../issue_507_replicating_ring_program.rs"]
+mod issue_507_replicating_ring_program;
 #[path = "../structural_choose_later_ports.rs"]
 mod structural_choose_later_ports;

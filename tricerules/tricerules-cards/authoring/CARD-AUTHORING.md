@@ -284,11 +284,16 @@ controller chooses applicable replacements one at a time, repeating the check af
 state-based actions are checked (CR 704.4).
 The ordinary `CreateTokens(..., who: SourceController)` leaf instead chooses its recipient when the
 effect resolves, so a later source control change can make that recipient differ from the earlier
-chooser. `EffectsApplicable` is admitted only on an ability `Choose` branch whose complete body is
-one resultless, fixed positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine checks
-whether that exact source incarnation can receive the counters both when the menu is offered and
-when a branch answer is validated. A mandatory choice with exactly one live cost-free branch enters
-it automatically and logs the selection; optional choices and paid branches still receive prompts.
+chooser. Ability Programs also admit fixed-positive `PutCounters` and resultless
+`RemoveAllCounters` leaves on `Source` for any validated counter kind. Replicating Ring and
+Lavabrink Floodgates use source-counter placement and threshold checks; Replicating Ring and
+Lightning Coils use removal of all counters of one kind. `EffectsApplicable` is still admitted only
+on an ability `Choose` branch whose complete
+body is one resultless, fixed positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine
+checks whether that exact source incarnation can receive the counters both when the menu is offered
+and when a branch answer is validated. A mandatory choice with exactly one live cost-free branch
+enters it automatically and logs the selection; optional choices and paid branches still receive
+prompts.
 For `PutHandCardOnLibraryBottom`, the chooser privately
 selects one current hand card; if it is a declared Commander, its owner chooses Command zone or Library.
 For `SacrificePermanent` and the one-permanent `TapPermanents` cost, the parked occurrence retains
@@ -314,10 +319,15 @@ recursive; other graveyard owners and `DistinctCardTypes` are outside this progr
 top-level Program `If` may also test `Void`, which is sampled when that instruction resolves before
 the selected branch begins; a later draw-replacement suspension does not reevaluate the condition
 (CR 608.2c, 608.2h). `Void` is not admitted inside `AllOf`/`AnyOf`, as a `Choose` requirement, or
-as the predicate for a conditional top-of-library search. The graveyard test also runs when its
-instruction resolves, after preceding steps, so Dawnhand Eulogist checks its graveyard after milling
-and HYDRA Troopers checks before either its token creation or fallback mill (CR 608.2c, 608.2h,
-701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`, or for a fixed
+as the predicate for a conditional top-of-library search. Ability Programs may directly test
+`SourceCounterCount` in an `If` at any nesting depth; the exact source counter total is read when
+that instruction resolves. This condition remains unsupported inside `AllOf`/`AnyOf`, as a `Choose`
+requirement, as a conditional top-of-library search predicate, and in spell Programs. Replicating
+Ring uses it after its counter-placement step; counter replacement choices finish and resume that
+same Program before the threshold branch (CR 608.2c, 608.2h, 616.1e-f, 122.2). The graveyard test
+also runs when its instruction resolves, after preceding steps, so Dawnhand Eulogist checks its
+graveyard after milling and HYDRA Troopers checks before either its token creation or fallback mill
+(CR 608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`, or for a fixed
 amount applied to `Controller` on a spell or ability program; neither form can bind or yield a
 result. Dawnhand uses the EachOpponent form, which it shares with Acolyte of Aclazotz and Arbiter of
 Woe. Decode Transmissions and Visions of Villainy use the fixed Controller form on spell programs.
@@ -463,12 +473,13 @@ Discard retains the existing validated `DiscardQuantity` choices. Permanent filt
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, controller
-`GraveyardAggregate(CardCount)`, controller-filtered `BattlefieldAggregate(Count)`, and the exact
+`GraveyardAggregate(CardCount)`, controller-filtered `BattlefieldAggregate(Count)`, the exact
 controller-Creature `BattlefieldAggregate(MaximumPower)` form with a positive `min`, no `max`,
-default remaining filter fields, and no observed-object exclusion.
-`AllOf` and `AnyOf` recursively combine these admitted non-`Void` predicates. The direct top-level
-`Void` form is a separate global turn-history predicate. Other contexts and leaf operations fail
-registration.
+default remaining filter fields, and no observed-object exclusion, plus an ability-only direct
+`SourceCounterCount` condition at any nesting depth. This counter condition does not join the shared
+composite, `Choose` requirement, or conditional-search condition whitelist. `AllOf` and `AnyOf`
+recursively combine the other admitted non-`Void` predicates. The direct `Void` form is a separate
+global turn-history predicate. Other contexts and leaf operations fail registration.
 
 Use `Choose` for a resolution-time branch whose cost and body belong together. Give the node a
 program-unique `choice` ID, give each branch a stable ID local to that choice, and put the branch

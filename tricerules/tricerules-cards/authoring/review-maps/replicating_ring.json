@@ -52,6 +52,10 @@
       "covers": "token entry parks after removal rejects bad answers and commits once"
     },
     {
+      "test": "scenario deck_coverage_replicating_ring::ring_doubled_counter_replacements_resume_program_and_enter_32_tokens_once",
+      "covers": "two counter replacements preserve the Ring Program continuation, remove only Night after reaching eight, and commit an ordered 32-token batch once"
+    },
+    {
       "test": "scenario deck_coverage_replicating_ring::ring_and_tokens_produce_all_five_colors_immediately_and_reject_invalid_activations",
       "covers": "and tokens produce all five colors immediately and reject invalid activations"
     },

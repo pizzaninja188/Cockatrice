@@ -16,25 +16,24 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: AtBeginningOfUpkeep(player: Controller),
-    effect: [
-      PutCounters(counter: Night, count: 1, subject: Source),
-      ChooseResolutionBranch(
-        selection: FirstApplicable,
-        branches: [
-          (
-            branch_id: "eight_or_more",
-            // Internal automatic branches have no separate printed ability line.
-            presentation: Fallback,
-            cost: None,
-            requirement: GameCondition(SourceCounterCount(counter: Night, min: Some(8))),
-            effects: [
-              RemoveAllCounters(counter: Night, subject: Source),
-              CreateTokens(token: "replicated_ring", count: 8),
-            ],
-          ),
-          (branch_id: "below_eight", presentation: Fallback, cost: None, requirement: Always, effects: []),
-        ],
-      ),
-    ],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "put_night", kind: Perform(PutCounters(
+        counter: Night, count: 1, subject: Source,
+      ))),
+      (id: "threshold", kind: If(
+        condition: SourceCounterCount(counter: Night, min: Some(8)),
+        yes: (steps: [
+          (id: "remove_night", kind: Perform(RemoveAllCounters(
+            counter: Night, subject: Source,
+          ))),
+          (id: "make_rings", kind: Perform(CreateTokens(
+            token: "replicated_ring", count: 8, who: Controller,
+            tapped: false, sacrifice_timing: None,
+          ))),
+        ], yields: []),
+        no: (steps: [], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
 )
