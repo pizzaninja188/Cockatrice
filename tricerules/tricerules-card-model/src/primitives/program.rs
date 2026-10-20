@@ -1671,6 +1671,18 @@ fn validate_and_result_types(
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::GrantKeywordsAll { filter, .. } => {
+            effect.validate(context)?;
+            if matches!(
+                filter.controller,
+                Some(super::CreatureScopeController::TargetedPlayer { .. })
+            ) {
+                return Err(
+                    "GrantKeywordsAll in a resolution program does not support TargetedPlayer scopes without a target-role binding".into(),
+                );
+            }
+            Ok(Vec::new())
+        }
         SpellEffectKind::CreateReflexiveTrigger { .. } => {
             effect.validate(context)?;
             validate_resultless_program_reflexive_trigger(effect, context)?;

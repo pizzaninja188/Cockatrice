@@ -7,8 +7,8 @@
 
 use tricerules_cards::primitives::{
     Amount, CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    PermanentTypeFilter, ResolutionBranchSelection, ResolutionCost, SpellEffectKind, TargetFilter,
-    TargetKind, TargetSchema, ZoneCardFilter,
+    PermanentTypeFilter, ResolutionCost, SpellEffectKind, TargetFilter, TargetKind, TargetSchema,
+    ZoneCardFilter,
 };
 use tricerules_cards::{CounterKind, ModalDef, TriggerCondition};
 
@@ -544,35 +544,109 @@ fn issue_424_qutrub_destroy_uses_the_damaged_this_turn_predicate() {
 
 #[test]
 fn issue_424_butcher_modes_bind_the_rat_token_another_sacrifice_and_team_menace() {
+    use tricerules_cards::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, ProgramTargetProjection,
+    };
+
     let butcher = modal("lord_skitters_butcher");
+    assert_eq!(butcher.modes.len(), 3);
     assert_eq!(
-        butcher.modes[0].effects,
-        [SpellEffectKind::CreateTokens {
-            token: "rat_b_1_1_cant_block".into(),
-            count: Amount::Fixed(1),
-            who: tricerules_cards::primitives::PlayerRecipient::Controller,
-            tapped: false,
-            sacrifice_timing: None,
-        }]
+        butcher
+            .modes
+            .iter()
+            .map(|mode| mode.mode_id.as_str())
+            .collect::<Vec<_>>(),
+        ["mode_01", "mode_02", "mode_03"]
     );
 
-    let [SpellEffectKind::ChooseResolutionBranch {
+    let registry = tricerules_cards::registry::global();
+    let ability = modal_ability("lord_skitters_butcher");
+    let ability_id = tricerules_cards::AbilityDefinitionId {
+        card_id: "lord_skitters_butcher".into(),
+        face_id: tricerules_cards::CardFaceId::new("lord_skitter_s_butcher").unwrap(),
+        ability_path: vec![ability.ability_id],
+    };
+    let programs = butcher
+        .modes
+        .iter()
+        .map(|mode| {
+            assert!(
+                mode.effects.is_empty(),
+                "{} has no legacy effects",
+                mode.mode_id
+            );
+            let owner = tricerules_cards::ProgramOwnerId::ability_mode(
+                ability_id.clone(),
+                mode.mode_id.clone(),
+            );
+            let program = registry
+                .compiled_program_for_owner(&owner)
+                .unwrap_or_else(|| panic!("missing compiled Program owner {owner:?}"));
+            assert_eq!(program.owner, owner);
+            assert_eq!(
+                program.target_projection,
+                ProgramTargetProjection::ModeLocal {
+                    mode_id: mode.mode_id.clone(),
+                }
+            );
+            assert!(program.body.yields.is_empty());
+            (mode, program)
+        })
+        .collect::<Vec<_>>();
+
+    let [rat_mode, sacrifice_mode, menace_mode] = programs.as_slice() else {
+        panic!("all three printed modes have compiled Programs")
+    };
+    assert_eq!(rat_mode.0.mode_id.as_str(), "mode_01");
+    let [rat] = rat_mode.1.body.steps.as_slice() else {
+        panic!("the Rat mode performs one token creation")
+    };
+    assert!(rat.outputs.is_empty());
+    assert!(matches!(
+        &rat.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateTokens {
+                token,
+                count: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            } if token == "rat_b_1_1_cant_block")
+    ));
+
+    assert_eq!(sacrifice_mode.0.mode_id.as_str(), "mode_02");
+    let [choice] = sacrifice_mode.1.body.steps.as_slice() else {
+        panic!("the sacrifice mode has one optional resolution choice")
+    };
+    let CompiledInstructionKind::Choose {
+        choice: choice_id,
+        chooser,
         optional,
-        selection,
         branches,
         otherwise,
-        ..
-    }] = butcher.modes[1].effects.as_slice()
+    } = &choice.kind
     else {
-        panic!("the sacrifice mode emits one authored resolution branch")
+        panic!("the sacrifice mode compiles as Choose")
     };
-    assert!(optional, "the printed sacrifice is optional");
-    assert_eq!(*selection, ResolutionBranchSelection::PlayerChoice);
-    assert!(otherwise.is_empty());
+    assert_eq!(choice_id.as_str(), "sacrifice_another_creature");
+    assert_eq!(
+        *chooser,
+        tricerules_cards::primitives::PlayerRecipient::Controller
+    );
+    assert!(*optional, "the printed sacrifice is optional");
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
     let [branch] = branches.as_slice() else {
         panic!("the sacrifice mode has exactly one branch")
     };
     assert_eq!(branch.branch_id.as_str(), "sacrifice_another_creature");
+    assert_eq!(
+        branch.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(vec![3])
+    );
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::Always
+    ));
     assert_eq!(
         branch.cost,
         ResolutionCost::SacrificePermanent {
@@ -586,28 +660,41 @@ fn issue_424_butcher_modes_bind_the_rat_token_another_sacrifice_and_team_menace(
         },
         "the sacrifice keeps the source-relative another-creature exclusion"
     );
-    assert_eq!(
-        branch.effects,
-        [
-            SpellEffectKind::Scry {
+    assert!(branch.body.yields.is_empty());
+    let [scry, draw] = branch.body.steps.as_slice() else {
+        panic!("the paid branch scries 2 then draws 1")
+    };
+    assert!(matches!(
+        &scry.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Scry {
                 count: Amount::Fixed(2),
-            },
-            SpellEffectKind::Draw {
+            })
+    ));
+    assert!(matches!(
+        &draw.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Draw {
                 who: tricerules_cards::primitives::PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
-            },
-        ]
-    );
+            })
+    ));
 
-    assert_eq!(
-        butcher.modes[2].effects,
-        [SpellEffectKind::GrantKeywordsAll {
-            filter: tricerules_cards::primitives::CreatureScopeFilter {
-                controller: Some(tricerules_cards::primitives::CreatureScopeController::YouControl),
-                ..tricerules_cards::primitives::CreatureScopeFilter::default()
-            },
-            keywords: vec![tricerules_cards::Keyword::Menace],
-        }]
-    );
+    assert_eq!(menace_mode.0.mode_id.as_str(), "mode_03");
+    let [grant] = menace_mode.1.body.steps.as_slice() else {
+        panic!("the Menace mode performs one team grant")
+    };
+    assert!(grant.outputs.is_empty());
+    assert!(matches!(
+        &grant.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::GrantKeywordsAll {
+                filter: tricerules_cards::primitives::CreatureScopeFilter {
+                    controller: Some(tricerules_cards::primitives::CreatureScopeController::YouControl),
+                    ..
+                },
+                keywords,
+            } if keywords == &[tricerules_cards::Keyword::Menace])
+    ));
     assert_modal_schema("lord_skitters_butcher", &butcher);
 }

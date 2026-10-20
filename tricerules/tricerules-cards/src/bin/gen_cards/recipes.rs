@@ -3022,14 +3022,13 @@ fn match_modal_create_rat_token_cant_block(
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
     (text == "Create a 1/1 black Rat creature token with \"This token can't block.\"").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::CreateTokens {
-                token: "rat_b_1_1_cant_block".into(),
-                count: Amount::Fixed(1),
-                who: PlayerRecipient::Controller,
-                tapped: false,
-                sacrifice_timing: None,
-            }],
+        modal_program(
+            authored_program(
+                r#"(id: "create_rat_token", kind: Perform(CreateTokens(
+                    token: "rat_b_1_1_cant_block", count: 1, who: Controller,
+                    tapped: false, sacrifice_timing: None)))"#,
+                "",
+            ),
             None,
         )
     })
@@ -3039,11 +3038,13 @@ fn match_modal_create_rat_token_cant_block(
 /// `modal_mode.grant.team.hexproof` shape with the Menace keyword.
 fn match_modal_grant_team_menace(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Creatures you control gain menace until end of turn.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::GrantKeywordsAll {
-                filter: creatures_you_control(),
-                keywords: vec![Keyword::Menace],
-            }],
+        modal_program(
+            authored_program(
+                r#"(id: "grant_team_menace", kind: Perform(GrantKeywordsAll(
+                    filter: (controller: Some(YouControl)), keywords: [Menace]
+                )))"#,
+                "",
+            ),
             None,
         )
     })
@@ -3059,38 +3060,32 @@ fn match_modal_sacrifice_another_scry_two_draw_one(
 ) -> Option<RecipeEmission> {
     (text == "You may sacrifice another creature. If you do, scry 2, then draw a card.").then(
         || {
-            modal_mode(
-                vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("sacrifice_another_creature")
-                            .expect("closed sacrifice branch uses a valid choice ID"),
-                        presentation: context.presentation.clone(),
-                        runtime_fallback: None,
-                        cost: ResolutionCost::SacrificePermanent {
-                            filter: TargetFilter {
-                                kind: TargetKind::Creature,
-                                controller: TargetController::You,
-                                excluded_objects: vec![TargetObjectExclusion::Source],
-                                ..TargetFilter::default()
-                            },
-                            source_only: false,
-                        },
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![
-                            SpellEffectKind::Scry {
-                                count: Amount::Fixed(2),
-                            },
-                            SpellEffectKind::Draw {
-                                who: PlayerRecipient::Controller,
-                                count: Amount::Fixed(1),
-                            },
-                        ],
-                    }],
-                    otherwise: Vec::new(),
-                }],
+            let presentation = match &context.presentation {
+                AbilityPresentation::OracleLines(lines) => format!("OracleLines({lines:?})"),
+                AbilityPresentation::Fallback => "Fallback".to_owned(),
+            };
+            modal_program(
+                authored_program(
+                    &format!(
+                        r#"(id: "sacrifice_another_creature", kind: Choose(
+                            choice: "sacrifice_another_creature", chooser: Controller, optional: true,
+                            branches: [(branch_id: "sacrifice_another_creature",
+                                presentation: {presentation},
+                                cost: SacrificePermanent(
+                                    filter: (kind: Creature, controller: You,
+                                        excluded_objects: [Source]),
+                                    source_only: false,
+                                ),
+                                requirement: Always,
+                                body: (steps: [
+                                    (id: "scry_two", kind: Perform(Scry(count: 2))),
+                                    (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+                                ], yields: []))],
+                            otherwise: (steps: [], yields: []),
+                        ))"#
+                    ),
+                    "",
+                ),
                 None,
             )
         },
@@ -50616,77 +50611,66 @@ mod tests {
                 ),
             }
         );
-        assert_eq!(
-            issue_424_modal_mode(
-                "Lord Skitter's Butcher",
-                ISSUE_424_BUTCHER_RAT,
-                "modal_mode.create_token.rat.cant_block",
-            ),
-            ModalModeEmission {
-                effects: vec![SpellEffectKind::CreateTokens {
-                    token: "rat_b_1_1_cant_block".into(),
-                    count: Amount::Fixed(1),
-                    who: PlayerRecipient::Controller,
-                    tapped: false,
-                    sacrifice_timing: None,
-                }],
-                targeting: None,
-            }
+        let (rat_program, rat_targeting) = issue_424_modal_program(
+            "Lord Skitter's Butcher",
+            ISSUE_424_BUTCHER_RAT,
+            "modal_mode.create_token.rat.cant_block",
         );
         assert_eq!(
-            issue_424_modal_mode(
-                "Lord Skitter's Butcher",
-                ISSUE_424_BUTCHER_SACRIFICE,
-                "modal_mode.sacrifice_another.scry_two_draw_one",
-            ),
-            ModalModeEmission {
-                effects: vec![SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection: ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: ChoiceId::new("sacrifice_another_creature").unwrap(),
-                        presentation: AbilityPresentation::OracleLines(vec![1]),
-                        runtime_fallback: None,
-                        cost: ResolutionCost::SacrificePermanent {
-                            filter: TargetFilter {
-                                kind: TargetKind::Creature,
-                                controller: TargetController::You,
-                                excluded_objects: vec![TargetObjectExclusion::Source],
-                                ..TargetFilter::default()
-                            },
+            rat_program,
+            authored_program(
+                r#"(id: "create_rat_token", kind: Perform(CreateTokens(
+                    token: "rat_b_1_1_cant_block", count: 1, who: Controller,
+                    tapped: false, sacrifice_timing: None)))"#,
+                "",
+            )
+        );
+        assert!(rat_targeting.is_none());
+
+        let (sacrifice_program, sacrifice_targeting) = issue_424_modal_program(
+            "Lord Skitter's Butcher",
+            ISSUE_424_BUTCHER_SACRIFICE,
+            "modal_mode.sacrifice_another.scry_two_draw_one",
+        );
+        assert_eq!(
+            sacrifice_program,
+            authored_program(
+                r#"(id: "sacrifice_another_creature", kind: Choose(
+                    choice: "sacrifice_another_creature", chooser: Controller, optional: true,
+                    branches: [(branch_id: "sacrifice_another_creature",
+                        presentation: OracleLines([1]),
+                        cost: SacrificePermanent(
+                            filter: (kind: Creature, controller: You,
+                                excluded_objects: [Source]),
                             source_only: false,
-                        },
-                        requirement: ResolutionBranchRequirement::Always,
-                        effects: vec![
-                            SpellEffectKind::Scry {
-                                count: Amount::Fixed(2),
-                            },
-                            SpellEffectKind::Draw {
-                                who: PlayerRecipient::Controller,
-                                count: Amount::Fixed(1),
-                            },
-                        ],
-                    }],
-                    otherwise: Vec::new(),
-                }],
-                targeting: None,
-            }
+                        ),
+                        requirement: Always,
+                        body: (steps: [
+                            (id: "scry_two", kind: Perform(Scry(count: 2))),
+                            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+                        ], yields: []))],
+                    otherwise: (steps: [], yields: []),
+                ))"#,
+                "",
+            )
+        );
+        assert!(sacrifice_targeting.is_none());
+
+        let (menace_program, menace_targeting) = issue_424_modal_program(
+            "Lord Skitter's Butcher",
+            ISSUE_424_BUTCHER_MENACE,
+            "modal_mode.grant.team.menace",
         );
         assert_eq!(
-            issue_424_modal_mode(
-                "Lord Skitter's Butcher",
-                ISSUE_424_BUTCHER_MENACE,
-                "modal_mode.grant.team.menace",
-            ),
-            ModalModeEmission {
-                effects: vec![SpellEffectKind::GrantKeywordsAll {
-                    filter: creatures_you_control(),
-                    keywords: vec![Keyword::Menace],
-                }],
-                targeting: None,
-            }
+            menace_program,
+            authored_program(
+                r#"(id: "grant_team_menace", kind: Perform(GrantKeywordsAll(
+                    filter: (controller: Some(YouControl)), keywords: [Menace]
+                )))"#,
+                "",
+            )
         );
+        assert!(menace_targeting.is_none());
     }
 
     #[test]

@@ -159,6 +159,21 @@ changed permanent generation refreshes the candidates and prompt. The existing
 `synthetic_legendary_sacrifice_program_finishes_search_and_tail_before_903_9a` remains the
 post-Program Commander SBA ordering reference: its Commander choice follows Program completion.
 Gearbane's scenarios cover its exact printed modes.
+
+The bounded 2026-10-19 Lord Skitter's Butcher migration authors all three siblings of its
+triggered modal ability as Programs: the Rat token creation, an optional controller choice to
+sacrifice another creature and then Scry 2 and draw one card, and the controller-scoped Menace
+grant. The creature sacrifice keeps its flat `excluded_objects: [Source]` filter so the entering
+Butcher cannot pay; the Scry and Draw stay in the paid branch and `Otherwise` stays empty. The
+resultless `GrantKeywordsAll` leaf reuses the ordinary validated `CreatureScopeFilter` and existing
+one-shot snapshot resolver in spell and ability Programs. `TargetedPlayer` scopes remain excluded
+because this operation has no Program target-role binding. The Menace mode snapshots creatures the
+controller controls when it resolves, including Butcher itself, and lasts through the turn; later
+entrants and opposing creatures are outside that cohort (CR 700.2b, 608.2c, 701.21a, 701.22a,
+121.1, 611.2c, 613.1f, 702.111). This ports one existing generated identity and preserves its
+stable face, ability and mode IDs; it adds no card admission or runtime, protocol, relay, or client
+operation.
+
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.

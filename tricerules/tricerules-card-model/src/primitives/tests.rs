@@ -9316,6 +9316,112 @@ fn spell_program_rejects_cast_cost_and_trigger_event_amounts() {
 }
 
 #[test]
+fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
+    let spell = program_fixture(
+        r#"(steps: [(id: "grant_opponents", bind: [], input: None,
+            kind: Perform(GrantKeywordsAll(
+                filter: (controller: Some(Opponents), subtype: Some("Elf"), attacking: true),
+                keywords: [Flying, Trample],
+            )))], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[])
+        .unwrap_or_else(|error| panic!("an untargeted spell keyword grant compiles: {error}"));
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the spell face owns its resultless keyword-grant program");
+    assert_eq!(compiled.owner, owner);
+    assert_eq!(compiled.context, crate::primitives::EffectContext::Spell);
+    assert!(compiled.required_inputs.is_empty());
+    assert!(compiled.target_bindings.is_empty());
+    assert!(compiled.body.yields.is_empty());
+    let [step] = compiled.body.steps.as_slice() else {
+        panic!("the spell keyword grant is one direct instruction");
+    };
+    assert!(step.outputs.is_empty());
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &step.kind else {
+        panic!("the spell keyword grant remains a Perform instruction");
+    };
+    assert_eq!(
+        **effect,
+        crate::primitives::SpellEffectKind::GrantKeywordsAll {
+            filter: crate::primitives::CreatureScopeFilter {
+                controller: Some(crate::primitives::CreatureScopeController::Opponents),
+                subtype: Some("Elf".into()),
+                attacking: true,
+                ..Default::default()
+            },
+            keywords: vec![crate::Keyword::Flying, crate::Keyword::Trample],
+        }
+    );
+
+    let ability = ability_program_fixture(
+        "program_ability_keyword_scope_fixture",
+        r#"(steps: [(id: "grant_friendly", bind: [], input: None,
+            kind: Perform(GrantKeywordsAll(
+                filter: (controller: Some(YouControl), color: Some(Blue), exclude_self: true),
+                keywords: [Haste],
+            )))], yields: [])"#,
+    )
+    .unwrap_or_else(|error| panic!("an ability keyword grant compiles: {error}"));
+    assert_eq!(ability.context, crate::primitives::EffectContext::Ability);
+    assert!(ability.required_inputs.is_empty());
+    assert!(ability.target_bindings.is_empty());
+    assert!(ability.body.yields.is_empty());
+    let [step] = ability.body.steps.as_slice() else {
+        panic!("the ability keyword grant is one direct instruction");
+    };
+    assert!(step.outputs.is_empty());
+    let crate::primitives::CompiledInstructionKind::Perform(effect) = &step.kind else {
+        panic!("the ability keyword grant remains a Perform instruction");
+    };
+    assert_eq!(
+        **effect,
+        crate::primitives::SpellEffectKind::GrantKeywordsAll {
+            filter: crate::primitives::CreatureScopeFilter {
+                controller: Some(crate::primitives::CreatureScopeController::YouControl),
+                color: Some(crate::primitives::Color::Blue),
+                exclude_self: true,
+                ..Default::default()
+            },
+            keywords: vec![crate::Keyword::Haste],
+        }
+    );
+}
+
+#[test]
+fn program_grant_keywords_all_rejects_targeted_player_and_invalid_scopes() {
+    let targeted = program_fixture(
+        r#"(steps: [(id: "grant_targeted", bind: [], input: None,
+            kind: Perform(GrantKeywordsAll(
+                filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer))),
+                keywords: [Menace],
+            )))], yields: [])"#,
+    );
+    let reason = invalid_program_reason(&targeted);
+    assert!(
+        reason.contains("TargetedPlayer"),
+        "a targeted player scope has no GrantKeywordsAll Program target-role binding: {reason}"
+    );
+
+    let invalid_scope = program_fixture(
+        r#"(steps: [(id: "grant_invalid_scope", bind: [], input: None,
+            kind: Perform(GrantKeywordsAll(
+                filter: (requires_any_counter: true, required_counter: Some(PlusOnePlusOne)),
+                keywords: [Vigilance],
+            )))], yields: [])"#,
+    );
+    let reason = invalid_program_reason(&invalid_scope);
+    assert!(
+        reason.contains("cannot combine any-counter and specific-counter requirements"),
+        "GrantKeywordsAll still runs ordinary CreatureScopeFilter validation: {reason}"
+    );
+}
+
+#[test]
 fn spell_program_rejects_dynamic_amount_selectors_and_if_contexts() {
     for (label, amount) in [
         (

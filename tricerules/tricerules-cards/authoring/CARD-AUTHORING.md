@@ -230,6 +230,15 @@ unchanged. Permanent choosers must be `Controller`;
 draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
 
+`GrantKeywordsAll` is also an accepted resultless `Perform` leaf when the ordinary effect
+validator accepts its complete `CreatureScopeFilter`. Every untargeted validated scope can use it
+with the operation's existing keyword values in a spell or ability Program; `TargetedPlayer` controller scopes remain
+unsupported because this operation has no Program target-role binding. The existing one-shot resolver
+snapshots the matching creatures at resolution, grants the keywords in layer 6 through end of turn,
+and does not include later entrants (CR 611.2c, 613.1f, 702.111). Lord Skitter's Butcher uses the
+ability Program form for its Menace mode; Overrun and Make a Stand are existing `GrantKeywordsAll`
+effect-list analogues. This adds no card admission or runtime operation.
+
 The filtered Program discard cost is narrowly admitted as `DiscardCard(filter: Some(Creature))`
 on an optional `Controller`-chosen ability branch; it selects one creature card from that payer's
 hand. Crypt Lurker uses it beside a creature-sacrifice branch, and either paid branch draws one

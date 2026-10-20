@@ -1,9 +1,12 @@
 //! Issue #424 — the eight retained triggered-modal Standard identities.
 //!
-//! Oracle and the current Comprehensive Rules were checked 2026-09-19 against the pinned
-//! Scryfall snapshot. CR 603.3c/700.2b (mode announcement), CR 122 (counters), CR 400.7/701.13
-//! (graveyard return and exile), CR 701.8a-c (destroy), CR 118.12/701.21a (mandatory sacrifice),
-//! CR 701.26 (tap/untap), and CR 701.18 (scry) govern the exercised behavior.
+//! The retained cohort's Oracle and rule citations were checked 2026-09-19 against the pinned
+//! Scryfall snapshot. Lord Skitter's Butcher's pinned Oracle and current rules were checked
+//! 2026-10-19. CR 603.3c/700.2b (mode announcement), CR 122 (counters), CR 400.7/701.13
+//! (graveyard return and exile), CR 701.8a-c (destroy), CR 701.21a (sacrifice),
+//! CR 701.26 (tap/untap), CR 701.22a (scry), CR 121.1 (draw), CR 608.2c (resolution order),
+//! CR 611.2c/613.1f (until-end-of-turn layer-6 effects), and CR 702.111 (menace) govern the
+//! exercised behavior.
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
@@ -761,6 +764,10 @@ fn issue_424_qutrub_destroys_only_a_creature_damaged_this_turn() {
 fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     let mut engine = modal_engine(424_080);
     let other = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let opponent = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
+    let [scry_bottom, scry_top] = seat_top_cards(&mut engine, 0, &["forest", "island"])
+        .try_into()
+        .expect("two known cards are placed on top");
     cast_and_announce(&mut engine, "lord_skitters_butcher");
     let source = battlefield_object_for_card(&engine, 0, "lord_skitters_butcher");
     engine
@@ -779,6 +786,10 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
         !payment.candidate_object_ids.contains(&source),
         "another creature excludes the entering Butcher"
     );
+    assert!(
+        !payment.candidate_object_ids.contains(&opponent),
+        "the sacrifice is limited to creatures the chooser controls"
+    );
     let library_before = engine.state.players[0].library.len();
     let hand_before = engine.state.players[0].hand.len();
     let scry_batch = engine
@@ -788,14 +799,9 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     let scry = find_resolution_choice(&scry_batch).expect("scry 2 after the sacrifice");
     assert_eq!(scry.choice_kind(), ChoiceKind::LibraryTop);
     assert_eq!((scry.min, scry.max), (0, 2));
-    assert_eq!(
-        scry.candidate_object_ids.len(),
-        2,
-        "the scry sees two cards"
-    );
-    let bottom = scry.candidate_object_ids[0];
+    assert_eq!(scry.candidate_object_ids, [scry_bottom, scry_top]);
     engine
-        .apply_scenario_command(0, &submit_resolution_choice(vec![bottom]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![scry_bottom]))
         .expect("bottom one of the two scried cards");
     assert_eq!(
         engine.state.players[0].library.len(),
@@ -803,6 +809,17 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
         "the receipt's draw takes the remaining scried top card"
     );
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(engine.state.objects[&scry_bottom].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&scry_top].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.players[0]
+            .hand
+            .iter()
+            .filter(|object_id| **object_id == scry_top)
+            .count(),
+        1,
+        "the known surviving top card is drawn exactly once"
+    );
 
     // Declining the optional sacrifice skips the whole "if you do" receipt.
     let mut decline_engine = modal_engine(424_081);
@@ -832,6 +849,52 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     );
     assert_eq!(decline_engine.state.players[0].hand.len(), hand_before);
     assert!(decline_engine.state.pending_resolution.is_none());
+
+    // An empty payment answer is the same explicit refusal for this optional branch.
+    let mut empty_payment_engine = modal_engine(424_084);
+    let empty_payment_bystander =
+        inject_creature_on_battlefield(&mut empty_payment_engine, 0, "grizzly_bears");
+    cast_and_announce(&mut empty_payment_engine, "lord_skitters_butcher");
+    empty_payment_engine
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
+        .expect("announce the sacrifice mode");
+    let branch_batch = resolve_top_stack(&mut empty_payment_engine);
+    find_resolution_choice(&branch_batch).expect("optional branch selection");
+    let payment_batch = empty_payment_engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("select the optional sacrifice branch");
+    let payment = find_resolution_choice(&payment_batch).expect("optional sacrifice payment");
+    assert!(payment
+        .candidate_object_ids
+        .contains(&empty_payment_bystander));
+    let hand_before = empty_payment_engine.state.players[0].hand.len();
+    empty_payment_engine
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .expect("decline the optional sacrifice with an empty payment answer");
+    assert_eq!(
+        empty_payment_engine.state.objects[&empty_payment_bystander].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(
+        empty_payment_engine.state.players[0].hand.len(),
+        hand_before
+    );
+    assert!(empty_payment_engine.state.pending_resolution.is_none());
+
+    // The source is the only creature, so excluding it leaves no branch to offer.
+    let mut no_candidate_engine = modal_engine(424_085);
+    cast_and_announce(&mut no_candidate_engine, "lord_skitters_butcher");
+    let source = battlefield_object_for_card(&no_candidate_engine, 0, "lord_skitters_butcher");
+    no_candidate_engine
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
+        .expect("announce the sacrifice mode");
+    let resolution = resolve_top_stack(&mut no_candidate_engine);
+    assert!(find_resolution_choice(&resolution).is_none());
+    assert_eq!(
+        no_candidate_engine.state.objects[&source].zone,
+        Zone::Battlefield
+    );
+    assert!(no_candidate_engine.state.pending_resolution.is_none());
 }
 
 #[test]
@@ -852,20 +915,36 @@ fn issue_424_butcher_rat_token_and_team_menace_resolve() {
 
     let mut menace_engine = modal_engine(424_083);
     let bear = inject_creature_on_battlefield(&mut menace_engine, 0, "grizzly_bears");
+    let opponent_bear = inject_creature_on_battlefield(&mut menace_engine, 1, "storm_crow");
     cast_and_announce(&mut menace_engine, "lord_skitters_butcher");
+    let source = battlefield_object_for_card(&menace_engine, 0, "lord_skitters_butcher");
     menace_engine
         .apply_scenario_command(0, &choose_trigger_mode(2, Vec::new()))
         .expect("announce the team menace mode");
     pass_both_players(&mut menace_engine);
-    let keywords = menace_engine
-        .characteristics(bear)
-        .expect("bear characteristics")
-        .keywords
-        .clone();
+    for current_friendly in [source, bear] {
+        assert!(
+            menace_engine.effective_has_keyword(current_friendly, tricerules_cards::Keyword::Menace),
+            "the one-shot grant covers each creature you control at resolution, including its source"
+        );
+    }
     assert!(
-        keywords.contains(&tricerules_cards::Keyword::Menace),
-        "the team grant covers each creature you control"
+        !menace_engine.effective_has_keyword(opponent_bear, tricerules_cards::Keyword::Menace),
+        "the team grant excludes opposing creatures"
     );
+    let later_friendly = inject_creature_on_battlefield(&mut menace_engine, 0, "hill_giant");
+    assert!(
+        !menace_engine.effective_has_keyword(later_friendly, tricerules_cards::Keyword::Menace),
+        "the one-shot scope does not include creatures entering after resolution"
+    );
+    end_active_turn(&mut menace_engine, 0);
+    for current_friendly in [source, bear] {
+        assert!(
+            !menace_engine
+                .effective_has_keyword(current_friendly, tricerules_cards::Keyword::Menace),
+            "the until-end-of-turn grant expires during cleanup"
+        );
+    }
 }
 
 #[test]
