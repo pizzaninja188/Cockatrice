@@ -14268,3 +14268,464 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
         "the named count must have valid lower and upper bounds"
     );
 }
+
+#[test]
+fn registry_admits_closed_spell_delayed_program_with_captured_target_controller() {
+    let fixture = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
+
+    let registry =
+        crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[]).unwrap_or_else(|error| {
+            let rendered = error.to_string();
+            assert!(
+                !rendered.starts_with("ron parse:"),
+                "the positive profile fixture must parse before admission is checked: {rendered}"
+            );
+            panic!(
+                "the valid direct spell-delayed Program profile is not admitted yet: {rendered}"
+            );
+        });
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_spell_program_fixture".into(),
+        face_id: crate::CardFaceId::new("delayed_spell_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the direct delayed child owns the compiled Program");
+    assert_eq!(compiled.owner, owner);
+    assert_eq!(
+        compiled.required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+    assert!(matches!(
+        compiled.body.steps.as_slice(),
+        [step] if matches!(
+            &step.kind,
+            crate::primitives::CompiledInstructionKind::Choose { branches, .. }
+                if branches.len() == 3
+        )
+    ));
+}
+
+const ARCANE_DELAYED_PROGRAM_BODY: &str = r#"(steps: [
+    (id: "choose_count", kind: Choose(
+        choice: "draw_count", chooser: AffectedPlayer, optional: false,
+        branches: [
+            (branch_id: "draw_zero", presentation: Fallback,
+                cost: None, requirement: Always,
+                body: (steps: [(id: "draw_zero",
+                    kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
+            (branch_id: "draw_one", presentation: Fallback,
+                cost: None, requirement: Always,
+                body: (steps: [(id: "draw_one",
+                    kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
+            (branch_id: "draw_two", presentation: Fallback,
+                cost: None, requirement: Always,
+                body: (steps: [(id: "draw_two",
+                    kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
+        ], otherwise: (steps: [], yields: []),
+    )),
+], yields: [])"#;
+
+fn delayed_spell_program_fixture(body: &str) -> String {
+    delayed_spell_program_fixture_with_face_fields(body, "[\"Instant\"]", "")
+}
+
+fn delayed_spell_program_fixture_with_face_fields(body: &str, types: &str, fields: &str) -> String {
+    r#"(id: "delayed_spell_program_fixture",
+        name: "Delayed Spell Program Fixture", face_id: "delayed_spell_program_fixture",
+        mana_cost: "{1}{U}", types: __FACE_TYPES__,
+        __FACE_FIELDS__
+        spell_effect: [
+            CounterTargetSpell(spell_filter: (), unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None),
+            CreateDelayedTrigger(subject: None,
+                affected_player: Some(PreviousTargetedSpellController),
+                ability: (
+                    ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextTurnUpkeep, effect: [],
+                    program: Some((body: __DELAYED_BODY__, target_bindings: [])),
+                    modal: None, targeting: None, may: false, intervening_if: None,
+                    triggers_only_once: false, max_triggers_per_turn: None,
+                ),
+            ),
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
+            effect_indices: [0])]))
+    )"#
+    .replace("__DELAYED_BODY__", body)
+    .replace("__FACE_TYPES__", types)
+    .replace("__FACE_FIELDS__", fields)
+}
+
+fn assert_delayed_spell_program_rejected(fixture: &str, expected_reason: &str) {
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect_err("the invalid direct face delayed Program profile must be rejected")
+        .to_string();
+    assert!(
+        !error.starts_with("ron parse:"),
+        "the near-miss fixture must parse before admission is checked: {error}"
+    );
+    assert!(
+        error.contains(expected_reason),
+        "expected {expected_reason:?} in admission error: {error}"
+    );
+}
+
+#[test]
+fn registry_reuses_the_direct_delayed_program_profile_for_a_different_body() {
+    let body = r#"(steps: [(id: "gain_life",
+        kind: Perform(GainLife(who: Controller, amount: 1)))], yields: [])"#;
+    let fixture = delayed_spell_program_fixture(body);
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
+        .expect("the exact capture profile admits another generally supported Program body");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_spell_program_fixture".into(),
+        face_id: crate::CardFaceId::new("delayed_spell_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the delayed child retains its exact owner");
+    assert!(compiled.required_inputs.is_empty());
+    assert!(matches!(
+        compiled.body.steps.as_slice(),
+        [step] if matches!(
+            &step.kind,
+            crate::primitives::CompiledInstructionKind::Perform(effect)
+                if matches!(**effect, crate::primitives::SpellEffectKind::GainLife { .. })
+        )
+    ));
+}
+
+#[test]
+fn registry_rejects_direct_delayed_program_near_miss_profiles() {
+    let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
+    let cases = [
+        (
+            "wrong captured player",
+            base.replace(
+                "affected_player: Some(PreviousTargetedSpellController)",
+                "affected_player: None",
+            ),
+            "requires the captured PreviousTargetedSpellController",
+        ),
+        (
+            "wrong delayed subject",
+            base.replace(
+                "CreateDelayedTrigger(subject: None,",
+                "CreateDelayedTrigger(subject: Some(PreviousEffectObject),",
+            ),
+            "requires a subjectless delayed trigger",
+        ),
+        (
+            "wrong trigger",
+            base.replace(
+                "trigger: AtBeginningOfNextTurnUpkeep",
+                "trigger: AtBeginningOfNextEndStep",
+            ),
+            "requires AtBeginningOfNextTurnUpkeep",
+        ),
+        (
+            "paid counter",
+            base.replace(
+                "unless_controller_pays: None",
+                "unless_controller_pays: Some(2)",
+            ),
+            "must have no payment form",
+        ),
+        (
+            "cast-cost-paid counter",
+            base.replace(
+                "unless_controller_pays_by_cast_cost: None",
+                "unless_controller_pays_by_cast_cost: Some((condition: (group_id: \"kick\", option_id: \"kick_option\"), if_selected: 1, otherwise: 1))",
+            ),
+            "must have no payment form",
+        ),
+        (
+            "wrong producer",
+            base.replace(
+                "CounterTargetSpell(spell_filter: (), unless_controller_pays: None,\n                unless_controller_pays_by_cast_cost: None),",
+                "CounterTargetAbility,",
+            ),
+            "requires an immediately preceding CounterTargetSpell",
+        ),
+        (
+            "non-adjacent producer",
+            base.replace(
+                "unless_controller_pays_by_cast_cost: None),\n            CreateDelayedTrigger",
+                "unless_controller_pays_by_cast_cost: None),\n            Draw(who: Controller, count: 1),\n            CreateDelayedTrigger",
+            ),
+            "requires an immediately preceding CounterTargetSpell",
+        ),
+        (
+            "optional delayed trigger",
+            base.replace("may: false", "may: true"),
+            "requires default delayed-ability metadata",
+        ),
+        (
+            "intervening-if delayed trigger",
+            base.replace("intervening_if: None", "intervening_if: Some(Void)"),
+            "requires default delayed-ability metadata",
+        ),
+        (
+            "trigger-only-once delayed trigger",
+            base.replace("triggers_only_once: false", "triggers_only_once: true"),
+            "requires default delayed-ability metadata",
+        ),
+        (
+            "capped delayed trigger",
+            base.replace(
+                "max_triggers_per_turn: None",
+                "max_triggers_per_turn: Some(1)",
+            ),
+            "requires default delayed-ability metadata",
+        ),
+        (
+            "targeted delayed trigger",
+            base.replace(
+                "modal: None, targeting: None",
+                "modal: None, targeting: Some((groups: []))",
+            ),
+            "requires default delayed-ability metadata",
+        ),
+        (
+            "implicit face targeting",
+            base.replace(
+                "targeting: Some((groups: [(min: 1, max: 1, prompt: \"Choose target spell\",\n            effect_indices: [0])]))",
+                "targeting: None",
+            ),
+            "requires an explicit face-local target group",
+        ),
+        (
+            "minimum other than one",
+            base.replace("min: 1, max: 1", "min: 0, max: 1"),
+            "requires one 1-of-1 StackSpell binding",
+        ),
+        (
+            "maximum other than one",
+            base.replace("min: 1, max: 1", "min: 1, max: 2"),
+            "requires one 1-of-1 StackSpell binding",
+        ),
+        (
+            "target group bound to the wrong effect",
+            base.replace("effect_indices: [0]", "effect_indices: [1]"),
+            "target group references an untargeted effect",
+        ),
+        (
+            "counter group also bound to a stack ability role",
+            base.replace(
+                "            ),\n        ],\n        targeting:",
+                "            ),\n            CounterTargetAbility,\n        ],\n        targeting:",
+            )
+            .replace("effect_indices: [0]", "effect_indices: [0, 2]"),
+            "requires one 1-of-1 StackSpell binding",
+        ),
+    ];
+
+    for (label, fixture, expected_reason) in cases {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
+            .expect_err("a near-miss delayed Program profile must be rejected")
+            .to_string();
+        assert!(
+            !error.starts_with("ron parse:"),
+            "{label} fixture must parse before admission is checked: {error}"
+        );
+        assert!(
+            error.contains(expected_reason),
+            "{label}: expected {expected_reason:?}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn registry_keeps_delayed_program_owner_ids_face_local_and_rejects_same_face_collisions() {
+    let printed_activated = delayed_spell_program_fixture_with_face_fields(
+        ARCANE_DELAYED_PROGRAM_BODY,
+        "[\"Instant\"]",
+        r#"activated_abilities: [(ability_id: "delayed_01", presentation: Fallback,
+            costs: [], effect: [Draw(who: Controller, count: 1)])],"#,
+    );
+    let printed_triggered = delayed_spell_program_fixture_with_face_fields(
+        ARCANE_DELAYED_PROGRAM_BODY,
+        "[\"Instant\"]",
+        r#"triggered_abilities: [(ability_id: "delayed_01", presentation: Fallback,
+            trigger: AtBeginningOfNextTurnUpkeep,
+            effect: [Draw(who: Controller, count: 1)])],"#,
+    );
+    let class_level_ability = delayed_spell_program_fixture_with_face_fields(
+        ARCANE_DELAYED_PROGRAM_BODY,
+        "[\"Enchantment\", \"Class\"]",
+        &class_level_bars("delayed_01", ""),
+    );
+    let class_activated = delayed_spell_program_fixture_with_face_fields(
+        ARCANE_DELAYED_PROGRAM_BODY,
+        "[\"Enchantment\", \"Class\"]",
+        &class_level_bars(
+            "level_two",
+            r#"activated_abilities: [(ability_id: "delayed_01", presentation: Fallback,
+                costs: [], effect: [Draw(who: Controller, count: 1)])],"#,
+        ),
+    );
+    let class_triggered = delayed_spell_program_fixture_with_face_fields(
+        ARCANE_DELAYED_PROGRAM_BODY,
+        "[\"Enchantment\", \"Class\"]",
+        &class_level_bars(
+            "level_two",
+            r#"triggered_abilities: [(ability_id: "delayed_01", presentation: Fallback,
+                trigger: WhenThisClassBecomesLevel(level: 2),
+                effect: [Draw(who: Controller, count: 1)])],"#,
+        ),
+    );
+
+    for (label, fixture) in [
+        ("printed activated", printed_activated),
+        ("printed triggered", printed_triggered),
+        ("Class level-up", class_level_ability),
+        ("Class activated", class_activated),
+        ("Class triggered", class_triggered),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
+            .expect_err("a delayed Program owner cannot collide with a same-face ability owner")
+            .to_string();
+        assert!(
+            !error.starts_with("ron parse:"),
+            "{label} collision fixture must parse: {error}"
+        );
+        assert!(
+            error.contains("conflicts with a face-local runtime ability owner"),
+            "{label}: expected runtime owner collision, got {error}"
+        );
+    }
+
+    let mut split = String::from(
+        r#"(id: "delayed_spell_split_fixture", name: "Delayed Spell Split Fixture",
+            layout: Split, faces: [
+                (name: "Ability Face", face_id: "ability_face", types: ["Instant"],
+                    triggered_abilities: [(ability_id: "delayed_01",
+                        presentation: Fallback, trigger: WhenSelfEntersBattlefield,
+                        effect: [Draw(who: Controller, count: 1)])]),
+        "#,
+    );
+    let spell_face = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY).replace(
+        "(id: \"delayed_spell_program_fixture\",\n        name: \"Delayed Spell Program Fixture\", face_id: \"delayed_spell_program_fixture\",",
+        "(name: \"Spell Face\", face_id: \"spell_face\",",
+    );
+    assert!(!spell_face.contains("id: \"delayed_spell_program_fixture\""));
+    split.push_str(&spell_face);
+    split.push_str("])");
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&split], &[])
+        .expect("another face may use the same local ability ID");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_spell_split_fixture".into(),
+        face_id: crate::CardFaceId::new("spell_face").unwrap(),
+        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
+    });
+    assert!(registry.compiled_program_for_owner(&owner).is_some());
+}
+
+#[test]
+fn registry_accepts_the_counter_target_group_among_unrelated_face_groups() {
+    let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
+    let fixture = base
+        .replace(
+            "        spell_effect: [\n            CounterTargetSpell",
+            "        spell_effect: [\n            Exile(subject: Chosen((kind: Creature))),\n            CounterTargetSpell",
+        )
+        .replace(
+            "effect_indices: [0])]))",
+            "effect_indices: [0]), (min: 1, max: 1, prompt: \"Choose target spell\", effect_indices: [1])]))",
+        );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
+        .expect("an unrelated target group does not obscure the counter's unique spell group");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_spell_program_fixture".into(),
+        face_id: crate::CardFaceId::new("delayed_spell_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
+    });
+    assert!(registry.compiled_program_for_owner(&owner).is_some());
+}
+
+fn class_level_bars(level_two_owner_id: &str, extra_level_two_fields: &str) -> String {
+    r#"class_level_bars: [(
+        level: 2,
+        level_ability: (ability_id: "__LEVEL_TWO_ID__", presentation: Fallback,
+            costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)], timing: SorcerySpeed),
+        __LEVEL_TWO_FIELDS__
+    ), (
+        level: 3,
+        level_ability: (ability_id: "level_three", presentation: Fallback,
+            costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)], timing: SorcerySpeed),
+    )],"#
+        .replace("__LEVEL_TWO_ID__", level_two_owner_id)
+        .replace("__LEVEL_TWO_FIELDS__", extra_level_two_fields)
+}
+
+#[test]
+fn registry_keeps_nested_delayed_programs_unowned_and_upkeep_inputs_closed() {
+    let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
+    let nested = base
+        .replace(
+            "CreateDelayedTrigger(subject: None,",
+            "Conditional(condition: Void, effect: CreateDelayedTrigger(subject: None,",
+        )
+        .replace(
+            "            ),\n        ],\n        targeting:",
+            "            )),\n        ],\n        targeting:",
+        );
+    assert_delayed_spell_program_rejected(
+        &nested,
+        "resolving-created abilities cannot use authored programs",
+    );
+
+    let generic_upkeep = r#"(id: "generic_upkeep_program_fixture",
+        name: "Generic Upkeep Program Fixture",
+        face_id: "generic_upkeep_program_fixture", types: ["Artifact"],
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: AtBeginningOfNextTurnUpkeep, effect: [],
+            program: Some((body: (steps: [(id: "draw",
+                kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: []),
+                target_bindings: [])),
+            modal: None, targeting: None, may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None)])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[generic_upkeep], &[])
+        .expect_err("upkeep timing alone does not provide the typed affected-player input")
+        .to_string();
+    assert!(
+        !error.starts_with("ron parse:"),
+        "the generic upkeep Program fixture must parse before admission: {error}"
+    );
+    assert!(
+        error.contains("delayed trigger conditions require CreateDelayedTrigger"),
+        "a delayed-only trigger is not a generic triggered-ability owner: {error}"
+    );
+
+    let ordinary_upkeep =
+        generic_upkeep.replace("AtBeginningOfNextTurnUpkeep", "WhenSelfEntersBattlefield");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&ordinary_upkeep], &[])
+        .expect_err("ordinary triggers without an affected-player binding cannot supply it")
+        .to_string();
+    assert!(
+        error.contains("TriggerAffectedPlayer")
+            && error.contains("trigger does not supply that input"),
+        "the delayed capture must not satisfy an unrelated triggered Program: {error}"
+    );
+}
+
+#[test]
+fn registry_rejects_duplicate_direct_delayed_ids_across_program_and_legacy_siblings() {
+    let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
+    let duplicate = base.replace(
+        "        ],\n        targeting:",
+        r#"            CreateDelayedTrigger(subject: None, affected_player: None,
+                ability: (ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextTurnUpkeep,
+                    effect: [Draw(who: Controller, count: 1)])),
+        ],
+        targeting:"#,
+    );
+    assert_delayed_spell_program_rejected(
+        &duplicate,
+        "duplicate direct delayed child ability id 'delayed_01'",
+    );
+}

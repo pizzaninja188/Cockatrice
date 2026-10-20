@@ -15,15 +15,23 @@
         ability_id: "delayed_01",
         presentation: OracleLines([1]),
         trigger: AtBeginningOfNextTurnUpkeep,
-        effect: [ChooseResolutionBranch(
-          chooser: AffectedPlayer,
-          optional: false,
-          branches: [
-            (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 0, who: AffectedPlayer)]),
-            (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 1, who: AffectedPlayer)]),
-            (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 2, who: AffectedPlayer)]),
-          ],
-        )],
+        effect: [],
+        program: Some((body: (steps: [
+          (id: "choose_count", kind: Choose(
+            choice: "draw_count",
+            chooser: AffectedPlayer,
+            optional: false,
+            branches: [
+              (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, requirement: Always,
+                body: (steps: [(id: "draw_zero", kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
+              (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, requirement: Always,
+                body: (steps: [(id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
+              (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, requirement: Always,
+                body: (steps: [(id: "draw_two", kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+          )),
+        ], yields: []), target_bindings: [])),
       ),
     ),
     CreateDelayedTrigger(

@@ -12,11 +12,18 @@
         "/faces/0/spell_effect/1/CreateDelayedTrigger/affected_player",
         "/faces/0/spell_effect/1/CreateDelayedTrigger/ability",
         "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/trigger",
-        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0",
-        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/chooser",
-        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/0",
-        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/1",
-        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/2",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/presentation",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/chooser",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/presentation",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/presentation",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/presentation",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/body/steps/0/kind/Perform/Draw",
         "/faces/0/targeting"
       ]
     },
@@ -54,24 +61,40 @@
       "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/trigger"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "PlayerRecipient::AffectedPlayer",
-      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/chooser"
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/chooser"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/1/effects/0"
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/2/effects/0"
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "AbilityPresentation::OracleLines",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/presentation"
+    },
+    {
+      "symbol": "AbilityPresentation::OracleLines",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/presentation"
+    },
+    {
+      "symbol": "AbilityPresentation::OracleLines",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/presentation"
+    },
+    {
+      "symbol": "AbilityPresentation::OracleLines",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/presentation"
     },
     {
       "symbol": "SpellEffectKind::CreateDelayedTrigger",
@@ -127,6 +150,26 @@
     {
       "test": "scenario deck_coverage_arcane_denial::arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice",
       "covers": "a delegate that leaves during the branch prompt is replaced and a fresh prompt reaches the surviving player"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_delayed_program_missing_affected_player_rejects_resolution_atomically",
+      "covers": "a staged delayed Program missing its captured affected player fails before the choice is offered and restores the exact pre-command state"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::twincast_copy_of_arcane_denial_counters_bolt_and_keeps_only_its_delayed_pair",
+      "covers": "a normal Twincast copy counters its chosen spell and creates only its own exact delayed pair"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_of_twincast_bolt_copy_captures_the_copy_controller",
+      "covers": "targeting a Twincast-created spell copy captures that copy's controller for the delayed Program choice and draw"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_program_draw_two_resumes_two_abundance_replacements_once",
+      "covers": "the actual delayed Program's Draw two completes two Abundance replacements without repeating or losing its instruction"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::synthetic_arcane_delayed_program_resumes_life_tail_after_two_abundance_replacements",
+      "covers": "a synthetic closed-profile Program resumes its following GainLife instruction exactly once after two separate Draw replacement choices"
     }
   ],
   "complete_definition_review_confirmed": true

@@ -691,14 +691,48 @@ pub(super) fn create_delayed_trigger(
     };
     let card_name = cx.spell_label.to_owned();
     let program_definition = if ability.program.is_some() {
-        let Some(tricerules_card_model::ProgramOwnerId::Ability(mut definition)) =
-            cx.top.ability_program_owner()
-        else {
-            return Err(EngineError::ProgramInvariant(
-                "authored delayed child has no immutable parent ability definition",
-            ));
+        let mut definition = match cx.top.ability_program_owner() {
+            Some(tricerules_card_model::ProgramOwnerId::Ability(definition)) => definition,
+            Some(_) => {
+                return Err(EngineError::ProgramInvariant(
+                    "authored delayed child has no immutable parent ability definition",
+                ));
+            }
+            None if is_spell_stack_item_for_delayed_child(cx.top) => {
+                let face = cx
+                    .engine
+                    .registry
+                    .get(&cx.top.card_id)
+                    .and_then(|card| card.face(cx.top.face_index))
+                    .ok_or(EngineError::ProgramInvariant(
+                        "authored delayed spell child has no exact face definition",
+                    ))?;
+                tricerules_card_model::AbilityDefinitionId {
+                    card_id: cx.top.card_id.clone(),
+                    face_id: face.face_id.clone(),
+                    ability_path: Vec::new(),
+                }
+            }
+            None => {
+                return Err(EngineError::ProgramInvariant(
+                    "authored delayed child has no immutable parent ability definition",
+                ));
+            }
         };
         definition.ability_path.push(ability.ability_id.clone());
+        let owner = tricerules_card_model::ProgramOwnerId::ability(definition.clone());
+        let compiled = cx
+            .engine
+            .registry
+            .compiled_program_for_owner(&owner)
+            .ok_or(EngineError::ProgramInvariant(
+                "authored delayed child has no exact compiled Program owner",
+            ))?;
+        if compiled.owner != owner {
+            return Err(EngineError::ProgramInvariant(
+                "authored delayed child compiled owner does not match its exact definition",
+            ));
+        }
         Some(definition)
     } else {
         None
@@ -786,6 +820,19 @@ pub(super) fn create_delayed_trigger(
             })),
         });
     Ok(EffectOutcome::Continue)
+}
+
+/// A spell-face delayed child binds to the exact printed face even when the resolving spell is a
+/// copy. Ability occurrences and parentless granted abilities must keep their existing closed
+/// identity rules; source objects are deliberately not consulted here.
+fn is_spell_stack_item_for_delayed_child(top: &StackItem) -> bool {
+    top.ability_text.is_none()
+        && !top.is_triggered
+        && top.ability_index.is_none()
+        && top.activated_ability.is_none()
+        && top.activated_ability_occurrence.is_none()
+        && top.triggered_ability.is_none()
+        && top.trigger_use_key.is_none()
 }
 
 fn attach_equipment_source(
@@ -1190,4 +1237,152 @@ pub(super) fn aura_attach(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod delayed_trigger_tests {
+    use super::*;
+
+    fn engine(seed: u64) -> GameEngine {
+        GameEngine::new_with_default_decks(tricerules_cards::registry::global(), seed, &[0, 1], 20)
+            .expect("delayed-trigger runtime fixture engine")
+    }
+
+    fn delayed_spell_item() -> StackItem {
+        StackItem {
+            mana_colors_spent_to_cast: Default::default(),
+            id: 900_001,
+            controller: 0,
+            card_id: "arcane_denial".into(),
+            prototyped: false,
+            targets: Vec::new(),
+            ability_text: None,
+            source_permanent_id: None,
+            source_owner: Some(0),
+            source_zone_change: 0,
+            trigger_use_key: None,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            activated_ability_occurrence: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: crate::state::SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: Some(0),
+            payment_result: Default::default(),
+            search_results: Default::default(),
+            exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: Default::default(),
+        }
+    }
+
+    fn delayed_child_effect() -> SpellEffectKind {
+        tricerules_cards::registry::global()
+            .get("arcane_denial")
+            .expect("Arcane Denial definition")
+            .primary_face()
+            .spell_effect[1]
+            .clone()
+    }
+
+    fn invoke_delayed_child(
+        engine: &mut GameEngine,
+        top: &StackItem,
+        effect: SpellEffectKind,
+        targeted_spell_controller: Option<i32>,
+    ) -> Result<EffectOutcome, EngineError> {
+        let previous_result = crate::state::EffectResult {
+            targeted_spell_controller,
+            ..Default::default()
+        };
+        let mut effect_result = crate::state::EffectResult::default();
+        let mut events = Vec::new();
+        let mut cx = EffectCx {
+            engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top,
+            controller: top.controller,
+            affected_player: top.controller,
+            spell_label: "Arcane Denial",
+            previous_effect_result: &previous_result,
+            resume_previous_result: Some(&previous_result),
+            effect_result: &mut effect_result,
+            effect_index: 1,
+            program_state: None,
+        };
+        create_delayed_trigger(&mut cx, effect)
+    }
+
+    #[test]
+    fn missing_previous_target_controller_capture_continues_without_an_observer() {
+        let mut engine = engine(91_001);
+        let top = delayed_spell_item();
+        let before = engine.diagnostic_snapshot().unwrap();
+
+        let result = invoke_delayed_child(&mut engine, &top, delayed_child_effect(), None);
+
+        assert!(matches!(result, Ok(EffectOutcome::Continue)));
+        assert!(engine.state.active_event_observers.is_empty());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    }
+
+    #[test]
+    fn missing_compiled_child_owner_errors_before_observer_publication() {
+        let mut engine = engine(91_002);
+        let top = delayed_spell_item();
+        let mut effect = delayed_child_effect();
+        let SpellEffectKind::CreateDelayedTrigger { ability, .. } = &mut effect else {
+            panic!("the Arcane delayed-child fixture is a CreateDelayedTrigger")
+        };
+        ability.ability_id =
+            tricerules_cards::AbilityId::new("missing_child").expect("fixture child ability id");
+        let before = engine.diagnostic_snapshot().unwrap();
+
+        let result = invoke_delayed_child(&mut engine, &top, effect, Some(1));
+
+        assert!(matches!(
+            result,
+            Err(EngineError::ProgramInvariant(
+                "authored delayed child has no exact compiled Program owner"
+            ))
+        ));
+        assert!(engine.state.active_event_observers.is_empty());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    }
+
+    #[test]
+    fn unrelated_parentless_ability_cannot_claim_a_face_spell_child_owner() {
+        let mut engine = engine(91_003);
+        let mut top = delayed_spell_item();
+        top.ability_text = Some("unrelated trigger".into());
+        top.is_triggered = true;
+        top.ability_index = Some(0);
+        let before = engine.diagnostic_snapshot().unwrap();
+
+        let result = invoke_delayed_child(&mut engine, &top, delayed_child_effect(), Some(1));
+
+        assert!(matches!(
+            result,
+            Err(EngineError::ProgramInvariant(
+                "authored delayed child has no immutable parent ability definition"
+            ))
+        ));
+        assert!(engine.state.active_event_observers.is_empty());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    }
 }

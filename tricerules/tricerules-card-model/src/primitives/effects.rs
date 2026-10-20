@@ -6193,7 +6193,19 @@ impl SpellEffectKind {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
                 }
                 if ability.program.is_some() {
-                    if !matches!(subject, Some(EffectSubject::PreviousEffectObject)) {
+                    let spell_captured_player_profile = matches!(context, EffectContext::Spell)
+                        && subject.is_none()
+                        && matches!(
+                            affected_player,
+                            Some(PlayerRecipient::PreviousTargetedSpellController)
+                        )
+                        && matches!(
+                            ability.trigger,
+                            TriggerCondition::AtBeginningOfNextTurnUpkeep
+                        );
+                    if !matches!(subject, Some(EffectSubject::PreviousEffectObject))
+                        && !spell_captured_player_profile
+                    {
                         return Err(
                             "authored delayed programs require the exact PreviousEffectObject capture"
                                 .into(),

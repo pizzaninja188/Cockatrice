@@ -3249,6 +3249,40 @@ impl GameEngine {
             return Ok(());
         }
 
+        if !delegate_prompt && choose.delegate_selected && !current_chooser_live {
+            if let [delegate] = eligible.as_slice() {
+                let original_chooser = choose.original_chooser;
+                let optional = choose.optional;
+                pending.deciding_player = *delegate;
+                pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+                pending.presentation.min = u32::from(!optional);
+                pending.presentation.max = 1;
+                pending.presentation.prompt = if optional {
+                    "Choose a resolution option, or decline.".into()
+                } else {
+                    "Choose a resolution option.".into()
+                };
+                pending.resolution_prompt_semantics = None;
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated ProgramChoose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::Selecting;
+                choose.delegate_selected = true;
+                self.state.pending_resolution = Some(pending);
+                events.push(ev_log(format!(
+                    "P{controller} assigns P{delegate} to make P{}'s resolution choice.",
+                    original_chooser
+                )));
+                events.push(
+                    self.program_choose_choice_event()
+                        .expect("reassigned ProgramChoose remains parked"),
+                );
+                return Ok(());
+            }
+        }
+
         let Some(selector) = selector else {
             self.state.pending_resolution = Some(pending);
             return Ok(());

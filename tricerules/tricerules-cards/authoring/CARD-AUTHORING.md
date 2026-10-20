@@ -604,11 +604,37 @@ supported program instructions may compose before, inside, or after that return;
 `Return`→`GainLife` fixture verifies that a following instruction resumes. The child program retains
 its cursor across Clone's entry-copy choice. `ReturnTriggeredCard`
 also serves Abnormal Endurance's legacy graveyard return, but that different operation shape remains
-on its existing legacy path. Other effect-created abilities remain unsupported as program owners.
+on its existing legacy path. Other effect-created abilities remain unsupported as program owners;
+Arcane Denial's distinct profile below is the only other bounded child case.
 This exception fails closed for a non-adjacent producer, other delayed timings, plural or other
 previous-effect subjects, modal or targetful child bodies, `may`, `once`, and maximum-use metadata;
 do not generalize it to arbitrary effect-created or activated abilities. Koya's exact trigger,
 target filters, and target bounds remain in its card definition and ordinary targeting validation.
+
+Arcane Denial is a separate, closed face-spell child profile. On a nonmodal face, a direct top-level
+`CreateDelayedTrigger` may own a Program only immediately after `CounterTargetSpell` with both
+`unless_controller_pays` and `unless_controller_pays_by_cast_cost` set to `None`. The child has
+`subject: None`, captures `affected_player: Some(PreviousTargetedSpellController)`, and uses
+`AtBeginningOfNextTurnUpkeep`. It keeps the default nonmodal, untargeted, mandatory, no-intervening-if,
+not-once, and uncapped metadata, with an empty legacy `effect` beside its Program. The face must have
+an explicit `TargetingDef` whose group for that immediately preceding counter has exactly one
+`StackSpell` binding and `min: 1, max: 1`; identify that group by its counter association, so unrelated
+face target groups do not have to be absent. An inferred or implicit group, a different role, or a
+different bound fails closed.
+
+This scoped child may require `TriggerAffectedPlayer` through the private
+`captured_delayed_affected_player` owner-input descriptor, derived from the delayed trigger's captured
+`PreviousTargetedSpellController`; it does not widen which ordinary triggers supply that input. The
+child's stable ID is compiled as a one-segment ability path below the exact card face, and is reserved
+against direct delayed siblings and same-face printed or class-bar activated, triggered, and level-up
+owners. Another face may use the same local ID. Compile the child's body through the normal finite
+Program compiler: do not whitelist Arcane Denial's choice, branch IDs, draw counts, or body shape.
+The actual delayed_01 definition and branches all use `OracleLines([1])`, so each offered branch keeps
+the printed choice-line presentation. Twincast copies use the same face/child owner binding and retain
+the copied spell's own captured target controller; no physical source-object lookup or card-named
+runtime route is involved. Arcane Denial's separate `delayed_02` remains its existing legacy
+`CreateDelayedTrigger` with `OracleLines([2])`. The reviewed behavior follows CR 503.1, 603.3b,
+603.7a-b/d, 121.2 and copy rule 707.10; it adds no wire, relay, or client operation.
 
 `Blight` as a `Perform` leaf is resultless in a program. It may suspend for its normal controller creature choice and
 for applicable counter-replacement choices, but it cannot bind or yield an output. Once those
@@ -628,8 +654,8 @@ triggered program may also use `EachOtherPlayerThanAffectedPlayer` with that req
 player. Activated programs have no trigger input and cannot use these event-player forms. If the
 captured chooser has left, the pending decision delegates with a fresh per-deciding-player prompt
 ID; this does not change the ability controller or a compiled payer. Effect-created activated or triggered
-abilities cannot own authored programs (including modal program bodies) except for the Koya child
-shape specified above. Do not author targetful activated abilities with `ChosenOpponent` target
+abilities cannot own authored programs (including modal program bodies) except for the Koya and
+Arcane Denial child shapes specified above. Do not author targetful activated abilities with `ChosenOpponent` target
 groups from Hand or Graveyard: the opponent-choice activation path is
 available only for battlefield sources, and model/registry validation rejects this authored shape.
 This boundary is specific to opponent-selected groups; direct controller-chosen target groups are

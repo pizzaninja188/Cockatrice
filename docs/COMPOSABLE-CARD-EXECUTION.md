@@ -328,6 +328,25 @@ activated ability that discards a land and creates Worm tokens remains unchanged
 remains available to typed result/count expressions and other operations. The developer
 `choice public-zones` fixture exercises the cross-zone candidate projection without moving a card
 or changing priority.
+
+The bounded 2026-10-20 Arcane Denial increment admits one exact delayed-child Program profile on a
+face spell. A direct top-level `CreateDelayedTrigger` immediately follows a `CounterTargetSpell`
+whose `unless_controller_pays` and `unless_controller_pays_by_cast_cost` are both `None`; the child
+is subjectless, captures `PreviousTargetedSpellController`, triggers at
+`AtBeginningOfNextTurnUpkeep`, and keeps its default nonmodal, untargeted, mandatory, no-intervening-if,
+not-once, uncapped metadata. Its face has an explicit `TargetingDef`: the group associated with that
+counter has one `StackSpell` binding and `min: 1, max: 1`; other face groups are not treated as that
+binding. A private `captured_delayed_affected_player` owner-input descriptor supplies
+`TriggerAffectedPlayer` from the delayed capture without broadening ordinary trigger input rules. The
+child's one-segment ability path is reserved against direct delayed siblings and same-face printed or
+class activated, triggered, and level-up owners; another face may reuse the local ID. Its body goes
+through the normal finite Program compiler, with no Arcane-specific card, branch-ID, draw-count, or
+body whitelist. The runtime offer exposes the three actual branch labels, each `OracleLines([1])`,
+under `Spell -> Ability(delayed_01) -> ResolutionBranch(draw_*)`; Twincast proofs show ordinary spell
+copies bind their own face/child owner and captured target controller. `delayed_02` is unchanged as
+the legacy delayed ability with `OracleLines([2])`. The behavior follows CR 503.1, 603.3b,
+603.7a-b/d, 121.2 and 707.10. This adds no protobuf, relay, or client contract.
+
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.
