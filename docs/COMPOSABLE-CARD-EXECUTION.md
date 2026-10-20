@@ -39,7 +39,7 @@ replacement choices suspend the same program cursor, which resumes its following
 once. The exact admitted syntax and fail-closed limits are in the
 [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs).
 This ports only those two definitions: legacy flat branch resolution remains live for other
-callers and has not been retired.
+supported costs and owners.
 The following five 2026-10-15 Choose ports reuse that runner without runtime changes: Ant-Man's
 Army's mandatory Food-or-Treasure choice, Consecrated Sphinx's optional free Draw 2, Mentor of the
 Meek's optional `{1}`-for-Draw 1, Mind's Eye's optional `{1}`-for-Draw 1, and only Solemn
@@ -518,6 +518,30 @@ live accepted rows retain APNAP order and generation bindings. Observer restorat
 same player-set transaction with a fresh prompt ID and its original Program cursor. A begun
 controller-owned ability continues through controller departure only for mandatory, unfiltered
 player-set discard; spell, optional and alternative-cost departure behavior is unchanged.
+
+The bounded 2026-10-19 Crypt Lurker increment moves its ETB owner to a resultless ability Program.
+An optional `Controller`-chosen `Choose` offers one creature-sacrifice branch and one
+`DiscardCard(filter: Some(Creature))` branch; either paid branch draws one card. This filtered
+resolution cost is admitted only on an optional `Controller`-chosen ability branch. The legacy flat
+`ChooseResolutionBranch` `DiscardCard` form is rejected during card validation and has no runtime
+`HandCards` dispatch, while other legacy branch costs remain live. `ResolutionCost::DiscardCard` and
+the shared physical-candidate and cost transactions remain in use for the separate Ward
+`CounterTriggeringStackObjectUnlessPays` Program leaf with `filter: None`.
+
+Crypt Lurker's pinned Oracle line authorizes one of the two actions and draws one card if either is
+paid; the 2020-06-23 ruling confirms that both alternatives cannot be performed to draw extra
+cards. Resolution-cost payment follows CR 118.12, discard CR 701.9, sacrifice CR 701.21a, and the
+trigger continues independently of its source once on the stack (CR 113.7a). Integration scenarios
+cover both paid alternatives, declines and empty offers, filtered and stale cards, Library of Leng
+and Madness, source departure, and payer departure without delegation. A synthetic core fixture
+directly restores a saved same-candidate discard-payment Program and verifies a fresh prompt with
+the retained payer, cursor, and candidate generation before paying once; it is continuation
+robustness evidence rather than a Crypt Lurker card scenario. No card admission or protocol, relay,
+or client change is added.
+
+A separate synthetic unit fixture moves the same discard candidate from hand to graveyard and back,
+then invokes the departure refresh directly to verify generation rebinding; this is distinct from
+the saved-observer fixture and Crypt Lurker's integration evidence.
 
 Heated Argument's exact face owner now uses an authored `spell_program`: deal six damage to the
 target creature, then offer the controller the optional one-card graveyard-exile cost, with the

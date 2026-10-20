@@ -183,16 +183,18 @@ either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
 `PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, the one-card
 `ExileGraveyardCard` cost on a `Controller`-chosen optional spell branch, a fixed positive-count
-`Blight` on a `Controller`-chosen ability branch, and one-permanent `SacrificePermanent` or
-`TapPermanents` costs on a `Controller`-chosen ability branch. Blight selects one creature that
+`Blight` on a `Controller`-chosen ability branch, a filtered `DiscardCard` cost on an optional
+`Controller`-chosen ability branch, and one-permanent `SacrificePermanent` or `TapPermanents` costs
+on a `Controller`-chosen ability branch. Blight selects one creature that
 player controls and that
 can receive the counters; it is not admitted on spell programs or with other chooser shapes. The
 hand-bottom cost is not admitted for ability programs. A Program
 sacrifice filter requires every terminal leaf to select a `Creature` or `AnyPermanent` controlled
 by `You`; `source_only: true` remains bound to the exact source and cannot use exclusions. With
 `source_only: false`, flat filter-level `excluded_objects` remains supported, but exclusions on
-`any_of` branches are rejected by typed Programs. Legacy `ChooseResolutionBranch` retains its own
-filter validation. A Program tap-cost filter must be flat, select a `Creature` or `AnyPermanent`
+`any_of` branches are rejected by typed Programs. The legacy flat `ChooseResolutionBranch` form
+rejects `DiscardCard` costs and directs authors to the typed Program shape. A Program tap-cost
+filter must be flat, select a `Creature` or `AnyPermanent`
 controlled by `You`, and cannot use `any_of` or filter-level `excluded_objects`. The cost-level
 `exclude_source: true` instead omits the exact source incarnation (ObjectId plus zone-change
 generation), as Gravelgill Scoundrel requires when it taps “another” creature. A candidate must be
@@ -227,6 +229,18 @@ hardening does not admit new syntax; spell, optional and alternative-cost depart
 unchanged. Permanent choosers must be `Controller`;
 draw and hand-selection counts
 and `GainLife` amounts must be fixed literals.
+
+The filtered Program discard cost is narrowly admitted as `DiscardCard(filter: Some(Creature))`
+on an optional `Controller`-chosen ability branch; it selects one creature card from that payer's
+hand. Crypt Lurker uses it beside a creature-sacrifice branch, and either paid branch draws one
+card. Its pinned Oracle line allows one of the two actions; the 2020-06-23 ruling confirms they
+cannot both be performed to draw more than one card. This resolution-time payment follows CR
+118.12, discard follows CR 701.9, sacrifice follows CR 701.21a, and a triggered ability on the
+stack exists independently of its source (CR 113.7a). Other `ResolutionCost::DiscardCard` filters
+and chooser contexts in Program `Choose` remain unsupported. The
+`ResolutionCost::DiscardCard` type remains in use by Ward's separate
+`CounterTriggeringStackObjectUnlessPays` Program leaf with `filter: None`; that does not restore
+flat `ChooseResolutionBranch` discard support.
 
 A Program `ExileGraveyardCard` cost is admitted only on an optional `Controller`-chosen spell
 branch. It selects exactly one card from that spell controller's graveyard when paid and may carry

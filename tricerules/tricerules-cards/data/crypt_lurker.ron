@@ -11,21 +11,33 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [ChooseResolutionBranch(
-        optional: true,
-        branches: [
-          (
-            branch_id: "sacrifice_a_creature", presentation: Fallback,
-            cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
-            effects: [Draw(count: 1)],
-          ),
-          (
-            branch_id: "discard_a_creature_card", presentation: Fallback,
-            cost: DiscardCard(filter: Some(Creature)),
-            effects: [Draw(count: 1)],
-          ),
-        ],
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_crypt_lurker_cost", kind: Choose(
+          choice: "crypt_lurker",
+          chooser: Controller,
+          optional: true,
+          branches: [
+            (
+              branch_id: "sacrifice_a_creature", presentation: Fallback,
+              cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
+              requirement: Always,
+              body: (steps: [
+                (id: "draw_after_sacrifice", kind: Perform(Draw(who: Controller, count: 1))),
+              ], yields: []),
+            ),
+            (
+              branch_id: "discard_a_creature_card", presentation: Fallback,
+              cost: DiscardCard(filter: Some(Creature)),
+              requirement: Always,
+              body: (steps: [
+                (id: "draw_after_discard", kind: Perform(Draw(who: Controller, count: 1))),
+              ], yields: []),
+            ),
+          ],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []))),
     ),
   ],
 )

@@ -1118,6 +1118,18 @@ impl GameEngine {
         ) {
             return self.finish_program_choose_graveyard_card_cost(pending, answer, decision);
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: crate::state::PendingProgramChooseStage::PayingDiscardCardCost { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.finish_program_choose_discard_card_cost(pending, answer, decision);
+        }
         if let ResolutionContinuation::BattlefieldReturn { pending: plan } = &pending.continuation {
             if matches!(
                 plan.stage.as_ref(),

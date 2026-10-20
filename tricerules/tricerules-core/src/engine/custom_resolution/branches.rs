@@ -444,6 +444,9 @@ impl GameEngine {
             cost,
             ResolutionCost::PutHandCardOnLibraryBottom
                 | ResolutionCost::ExileGraveyardCard { .. }
+                | ResolutionCost::DiscardCard {
+                    filter: Some(tricerules_card_model::primitives::CardTypeFilter::Creature),
+                }
                 | ResolutionCost::Blight { .. }
                 | ResolutionCost::TapPermanents { .. }
                 | ResolutionCost::SacrificePermanent { .. }
@@ -603,6 +606,39 @@ impl GameEngine {
                         rv1::ChoiceCandidateSourceZone::Graveyard as i32;
                         candidates.len()
                     ],
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn program_choose_discard_cost_choice_event(
+        &self,
+        pending: &PendingResolution,
+        candidates: &[ObjectId],
+    ) -> rv1::RuledEvent {
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::HandCards as i32,
+                    candidate_object_ids: candidates.to_vec(),
+                    candidate_card_ids: candidates
+                        .iter()
+                        .map(|object_id| {
+                            self.state
+                                .objects
+                                .get(object_id)
+                                .map(|object| object.card_id.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect(),
+                    candidate_names: self.object_names(candidates),
+                    min: pending.presentation.min,
+                    max: 1,
                     ..Default::default()
                 },
             )),
@@ -1057,6 +1093,207 @@ impl GameEngine {
             if let PaidCardCost::Exile { card_name, .. } = cost {
                 events.push(ev_log(format!(
                     "P{} exiles {card_name}.",
+                    choose.original_chooser
+                )));
+            }
+        }
+        let mut stack = stack;
+        self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
+        let previous_result = stack.previous_result.clone();
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
+    }
+
+    pub(super) fn finish_program_choose_discard_card_cost(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, choose, selected_branch, branch_id, candidate_generations) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramChoose { stack, choose } => match &choose.stage {
+                    PendingProgramChooseStage::PayingDiscardCardCost {
+                        selected_branch,
+                        branch_id,
+                        candidate_generations,
+                    } => (
+                        stack.clone(),
+                        choose.clone(),
+                        *selected_branch,
+                        branch_id.clone(),
+                        candidate_generations.clone(),
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "program Choose is not awaiting a discard-card payment",
+                        ));
+                    }
+                },
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "program Choose discard-cost continuation missing",
+                    ));
+                }
+            };
+        let invalid_fields = !answer.chosen_player_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some();
+        if invalid_fields {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "discard-cost payment choice contains unrelated fields",
+            ));
+        }
+        if pending.deciding_player != choose.original_chooser {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "program Choose discard-cost payment cannot be delegated",
+            ));
+        }
+        let branch = match self.program_choose_selected_branch(
+            &stack,
+            &choose.occurrence,
+            choose.original_chooser,
+            selected_branch,
+        ) {
+            Ok(branch)
+                if branch.branch_id == branch_id
+                    && matches!(
+                        &branch.cost,
+                        ResolutionCost::DiscardCard {
+                            filter: Some(
+                                tricerules_card_model::primitives::CardTypeFilter::Creature
+                            ),
+                        }
+                    ) =>
+            {
+                branch
+            }
+            Ok(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("program Choose branch became stale"));
+            }
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+
+        if decision == rv1::ResolutionChoiceDecision::Decline {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required discard-cost payment cannot be declined",
+                ));
+            }
+            if !answer.chosen_object_ids.is_empty() {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "declining a discard-cost payment cannot include an object",
+                ));
+            }
+            return self.complete_program_choose_otherwise_from_parts(
+                stack,
+                choose,
+                format!(
+                    "P{} declines the program Choose discard cost; Otherwise resolves.",
+                    pending.deciding_player
+                ),
+            );
+        }
+        if decision != rv1::ResolutionChoiceDecision::Unspecified {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "discard-cost payment requires an object choice or decline",
+            ));
+        }
+        if answer.chosen_object_ids.is_empty() {
+            if !choose.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "required discard-cost payment needs one card",
+                ));
+            }
+            return self.complete_program_choose_otherwise_from_parts(
+                stack,
+                choose,
+                format!(
+                    "P{} declines the program Choose discard cost; Otherwise resolves.",
+                    pending.deciding_player
+                ),
+            );
+        }
+        if answer.chosen_object_ids.len() != 1 {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "discard-cost payment requires one card",
+            ));
+        }
+
+        let object_id = answer.chosen_object_ids[0];
+        let Some(zone_change_generation) = candidate_generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation))
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("discard-cost payment choice is stale"));
+        };
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let source = rv1::CostObjectRef {
+            object_id: stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            zone_change_generation: stack.item.source_zone_change,
+        };
+        let selected = rv1::CostObjectRef {
+            object_id,
+            zone_change_generation,
+        };
+        let legal_candidates = self.resolution_cost_candidates(
+            choose.original_chooser,
+            source.object_id,
+            source.zone_change_generation,
+            &branch.cost,
+        );
+        if current_generation != zone_change_generation
+            || !pending.presentation.candidates.contains(&object_id)
+            || !legal_candidates.contains(&object_id)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "discard-cost payment choice became stale",
+            ));
+        }
+        let receipt = match self
+            .plan_resolution_object_costs(
+                choose.original_chooser,
+                source,
+                &branch.cost,
+                &[selected],
+            )
+            .and_then(|plan| self.commit_cost_transaction(plan))
+        {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let mut events = receipt.move_events;
+        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed, &mut events);
+        for cost in receipt.paid_card_costs {
+            if let PaidCardCost::Discard { card_name, .. } = cost {
+                events.push(ev_log(format!(
+                    "P{} discards {card_name}.",
                     choose.original_chooser
                 )));
             }
@@ -1789,6 +2026,50 @@ impl GameEngine {
                 events.push(event);
                 Ok(finish_with_events(self, events))
             }
+            cost @ ResolutionCost::DiscardCard {
+                filter: Some(tricerules_card_model::primitives::CardTypeFilter::Creature),
+            } => {
+                let payer = choose_state.original_chooser;
+                let candidates = self.resolution_cost_candidates(
+                    payer,
+                    stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    stack.item.source_zone_change,
+                    &cost,
+                );
+                if candidates.is_empty() {
+                    let mut otherwise = self.complete_program_choose_otherwise_from_parts(
+                        stack,
+                        choose_state,
+                        "No creature card remains in the payer's hand for the program Choose cost; Otherwise resolves."
+                            .into(),
+                    )?;
+                    events.extend(otherwise.events);
+                    otherwise.events = events;
+                    return Ok(otherwise);
+                }
+                pending.deciding_player = payer;
+                pending.presentation.choice_kind = rv1::ChoiceKind::HandCards;
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.min = 0;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    "Choose a creature card to discard, or decline.".into();
+                let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated ProgramChoose continuation")
+                };
+                choose.stage = PendingProgramChooseStage::PayingDiscardCardCost {
+                    selected_branch: branch_index,
+                    branch_id: branch.branch_id,
+                    candidate_generations,
+                };
+                let event = self.program_choose_discard_cost_choice_event(&pending, &candidates);
+                self.state.pending_resolution = Some(pending);
+                events.push(event);
+                Ok(finish_with_events(self, events))
+            }
             ResolutionCost::Blight { count } => {
                 let payer = choose_state.original_chooser;
                 let candidates = self.resolution_cost_candidates(
@@ -2193,24 +2474,25 @@ impl GameEngine {
                     "graveyard-exile costs require a typed Program Choose branch",
                 ));
             }
-            ResolutionCost::DiscardCard { .. }
-            | ResolutionCost::SacrificePermanent { .. }
+            ResolutionCost::DiscardCard { .. } => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "DiscardCard costs require an authored Program Choose branch",
+                ));
+            }
+            ResolutionCost::SacrificePermanent { .. }
             | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
-                let is_hand_card = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
                 let count = match branch.cost {
                     ResolutionCost::TapPermanents { count, .. } => count,
                     _ => 1,
                 };
-                pending.presentation.choice_kind = if is_hand_card {
-                    rv1::ChoiceKind::HandCards
-                } else if is_tap
+                pending.presentation.choice_kind = if is_tap
                     || matches!(
                         branch.cost,
                         ResolutionCost::Blight { .. } | ResolutionCost::SacrificePermanent { .. }
-                    )
-                {
+                    ) {
                     rv1::ChoiceKind::CostObjects
                 } else {
                     rv1::ChoiceKind::TargetObjects
@@ -2228,8 +2510,6 @@ impl GameEngine {
                             ""
                         }
                     )
-                } else if matches!(branch.cost, ResolutionCost::DiscardCard { .. }) {
-                    "Choose a card to discard, or decline.".into()
                 } else if is_tap {
                     let plural = if count == 1 { "" } else { "s" };
                     let decline = if branch_state.optional {
@@ -2557,6 +2837,17 @@ impl GameEngine {
             // Otherwise or the parent program tail.
             return Ok(());
         }
+        if matches!(
+            choose.stage,
+            PendingProgramChooseStage::PayingDiscardCardCost { .. }
+        ) && choose.original_chooser == controller
+            && !original_chooser_live
+        {
+            // This controller-only payment has no delegate. If the controlling player leaves
+            // during the hand-cost prompt, the parked ability ends rather than entering
+            // Otherwise.
+            return Ok(());
+        }
         let delegate_prompt = matches!(
             choose.stage,
             PendingProgramChooseStage::ChoosingDelegate { .. }
@@ -2566,6 +2857,7 @@ impl GameEngine {
             PendingProgramChooseStage::PayingMana { .. }
                 | PendingProgramChooseStage::PayingHandCard { .. }
                 | PendingProgramChooseStage::PayingGraveyardCardCost { .. }
+                | PendingProgramChooseStage::PayingDiscardCardCost { .. }
                 | PendingProgramChooseStage::PayingBlight { .. }
                 | PendingProgramChooseStage::PayingPermanentCost { .. }
                 | PendingProgramChooseStage::ChoosingCommanderDestination { .. }
@@ -2690,6 +2982,114 @@ impl GameEngine {
                     &branch.cost,
                     choose.optional,
                 )?);
+            }
+            return Ok(());
+        }
+
+        if let PendingProgramChooseStage::PayingDiscardCardCost {
+            selected_branch,
+            branch_id,
+            candidate_generations: previous_candidates,
+        } = &choose.stage
+        {
+            if !original_chooser_live {
+                // Controller-only hand-cost payment has no delegate. If the controlling player
+                // leaves, the parked ability ends under CR 800.4a.
+                return Ok(());
+            }
+            if !current_chooser_live || pending.deciding_player != choose.original_chooser {
+                let completed = self.complete_program_choose_otherwise(
+                    pending,
+                    "The program Choose discard-cost payment cannot be delegated; Otherwise resolves."
+                        .into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+            if choose.original_chooser != controller {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "Controller discard-cost payment lost its resolving controller",
+                ));
+            }
+            let branch = match self.program_choose_branch_at_occurrence(
+                &stack,
+                &choose.occurrence,
+                *selected_branch,
+            ) {
+                Ok(branch)
+                    if branch.branch_id == *branch_id
+                        && matches!(
+                            &branch.cost,
+                            ResolutionCost::DiscardCard {
+                                filter: Some(
+                                    tricerules_card_model::primitives::CardTypeFilter::Creature
+                                ),
+                            }
+                        ) =>
+                {
+                    branch
+                }
+                Ok(_) => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::ProgramInvariant(
+                        "parked Program discard-cost branch changed identity",
+                    ));
+                }
+                Err(error) => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            };
+            let candidates = self.resolution_cost_candidates(
+                choose.original_chooser,
+                stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                stack.item.source_zone_change,
+                &branch.cost,
+            );
+            if candidates.is_empty() {
+                let completed = self.complete_program_choose_otherwise_from_parts(
+                    stack,
+                    choose,
+                    "No creature card remains in the payer's hand for the program Choose cost; Otherwise resolves."
+                        .into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+            let candidate_generations = self.hand_bottom_candidate_generations(&candidates);
+            let candidates_changed = candidate_generations != *previous_candidates;
+            let prompt_was_reset = pending.resolution_prompt_id.get() == 0;
+            if candidates_changed {
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.choice_kind = rv1::ChoiceKind::HandCards;
+                pending.presentation.min = 0;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    "Choose a creature card to discard, or decline.".into();
+                pending.resolution_prompt_semantics = None;
+                let ResolutionContinuation::ProgramChoose { choose, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated ProgramChoose continuation")
+                };
+                let PendingProgramChooseStage::PayingDiscardCardCost {
+                    candidate_generations: saved,
+                    ..
+                } = &mut choose.stage
+                else {
+                    unreachable!("validated Program discard-cost payment stage")
+                };
+                *saved = candidate_generations;
+            }
+            self.state.pending_resolution = Some(pending);
+            if candidates_changed || prompt_was_reset {
+                let pending = self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("refreshed Program discard-cost payment remains parked");
+                events.push(self.program_choose_discard_cost_choice_event(pending, &candidates));
             }
             return Ok(());
         }

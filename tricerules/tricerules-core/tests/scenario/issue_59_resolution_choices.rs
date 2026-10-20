@@ -23,6 +23,52 @@ fn engine() -> GameEngine {
     engine
 }
 
+fn three_player_crypt_lurker_branch_choice(seed: u64) -> (GameEngine, u32) {
+    let decks = Some(vec![
+        deck_with("forest", &["crypt_lurker", "grizzly_bears"]),
+        island_only_deck(),
+        island_only_deck(),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("three-player Crypt Lurker game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let discard_candidate = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let index = hand_index_for_card(&engine, 0, "crypt_lurker");
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Crypt Lurker");
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Crypt Lurker trigger offers its optional choice")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    (engine, discard_candidate)
+}
+
 const REFLEXIVE_PROGRAM_DAMAGE_FIXTURE: &str = r#"(
   id: "reflexive_program_damage_fixture",
   name: "Reflexive Program Damage Fixture",
@@ -148,6 +194,26 @@ fn select_branch(index: u32) -> RuledCommand {
             chosen_player_ids: vec![],
         })),
     }
+}
+
+fn cast_crypt_lurker_until_branch_choice(engine: &mut GameEngine, crypt_lurker: u32) {
+    let index = hand_index_for_card(engine, 0, "crypt_lurker");
+    assert_eq!(engine.state.players[0].hand[index], crypt_lurker);
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Crypt Lurker");
+    pass_both_players(engine);
+    pass_both_players(engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Crypt Lurker trigger offers its optional choice")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
 }
 
 fn crime_with_bolt(e: &mut GameEngine) {
@@ -795,7 +861,14 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
         .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Crypt Lurker");
     pass_both_players(&mut engine); // creature resolves, ETB trigger reaches stack
-    pass_both_players(&mut engine); // ETB parks for branch choice
+    let branch_offer_batch = pass_both_players_with_batch(&mut engine); // ETB parks for branch choice
+    let branch_offer = find_resolution_choice(&branch_offer_batch).expect("branch choice offer");
+    let discard_branch = branch_offer
+        .resolution_branches
+        .iter()
+        .find(|branch| branch.branch_index == 1)
+        .expect("the discard option is branch 1");
+    assert_eq!(discard_branch.label, "Discard a creature card");
     assert_eq!(
         engine
             .state
@@ -813,32 +886,52 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
             .as_ref()
             .expect("branch choice")
             .continuation,
-        ResolutionContinuation::AuthoredBranch {
-            branch: tricerules_core::state::PendingResolutionBranch {
-                stage: PendingResolutionBranchStage::Selecting,
-                ..
-            },
-            ..
-        }
+        ResolutionContinuation::ProgramChoose { .. }
     ));
     engine
         .apply_scenario_command(0, &select_branch(1))
         .expect("choose discard branch");
-    assert!(matches!(
-        &engine
+    let discard_payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("discard payment")
+        .presentation
+        .clone();
+    assert_eq!(
+        engine
             .state
             .pending_resolution
             .as_ref()
             .expect("discard payment")
-            .continuation,
-        ResolutionContinuation::AuthoredBranch {
-            branch: tricerules_core::state::PendingResolutionBranch {
-                stage: PendingResolutionBranchStage::PayingObjects { .. },
-                ..
-            },
-            ..
-        }
+            .deciding_player,
+        0
+    );
+    let discard_continuation = &engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("discard payment")
+        .continuation;
+    assert!(matches!(
+        discard_continuation,
+        ResolutionContinuation::ProgramChoose { .. }
     ));
+    assert!(
+        format!("{discard_continuation:?}").contains("PayingDiscardCardCost"),
+        "the Program Choose owns its generation-bound discard-cost continuation"
+    );
+    assert_eq!(discard_payment.choice_kind, ChoiceKind::HandCards);
+    assert_eq!((discard_payment.min, discard_payment.max), (0, 1));
+    assert_eq!(discard_payment.candidates, vec![discarded]);
+    let hand_before_payment = engine.state.players[0].hand.len();
+    let library_before_payment = engine.state.players[0].library.len();
+    let discard_generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&discarded)
+        .copied()
+        .unwrap_or(0);
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard creature card");
@@ -851,7 +944,471 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
             .zone,
         tricerules_core::Zone::Graveyard
     );
+    assert!(engine.state.zone_change_generation[&discarded] > discard_generation_before);
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before_payment,
+        "one paid discard is followed by the branch's one draw"
+    );
+    assert_eq!(
+        engine.state.players[0].library.len() + 1,
+        library_before_payment,
+        "the branch draws exactly once"
+    );
     assert!(engine.state.pending_resolution.is_none());
+    let after_payment = format!("{:?}", engine.state);
+    assert!(engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
+        .is_err());
+    assert_eq!(
+        format!("{:?}", engine.state),
+        after_payment,
+        "replaying the consumed offer cannot discard or draw again"
+    );
+}
+
+#[test]
+fn crypt_lurker_self_sacrifice_pays_and_its_trigger_draws_once() {
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    inject_library_card(&mut engine, 0, "forest");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+    let library_before = engine.state.players[0].library.len();
+    let hand_before_payment = engine.state.players[0].hand.len();
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&crypt_lurker)
+        .copied()
+        .unwrap_or(0);
+
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the sacrifice branch");
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("optional sacrifice payment")
+        .presentation
+        .clone();
+    assert_eq!(payment.candidates, vec![crypt_lurker]);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![crypt_lurker]))
+        .expect("Crypt Lurker can sacrifice itself for its already-triggered ability");
+
+    assert_eq!(
+        engine.state.objects[&crypt_lurker].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine.state.zone_change_generation[&crypt_lurker] > generation_before);
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_payment + 1);
+    assert_eq!(engine.state.players[0].library.len() + 1, library_before);
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn crypt_lurker_optional_menu_and_both_costs_can_be_declined_or_left_empty() {
+    // Declining the optional mode at the top level follows the empty Otherwise body.
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let creature_card = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+    let library_before = engine.state.players[0].library.len();
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline the optional branch menu");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.objects[&creature_card].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert_eq!(engine.state.players[0].library.len(), library_before);
+
+    for branch in [0, 1] {
+        for explicit_decline in [false, true] {
+            let mut engine = self::engine();
+            let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+            let paid_object = if branch == 0 {
+                inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears")
+            } else {
+                inject_card_into_hand(&mut engine, 0, "grizzly_bears")
+            };
+            give_mana(
+                &mut engine,
+                0,
+                ManaGift {
+                    b: 1,
+                    c: 3,
+                    ..Default::default()
+                },
+            );
+            cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+            let library_before = engine.state.players[0].library.len();
+            engine
+                .apply_scenario_command(0, &select_branch(branch))
+                .expect("select one optional payment branch");
+            let payment = &engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation;
+            assert_eq!((payment.min, payment.max), (0, 1));
+            assert!(payment.candidates.contains(&paid_object));
+            let answer = if explicit_decline {
+                submit_resolution_decision(ResolutionChoiceDecision::Decline)
+            } else {
+                submit_resolution_choice(Vec::new())
+            };
+            engine
+                .apply_scenario_command(0, &answer)
+                .unwrap_or_else(|error| panic!("branch {branch} empty/declined payment: {error}"));
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].library.len(), library_before);
+            assert_eq!(
+                engine.state.objects[&paid_object].zone,
+                if branch == 0 {
+                    tricerules_core::Zone::Battlefield
+                } else {
+                    tricerules_core::Zone::Hand
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn crypt_lurker_does_not_offer_fiery_temper_as_a_creature_discard_cost() {
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let fiery_temper = inject_card_into_hand(&mut engine, 0, "fiery_temper");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+    let before = format!("{:?}", engine.state);
+    assert!(engine.apply_scenario_command(0, &select_branch(1)).is_err());
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert_eq!(
+        engine.state.objects[&fiery_temper].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert!(engine.state.pending_resolution.is_some());
+}
+
+#[test]
+fn crypt_lurker_filtered_discard_answers_reject_invalid_objects_atomically() {
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let creature = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    let noncreature = inject_card_into_hand(&mut engine, 0, "fiery_temper");
+    let foreign_creature = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose the creature-discard branch");
+
+    let mut unrelated = submit_resolution_choice(vec![creature]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = unrelated.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.chosen_player_ids.push(1);
+    for (label, answer) in [
+        ("noncreature", submit_resolution_choice(vec![noncreature])),
+        (
+            "foreign card",
+            submit_resolution_choice(vec![foreign_creature]),
+        ),
+        (
+            "duplicate object",
+            submit_resolution_choice(vec![creature, creature]),
+        ),
+        ("unrelated player field", unrelated),
+    ] {
+        let before = format!("{:?}", engine.state);
+        assert!(
+            engine.apply_scenario_command(0, &answer).is_err(),
+            "{label} is outside the filtered discard payment"
+        );
+        assert_eq!(format!("{:?}", engine.state), before, "{label} is atomic");
+        assert!(engine.state.pending_resolution.is_some());
+    }
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
+        .expect("a current, owned creature remains a valid payment");
+    assert_eq!(
+        engine.state.objects[&creature].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.objects[&noncreature].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert_eq!(
+        engine.state.objects[&foreign_creature].zone,
+        tricerules_core::Zone::Hand
+    );
+}
+
+#[test]
+fn crypt_lurker_cost_discard_ignores_library_of_leng_and_resolves_madness_after_draw() {
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let wurm = inject_card_into_hand(&mut engine, 0, "arrogant_wurm");
+    inject_permanent_on_battlefield(&mut engine, 0, "library_of_leng");
+    inject_library_card(&mut engine, 0, "forest");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    cast_crypt_lurker_until_branch_choice(&mut engine, crypt_lurker);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose the creature-discard branch");
+    let hand_before_payment = engine.state.players[0].hand.len();
+    let library_before_payment = engine.state.players[0].library.len();
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![wurm]))
+        .expect("discard Arrogant Wurm as a resolution cost");
+    assert_eq!(
+        engine.state.objects[&wurm].zone,
+        tricerules_core::Zone::Exile,
+        "Madness replaces a cost discard; Library of Leng does not"
+    );
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_payment);
+    assert_eq!(
+        engine.state.players[0].library.len() + 1,
+        library_before_payment
+    );
+    assert!(engine.state.pending_resolution.is_none());
+
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline the Madness cast after Crypt Lurker already drew");
+    assert_eq!(
+        engine.state.objects[&wurm].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn crypt_lurker_trigger_resolves_after_unsummon_returns_its_source() {
+    let mut engine = engine();
+    let crypt_lurker = inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let creature_card = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 1, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let library_before = engine.state.players[0].library.len();
+    let index = hand_index_for_card(&engine, 0, "crypt_lurker");
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Crypt Lurker");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active player passes so the opponent can return the source");
+    let unsummon_index = hand_index_for_card(&engine, 1, "unsummon");
+    engine
+        .apply_scenario_command(1, &cast_spell(unsummon_index, target_object(crypt_lurker)))
+        .expect("cast Unsummon with the ETB trigger waiting on the stack");
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&crypt_lurker].zone,
+        tricerules_core::Zone::Hand
+    );
+
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("the resolving trigger keeps its optional Program");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![creature_card]))
+        .expect("discard and draw after the source returned to hand");
+    assert_eq!(
+        engine.state.objects[&creature_card].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(engine.state.players[0].library.len() + 1, library_before);
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn crypt_lurker_payer_concession_does_not_delegate_or_draw_in_three_player_game() {
+    let (mut engine, _) = three_player_crypt_lurker_branch_choice(59_003);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("its controller's branch choice is pending")
+            .deciding_player,
+        0
+    );
+    let draw_counts_before: Vec<_> = engine
+        .state
+        .players
+        .iter()
+        .map(|player| {
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn
+        })
+        .collect();
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the payer may concede during its own optional resolution choice");
+    assert!(engine.state.players[0].has_lost);
+    assert!(!engine.state.players[1].has_lost && !engine.state.players[2].has_lost);
+    assert!(
+        engine.state.outcome.is_none(),
+        "the two survivors keep playing"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(find_resolution_choice(&departure).is_none());
+    for (player, before) in engine.state.players.iter().zip(draw_counts_before) {
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn,
+            before,
+            "concession must not resolve the paid branch body or delegate its draw"
+        );
+    }
+    assert_eq!(engine.state.players[1].life, 20);
+    assert_eq!(engine.state.players[2].life, 20);
+}
+
+#[test]
+fn crypt_lurker_payer_concession_does_not_delegate_or_draw_during_discard_payment() {
+    let (mut engine, discard_candidate) = three_player_crypt_lurker_branch_choice(59_004);
+    engine
+        .apply_scenario_command(0, &select_branch(1))
+        .expect("choose the optional creature-discard branch");
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the discard cost is pending")
+        .clone();
+    assert_eq!(payment.deciding_player, 0);
+    assert_eq!(payment.presentation.choice_kind, ChoiceKind::HandCards);
+    assert_eq!((payment.presentation.min, payment.presentation.max), (0, 1));
+    assert_eq!(payment.presentation.candidates, vec![discard_candidate]);
+    assert!(matches!(
+        &payment.continuation,
+        ResolutionContinuation::ProgramChoose { .. }
+    ));
+    assert!(format!("{:?}", payment.continuation).contains("PayingDiscardCardCost"));
+    assert!(engine.state.players[0].hand.contains(&discard_candidate));
+    let draw_counts_before: Vec<_> = engine
+        .state
+        .players
+        .iter()
+        .map(|player| {
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn
+        })
+        .collect();
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the payer may concede during its own discard-cost choice");
+    assert!(engine.state.players[0].has_lost);
+    assert!(!engine.state.players[1].has_lost && !engine.state.players[2].has_lost);
+    assert!(
+        engine.state.outcome.is_none(),
+        "the two survivors keep playing"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(find_resolution_choice(&departure).is_none());
+    for (player, before) in engine.state.players.iter().zip(draw_counts_before) {
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn,
+            before,
+            "concession must not commit the discard payment or run the branch draw"
+        );
+    }
+    assert_eq!(engine.state.players[1].life, 20);
+    assert_eq!(engine.state.players[2].life, 20);
 }
 
 #[test]
@@ -927,6 +1484,12 @@ fn crypt_lurker_rejects_a_stale_discard_without_consuming_the_choice() {
         .apply_scenario_command(0, &select_branch(1))
         .expect("choose discard branch");
 
+    let offered_generation = engine
+        .state
+        .zone_change_generation
+        .get(&candidate)
+        .copied()
+        .unwrap_or(0);
     engine.state.players[0].hand.retain(|oid| *oid != candidate);
     engine.state.players[0].graveyard.push(candidate);
     engine
@@ -935,6 +1498,28 @@ fn crypt_lurker_rejects_a_stale_discard_without_consuming_the_choice() {
         .get_mut(&candidate)
         .expect("candidate")
         .zone = tricerules_core::Zone::Graveyard;
+    // This fixture stages the same physical ID as a new Hand incarnation so the old prompt
+    // must fail on the saved generation, even though the ID is again in the legal zone.
+    let returned_generation = offered_generation + 2;
+    engine.state.players[0]
+        .graveyard
+        .retain(|oid| *oid != candidate);
+    engine.state.players[0].hand.push(candidate);
+    engine
+        .state
+        .objects
+        .get_mut(&candidate)
+        .expect("returned candidate")
+        .zone = tricerules_core::Zone::Hand;
+    engine
+        .state
+        .zone_change_generation
+        .insert(candidate, returned_generation);
+    assert!(returned_generation > offered_generation);
+    assert_eq!(
+        engine.state.objects[&candidate].zone,
+        tricerules_core::Zone::Hand
+    );
     assert!(engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![candidate]))
         .is_err());

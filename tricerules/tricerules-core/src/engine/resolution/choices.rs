@@ -1355,10 +1355,12 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
         return None;
     };
     if matches!(branch.stage, PendingResolutionBranchStage::Selecting)
-        && branch
-            .branches
-            .iter()
-            .any(|option| option.cost == ResolutionCost::PutHandCardOnLibraryBottom)
+        && branch.branches.iter().any(|option| {
+            matches!(
+                &option.cost,
+                ResolutionCost::PutHandCardOnLibraryBottom | ResolutionCost::DiscardCard { .. }
+            )
+        })
     {
         return None;
     }
@@ -1430,10 +1432,9 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                     ResolutionCost::Mana(cost) => {
                         (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
                     }
-                    ResolutionCost::DiscardCard { .. } => (
-                        rv1::ResolutionBranchCostKind::DiscardCard,
-                        "discard a matching card".into(),
-                    ),
+                    ResolutionCost::DiscardCard { .. } => {
+                        unreachable!("flat authored branches reject discard costs")
+                    }
                     ResolutionCost::PutHandCardOnLibraryBottom => {
                         unreachable!("flat authored branches reject hand-bottom costs")
                     }

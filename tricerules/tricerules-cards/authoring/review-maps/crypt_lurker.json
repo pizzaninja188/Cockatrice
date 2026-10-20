@@ -1,0 +1,96 @@
+{
+  "format_version": 1,
+  "oracle_id": "f0cbf361-d7dc-4556-a654-71c08785095a",
+  "spans": [
+    {
+      "face_id": "crypt_lurker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::SacrificePermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "ResolutionCost::DiscardCard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_discard_branch_pays_then_draws",
+      "covers": "the payer discards exactly one current creature card from hand and the selected branch draws exactly once"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_self_sacrifice_pays_and_its_trigger_draws_once",
+      "covers": "Crypt Lurker can pay its own already-triggered ability by sacrificing itself, then draw once"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_optional_menu_and_both_costs_can_be_declined_or_left_empty",
+      "covers": "declining the optional mode or either optional cost follows Otherwise without a draw or payment"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_does_not_offer_fiery_temper_as_a_creature_discard_cost",
+      "covers": "the filtered private hand offer excludes an instant that is not a creature"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_filtered_discard_answers_reject_invalid_objects_atomically",
+      "covers": "noncreature, foreign, duplicate, and unrelated candidate answers are rejected without consuming the prompt"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_cost_discard_ignores_library_of_leng_and_resolves_madness_after_draw",
+      "covers": "the resolution-cost discard is not replaced by Library of Leng and an Arrogant Wurm Madness trigger resolves after Crypt Lurker draws"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_trigger_resolves_after_unsummon_returns_its_source",
+      "covers": "the trigger continues after Unsummon returns Crypt Lurker to its owner's hand"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_payer_concession_does_not_delegate_or_draw_in_three_player_game",
+      "covers": "a payer departure at the optional menu leaves the two survivors playing without a delegated choice or draw"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_payer_concession_does_not_delegate_or_draw_during_discard_payment",
+      "covers": "a payer departure during the open filtered discard-cost offer commits no payment, creates no delegated offer, and draws no card"
+    },
+    {
+      "test": "scenario issue_59_resolution_choices::crypt_lurker_rejects_a_stale_discard_without_consuming_the_choice",
+      "covers": "the old prompt cannot consume a physical card after its zone-change generation changes"
+    },
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_crypt_lurker_uses_optional_creature_sacrifice_or_discard_program",
+      "covers": "the registered trigger owns the optional resultless Program with its exact sacrifice/discard branches and one-card draw bodies"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

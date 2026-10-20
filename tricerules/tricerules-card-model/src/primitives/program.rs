@@ -356,6 +356,9 @@ impl CompiledChooseBranch {
                 format!("Tap {count} permanent(s)")
             }
             ResolutionCost::ExileGraveyardCard { .. } => "Exile a card from your graveyard".into(),
+            ResolutionCost::DiscardCard {
+                filter: Some(CardTypeFilter::Creature),
+            } => "Discard a creature card".into(),
             ResolutionCost::None if self.body.steps.is_empty() => "Continue".into(),
             ResolutionCost::None => {
                 let effects = self
@@ -975,6 +978,14 @@ impl Compiler {
                                         instruction.id, branch.branch_id
                                     ));
                                 }
+                            }
+                            ResolutionCost::DiscardCard {
+                                filter: Some(CardTypeFilter::Creature),
+                            } if *optional
+                                && *chooser == PlayerRecipient::Controller
+                                && self.context == EffectContext::Ability =>
+                            {
+                                has_paid_branch = true;
                             }
                             ResolutionCost::PutHandCardOnLibraryBottom
                                 if *chooser == PlayerRecipient::Controller

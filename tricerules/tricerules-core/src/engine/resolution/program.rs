@@ -1165,6 +1165,14 @@ impl GameEngine {
                                 rv1::ResolutionBranchCostKind::ExileGraveyardCard,
                                 "exile a matching card from your graveyard".to_string(),
                             ),
+                            ResolutionCost::DiscardCard {
+                                filter: Some(
+                                    tricerules_card_model::primitives::CardTypeFilter::Creature,
+                                ),
+                            } => (
+                                rv1::ResolutionBranchCostKind::DiscardCard,
+                                "discard a creature card".to_string(),
+                            ),
                             ResolutionCost::SacrificePermanent { .. } => (
                                 rv1::ResolutionBranchCostKind::SacrificePermanent,
                                 "sacrifice a matching permanent".to_string(),
@@ -1201,6 +1209,7 @@ impl GameEngine {
             crate::state::PendingProgramChooseStage::PayingMana { .. } => return None,
             crate::state::PendingProgramChooseStage::PayingHandCard { .. }
             | crate::state::PendingProgramChooseStage::PayingGraveyardCardCost { .. }
+            | crate::state::PendingProgramChooseStage::PayingDiscardCardCost { .. }
             | crate::state::PendingProgramChooseStage::PayingBlight { .. }
             | crate::state::PendingProgramChooseStage::PayingPermanentCost { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
@@ -2989,6 +2998,125 @@ mod invariant_rollback_tests {
         (engine, top, owners, source, borrowed)
     }
 
+    fn controller_filtered_discard_choose_fixture() -> (
+        GameEngine,
+        StackItem,
+        Vec<tricerules_card_model::ProgramOwnerId>,
+        ObjectId,
+        ObjectId,
+    ) {
+        use crate::state::{TriggerAbilityOrigin, TriggerUseKey};
+
+        const CARD_ID: &str = "controller_filtered_discard_program_fixture";
+        let card = r#"(
+            id: "controller_filtered_discard_program_fixture",
+            name: "Controller Filtered Discard Program Fixture",
+            face_id: "controller_filtered_discard_program_fixture",
+            types: ["Creature"], power: 2, toughness: 2,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "choose", kind: Choose(
+                        choice: "discard", chooser: Controller, optional: true,
+                        branches: [(
+                            branch_id: "discard_creature", presentation: Fallback,
+                            cost: DiscardCard(filter: Some(Creature)), requirement: Always,
+                            body: (steps: [(id: "branch_gain", kind: Perform(GainLife(amount: 2)))],
+                                yields: []),
+                        )],
+                        otherwise: (steps: [(id: "otherwise_gain", kind: Perform(GainLife(amount: 7)))],
+                            yields: []),
+                    )),
+                    (id: "tail_gain", kind: Perform(GainLife(amount: 3))),
+                ], yields: []), target_bindings: [])),
+            )],
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("the filtered-discard Program fixture compiles"),
+        ));
+        let decks = Some(vec![vec![CARD_ID.to_string(); 30]; 2]);
+        let mut engine = GameEngine::new(registry, 91_247, &[0, 1], 20, decks, true)
+            .expect("two-player filtered-discard Program fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+
+        let source = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("opening hand contains the fixture source");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("the fixture source enters the battlefield");
+        let candidate = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("another fixture creature remains in hand");
+        let other_hand_cards = engine.state.players[0].hand.clone();
+        for object_id in other_hand_cards.into_iter().filter(|id| *id != candidate) {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                object_id,
+                Zone::Graveyard,
+                None,
+            )
+            .expect("only the exact payment candidate remains in hand");
+        }
+
+        let face = registry
+            .get(CARD_ID)
+            .and_then(|definition| definition.face(0))
+            .expect("fixture face");
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("fixture triggered ability")
+            .clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: CARD_ID.into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(source, 0);
+        top.id = engine.state.next_object_id.saturating_add(1);
+        top.controller = 0;
+        top.card_id = CARD_ID.into();
+        top.ability_text = Some("Controller Filtered Discard Program Fixture trigger".into());
+        top.source_permanent_id = Some(source);
+        top.source_owner = Some(engine.state.objects[&source].owner);
+        top.source_zone_change = generation;
+        top.ability_index = Some(0);
+        top.triggered_ability = Some(ability);
+        top.trigger_use_key = Some(TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::Printed(definition),
+        });
+        top.is_triggered = true;
+        top.is_copy = false;
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("fixture trigger Program owner lookup")
+            .expect("the synthetic trigger owns a compiled Program");
+        engine.state.stack.push(top.clone());
+        (engine, top, owners, source, candidate)
+    }
+
     fn controller_tap_choose_fixture_for_players(
         player_ids: &[PlayerId],
     ) -> (
@@ -4701,6 +4829,316 @@ mod invariant_rollback_tests {
             "paid body and parent tail run once"
         );
         assert_eq!(engine.state.objects[&borrowed].zone, Zone::Graveyard);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn synthetic_program_choose_filtered_discard_payment_restores_same_candidates_after_observer_return(
+    ) {
+        use crate::state::PendingProgramChooseStage;
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, _source, candidate) =
+            controller_filtered_discard_choose_fixture();
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let initial_offer = initial_payment
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("optional filtered-discard payment offer");
+        assert_eq!(initial_offer.deciding_player_id, 0);
+        assert_eq!(initial_offer.choice_kind(), rv1::ChoiceKind::HandCards);
+        assert_eq!((initial_offer.min, initial_offer.max), (0, 1));
+        assert_eq!(initial_offer.candidate_object_ids, vec![candidate]);
+        let original_prompt_id = initial_offer.resolution_prompt_id;
+
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("the discard payment is suspended for the synthetic observer return");
+        assert_eq!(original_pending.deciding_player, 0);
+        let ResolutionContinuation::ProgramChoose { stack, choose } =
+            &original_pending.continuation
+        else {
+            panic!("saved filtered-discard payment keeps ProgramChoose");
+        };
+        assert!(choose.optional);
+        let original_program = format!("{:?}", stack.program);
+        let original_stack_id = stack.item.id;
+        let original_controller = stack.item.controller;
+        let original_owner = stack.item.source_owner;
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&candidate)
+            .copied()
+            .unwrap_or(0);
+        let PendingProgramChooseStage::PayingDiscardCardCost {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("the saved fixture is in its filtered-discard payment stage");
+        };
+        let saved_generations = candidate_generations.to_vec();
+        assert_eq!(saved_generations, vec![(candidate, generation)]);
+
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+        let observer = engine
+            .state
+            .pending_observer_return_batch
+            .take()
+            .expect("synthetic observer-return batch");
+        let mut restored = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                observer.suspended_resolution,
+                observer.suspended_replacement_event,
+                &mut restored,
+            )
+            .expect("restore the synthetic filtered-discard payment"));
+        engine
+            .publish_resolution_prompt_ids(&mut restored)
+            .expect("restoration gives the saved offer a fresh prompt ID");
+        let offers = restored
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(offers.len(), 1, "restoration republishes one private offer");
+        let restored_offer = offers[0];
+        assert_ne!(restored_offer.resolution_prompt_id, original_prompt_id);
+        assert_eq!(restored_offer.deciding_player_id, 0);
+        assert_eq!(restored_offer.choice_kind(), rv1::ChoiceKind::HandCards);
+        assert_eq!((restored_offer.min, restored_offer.max), (0, 1));
+        assert_eq!(restored_offer.candidate_object_ids, vec![candidate]);
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("restored payment remains pending for its original payer");
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(
+            pending.resolution_prompt_id.get(),
+            restored_offer.resolution_prompt_id
+        );
+        assert_eq!(pending.presentation.candidates, vec![candidate]);
+        let ResolutionContinuation::ProgramChoose { stack, choose } = &pending.continuation else {
+            panic!("restored payment retains ProgramChoose");
+        };
+        assert!(choose.optional);
+        assert_eq!(format!("{:?}", stack.program), original_program);
+        assert_eq!(stack.item.id, original_stack_id);
+        assert_eq!(stack.item.controller, original_controller);
+        assert_eq!(stack.item.source_owner, original_owner);
+        let PendingProgramChooseStage::PayingDiscardCardCost {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("restoration retains the filtered-discard cost stage");
+        };
+        assert_eq!(candidate_generations, &saved_generations);
+
+        let paid = nested_select_objects(&mut engine, vec![candidate]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(life_deltas, vec![2, 3], "paid body and tail each run once");
+        assert_eq!(engine.state.objects[&candidate].zone, Zone::Graveyard);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+
+        let before_replay = command_snapshot(&engine);
+        let replay = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: restored_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![candidate],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &replay).is_err());
+        assert!(
+            command_snapshot(&engine) == before_replay,
+            "stale prompt replay leaves engine state unchanged"
+        );
+    }
+
+    #[test]
+    fn synthetic_program_choose_filtered_discard_refreshes_returned_candidate_generation() {
+        use crate::state::PendingProgramChooseStage;
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, _source, candidate) =
+            controller_filtered_discard_choose_fixture();
+        let starting_life = engine.state.players[0].life;
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        let initial_offer = initial_payment
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("the selected branch opens its filtered-discard payment");
+        assert_eq!(initial_offer.deciding_player_id, 0);
+        assert_eq!(initial_offer.choice_kind(), rv1::ChoiceKind::HandCards);
+        assert_eq!((initial_offer.min, initial_offer.max), (0, 1));
+        assert_eq!(initial_offer.candidate_object_ids, vec![candidate]);
+        let old_prompt_id = initial_offer.resolution_prompt_id;
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&candidate)
+            .copied()
+            .unwrap_or(0);
+        let old_candidates = {
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            let ResolutionContinuation::ProgramChoose { choose, .. } = &pending.continuation else {
+                panic!("the original filtered-discard offer remains in ProgramChoose");
+            };
+            let PendingProgramChooseStage::PayingDiscardCardCost {
+                candidate_generations,
+                ..
+            } = &choose.stage
+            else {
+                panic!("the original offer is in its discard-cost stage");
+            };
+            candidate_generations.clone()
+        };
+        assert_eq!(old_candidates, vec![(candidate, old_generation)]);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            candidate,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the same physical candidate leaves the payer's hand");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            candidate,
+            Zone::Hand,
+            Some(0),
+        )
+        .expect("the same physical candidate returns to the payer's hand");
+        let current_generation = engine.state.zone_change_generation[&candidate];
+        assert_ne!(old_generation, current_generation);
+
+        let mut refreshed = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut refreshed)
+            .expect("the explicit refresh rebinds the current filtered-hand candidate");
+        engine
+            .publish_resolution_prompt_ids(&mut refreshed)
+            .expect("the changed candidate generation gets a fresh prompt ID");
+        let offers = refreshed
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(offers.len(), 1);
+        let refreshed_offer = offers[0];
+        assert_ne!(refreshed_offer.resolution_prompt_id, old_prompt_id);
+        assert_eq!(refreshed_offer.deciding_player_id, 0);
+        assert_eq!(refreshed_offer.choice_kind(), rv1::ChoiceKind::HandCards);
+        assert_eq!((refreshed_offer.min, refreshed_offer.max), (0, 1));
+        assert_eq!(refreshed_offer.candidate_object_ids, vec![candidate]);
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(pending.presentation.candidates, vec![candidate]);
+        assert_eq!(
+            pending.resolution_prompt_id.get(),
+            refreshed_offer.resolution_prompt_id
+        );
+        let ResolutionContinuation::ProgramChoose { choose, .. } = &pending.continuation else {
+            panic!("the refreshed offer stays in ProgramChoose");
+        };
+        let PendingProgramChooseStage::PayingDiscardCardCost {
+            candidate_generations,
+            ..
+        } = &choose.stage
+        else {
+            panic!("the refreshed offer stays in its discard-cost stage");
+        };
+        assert_eq!(
+            candidate_generations,
+            &vec![(candidate, current_generation)]
+        );
+
+        let before_stale_replay = command_snapshot(&engine);
+        let stale_replay = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: old_prompt_id,
+                    chosen_object_ids: vec![candidate],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &stale_replay).is_err());
+        assert!(
+            command_snapshot(&engine) == before_stale_replay,
+            "the invalidated prompt cannot consume the rebound physical candidate"
+        );
+
+        let paid = nested_select_objects(&mut engine, vec![candidate]);
+        assert_eq!(engine.state.players[0].life, starting_life + 5);
+        let life_deltas = paid
+            .events
+            .iter()
+            .filter_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            life_deltas,
+            vec![2, 3],
+            "paid body and parent tail run once"
+        );
+        assert_eq!(engine.state.objects[&candidate].zone, Zone::Graveyard);
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.stack.is_empty());
     }

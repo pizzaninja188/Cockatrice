@@ -12180,6 +12180,13 @@ mod attached_subject_tests {
         }
 
         fn engine_with_pending_choice(branches: Vec<ResolutionBranchDef>) -> GameEngine {
+            engine_with_pending_choice_before_offer(branches, |_| ()).0
+        }
+
+        fn engine_with_pending_choice_before_offer<T>(
+            branches: Vec<ResolutionBranchDef>,
+            setup_before_offer: impl FnOnce(&mut GameEngine) -> T,
+        ) -> (GameEngine, T, Vec<rv1::RuledEvent>) {
             let mut engine = GameEngine::new_with_default_decks(
                 tricerules_cards::registry::global(),
                 800_401,
@@ -12191,6 +12198,7 @@ mod attached_subject_tests {
             engine.state.opening = None;
             engine.state.turn_step = TurnStep::Main1;
             let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let setup_value = setup_before_offer(&mut engine);
             let mut item = quantity_item(
                 source,
                 vec![
@@ -12211,8 +12219,9 @@ mod attached_subject_tests {
             );
             item.trigger_context.affected_player = Some(1);
             let (effects, label) = engine.build_resolution_effects(&item);
+            let mut initial_offer_events = Vec::new();
             engine
-                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .run_effect_list(&item, &label, effects, 0, &mut initial_offer_events)
                 .unwrap();
             assert_eq!(
                 engine
@@ -12223,7 +12232,7 @@ mod attached_subject_tests {
                     .deciding_player,
                 1
             );
-            engine
+            (engine, setup_value, initial_offer_events)
         }
 
         fn depart_original_chooser(engine: &mut GameEngine) -> Vec<rv1::RuledEvent> {
@@ -12477,13 +12486,50 @@ mod attached_subject_tests {
 
         #[test]
         fn departing_chooser_abandons_an_unpaid_object_branch_and_resumes_otherwise_and_tail() {
-            let mut engine = engine_with_pending_choice(vec![branch(
-                "costed_discard",
-                ResolutionCost::DiscardCard { filter: None },
-                10,
-            )]);
-            let hand_before = engine.state.players[1].hand.clone();
+            let (mut engine, payable, initial_offer_events) =
+                engine_with_pending_choice_before_offer(
+                    vec![branch(
+                        "costed_sacrifice",
+                        ResolutionCost::SacrificePermanent {
+                            filter: TargetFilter {
+                                kind: TargetKind::Creature,
+                                controller: TargetController::You,
+                                ..Default::default()
+                            },
+                            source_only: false,
+                        },
+                        10,
+                    )],
+                    |engine| add_battlefield_object(engine, 1, "grizzly_bears"),
+                );
+            let first_offer = initial_offer_events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                    _ => None,
+                })
+                .expect("initial offer presents the payable sacrifice branch");
+            assert_eq!(first_offer.deciding_player_id, 1);
+            assert_eq!(
+                first_offer
+                    .resolution_branches
+                    .iter()
+                    .map(|branch| branch.branch_index)
+                    .collect::<Vec<_>>(),
+                [0],
+                "the payer's creature makes the costed branch selectable on its first offer"
+            );
             select_pending_branch(&mut engine);
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates,
+                [payable]
+            );
             assert!(matches!(
                 engine
                     .state
@@ -12499,6 +12545,12 @@ mod attached_subject_tests {
                     ..
                 }
             ));
+            let sacrifices_before = engine
+                .state
+                .turn_history
+                .current
+                .permanents_sacrificed
+                .len();
 
             let events = depart_original_chooser(&mut engine);
 
@@ -12507,7 +12559,16 @@ mod attached_subject_tests {
                 event.ev,
                 Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
             )));
-            assert_eq!(engine.state.players[1].hand, hand_before);
+            assert_eq!(engine.state.objects[&payable].zone, Zone::Battlefield);
+            assert_eq!(
+                engine
+                    .state
+                    .turn_history
+                    .current
+                    .permanents_sacrificed
+                    .len(),
+                sacrifices_before
+            );
             assert_eq!(engine.state.players[0].life, 26);
             assert_eq!(engine.state.players[2].life, 20);
         }
@@ -12577,7 +12638,6 @@ mod attached_subject_tests {
         let first = add_battlefield_object(&mut engine, 0, "hill_giant");
         let second = add_battlefield_object(&mut engine, 0, "hill_giant");
         let chosen = match cost {
-            ResolutionCost::DiscardCard { .. } => vec![engine.state.players[0].hand[0]],
             ResolutionCost::TapPermanents { .. } => vec![second, first],
             _ => vec![first],
         };
@@ -12626,7 +12686,6 @@ mod attached_subject_tests {
 
     fn payment_branch_costs() -> Vec<ResolutionCost> {
         vec![
-            ResolutionCost::DiscardCard { filter: None },
             ResolutionCost::SacrificePermanent {
                 filter: TargetFilter {
                     kind: TargetKind::Creature,
@@ -12670,12 +12729,7 @@ mod attached_subject_tests {
                 choice.candidate_object_ids.len(),
                 choice.candidate_card_ids.len()
             );
-            let expected_kind = match cost {
-                ResolutionCost::DiscardCard { .. } => rv1::ChoiceKind::HandCards,
-                ResolutionCost::SacrificePermanent { .. } => rv1::ChoiceKind::CostObjects,
-                _ => rv1::ChoiceKind::CostObjects,
-            };
-            assert_eq!(choice.choice_kind, expected_kind as i32);
+            assert_eq!(choice.choice_kind, rv1::ChoiceKind::CostObjects as i32);
             let generation = engine
                 .state
                 .zone_change_generation
@@ -12702,7 +12756,7 @@ mod attached_subject_tests {
                 })
                 .collect::<Vec<_>>();
             match cost {
-                ResolutionCost::DiscardCard { .. } | ResolutionCost::SacrificePermanent { .. } => {
+                ResolutionCost::SacrificePermanent { .. } => {
                     assert_eq!(engine.state.objects[&chosen[0]].zone, Zone::Graveyard);
                     assert_eq!(
                         engine.state.zone_change_generation[&chosen[0]],
@@ -12712,20 +12766,16 @@ mod attached_subject_tests {
                         batch.events[0].ev,
                         Some(rv1::ruled_event::Ev::PermanentMoved(_))
                     ));
-                    if matches!(cost, ResolutionCost::SacrificePermanent { .. }) {
-                        assert_eq!(logs[0], "P0 sacrifices Hill Giant.");
-                        assert_eq!(
-                            engine
-                                .state
-                                .turn_history
-                                .current
-                                .permanents_sacrificed
-                                .len(),
-                            1
-                        );
-                    } else {
-                        assert!(logs[0].starts_with("P0 discards "));
-                    }
+                    assert_eq!(logs[0], "P0 sacrifices Hill Giant.");
+                    assert_eq!(
+                        engine
+                            .state
+                            .turn_history
+                            .current
+                            .permanents_sacrificed
+                            .len(),
+                        1
+                    );
                 }
                 ResolutionCost::TapPermanents { .. } => {
                     assert!(chosen.iter().all(|oid| engine.state.objects[oid].tapped));

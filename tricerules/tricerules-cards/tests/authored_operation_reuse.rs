@@ -590,6 +590,80 @@ fn authored_karns_bastion_keeps_mana_and_program_proliferate_separate() {
     assert_perform(proliferate, SpellEffectKind::Proliferate);
 }
 
+#[test]
+fn authored_crypt_lurker_uses_optional_creature_sacrifice_or_discard_program() {
+    let registry = tricerules_cards::registry::global();
+    let face = registry
+        .get("crypt_lurker")
+        .expect("Crypt Lurker")
+        .primary_face();
+    let [trigger] = face.triggered_abilities.as_slice() else {
+        panic!("Crypt Lurker owns its one enters-the-battlefield trigger");
+    };
+    assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+    assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+
+    let program = ability_program("crypt_lurker", 0, false);
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.body.yields.is_empty());
+    let [choose] = program.body.steps.as_slice() else {
+        panic!("Crypt Lurker's trigger has one resultless Choose");
+    };
+    let CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choose.kind
+    else {
+        panic!("Crypt Lurker's trigger uses its compiled Program Choose");
+    };
+    assert_eq!(choice.as_str(), "crypt_lurker");
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [sacrifice, discard] = branches.as_slice() else {
+        panic!("the Program preserves both printed payment branches in order");
+    };
+    assert_eq!(sacrifice.branch_id.as_str(), "sacrifice_a_creature");
+    assert_eq!(
+        sacrifice.cost,
+        ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            source_only: false,
+        }
+    );
+    assert_eq!(discard.branch_id.as_str(), "discard_a_creature_card");
+    assert_eq!(
+        discard.cost,
+        ResolutionCost::DiscardCard {
+            filter: Some(CardTypeFilter::Creature),
+        }
+    );
+    for (branch, step_id) in [
+        (sacrifice, "draw_after_sacrifice"),
+        (discard, "draw_after_discard"),
+    ] {
+        assert!(branch.body.yields.is_empty());
+        let [draw] = branch.body.steps.as_slice() else {
+            panic!("each paid branch draws once");
+        };
+        assert_eq!(draw.id.as_str(), step_id);
+        assert_perform(
+            draw,
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            },
+        );
+    }
+}
+
 fn assert_single_sacrifice_choose<'a>(
     program: &'a CompiledProgram,
     expected_branch_id: &str,

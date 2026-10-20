@@ -8744,6 +8744,59 @@ fn legacy_ward_nested_choice_modal_and_grant_owners_require_programs() {
 }
 
 #[test]
+fn legacy_resolution_branch_discard_cost_requires_an_authored_program() {
+    fn definition(effect: &str) -> String {
+        format!(
+            r#"(id: "legacy_discard_branch_fixture", name: "Legacy Discard Branch Fixture",
+                face_id: "legacy_discard_branch_fixture", types: ["Creature"], power: 2, toughness: 2,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [{effect}], program: None,
+                    modal: None, targeting: None, may: false, intervening_if: None,
+                    triggers_only_once: false, max_triggers_per_turn: None)])"#
+        )
+    }
+
+    const CHOOSE: &str = r#"ChooseResolutionBranch(
+        chooser: Controller, optional: true, selection: PlayerChoice,
+        branches: [(branch_id: "discard_creature", presentation: Fallback,
+            cost: DiscardCard(filter: Some(Creature)), effects: [Draw(who: Controller, count: 1)])],
+        otherwise: [])"#;
+
+    let outer_free_choice = format!(
+        r#"ChooseResolutionBranch(
+            chooser: Controller, optional: false, selection: PlayerChoice,
+            branches: [(branch_id: "outer_free_branch", presentation: Fallback,
+                cost: None,
+                effects: [GrantTriggeredAbility(subject: Source, ability: (
+                    ability_id: "nested_costed_choice", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [{CHOOSE}],
+                    program: None, modal: None, targeting: None, may: false,
+                    intervening_if: None, triggers_only_once: false,
+                    max_triggers_per_turn: None,
+                ))])], otherwise: [])"#
+    );
+
+    for (label, effect) in [
+        ("direct", CHOOSE.to_string()),
+        (
+            "nested below a supported free legacy choice and granted trigger",
+            outer_free_choice,
+        ),
+    ] {
+        let ron = definition(&effect);
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&ron], &[])
+            .expect_err("legacy filtered-discard Choose branches are retired");
+        assert!(
+            error
+                .to_string()
+                .to_lowercase()
+                .contains("authored program"),
+            "the {label} legacy discard cost is rejected at the authored Program boundary: {error}"
+        );
+    }
+}
+
+#[test]
 fn all_legacy_modal_spell_owners_stay_on_legacy_dispatch() {
     let definition = r#"(id: "all_legacy_modal_fixture", name: "All Legacy Modal Fixture",
         face_id: "all_legacy_modal_fixture", mana_cost: "{0}", types: ["Instant"],
@@ -10561,6 +10614,155 @@ fn program_choose_admits_fixed_blight_only_for_controller_ability_programs() {
         compile("spell_blight_fixture", EffectContext::Spell, body).is_err(),
         "the Blight cost is not admitted on a spell program"
     );
+}
+
+#[test]
+fn program_choose_admits_optional_filtered_discard_for_ability_controller() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let compile = |context: EffectContext, body: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("program fixture parses");
+        let card_id = "crypt_lurker_choose_fixture";
+        let owner = match context {
+            EffectContext::Spell => {
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+            }
+            EffectContext::Ability => crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                card_id: card_id.into(),
+                face_id: crate::CardFaceId::new(card_id).unwrap(),
+                ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+            }),
+        };
+        CompiledProgram::compile(owner, context, &program)
+    };
+    let body = r#"(steps: [(id: "choose_crypt_lurker_branch", kind: Choose(
+        choice: "crypt_lurker", chooser: Controller, optional: true,
+        branches: [
+            (branch_id: "sacrifice_a_creature", presentation: Fallback,
+                cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
+                requirement: Always,
+                body: (steps: [(id: "draw_after_sacrifice", kind: Perform(
+                    Draw(who: Controller, count: 1)))], yields: [])),
+            (branch_id: "discard_a_creature_card", presentation: Fallback,
+                cost: DiscardCard(filter: Some(Creature)),
+                requirement: Always,
+                body: (steps: [(id: "draw_after_discard", kind: Perform(
+                    Draw(who: Controller, count: 1)))], yields: [])),
+        ],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+
+    let compiled = compile(EffectContext::Ability, body)
+        .expect("the optional ability Choose admits Crypt Lurker's filtered discard cost");
+    assert_eq!(compiled.context, EffectContext::Ability);
+    assert!(compiled.body.yields.is_empty());
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("Crypt Lurker has one resultless branch choice");
+    };
+    assert!(choose.outputs.is_empty());
+    let crate::primitives::CompiledInstructionKind::Choose {
+        choice,
+        chooser,
+        optional,
+        branches,
+        otherwise,
+    } = &choose.kind
+    else {
+        panic!("Crypt Lurker's effect is a typed Choose");
+    };
+    assert_eq!(choice.as_str(), "crypt_lurker");
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty() && otherwise.yields.is_empty());
+    let [sacrifice, discard] = branches.as_slice() else {
+        panic!("Crypt Lurker keeps its sacrifice and discard branches in order");
+    };
+    assert_eq!(sacrifice.branch_id.as_str(), "sacrifice_a_creature");
+    assert_eq!(
+        sacrifice.cost,
+        crate::primitives::ResolutionCost::SacrificePermanent {
+            filter: crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                controller: crate::primitives::TargetController::You,
+                ..Default::default()
+            },
+            source_only: false,
+        }
+    );
+    assert_eq!(discard.branch_id.as_str(), "discard_a_creature_card");
+    assert_eq!(
+        discard.cost,
+        crate::primitives::ResolutionCost::DiscardCard {
+            filter: Some(crate::primitives::CardTypeFilter::Creature),
+        }
+    );
+    for (branch, draw_id) in [
+        (sacrifice, "draw_after_sacrifice"),
+        (discard, "draw_after_discard"),
+    ] {
+        assert!(branch.body.yields.is_empty());
+        let [draw] = branch.body.steps.as_slice() else {
+            panic!("each paid branch draws exactly one card");
+        };
+        assert_eq!(draw.id.as_str(), draw_id);
+        assert!(draw.outputs.is_empty());
+        let crate::primitives::CompiledInstructionKind::Perform(effect) = &draw.kind else {
+            panic!("each paid branch's resultless body is one Draw");
+        };
+        assert_eq!(
+            **effect,
+            crate::primitives::SpellEffectKind::Draw {
+                who: crate::primitives::PlayerRecipient::Controller,
+                count: crate::primitives::Amount::Fixed(1),
+            }
+        );
+    }
+
+    let discard_only = |chooser: &str, optional: &str, filter: &str| {
+        format!(
+            r#"(steps: [(id: "choose_discard", kind: Choose(
+                choice: "discard", chooser: {chooser}, optional: {optional},
+                branches: [(branch_id: "discard_creature", presentation: Fallback,
+                    cost: DiscardCard(filter: {filter}), requirement: Always,
+                    body: (steps: [(id: "draw", kind: Perform(
+                        Draw(who: Controller, count: 1)))], yields: []))],
+                otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        )
+    };
+    for (label, context, invalid_body) in [
+        (
+            "mandatory payment",
+            EffectContext::Ability,
+            discard_only("Controller", "false", "Some(Creature)"),
+        ),
+        (
+            "SourceController chooser",
+            EffectContext::Ability,
+            discard_only("SourceController", "true", "Some(Creature)"),
+        ),
+        (
+            "unfiltered discard",
+            EffectContext::Ability,
+            discard_only("Controller", "true", "None"),
+        ),
+        (
+            "noncreature filter",
+            EffectContext::Ability,
+            discard_only("Controller", "true", "Some(Artifact)"),
+        ),
+        (
+            "spell program",
+            EffectContext::Spell,
+            discard_only("Controller", "true", "Some(Creature)"),
+        ),
+    ] {
+        assert!(
+            compile(context, &invalid_body).is_err(),
+            "Program filtered-discard admission rejects {label}"
+        );
+    }
 }
 
 #[test]

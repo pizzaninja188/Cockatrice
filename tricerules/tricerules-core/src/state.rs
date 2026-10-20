@@ -1351,6 +1351,11 @@ pub(crate) enum PendingProgramChooseStage {
         branch_id: ChoiceId,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
+    PayingDiscardCardCost {
+        selected_branch: usize,
+        branch_id: ChoiceId,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     PayingBlight {
         selected_branch: usize,
         branch_id: ChoiceId,

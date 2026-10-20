@@ -5582,7 +5582,11 @@ impl SpellEffectKind {
                                 );
                             }
                         }
-                        ResolutionCost::DiscardCard { .. } => {}
+                        ResolutionCost::DiscardCard { .. } => {
+                            return Err(
+                                "DiscardCard costs in flat ChooseResolutionBranch require an authored Program Choose branch".into(),
+                            );
+                        }
                         ResolutionCost::PutHandCardOnLibraryBottom => {
                             return Err(
                                 "hand-bottom costs require a typed Program Choose branch".into()
