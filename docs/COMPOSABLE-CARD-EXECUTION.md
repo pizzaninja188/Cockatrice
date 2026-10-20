@@ -146,9 +146,11 @@ Source-sacrifice receipts capture effective characteristics, including supertype
 before any selected permanent moves and attach those facts to the existing committed movement
 receipt; the receipt retains its original action, ObjectId, generation, instructed player, and
 provenance.
-Standstill's own count remains unfiltered. Existing effect-list `CardResultCount` remains on its
-legacy path. Bound `Sacrifice(Source)` and `Mill` are typed producer examples for this condition,
-not a claim that other cards are complete.
+Standstill's own count remains unfiltered. The flat `ChooseResolutionBranch` `CardResultCount`
+requirement was retired on 2026-10-20 after its card owners moved to typed Programs. Named Program
+`CardResultCount` and the `CountExpression` `CardsMatchingResult` family remain live; this records
+only the status of that branch requirement. Bound `Sacrifice(Source)` and `Mill` are typed producer
+examples for named Program conditions, not a claim that other cards are complete.
 Automated Standstill scenarios cover the missing-caster preflight, first successful sacrifice among
 two cast triggers, and an Abundance replacement park/resume/replay. Its complete definition and updated review map have independent semantic approval. This adds no card admission or protocol, relay, or client change.
 

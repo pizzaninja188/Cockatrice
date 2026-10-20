@@ -746,7 +746,7 @@ mod into_the_wilds_tests {
             for &oid in looked.iter().rev() {
                 engine.state.players[0].library.push_front(oid);
             }
-            let tail = super::super::synthetic_mill_result_count_tail();
+            let tail = super::super::synthetic_mill_receipt_gain_life_tail();
             let mut item = test_stack_item();
             item.card_id = "deploy_the_gatewatch".into();
             item.is_triggered = true;
@@ -838,7 +838,7 @@ mod into_the_wilds_tests {
                 );
             }
             assert!(engine.state.pending_resolution.is_none());
-            assert_eq!(engine.state.players[0].life, 23);
+            assert_eq!(engine.state.players[0].life, 21);
             for oid in selected {
                 assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);
                 assert!(engine.state.objects[&oid].tapped);
@@ -942,7 +942,7 @@ mod into_the_wilds_tests {
             let forest = library_card(&mut engine, "forest");
             engine.state.players[0].library.retain(|id| *id != forest);
             engine.state.players[0].library.push_front(forest);
-            let tail = super::super::synthetic_mill_result_count_tail();
+            let tail = super::super::synthetic_mill_receipt_gain_life_tail();
             let mut item = test_stack_item();
             item.card_id = "into_the_wilds".into();
             item.is_triggered = true;
@@ -1044,7 +1044,7 @@ mod into_the_wilds_tests {
             }
             assert!(engine.state.pending_resolution.is_none());
             assert_eq!(
-                engine.state.players[0].life, 23,
+                engine.state.players[0].life, 21,
                 "saved result admits tail exactly once"
             );
             assert!(!batches.iter().flat_map(|batch| &batch.events).any(|event|

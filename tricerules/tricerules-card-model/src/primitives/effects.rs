@@ -770,15 +770,6 @@ pub enum ResolutionBranchRequirement {
     /// A linked cast-time choice recorded on this spell's stack item (CR 607.2i). Kicker and
     /// behold effects remain true even if the object used for the choice later changes zones.
     CastCostReceipt(CastCostReceiptCondition),
-    /// Compare the size of an exact paid-or-moved card cohort. Grab the Prize reads its discard
-    /// payment; Soul-Shackled Zombie and Fanatic of the Harrowing read a preceding instruction.
-    CardResultCount {
-        filter: CardResultFilter,
-        #[serde(default)]
-        min: Option<u32>,
-        #[serde(default)]
-        max: Option<u32>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -4541,23 +4532,6 @@ impl SpellEffectKind {
                     );
                 }
             }
-            if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = effect {
-                for branch in branches {
-                    if let ResolutionBranchRequirement::CardResultCount { filter, .. } =
-                        &branch.requirement
-                    {
-                        if filter.source == CardResultSource::PreviousEffect
-                            && !previous
-                                .is_some_and(|effect| produces_card_result(effect, filter.action))
-                        {
-                            return Err(
-                                "PreviousEffect card result requires an immediately preceding compatible card-moving effect"
-                                    .into(),
-                            );
-                        }
-                    }
-                }
-            }
             if let SpellEffectKind::CreateReflexiveTrigger {
                 when: Some(ResolutionReceiptCondition::CountersPlaced { counter, object: _ }),
                 ..
@@ -5623,19 +5597,6 @@ impl SpellEffectKind {
                         &branch.requirement
                     {
                         condition.validate_without_self_entry_spell()?;
-                    }
-                    if let ResolutionBranchRequirement::CardResultCount { min, max, .. } =
-                        &branch.requirement
-                    {
-                        if min.is_none() && max.is_none() {
-                            return Err("card result count requires a minimum or maximum".into());
-                        }
-                        if min
-                            .zip(*max)
-                            .is_some_and(|(minimum, maximum)| minimum > maximum)
-                        {
-                            return Err("card result count minimum cannot exceed maximum".into());
-                        }
                     }
                     for effect in &branch.effects {
                         if effect.needs_target() {

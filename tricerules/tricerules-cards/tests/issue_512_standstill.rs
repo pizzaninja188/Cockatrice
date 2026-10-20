@@ -185,10 +185,9 @@ fn standstill_named_count_uses_typed_cohorts_and_rejects_missing_or_wrong_result
 }
 
 #[test]
-fn legacy_previous_effect_sacrifice_count_still_requires_an_immediate_compatible_producer() {
-    // Preserve the existing effect-list contract separately from Standstill's new named Program
-    // result: a PreviousEffect count reads only the immediately preceding matching movement.
-    let legacy = r#"(
+fn previous_effect_sacrifice_amount_requires_an_immediate_compatible_producer() {
+    // Amount result counts still read only the immediately preceding matching movement.
+    let fixture = r#"(
         id: "standstill_legacy_receipt_fixture",
         name: "Standstill Legacy Receipt Fixture",
         face_id: "standstill_legacy_receipt_fixture",
@@ -199,29 +198,10 @@ fn legacy_previous_effect_sacrifice_count_still_requires_an_immediate_compatible
             trigger: WhenSelfEntersBattlefield,
             effect: [
                 SacrificeAll(players: Controller, filter: (kind: AnyPermanent)),
-                ChooseResolutionBranch(
-                    selection: FirstApplicable,
-                    branches: [
-                        (
-                            branch_id: "after_sacrifice",
-                            presentation: Fallback,
-                            cost: None,
-                            requirement: CardResultCount(
-                                filter: (source: PreviousEffect, action: Sacrifice,
-                                    players: Controller, card_type: None),
-                                min: Some(1), max: None,
-                            ),
-                            effects: [GainLife(amount: 1)],
-                        ),
-                        (
-                            branch_id: "no_sacrifice",
-                            presentation: Fallback,
-                            cost: None,
-                            requirement: Always,
-                            effects: [],
-                        ),
-                    ],
-                ),
+                GainLife(amount: Count(CardsMatchingResult(filter: (
+                    source: PreviousEffect, action: Sacrifice,
+                    players: Controller, card_type: None,
+                )))),
             ],
             modal: None,
             targeting: None,
@@ -232,13 +212,13 @@ fn legacy_previous_effect_sacrifice_count_still_requires_an_immediate_compatible
         )],
     )"#;
     assert!(
-        CardRegistry::from_chunks_and_tokens(&[legacy], &[]).is_ok(),
-        "legacy PreviousEffect accepts the immediately preceding controller SacrificeAll cohort"
+        CardRegistry::from_chunks_and_tokens(&[fixture], &[]).is_ok(),
+        "PreviousEffect Count accepts the immediately preceding controller SacrificeAll cohort"
     );
 
-    let wrong_action = legacy.replace("action: Sacrifice", "action: Discard");
+    let wrong_action = fixture.replace("action: Sacrifice", "action: Discard");
     assert_ne!(
-        wrong_action, legacy,
+        wrong_action, fixture,
         "the action replacement must take effect"
     );
     assert!(
@@ -246,16 +226,16 @@ fn legacy_previous_effect_sacrifice_count_still_requires_an_immediate_compatible
         "a PreviousEffect discard count cannot read a sacrifice cohort"
     );
 
-    let missing_producer = legacy.replace(
+    let missing_producer = fixture.replace(
         "SacrificeAll(players: Controller, filter: (kind: AnyPermanent)),",
         "",
     );
     assert_ne!(
-        missing_producer, legacy,
+        missing_producer, fixture,
         "the missing-producer replacement must take effect"
     );
     assert!(
         CardRegistry::from_chunks_and_tokens(&[&missing_producer], &[]).is_err(),
-        "legacy PreviousEffect does not infer an absent sacrifice producer"
+        "PreviousEffect Count does not infer an absent sacrifice producer"
     );
 }

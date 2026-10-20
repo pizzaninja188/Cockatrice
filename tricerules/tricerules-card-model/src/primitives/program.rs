@@ -1487,12 +1487,6 @@ impl Compiler<'_> {
                                 }
                                 CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters
                             }
-                            ResolutionBranchRequirement::CardResultCount { .. } => {
-                                return Err(format!(
-                                    "Choose instruction '{}' does not support CardResultCount requirements",
-                                    instruction.id
-                                ));
-                            }
                         };
 
                         let (body, body_types) = self.compile_block(&branch.body, &names)?;

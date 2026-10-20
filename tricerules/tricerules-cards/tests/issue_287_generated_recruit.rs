@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
-    CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, InstructionKind,
-    PlayerRecipient, ProgramResultCondition, RelativePlayerSet, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
+    CardTypeFilter, InstructionKind, PlayerRecipient, ProgramResultCondition, RelativePlayerSet,
+    SpellEffectKind,
 };
 use tricerules_cards::{
-    AbilityDefinitionId, AbilityId, AbilityPresentation, Amount, CardFaceId, ChoiceId,
-    ProgramOwnerId, TriggerCondition,
+    AbilityDefinitionId, AbilityId, AbilityPresentation, Amount, CardFaceId, ProgramOwnerId,
+    TriggerCondition,
 };
 
 #[test]
@@ -129,76 +128,51 @@ fn issue_287_registers_both_generated_recruit_etb_cards_with_exact_programs() {
 }
 
 #[test]
-fn issue_287_recruit_assembly_requires_the_typed_discard_result_producer() {
-    // The exact assembly the generator emits is valid...
-    let soldier = ResolutionBranchRequirement::CardResultCount {
-        filter: CardResultFilter {
-            source: CardResultSource::PreviousEffect,
-            action: CardResultAction::Discard,
-            players: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Nonland),
-        },
-        min: Some(1),
-        max: None,
+fn issue_287_recruit_named_count_requires_its_bound_discard_result() {
+    // The first test verifies the exact registered owner compiles its valid named Discard result.
+    // Mutate that same generated definition to preserve missing and incompatible producer checks.
+    let source = include_str!("../data/generated/l/long_lake_nuisance.ron");
+    let token = include_str!("../data/tokens/human_soldier_w_1_1.ron");
+    let registry_from = |card: &str| {
+        tricerules_cards::registry::CardRegistry::from_chunks_and_tokens(&[card], &[token])
     };
-    let branch = tricerules_cards::primitives::ResolutionBranchDef {
-        branch_id: ChoiceId::new("create_a_soldier").unwrap(),
-        presentation: AbilityPresentation::Fallback,
-        runtime_fallback: None,
-        cost: ResolutionCost::None,
-        requirement: soldier.clone(),
-        effects: vec![SpellEffectKind::CreateTokens {
-            token: "human_soldier_w_1_1".into(),
-            count: Amount::Fixed(1),
-            who: PlayerRecipient::Controller,
-            tapped: false,
-            sacrifice_timing: None,
-        }],
-    };
-    let branch_effect = SpellEffectKind::ChooseResolutionBranch {
-        chooser: PlayerRecipient::Controller,
-        optional: false,
-        selection: ResolutionBranchSelection::FirstApplicable,
-        branches: vec![
-            branch,
-            tricerules_cards::primitives::ResolutionBranchDef {
-                branch_id: ChoiceId::new("no_soldier").unwrap(),
-                presentation: AbilityPresentation::Fallback,
-                runtime_fallback: None,
-                cost: ResolutionCost::None,
-                requirement: ResolutionBranchRequirement::Always,
-                effects: Vec::new(),
-            },
-        ],
-        otherwise: Vec::new(),
-    };
-    assert_eq!(
-        SpellEffectKind::validate_list(&[
-            SpellEffectKind::Draw {
-                who: PlayerRecipient::Controller,
-                count: Amount::Fixed(1),
-            },
-            SpellEffectKind::Discard {
-                who: PlayerRecipient::Controller,
-                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
-            },
-            branch_effect.clone(),
-        ]),
-        Ok(())
+    registry_from(source).expect("the unmodified generated Recruit compiles with its token");
+
+    let missing_producer = source.replace(
+        ",(id:\"discard_one\",bind:[\"discarded\"],input:None,kind:Perform(Discard(who:Controller,quantity:Exact(1))))",
+        "",
+    );
+    assert_ne!(
+        missing_producer, source,
+        "the producer removal must take effect"
+    );
+    let error = registry_from(&missing_producer)
+        .expect_err("the named condition cannot read a missing Discard result");
+    assert!(
+        matches!(
+            &error,
+            tricerules_cards::registry::RegistryError::InvalidCard { reason, .. }
+                if reason.contains("result 'discarded' is not in scope")
+        ),
+        "expected an out-of-scope Discard result, got {error:?}"
     );
 
-    // ...and a branch that cannot read an immediately preceding discard result is rejected, so a
-    // malformed configuration can never silently create the token without the discard dependency.
-    assert_eq!(
-        SpellEffectKind::validate_list(&[
-            SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1),
-            },
-            branch_effect,
-        ]),
-        Err(
-            "PreviousEffect card result requires an immediately preceding compatible card-moving effect"
-                .into()
-        )
+    let incompatible_producer = source.replace(
+        "kind:Perform(Discard(who:Controller,quantity:Exact(1)))",
+        "kind:Perform(Mill(who:Controller,count:1))",
+    );
+    assert_ne!(
+        incompatible_producer, source,
+        "the incompatible producer replacement must take effect"
+    );
+    let error = registry_from(&incompatible_producer)
+        .expect_err("a named Discard count cannot read a Mill result");
+    assert!(
+        matches!(
+            &error,
+            tricerules_cards::registry::RegistryError::InvalidCard { reason, .. }
+                if reason.contains("result 'discarded' is not a compatible discard result")
+        ),
+        "expected an incompatible typed result, got {error:?}"
     );
 }

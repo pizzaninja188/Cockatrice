@@ -1,7 +1,7 @@
 //! Issue #287: generated ETB Recruit (CR 701.70) draws, takes a private mandatory discard, and
 //! creates exactly one 1/1 white Human Soldier token only when the authoritative discard result
 //! contains a nonland card. The implementation reuses the typed `DrawDiscard` instruction plus the
-//! result-carrying `CardResultCount` resolution branch; these scenarios prove the observable
+//! named Program discard-result condition; these scenarios prove the observable
 //! behavior, the edge cases, the CR 701.9c unrevealed hidden-zone replacement, and the
 //! choosing-player boundaries.
 use crate::helpers::ScenarioCommandExt;

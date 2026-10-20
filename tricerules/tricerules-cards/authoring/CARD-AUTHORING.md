@@ -686,8 +686,10 @@ then keeps its committed Battlefield movement provenance, action, ObjectId, gene
 instructed player. The predicate has no ambient `PreviousEffect` or `Payment` source or
 action/player selector. `Sacrifice(Source)` in an ability Program, `Mill`, and Grab the Prize's
 imported discard are typed producer examples; this compiler surface does not establish complete-card
-readiness for other owners. The effect-list `CardResultCount` form remains a separate legacy
-surface.
+readiness for other owners. The flat `ChooseResolutionBranch` `CardResultCount` requirement was
+retired on 2026-10-20 after its card owners moved to typed Programs. Named Program
+`ProgramResultCondition::CardResultCount` and `CountExpression` result-count consumers remain live;
+this retirement covers that branch requirement only.
 
 `ChooseLinkedExiledCard` has one authored Program shape: a mandatory (`optional: false`)
 ability-owned `Perform` leaf with destination `OwnerGraveyard`. The result slot is a typed

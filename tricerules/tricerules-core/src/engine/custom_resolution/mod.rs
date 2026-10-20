@@ -38,38 +38,21 @@ mod trigger_choices;
 mod ward;
 
 #[cfg(test)]
-fn synthetic_mill_result_count_tail() -> tricerules_card_model::primitives::SpellEffectKind {
+fn synthetic_mill_receipt_gain_life_tail() -> tricerules_card_model::primitives::SpellEffectKind {
     use tricerules_card_model::primitives::{
-        Amount, CardResultAction, CardResultFilter, CardResultSource, PlayerRecipient,
-        RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
-        ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
+        Amount, CardResultAction, CardResultFilter, CardResultSource, CountExpression,
+        RelativePlayerSet, SpellEffectKind,
     };
 
-    SpellEffectKind::ChooseResolutionBranch {
-        chooser: PlayerRecipient::Controller,
-        optional: false,
-        selection: ResolutionBranchSelection::FirstApplicable,
-        branches: vec![ResolutionBranchDef {
-            branch_id: tricerules_card_model::ChoiceId::new("synthetic_mill_result")
-                .expect("valid synthetic test branch id"),
-            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-            runtime_fallback: None,
-            cost: ResolutionCost::None,
-            requirement: ResolutionBranchRequirement::CardResultCount {
-                filter: CardResultFilter {
-                    source: CardResultSource::PreviousEffect,
-                    action: CardResultAction::Mill,
-                    players: RelativePlayerSet::Controller,
-                    card_type: None,
-                },
-                min: Some(1),
-                max: None,
+    SpellEffectKind::GainLife {
+        amount: Amount::Count(CountExpression::CardsMatchingResult {
+            filter: CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Mill,
+                players: RelativePlayerSet::Controller,
+                card_type: None,
             },
-            effects: vec![SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3),
-            }],
-        }],
-        otherwise: Vec::new(),
+        }),
     }
 }
 

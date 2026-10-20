@@ -704,7 +704,6 @@ pub(super) fn may_behold(
 pub(in crate::engine) fn resolution_branch_is_live(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
     deciding_player: i32,
     branch: &ResolutionBranchDef,
 ) -> bool {
@@ -744,10 +743,6 @@ pub(in crate::engine) fn resolution_branch_is_live(
         ResolutionBranchRequirement::CastCostReceipt(condition) => {
             top.cast_cost_condition_matches(condition)
         }
-        ResolutionBranchRequirement::CardResultCount { filter, min, max } => {
-            let count = card_result_count(engine, top, previous_result, filter);
-            min.is_none_or(|minimum| count >= minimum) && max.is_none_or(|maximum| count <= maximum)
-        }
     };
     let required_candidates = match branch.cost {
         ResolutionCost::None | ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => 0,
@@ -783,7 +778,7 @@ pub(in crate::engine) fn resolution_branch_is_selectable(
         .player_idx(original_chooser)
         .is_some_and(|index| !engine.state.players[index].has_lost);
     (original_chooser_live || branch.cost == ResolutionCost::None)
-        && resolution_branch_is_live(engine, top, previous_result, deciding_player, branch)
+        && resolution_branch_is_live(engine, top, deciding_player, branch)
         && (!check_draw_capacity
             || branch.cost != ResolutionCost::None
             || direct_draw_effect_is_selectable(engine, top, previous_result, &branch.effects)

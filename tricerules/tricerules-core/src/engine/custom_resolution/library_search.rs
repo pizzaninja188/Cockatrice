@@ -3422,7 +3422,7 @@ mod tests {
             *search_count = 2;
             *count_by_cast_cost = None;
             *reveal = false;
-            let tail = super::super::synthetic_mill_result_count_tail();
+            let tail = super::super::synthetic_mill_receipt_gain_life_tail();
             let mut item = test_stack_item();
             item.card_id = "myriad_landscape".into();
             item.ability_text = Some("search plus sentinel".into());
@@ -3535,7 +3535,7 @@ mod tests {
             }
             assert!(engine.state.pending_resolution.is_none());
             assert_eq!(
-                engine.state.players[0].life, 23,
+                engine.state.players[0].life, 21,
                 "saved previous result admits the sentinel tail exactly once, count {count}"
             );
             assert_eq!(batches.iter().flat_map(|batch| &batch.events).filter(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library.")).count(), 1);

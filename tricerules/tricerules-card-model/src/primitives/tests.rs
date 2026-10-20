@@ -10777,14 +10777,6 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction",
         ),
         (
-            "implicit card-result requirement",
-            "Controller",
-            "None",
-            "CardResultCount(filter: (source: PreviousEffect, action: Discard, players: Controller, card_type: None), min: Some(1), max: None)",
-            "None",
-            "does not support CardResultCount requirements",
-        ),
-        (
             "Void game-condition requirement remains unsupported for Choose",
             "Controller",
             "None",
@@ -10804,6 +10796,39 @@ fn program_choose_rejects_unsupported_admission_shapes() {
         let error = invalid_program_reason(&definition(chooser, cost, requirement, input));
         assert!(error.contains(expected), "{label}: {error}");
     }
+}
+
+#[test]
+fn registry_rejects_the_retired_card_result_count_branch_requirement() {
+    let card = r#"(
+        id: "retired_card_result_count_requirement",
+        name: "Retired Card Result Count Requirement",
+        face_id: "retired_card_result_count_requirement",
+        types: ["Sorcery"],
+        spell_effect: [ChooseResolutionBranch(
+            selection: FirstApplicable,
+            branches: [(
+                branch_id: "paid_discard",
+                presentation: Fallback,
+                cost: None,
+                requirement: CardResultCount(
+                    filter: (source: Payment, action: Discard, players: Controller, card_type: None),
+                    min: Some(1),
+                ),
+                effects: [],
+            )],
+        )],
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
+        .expect_err("the retired branch requirement must fail during RON deserialization");
+    assert!(
+        matches!(
+            &error,
+            crate::registry::RegistryError::Ron(error)
+                if error.to_string().contains("CardResultCount")
+        ),
+        "expected an unknown retired variant during parse, got {error:?}"
+    );
 }
 
 #[test]

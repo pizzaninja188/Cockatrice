@@ -850,27 +850,12 @@ mod tests {
             face_id: "bad_payment_result",
             mana_cost: "{1}",
             types: ["Sorcery"],
-            spell_effect: [ChooseResolutionBranch(
-                selection: FirstApplicable,
-                branches: [
-                    (
-                        branch_id: "paid_discard",
-                        presentation: Fallback,
-                        cost: None,
-                        requirement: CardResultCount(
-                            filter: (
-                                source: Payment,
-                                action: Discard,
-                                players: Controller,
-                                card_type: None,
-                            ),
-                            min: Some(1),
-                        ),
-                        effects: [],
-                    ),
-                    (branch_id: "fallback_branch", presentation: Fallback, cost: None, requirement: Always, effects: []),
-                ],
-            )],
+            spell_effect: [GainLife(amount: Count(CardsMatchingResult(filter: (
+                source: Payment,
+                action: Discard,
+                players: Controller,
+                card_type: None,
+            ))))],
         )"#;
 
         let error = super::from_chunks(&[card]).expect_err("missing discard cost");
@@ -888,10 +873,34 @@ mod tests {
                     options: [DiscardCard(option_id: "discard", presentation: Fallback)],
                 )],
                 spell_effect:"#,
-            )
-            .replace("effects: []", "effects: [GainLife(amount: 1)]");
+            );
         super::from_chunks(&[&cast_option])
             .expect("a discard cast-cost option backs Payment discard results");
+
+        let activated = r#"(
+            id: "activated_payment_result",
+            name: "Activated Payment Result",
+            face_id: "activated_payment_result",
+            types: ["Artifact"],
+            activated_abilities: [(
+                ability_id: "activated_01",
+                presentation: Fallback,
+                costs: [Discard],
+                effect: [GainLife(amount: Count(CardsMatchingResult(filter: (
+                    source: Payment,
+                    action: Discard,
+                    players: Controller,
+                    card_type: None,
+                ))))],
+            )],
+        )"#;
+        super::from_chunks(&[activated])
+            .expect("an activated ability's own discard cost backs its Payment result");
+
+        let wrong_activated_cost = activated.replace("costs: [Discard]", "costs: [Tap]");
+        let error = super::from_chunks(&[&wrong_activated_cost])
+            .expect_err("an activated ability cannot borrow a discard receipt from another cost");
+        assert!(error.to_string().contains("compatible card cost"));
     }
 
     #[test]

@@ -1044,12 +1044,6 @@ fn validate_effect_payment_results(
     } = effect
     {
         for branch in branches {
-            if let ResolutionBranchRequirement::CardResultCount { filter, .. } = &branch.requirement
-            {
-                if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
-                    return Err("Payment card result requires a compatible card cost".into());
-                }
-            }
             for nested in &branch.effects {
                 validate_effect_payment_results(allowed, nested)?;
             }
