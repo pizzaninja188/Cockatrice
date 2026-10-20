@@ -1221,6 +1221,43 @@ impl GameEngine {
                 ));
             }
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key,
+                action,
+                stage: crate::state::PendingLinkedExileChoiceStage::ChoosingDelegate { .. },
+                ..
+            } if self.is_mandatory_program_linked_owner_graveyard_choice(stack, key, *action)
+        ) {
+            return self.select_linked_exile_delegate(pending, answer, decision);
+        }
+        let program_linked_owner_graveyard_choice = match &pending.continuation {
+            ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key,
+                action,
+                stage: crate::state::PendingLinkedExileChoiceStage::Selecting { .. },
+                ..
+            } => self.is_mandatory_program_linked_owner_graveyard_choice(stack, key, *action),
+            _ => false,
+        };
+        if program_linked_owner_graveyard_choice
+            && (decision != rv1::ResolutionChoiceDecision::Unspecified
+                || answer.selected_branch_index != 0
+                || !answer.chosen_player_ids.is_empty()
+                || answer.cast_spell.is_some()
+                || answer.chosen_combat_defender.is_some()
+                || answer.payment.is_some()
+                || !answer.restricted_mana.is_empty()
+                || answer.spell_cast_announcement.is_some())
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "linked Exile choice contains unrelated answer fields",
+            ));
+        }
         if decision != rv1::ResolutionChoiceDecision::Unspecified {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(

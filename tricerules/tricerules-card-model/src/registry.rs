@@ -2416,13 +2416,27 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
     }
 }
 
-fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[SpellEffectKind])> {
+fn face_linked_exile_abilities(
+    face: &CardFace,
+) -> Vec<(
+    &crate::AbilityId,
+    &[SpellEffectKind],
+    Option<&crate::CardProgram>,
+)> {
     let mut abilities = Vec::new();
     for ability in face_activated_abilities(face) {
-        abilities.push((&ability.ability_id, ability.effect.as_slice()));
+        abilities.push((
+            &ability.ability_id,
+            ability.effect.as_slice(),
+            ability.program.as_ref(),
+        ));
     }
     for ability in face_triggered_abilities(face) {
-        abilities.push((&ability.ability_id, ability.effect.as_slice()));
+        abilities.push((
+            &ability.ability_id,
+            ability.effect.as_slice(),
+            ability.program.as_ref(),
+        ));
     }
     for ability in face_static_abilities(face) {
         match &ability.definition {
@@ -2437,10 +2451,18 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
                 ..
             } => {
                 for granted in activated_abilities {
-                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                    abilities.push((
+                        &granted.ability_id,
+                        granted.effect.as_slice(),
+                        granted.program.as_ref(),
+                    ));
                 }
                 for granted in triggered_abilities {
-                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                    abilities.push((
+                        &granted.ability_id,
+                        granted.effect.as_slice(),
+                        granted.program.as_ref(),
+                    ));
                 }
             }
             StaticAbilityDef::GrantActivatedAbilityToPermanents {
@@ -2448,7 +2470,11 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
                 ..
             } => {
                 for granted in activated_abilities {
-                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                    abilities.push((
+                        &granted.ability_id,
+                        granted.effect.as_slice(),
+                        granted.program.as_ref(),
+                    ));
                 }
             }
             StaticAbilityDef::GrantTriggeredAbilityToPermanents {
@@ -2456,7 +2482,11 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
                 ..
             } => {
                 for granted in triggered_abilities {
-                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                    abilities.push((
+                        &granted.ability_id,
+                        granted.effect.as_slice(),
+                        granted.program.as_ref(),
+                    ));
                 }
             }
             StaticAbilityDef::ConditionalPermanentTransformation {
@@ -2464,7 +2494,11 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
                 ..
             } => {
                 for granted in triggered_abilities {
-                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                    abilities.push((
+                        &granted.ability_id,
+                        granted.effect.as_slice(),
+                        granted.program.as_ref(),
+                    ));
                 }
             }
             _ => {}
@@ -2473,88 +2507,135 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
     abilities
 }
 
-fn collect_return_linked_exile_uses(
+fn visit_authored_program_effects(
+    block: &crate::primitives::AuthoredBlock,
+    visit: &mut impl FnMut(&SpellEffectKind) -> Result<(), String>,
+) -> Result<(), String> {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            crate::primitives::InstructionKind::Perform(effect) => visit(effect)?,
+            crate::primitives::InstructionKind::If { yes, no, .. }
+            | crate::primitives::InstructionKind::IfResult { yes, no, .. } => {
+                visit_authored_program_effects(yes, visit)?;
+                visit_authored_program_effects(no, visit)?;
+            }
+            crate::primitives::InstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    visit_authored_program_effects(&branch.body, visit)?;
+                }
+                visit_authored_program_effects(otherwise, visit)?;
+            }
+            crate::primitives::InstructionKind::ImportCastPayment => {}
+        }
+    }
+    Ok(())
+}
+
+fn visit_linked_exile_ability_effects(
     effects: &[SpellEffectKind],
-    returns: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+    program: Option<&crate::CardProgram>,
+    visit: &mut impl FnMut(&SpellEffectKind) -> Result<(), String>,
 ) -> Result<(), String> {
     for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            if let SpellEffectKind::ReturnLinkedExiledCards {
-                producer_ability_id,
-                linked_exile_id,
-                ..
-            } = effect
-            {
-                returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
-            }
-            Ok(())
+        visit_scoped_grant_effect(effect, visit)?;
+    }
+    if let Some(program) = program {
+        visit_authored_program_effects(&program.body, &mut |effect| {
+            visit_scoped_grant_effect(effect, visit)
         })?;
     }
     Ok(())
+}
+
+fn collect_program_linked_exile_uses(
+    program: &crate::CardProgram,
+    uses: &mut HashMap<String, (u32, u32)>,
+) -> Result<(), String> {
+    visit_authored_program_effects(&program.body, &mut |effect| {
+        collect_linked_exile_uses(effect, uses);
+        Ok(())
+    })
+}
+
+fn collect_return_linked_exile_uses(
+    effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
+    returns: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+) -> Result<(), String> {
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::ReturnLinkedExiledCards {
+            producer_ability_id,
+            linked_exile_id,
+            ..
+        } = effect
+        {
+            returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
+        }
+        Ok(())
+    })
 }
 
 fn collect_return_other_linked_exile_uses(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     returns: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
 ) -> Result<(), String> {
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            if let SpellEffectKind::ReturnOtherLinkedExiledCards {
-                producer_ability_id,
-                linked_exile_id,
-            } = effect
-            {
-                returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
-            }
-            Ok(())
-        })?;
-    }
-    Ok(())
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::ReturnOtherLinkedExiledCards {
+            producer_ability_id,
+            linked_exile_id,
+        } = effect
+        {
+            returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
+        }
+        Ok(())
+    })
 }
 
 fn collect_choose_linked_exile_uses(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     choices: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
 ) -> Result<(), String> {
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            if let SpellEffectKind::ChooseLinkedExiledCard {
-                producer_ability_id,
-                linked_exile_id,
-                ..
-            }
-            | SpellEffectKind::PlayLinkedExiledCard {
-                producer_ability_id,
-                linked_exile_id,
-                ..
-            } = effect
-            {
-                choices.push((producer_ability_id.clone(), linked_exile_id.clone()));
-            }
-            Ok(())
-        })?;
-    }
-    Ok(())
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::ChooseLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            ..
+        }
+        | SpellEffectKind::PlayLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            ..
+        } = effect
+        {
+            choices.push((producer_ability_id.clone(), linked_exile_id.clone()));
+        }
+        Ok(())
+    })
 }
 
 fn ability_has_linked_graveyard_exile_producer(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     linked_exile_id: &crate::AbilityLinkId,
 ) -> Result<bool, String> {
     let mut found = false;
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            if let SpellEffectKind::MoveGraveyardCards {
-                destination: crate::primitives::GraveyardDestination::Exile,
-                linked_exile_id: Some(effect_link_id),
-                ..
-            } = effect
-            {
-                found |= effect_link_id == linked_exile_id;
-            }
-            Ok(())
-        })?;
-    }
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::MoveGraveyardCards {
+            destination: crate::primitives::GraveyardDestination::Exile,
+            linked_exile_id: Some(effect_link_id),
+            ..
+        } = effect
+        {
+            found |= effect_link_id == linked_exile_id;
+        }
+        Ok(())
+    })?;
     Ok(found)
 }
 
@@ -2562,15 +2643,15 @@ fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String>
     let abilities = face_linked_exile_abilities(face);
     let mut returns = Vec::new();
     let mut other_returns = Vec::new();
-    for (_, effects) in &abilities {
-        collect_return_linked_exile_uses(effects, &mut returns)?;
-        collect_return_other_linked_exile_uses(effects, &mut other_returns)?;
+    for (_, effects, program) in &abilities {
+        collect_return_linked_exile_uses(effects, *program, &mut returns)?;
+        collect_return_other_linked_exile_uses(effects, *program, &mut other_returns)?;
     }
     for (producer_ability_id, linked_exile_id) in returns {
         let mut matching_producers = 0;
-        for (ability_id, effects) in &abilities {
+        for (ability_id, effects, program) in &abilities {
             if **ability_id == producer_ability_id
-                && ability_has_linked_graveyard_exile_producer(effects, &linked_exile_id)?
+                && ability_has_linked_graveyard_exile_producer(effects, *program, &linked_exile_id)?
             {
                 matching_producers += 1;
             }
@@ -2584,9 +2665,13 @@ fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String>
     }
     for (producer_ability_id, linked_exile_id) in other_returns {
         let mut matching_producers = 0;
-        for (ability_id, effects) in &abilities {
+        for (ability_id, effects, program) in &abilities {
             if **ability_id == producer_ability_id
-                && ability_has_trigger_object_linked_exile_producer(effects, &linked_exile_id)?
+                && ability_has_trigger_object_linked_exile_producer(
+                    effects,
+                    *program,
+                    &linked_exile_id,
+                )?
             {
                 matching_producers += 1;
             }
@@ -2603,63 +2688,122 @@ fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String>
 
 fn ability_has_trigger_object_linked_exile_producer(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     linked_exile_id: &crate::AbilityLinkId,
 ) -> Result<bool, String> {
     let mut found = false;
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            if let SpellEffectKind::Exile {
-                subject: crate::primitives::EffectSubject::TriggerObject,
-                linked_exile_id: Some(effect_link_id),
-            } = effect
-            {
-                found |= effect_link_id == linked_exile_id;
-            }
-            Ok(())
-        })?;
-    }
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::Exile {
+            subject: crate::primitives::EffectSubject::TriggerObject,
+            linked_exile_id: Some(effect_link_id),
+        } = effect
+        {
+            found |= effect_link_id == linked_exile_id;
+        }
+        Ok(())
+    })?;
     Ok(found)
 }
 
 fn ability_has_linked_exile_choice_producer(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     linked_exile_id: &crate::AbilityLinkId,
 ) -> Result<bool, String> {
     let mut found = false;
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            match effect {
-                SpellEffectKind::Exile {
-                    subject: crate::primitives::EffectSubject::TriggerObject,
-                    linked_exile_id: Some(effect_link_id),
-                }
-                | SpellEffectKind::ExileGraveyards {
-                    linked_exile_id: Some(effect_link_id),
-                    ..
-                }
-                | SpellEffectKind::Hideaway {
-                    linked_exile_id: effect_link_id,
-                    ..
-                } => found |= effect_link_id == linked_exile_id,
-                _ => {}
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        match effect {
+            SpellEffectKind::Exile {
+                subject: crate::primitives::EffectSubject::TriggerObject,
+                linked_exile_id: Some(effect_link_id),
             }
-            Ok(())
-        })?;
-    }
+            | SpellEffectKind::ExileGraveyards {
+                linked_exile_id: Some(effect_link_id),
+                ..
+            }
+            | SpellEffectKind::Hideaway {
+                linked_exile_id: effect_link_id,
+                ..
+            } => found |= effect_link_id == linked_exile_id,
+            _ => {}
+        }
+        Ok(())
+    })?;
     Ok(found)
+}
+
+fn ability_has_hideaway_linked_exile_producer(
+    effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
+    linked_exile_id: &crate::AbilityLinkId,
+) -> Result<bool, String> {
+    let mut found = false;
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        if let SpellEffectKind::Hideaway {
+            linked_exile_id: effect_link_id,
+            ..
+        } = effect
+        {
+            found |= effect_link_id == linked_exile_id;
+        }
+        Ok(())
+    })?;
+    Ok(found)
+}
+
+fn collect_mandatory_program_owner_graveyard_linked_choices(
+    program: &crate::CardProgram,
+    choices: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+) -> Result<(), String> {
+    visit_authored_program_effects(&program.body, &mut |effect| {
+        if let SpellEffectKind::ChooseLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            destination: crate::primitives::LinkedExiledCardDestination::OwnerGraveyard,
+            optional: false,
+            ..
+        } = effect
+        {
+            choices.push((producer_ability_id.clone(), linked_exile_id.clone()));
+        }
+        Ok(())
+    })
 }
 
 fn validate_linked_exile_choice_producers(face: &CardFace) -> Result<(), String> {
     let abilities = face_linked_exile_abilities(face);
+    for (_, _, program) in &abilities {
+        let Some(program) = program else {
+            continue;
+        };
+        let mut restricted_choices = Vec::new();
+        collect_mandatory_program_owner_graveyard_linked_choices(program, &mut restricted_choices)?;
+        for (producer_ability_id, linked_exile_id) in restricted_choices {
+            for (ability_id, effects, producer_program) in &abilities {
+                if **ability_id == producer_ability_id
+                    && ability_has_hideaway_linked_exile_producer(
+                        effects,
+                        *producer_program,
+                        &linked_exile_id,
+                    )?
+                {
+                    return Err(
+                        "mandatory Program OwnerGraveyard linked Exile choices cannot use Hideaway producers"
+                            .into(),
+                    );
+                }
+            }
+        }
+    }
     let mut choices = Vec::new();
-    for (_, effects) in &abilities {
-        collect_choose_linked_exile_uses(effects, &mut choices)?;
+    for (_, effects, program) in &abilities {
+        collect_choose_linked_exile_uses(effects, *program, &mut choices)?;
     }
     for (producer_ability_id, linked_exile_id) in choices {
         let mut matching_producers = 0;
-        for (ability_id, effects) in &abilities {
+        for (ability_id, effects, program) in &abilities {
             if **ability_id == producer_ability_id
-                && ability_has_linked_exile_choice_producer(effects, &linked_exile_id)?
+                && ability_has_linked_exile_choice_producer(effects, *program, &linked_exile_id)?
             {
                 matching_producers += 1;
             }
@@ -2676,56 +2820,53 @@ fn validate_linked_exile_choice_producers(face: &CardFace) -> Result<(), String>
 
 fn ability_has_linked_exile_copy_producer(
     effects: &[SpellEffectKind],
+    program: Option<&crate::CardProgram>,
     linked_exile_id: &crate::AbilityLinkId,
 ) -> Result<bool, String> {
     let mut matches = 0;
-    for effect in effects {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            match effect {
-                SpellEffectKind::MoveGraveyardCards {
-                    destination: crate::primitives::GraveyardDestination::Exile,
-                    linked_exile_id: Some(effect_link_id),
-                    ..
-                }
-                | SpellEffectKind::Exile {
-                    linked_exile_id: Some(effect_link_id),
-                    ..
-                } if effect_link_id == linked_exile_id => matches += 1,
-                _ => {}
+    visit_linked_exile_ability_effects(effects, program, &mut |effect| {
+        match effect {
+            SpellEffectKind::MoveGraveyardCards {
+                destination: crate::primitives::GraveyardDestination::Exile,
+                linked_exile_id: Some(effect_link_id),
+                ..
             }
-            Ok(())
-        })?;
-    }
+            | SpellEffectKind::Exile {
+                linked_exile_id: Some(effect_link_id),
+                ..
+            } if effect_link_id == linked_exile_id => matches += 1,
+            _ => {}
+        }
+        Ok(())
+    })?;
     Ok(matches == 1)
 }
 
 fn validate_linked_exile_copy_sources(face: &CardFace) -> Result<(), String> {
     let abilities = face_linked_exile_abilities(face);
     let mut copy_sources = Vec::new();
-    for (_, effects) in &abilities {
-        for effect in *effects {
-            visit_scoped_grant_effect(effect, &mut |effect| {
-                if let SpellEffectKind::CreateTokenCopies {
-                    source:
-                        TokenCopySource::LinkedExile {
-                            producer_ability_id,
-                            linked_exile_id,
-                        },
-                    ..
-                } = effect
-                {
-                    copy_sources.push((producer_ability_id.clone(), linked_exile_id.clone()));
-                }
-                Ok(())
-            })?;
-        }
+    for (_, effects, program) in &abilities {
+        visit_linked_exile_ability_effects(effects, *program, &mut |effect| {
+            if let SpellEffectKind::CreateTokenCopies {
+                source:
+                    TokenCopySource::LinkedExile {
+                        producer_ability_id,
+                        linked_exile_id,
+                    },
+                ..
+            } = effect
+            {
+                copy_sources.push((producer_ability_id.clone(), linked_exile_id.clone()));
+            }
+            Ok(())
+        })?;
     }
 
     for (producer_ability_id, linked_exile_id) in copy_sources {
         let mut matching = 0;
-        for (ability_id, effects) in &abilities {
+        for (ability_id, effects, program) in &abilities {
             if **ability_id == producer_ability_id
-                && ability_has_linked_exile_copy_producer(effects, &linked_exile_id)?
+                && ability_has_linked_exile_copy_producer(effects, *program, &linked_exile_id)?
             {
                 matching += 1;
             }
@@ -2826,14 +2967,25 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
         }
     };
     collect(&face.spell_effect, &mut uses);
+    if let Some(program) = &face.spell_program {
+        collect_program_linked_exile_uses(program, &mut uses)?;
+    }
     for mode in face.modal_spell.iter().flat_map(|modal| &modal.modes) {
         collect(&mode.effects, &mut uses);
+        if let Some(program) = &mode.program {
+            collect_program_linked_exile_uses(program, &mut uses)?;
+        }
     }
     for ability in face_activated_abilities(face) {
         collect(&ability.effect, &mut uses);
     }
     for ability in face_triggered_abilities(face) {
         collect(&ability.effect, &mut uses);
+    }
+    for (_, _, program) in face_linked_exile_abilities(face) {
+        if let Some(program) = program {
+            collect_program_linked_exile_uses(program, &mut uses)?;
+        }
     }
     for ability in face_static_abilities(face) {
         match &ability.definition {

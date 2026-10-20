@@ -288,6 +288,14 @@ pub enum ResultType {
         who: PlayerRecipient,
         cardinality: Cardinality,
     },
+    /// Exact linked-exile choice facts from one named producer/link pair. The selected card's
+    /// owner is carried by its runtime cohort entry, so this origin intentionally has no
+    /// `PlayerRecipient`.
+    LinkedExileCardResultCohort {
+        producer_ability_id: crate::AbilityId,
+        linked_exile_id: crate::AbilityLinkId,
+        cardinality: Cardinality,
+    },
     /// Successful chosen-Destroy facts tied to the exact singleton target group that supplied
     /// the Destroy instruction's Subject role. Runtime values reuse CardResultCohort.
     TargetCardResultCohort {
@@ -1484,7 +1492,8 @@ fn compile_program_condition(
             let cardinality = match &slots[slot.0 as usize].result_type {
                 ResultType::CardResultCohort { cardinality, .. }
                 | ResultType::TargetCardResultCohort { cardinality, .. }
-                | ResultType::CastPaymentCohort { cardinality, .. } => cardinality,
+                | ResultType::CastPaymentCohort { cardinality, .. }
+                | ResultType::LinkedExileCardResultCohort { cardinality, .. } => cardinality,
                 _ => {
                     return Err(format!(
                         "result '{result}' is not a compatible card-result cohort"
@@ -1848,6 +1857,22 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
         ) if aa == ba && aw == bw => ResultType::CardResultCohort {
             action: *aa,
             who: *aw,
+            cardinality: union(*ac, *bc),
+        },
+        (
+            ResultType::LinkedExileCardResultCohort {
+                producer_ability_id: ap,
+                linked_exile_id: al,
+                cardinality: ac,
+            },
+            ResultType::LinkedExileCardResultCohort {
+                producer_ability_id: bp,
+                linked_exile_id: bl,
+                cardinality: bc,
+            },
+        ) if ap == bp && al == bl => ResultType::LinkedExileCardResultCohort {
+            producer_ability_id: ap.clone(),
+            linked_exile_id: al.clone(),
             cardinality: union(*ac, *bc),
         },
         (
@@ -2377,6 +2402,27 @@ fn validate_and_result_types(
             counter.validate()?;
             Ok(Vec::new())
         }
+        SpellEffectKind::ChooseLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            destination: super::LinkedExiledCardDestination::OwnerGraveyard,
+            optional: false,
+            ..
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::LinkedExileCardResultCohort {
+                producer_ability_id: producer_ability_id.clone(),
+                linked_exile_id: linked_exile_id.clone(),
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
+        }
+        SpellEffectKind::ChooseLinkedExiledCard { .. } => Err(
+            "ChooseLinkedExiledCard in a resolution program requires a mandatory ability-owned OwnerGraveyard choice"
+                .into(),
+        ),
         SpellEffectKind::Sacrifice {
             subject: EffectSubject::Source,
         } if context == EffectContext::Ability => {

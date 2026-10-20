@@ -1,6 +1,9 @@
 use super::*;
 
-use crate::state::{LibrarySearchEntryProgress, PendingLinkedExileAction, SpecialCastCompletion};
+use crate::state::{
+    LibrarySearchEntryProgress, PendingLinkedExileAction, PendingLinkedExileChoiceStage,
+    SpecialCastCompletion,
+};
 
 fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>]) -> bool {
     fn assign(
@@ -876,6 +879,102 @@ impl GameEngine {
         )
     }
 
+    pub(super) fn select_linked_exile_delegate(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let selector = pending.deciding_player;
+        if !answer.chosen_object_ids.is_empty()
+            || !answer.chosen_player_ids.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some()
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "linked Exile delegate selection contains unrelated fields",
+            ));
+        }
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "a departed linked Exile chooser requires a live delegate",
+            ));
+        }
+        let (controller, candidates) = match &pending.continuation {
+            ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key,
+                action,
+                stage: PendingLinkedExileChoiceStage::ChoosingDelegate { candidates },
+                ..
+            } if self.is_mandatory_program_linked_owner_graveyard_choice(stack, key, *action) => {
+                (stack.item.controller, candidates.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "linked Exile delegate continuation missing",
+                ));
+            }
+        };
+        let delegate = candidates
+            .get(answer.selected_branch_index as usize)
+            .copied()
+            .flatten();
+        let eligible = super::super::resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            controller,
+        );
+        let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that linked Exile delegate is no longer available",
+            ));
+        };
+        if self
+            .state
+            .player_idx(delegate)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that linked Exile delegate is no longer available",
+            ));
+        }
+        let ResolutionContinuation::LinkedExileChoice { stage, .. } = &mut pending.continuation
+        else {
+            unreachable!("validated linked Exile delegate continuation")
+        };
+        *stage = PendingLinkedExileChoiceStage::Selecting {
+            delegate_candidates: candidates,
+        };
+        pending.deciding_player = delegate;
+        pending.presentation.choice_kind = rv1::ChoiceKind::LinkedExileCards;
+        pending.presentation.min = 1;
+        pending.presentation.max = 1;
+        pending.presentation.prompt = format!("P{delegate}: choose a linked card in exile.");
+        pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
+        pending.resolution_prompt_semantics = None;
+        let mut events = vec![ev_log(format!(
+            "P{selector} chooses P{delegate} to make P{controller}'s linked Exile choice."
+        ))];
+        self.state.pending_resolution = Some(pending);
+        events.push(
+            super::super::resolution::linked_exile_choice_event(self).ok_or(
+                EngineError::ProgramInvariant(
+                    "delegated linked Exile choice no longer matches its Program",
+                ),
+            )?,
+        );
+        Ok(finish_with_events(self, events))
+    }
+
     pub(super) fn finish_linked_exile_choice(
         &mut self,
         pending: PendingResolution,
@@ -888,6 +987,7 @@ impl GameEngine {
                 action,
                 candidate_generations,
                 spell_label,
+                ..
             } => (
                 stack.clone(),
                 key.clone(),
@@ -902,6 +1002,8 @@ impl GameEngine {
             }
         };
         let controller = stack.item.controller;
+        let public_program_profile =
+            self.is_mandatory_program_linked_owner_graveyard_choice(&stack, &key, action);
         let mut events = Vec::new();
         let Some(&object_id) = chosen.first() else {
             if matches!(action, PendingLinkedExileAction::Play { .. }) {
@@ -919,9 +1021,8 @@ impl GameEngine {
             events.push(ev_log(format!(
                 "P{controller} declines the linked Exile choice."
             )));
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
+            return self.complete_parked_stack_with_previous(
+                stack,
                 crate::state::EffectResult::default(),
                 events,
             );
@@ -951,6 +1052,7 @@ impl GameEngine {
         };
         if expected_generation != Some(current_generation)
             || object.zone != Zone::Exile
+            || (public_program_profile && object.face_down)
             || !linked_current
         {
             self.state.pending_resolution = Some(pending);
@@ -1006,12 +1108,7 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             PendingLinkedExileAction::Move {
                 destination: tricerules_card_model::primitives::LinkedExiledCardDestination::ControllerBattlefield,
@@ -2952,11 +3049,20 @@ mod tests {
             )
             .unwrap();
             engine.state.turn_step = TurnStep::Main1;
+            let source = battlefield_card(&mut engine, "currency_converter");
+            let source_generation = engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0);
             let mut item = test_stack_item();
             item.card_id = "currency_converter".into();
             item.ability_text = Some("return linked card".into());
             item.ability_index = Some(1);
-            item.source_permanent_id = Some(90_002);
+            item.source_permanent_id = Some(source);
+            item.source_owner = Some(0);
+            item.source_zone_change = source_generation;
             item.activated_ability = Some(
                 engine
                     .registry
@@ -2966,12 +3072,66 @@ mod tests {
                     .activated_abilities[1]
                     .clone(),
             );
+            item.activated_ability_occurrence =
+                Some(crate::state::ActivatedAbilityOccurrence::Printed(
+                    tricerules_card_model::AbilityDefinitionId {
+                        card_id: "currency_converter".into(),
+                        face_id: tricerules_card_model::CardFaceId::new("currency_converter")
+                            .unwrap(),
+                        ability_path: vec![tricerules_card_model::AbilityId::new(
+                            "return_linked_card",
+                        )
+                        .unwrap()],
+                    },
+                ));
 
-            // The generic suspension path stores an empty result at effect index 1. This fixture
-            // models the accepted pre-move receipt replacing it; the selected object is absent
-            // and no graveyard movement result exists, as in a future move-replacement outcome.
-            let mut parked = ParkedStackResolution::new(item.clone());
-            parked.resume_effect_index = Some(1);
+            // Park the exact authored Program at its linked-choice output. The pre-move action
+            // facts are the accepted operation result; the selected object is deliberately absent
+            // and no graveyard movement result exists, as in a replaced destination move.
+            let owners = engine
+                .compiled_resolution_program_owners(&item)
+                .expect("Currency Converter Program owner lookup")
+                .expect("Currency Converter has an authored return Program");
+            let owner = item
+                .ability_program_owner()
+                .expect("captured printed ability owner");
+            assert_eq!(owners.as_slice(), std::slice::from_ref(&owner));
+            let compiled = engine
+                .registry
+                .compiled_program_for_owner(&owner)
+                .expect("the exact return Program is compiled");
+            let choose_instruction = compiled
+                .body
+                .steps
+                .first()
+                .expect("the return Program starts with linked choice");
+            assert!(matches!(
+                &choose_instruction.kind,
+                tricerules_card_model::primitives::CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), tricerules_card_model::primitives::SpellEffectKind::ChooseLinkedExiledCard { .. })
+            ));
+            let choose_outputs = choose_instruction.outputs.clone();
+            let mut program = engine
+                .begin_program_run(&item, owners)
+                .expect("begin the bound Currency Converter Program");
+            program
+                .frames
+                .last_mut()
+                .expect("root Program frame")
+                .next_instruction = 1;
+            program.in_flight = Some(choose_outputs);
+            assert!(matches!(
+                engine.current_program_perform(&program),
+                Ok(
+                    tricerules_card_model::primitives::SpellEffectKind::ChooseLinkedExiledCard { .. }
+                )
+            ));
+            let parked = ParkedStackResolution {
+                item: item.clone(),
+                resume_effect_index: None,
+                previous_result: Default::default(),
+                program: Some(program),
+            };
             assert!(parked.previous_result.cards.is_empty());
             let selected_object_id = 99_991;
             let previous_result: crate::state::EffectResult = CardResultCohort {
@@ -2988,13 +3148,8 @@ mod tests {
             .into();
 
             let batch = engine
-                .complete_parked_resolution_with_previous(
-                    parked.item,
-                    parked.resume_effect_index,
-                    previous_result,
-                    Vec::new(),
-                )
-                .expect("resume the type-dependent result branch");
+                .complete_parked_stack_with_previous(parked, previous_result, Vec::new())
+                .expect("resume the bound Program's typed result branch");
 
             assert!(!engine.state.objects.contains_key(&selected_object_id));
             assert!(engine.state.players[0].graveyard.is_empty());

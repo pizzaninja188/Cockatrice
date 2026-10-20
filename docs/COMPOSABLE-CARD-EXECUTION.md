@@ -182,6 +182,38 @@ replacement, stale identity, and a parked Aura-return choice that resumes throug
 This follows CR 608.2b, 608.2h-i, 613.1, 613.1d, 701.8a-c, 701.19a-b, 702.12b, 614.1a, 616.1,
 and 400.7. Mortify has the same chosen Creature-or-Enchantment Destroy shape but remains on its
 existing path. This adds no card admission or protocol, relay, or client change.
+
+The bounded 2026-10-20 Currency Converter increment moves only the `return_linked_card` activated
+ability in the [handwritten definition](../tricerules/tricerules-cards/data/currency_converter.ron)
+to a mandatory ability-owned `ChooseLinkedExiledCard` Program with destination `OwnerGraveyard`.
+Its [review map](../tricerules/tricerules-cards/authoring/review-maps/currency_converter.json) covers
+all three Oracle lines and the actual-card scenarios. Its `LinkedExileCardResultCohort` slot is keyed
+by the exact producer ability and link and has cardinality 0..1. Selection records the chosen card's
+pre-move `ActionFacts`, including its type snapshot, before the engine attempts the move to its
+owner's graveyard. The later `CardResultCount` instructions test the selected card's type even when a
+replacement changes that attempted destination; they then create a Treasure for a Land or a Rogue
+for a Nonland. The runtime admits only the matching source incarnation, producer/link pair, and
+in-flight instruction.
+The public Program offer is face-up only at creation, refresh and answer, and registry validation
+rejects a matching Hideaway producer so its private look permission cannot cross to a delegate.
+When the original controller or source owner leaves while this exact mandatory choice is active or
+saved below observer work, the same Program cursor and original effect-controller attribution are
+retained and the linked candidates are reconciled. Under CR 800.4a the departed controller's
+noncard stack object ceases to exist; because the ability had already begun resolving, CR 608.2m
+requires it to finish. The engine keeps its Program continuation as execution state, not as a new
+stack object. If the original chooser has left, CR 800.4g lets the ability controller choose a
+replacement chooser. If that controller has also left, the runtime applies CR 800.4h to let the next
+live player make that selector choice. This two-step application is an explicit rules interpretation,
+not a worked example in the rules text. A departed controller receives no token (CR 800.4b). A
+source leave does not rebind the begun occurrence to a later source incarnation; only a choice with
+no current candidates completes with an empty result.
+This is a narrow owner-graveyard profile, not a new rule for other begun abilities. Nautiloid Ship's
+optional `ChooseLinkedExiledCard` return-to-controller-battlefield path remains unchanged;
+`PlayLinkedExiledCard` remains a separate legacy path for Hideaway play permissions. Neither is
+admitted by this mandatory Program profile. The choice uses existing linked-card and resolution-
+choice events, with no new wire, relay or client contract. Its card mechanics follow CR 400.7,
+603.2c, 603.5, 607.2a, 608.2d, 608.2m and 800.4a-b/g-h. The update adds no card admission.
+
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

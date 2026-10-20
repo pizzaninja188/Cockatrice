@@ -6,7 +6,8 @@ use super::super::presentation::{
 use super::candidate_identities;
 use super::*;
 use crate::state::{
-    EntryCounterPlacement, EntryCounterSource, PendingLinkedExileAction, SpecialCastCompletion,
+    EntryCounterPlacement, EntryCounterSource, PendingLinkedExileAction,
+    PendingLinkedExileChoiceStage, SpecialCastCompletion,
 };
 
 fn entry_counter_instruction(
@@ -2900,6 +2901,15 @@ fn choose_linked_exiled_card_action(
     action: PendingLinkedExileAction,
 ) -> Result<EffectOutcome, EngineError> {
     let key = linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
+    // An authored Program parks its exact frame and output slot. Only its mandatory owner-GY
+    // profile is constrained to face-up linked objects; legacy Hideaway permissions remain local.
+    let mut stack = cx.parked_stack();
+    if stack.program.is_none() {
+        stack.resume_effect_index = Some(cx.effect_index + 1);
+    }
+    let public_program_profile = cx
+        .engine
+        .is_mandatory_program_linked_owner_graveyard_choice(&stack, &key, action);
     let controller = cx.controller;
     let mut seen = HashSet::new();
     let candidates: Vec<_> = cx
@@ -2915,7 +2925,9 @@ fn choose_linked_exiled_card_action(
                 .state
                 .objects
                 .get(&linked.object_id)
-                .is_some_and(|object| object.zone == Zone::Exile)
+                .is_some_and(|object| {
+                    object.zone == Zone::Exile && (!public_program_profile || !object.face_down)
+                })
                 && cx
                     .engine
                     .state
@@ -2965,8 +2977,6 @@ fn choose_linked_exiled_card_action(
             format!("P{controller}: you may play one linked card in exile without paying its mana cost."),
         ),
     };
-    let mut stack = ParkedStackResolution::new(cx.top.clone());
-    stack.resume_effect_index = Some(cx.effect_index + 1);
     if let PendingLinkedExileAction::Play {
         kind,
         return_source_to_owner_hand_if_cast,
@@ -3056,6 +3066,7 @@ fn choose_linked_exiled_card_action(
             key,
             action,
             candidate_generations: candidates,
+            stage: crate::state::PendingLinkedExileChoiceStage::default(),
             spell_label: cx.spell_label.to_string(),
         },
     });
@@ -3063,12 +3074,260 @@ fn choose_linked_exiled_card_action(
 }
 
 impl GameEngine {
+    fn reconcile_pending_program_linked_exile_choice(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(false);
+        };
+        let (stack, key, offered, stage, spell_label) = match &pending.continuation {
+            ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key,
+                action,
+                candidate_generations,
+                stage,
+                spell_label,
+            } if self.is_mandatory_program_linked_owner_graveyard_choice(stack, key, *action) => (
+                stack.clone(),
+                key.clone(),
+                candidate_generations.clone(),
+                stage.clone(),
+                spell_label.clone(),
+            ),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(false);
+            }
+        };
+        let chooser = stack.item.controller;
+        let filter = match self
+            .current_program_perform(stack.program.as_ref().expect("profile requires a Program"))?
+        {
+            SpellEffectKind::ChooseLinkedExiledCard { filter, .. } => Some(filter),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "linked Exile choice no longer matches its Program instruction",
+                ));
+            }
+        };
+        let linked_records = self
+            .state
+            .linked_exile_records
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
+        let mut seen = HashSet::new();
+        let current: Vec<_> = offered
+            .iter()
+            .copied()
+            .filter(|candidate| seen.insert(*candidate))
+            .filter(|(object_id, generation)| {
+                linked_records.iter().any(|record| {
+                    record.object_id == *object_id && record.zone_change_generation == *generation
+                }) && self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .is_some_and(|object| object.zone == Zone::Exile && !object.face_down)
+                    && self.state.zone_change_generation.get(object_id).copied()
+                        == Some(*generation)
+                    && super::super::card_predicates::linked_exile_card_matches_filter(
+                        &self.state,
+                        self.registry,
+                        &key,
+                        chooser,
+                        *object_id,
+                        *generation,
+                        filter.as_ref(),
+                    )
+            })
+            .collect();
+        if current.is_empty() {
+            events.push(ev_log(format!(
+                "No offered linked Exile card remains for {spell_label}; the mandatory instruction continues with an empty cohort."
+            )));
+            events.extend(
+                self.complete_parked_stack_with_previous(
+                    stack,
+                    crate::state::EffectResult::default(),
+                    Vec::new(),
+                )?
+                .events,
+            );
+            return Ok(true);
+        }
+
+        let candidates_changed = current != offered;
+        let prompt_was_reset = pending.resolution_prompt_id.get() == 0;
+        if candidates_changed {
+            pending.presentation.candidates = current.iter().map(|(id, _)| *id).collect();
+        }
+        let current_actor_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let current_selector_live = current_actor_live;
+        let mut refresh_event = candidates_changed || prompt_was_reset;
+
+        let selecting_delegate_slots = match &stage {
+            PendingLinkedExileChoiceStage::Selecting {
+                delegate_candidates,
+            } => delegate_candidates.clone(),
+            PendingLinkedExileChoiceStage::ChoosingDelegate { candidates } => candidates.clone(),
+        };
+        let chooser_live = self
+            .state
+            .player_idx(chooser)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let needs_delegate = !current_actor_live;
+        let stage_is_delegate = matches!(
+            stage,
+            PendingLinkedExileChoiceStage::ChoosingDelegate { .. }
+        );
+
+        if needs_delegate || stage_is_delegate {
+            let eligible =
+                super::resolution_choice_delegate_candidates(&self.state, chooser, chooser);
+            if eligible.is_empty() {
+                events.push(ev_log(format!(
+                    "No live player can make P{chooser}'s linked Exile choice; the mandatory instruction continues with an empty cohort."
+                )));
+                events.extend(
+                    self.complete_parked_stack_with_previous(
+                        stack,
+                        crate::state::EffectResult::default(),
+                        Vec::new(),
+                    )?
+                    .events,
+                );
+                return Ok(true);
+            }
+            let selector = if chooser_live {
+                Some(chooser)
+            } else {
+                self.state
+                    .player_idx(chooser)
+                    .and_then(|index| self.state.next_in_game_player_idx(index))
+                    .map(|index| self.state.players[index].id)
+                    .or_else(|| {
+                        self.state
+                            .players
+                            .iter()
+                            .find(|player| !player.has_lost)
+                            .map(|player| player.id)
+                    })
+            };
+            let mut slots = selecting_delegate_slots;
+            for slot in &mut slots {
+                if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
+                    *slot = None;
+                }
+            }
+            for candidate in eligible.iter().copied() {
+                if !slots.contains(&Some(candidate)) {
+                    slots.push(Some(candidate));
+                }
+            }
+            let selector = selector.ok_or(EngineError::Illegal(
+                "no live player can select a linked Exile delegate",
+            ))?;
+            if eligible.len() == 1 {
+                let delegate = eligible[0];
+                if !matches!(stage, PendingLinkedExileChoiceStage::Selecting { .. })
+                    || pending.deciding_player != delegate
+                {
+                    refresh_event = true;
+                }
+                pending.deciding_player = delegate;
+                pending.presentation.choice_kind = rv1::ChoiceKind::LinkedExileCards;
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                pending.presentation.prompt =
+                    format!("P{delegate}: choose a linked card in exile.");
+                if let ResolutionContinuation::LinkedExileChoice { stage, .. } =
+                    &mut pending.continuation
+                {
+                    *stage = PendingLinkedExileChoiceStage::Selecting {
+                        delegate_candidates: slots,
+                    };
+                }
+            } else {
+                let unchanged_delegate_prompt = stage_is_delegate
+                    && current_selector_live
+                    && pending.deciding_player == selector
+                    && matches!(
+                        &stage,
+                        PendingLinkedExileChoiceStage::ChoosingDelegate { candidates }
+                            if *candidates == slots
+                    );
+                if !unchanged_delegate_prompt {
+                    refresh_event = true;
+                }
+                pending.deciding_player = selector;
+                pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                pending.presentation.prompt = format!(
+                    "P{selector}: choose a player to make P{chooser}'s linked Exile choice."
+                );
+                if let ResolutionContinuation::LinkedExileChoice { stage, .. } =
+                    &mut pending.continuation
+                {
+                    *stage = PendingLinkedExileChoiceStage::ChoosingDelegate { candidates: slots };
+                }
+            }
+        } else {
+            if candidates_changed {
+                pending.presentation.choice_kind = rv1::ChoiceKind::LinkedExileCards;
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                if let ResolutionContinuation::LinkedExileChoice {
+                    stage: PendingLinkedExileChoiceStage::Selecting { .. },
+                    ..
+                } = &pending.continuation
+                {
+                    pending.presentation.prompt = format!(
+                        "P{}: choose a linked card in exile.",
+                        pending.deciding_player
+                    );
+                }
+            }
+        }
+
+        if let ResolutionContinuation::LinkedExileChoice {
+            candidate_generations,
+            ..
+        } = &mut pending.continuation
+        {
+            *candidate_generations = current;
+        }
+        if refresh_event {
+            pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
+            pending.resolution_prompt_semantics = None;
+        }
+        self.state.pending_resolution = Some(pending);
+        if refresh_event {
+            events.push(super::linked_exile_choice_event(self).ok_or(
+                EngineError::ProgramInvariant(
+                    "refreshed linked Exile offer no longer matches its Program",
+                ),
+            )?);
+        }
+        Ok(true)
+    }
+
     /// Rebuild the live linked-play prompt after a player leaves. A chooser who has left cannot
     /// make further choices, so its already-started instruction continues through the saved tail.
     pub(in crate::engine) fn reconcile_pending_linked_exile_after_departure(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        if self.reconcile_pending_program_linked_exile_choice(events)? {
+            return Ok(());
+        }
         let Some(cohort) = self.state.pending_linked_exile_play.as_ref() else {
             return Ok(());
         };
@@ -3343,6 +3602,7 @@ impl GameEngine {
                             .return_source_to_owner_hand_if_cast,
                     },
                     candidate_generations,
+                    stage: crate::state::PendingLinkedExileChoiceStage::default(),
                     spell_label: cohort.spell_label.clone(),
                 },
             });
@@ -7105,6 +7365,619 @@ pub(super) fn search_library(
 mod tests {
     use super::*;
     use crate::state::ProgramFrame;
+
+    fn synthetic_hidden_linked_program_fixture(
+        face_down: bool,
+    ) -> (
+        GameEngine,
+        StackItem,
+        crate::state::LinkedExileKey,
+        ObjectId,
+    ) {
+        const SOURCE_ID: &str = "linked_program_source";
+        const HIDDEN_ID: &str = "linked_hidden_secret";
+        const AURA_ID: &str = "linked_observer_aura";
+        let source = r#"(
+            id: "linked_program_source", name: "Linked Program Source",
+            face_id: "linked_program_source", types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "exile_cards", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsCard(player: Controller),
+                effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_cards"))],
+            )],
+            activated_abilities: [(
+                ability_id: "return_linked_card", presentation: Fallback,
+                source_zone: Battlefield, costs: [Tap], effect: [],
+                program: Some((body: (steps: [
+                    (id: "choose", bind: ["chosen"], input: None, kind: Perform(
+                        ChooseLinkedExiledCard(
+                            producer_ability_id: "exile_cards",
+                            linked_exile_id: "linked_cards",
+                            filter: (card_type: Some(Creature)),
+                            destination: OwnerGraveyard,
+                            optional: false,
+                        )
+                    )),
+                ], yields: []), target_bindings: [])),
+            )],
+        )"#;
+        let hidden = r#"(
+            id: "linked_hidden_secret", name: "Hidden Secret",
+            face_id: "linked_hidden_secret", types: ["Creature"],
+            power: Some(1), toughness: Some(1),
+        )"#;
+        let aura = r#"(
+            id: "linked_observer_aura", name: "Linked Observer Aura",
+            face_id: "linked_observer_aura", types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[source, hidden, aura],
+                &[],
+            )
+            .expect("synthetic linked Program registry"),
+        ));
+        let mut owner_deck = vec![HIDDEN_ID.into(); 8];
+        owner_deck.push(AURA_ID.into());
+        let mut engine = GameEngine::new(
+            registry,
+            90_301,
+            &[0, 1, 2],
+            20,
+            Some(vec![
+                owner_deck,
+                vec![SOURCE_ID.into(); 8],
+                vec![HIDDEN_ID.into(); 8],
+            ]),
+            true,
+        )
+        .expect("synthetic linked Program engine");
+        let source_object = *engine.state.players[1]
+            .library
+            .front()
+            .expect("source in P1 library");
+        let hidden_object = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .find(|object_id| engine.state.objects[object_id].card_id == HIDDEN_ID)
+            .expect("hidden card in P0 library");
+        let mut movement_events = Vec::new();
+        engine
+            .commit_observed_zone_move(
+                source_object,
+                Zone::Battlefield,
+                Some(1),
+                &mut movement_events,
+            )
+            .expect("move the linked Program source to the battlefield");
+        engine
+            .commit_observed_zone_move(hidden_object, Zone::Exile, None, &mut movement_events)
+            .expect("move a candidate into Exile");
+        engine
+            .state
+            .objects
+            .get_mut(&hidden_object)
+            .expect("hidden linked object")
+            .face_down = face_down;
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source_object)
+            .copied()
+            .unwrap_or(0);
+        let hidden_generation = engine
+            .state
+            .zone_change_generation
+            .get(&hidden_object)
+            .copied()
+            .unwrap_or(0);
+        let mut top =
+            linked_exile_test_item(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        top.id = 90_302;
+        top.controller = 1;
+        top.card_id = SOURCE_ID.into();
+        top.source_permanent_id = Some(source_object);
+        top.source_owner = Some(1);
+        top.source_zone_change = source_generation;
+        top.ability_index = Some(0);
+        let source_face = engine
+            .registry
+            .get(SOURCE_ID)
+            .and_then(|definition| definition.face(0))
+            .expect("source face");
+        let activated_ability = source_face
+            .activated_abilities
+            .first()
+            .expect("captured activated ability")
+            .clone();
+        let ability_definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: SOURCE_ID.into(),
+            face_id: source_face.face_id.clone(),
+            ability_path: vec![activated_ability.ability_id.clone()],
+        };
+        top.activated_ability = Some(activated_ability);
+        top.activated_ability_occurrence = Some(crate::state::ActivatedAbilityOccurrence::Printed(
+            ability_definition,
+        ));
+        top.is_triggered = false;
+        let key = linked_exile_key(
+            &engine,
+            &top,
+            tricerules_card_model::AbilityLinkId::new("linked_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_cards").unwrap(),
+        )
+        .expect("exact linked producer/source incarnation");
+        engine.state.linked_exile_records.insert(
+            key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: hidden_object,
+                zone_change_generation: hidden_generation,
+            }],
+        );
+        engine
+            .state
+            .hideaway_look_permissions
+            .entry((key.clone(), hidden_object, hidden_generation))
+            .or_default()
+            .insert(1);
+        engine.state.stack.push(top.clone());
+        (engine, top, key, hidden_object)
+    }
+
+    fn synthetic_linked_program_run(engine: &GameEngine, top: &StackItem) -> ProgramRunState {
+        let owner = top
+            .ability_program_owner()
+            .expect("captured activated Program owner");
+        let mut run = engine
+            .begin_program_run(top, vec![owner])
+            .expect("initialize exact compiled Program slots");
+        run.frames
+            .last_mut()
+            .expect("active compiled Program frame")
+            .next_instruction = 1;
+        run.in_flight = Some(vec![tricerules_card_model::primitives::ResultSlotId(0)]);
+        run
+    }
+
+    fn open_synthetic_linked_program_choice(
+        engine: &mut GameEngine,
+        top: &StackItem,
+    ) -> (EffectOutcome, Vec<rv1::RuledEvent>) {
+        let program_state = synthetic_linked_program_run(engine, top);
+        let operation = engine
+            .current_program_perform(&program_state)
+            .expect("resolve the exact compiled linked-choice operation");
+        let previous_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut events = Vec::new();
+        let outcome = choose_linked_exiled_card(
+            &mut EffectCx {
+                engine,
+                events: &mut events,
+                targets: &[],
+                targets_by_role: &[],
+                target_damage: &[],
+                target_group_indices: &[],
+                top,
+                controller: 1,
+                affected_player: 1,
+                spell_label: "synthetic linked Program",
+                previous_effect_result: &previous_result,
+                resume_previous_result: Some(&previous_result),
+                effect_result: &mut effect_result,
+                effect_index: 0,
+                program_state: Some(program_state),
+            },
+            operation,
+        )
+        .expect("open the exact synthetic Program linked-choice operation");
+        (outcome, events)
+    }
+
+    fn assert_no_hidden_linked_identity(events: &[rv1::RuledEvent], hidden_object: ObjectId) {
+        assert!(!events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.candidate_object_ids.contains(&hidden_object)
+                    || choice.candidate_card_ids.iter().any(|card_id| card_id == "linked_hidden_secret")
+                    || choice.candidate_names.iter().any(|name| name == "Hidden Secret")
+        )), "a face-down linked record must never appear in a public Program offer");
+        assert!(
+            !format!("{events:?}").contains("Hidden Secret"),
+            "event logs must not reveal the face-down linked card identity"
+        );
+    }
+
+    #[test]
+    fn program_linked_choice_initial_offer_rejects_a_hidden_record_despite_old_controller_permission(
+    ) {
+        let (mut engine, top, _key, hidden_object) = synthetic_hidden_linked_program_fixture(true);
+        assert!(engine
+            .state
+            .hideaway_look_permissions
+            .values()
+            .any(|viewers| { viewers.contains(&1) && !viewers.contains(&0) }));
+
+        let (outcome, events) = open_synthetic_linked_program_choice(&mut engine, &top);
+
+        assert!(matches!(outcome, EffectOutcome::Continue));
+        assert!(engine.state.pending_resolution.is_none());
+        assert_no_hidden_linked_identity(&events, hidden_object);
+    }
+
+    #[test]
+    fn program_linked_choice_reconcile_removes_a_newly_hidden_record() {
+        let (mut engine, top, _key, hidden_object) = synthetic_hidden_linked_program_fixture(false);
+        let (outcome, mut events) = open_synthetic_linked_program_choice(&mut engine, &top);
+        assert!(matches!(outcome, EffectOutcome::Suspended));
+        assert!(engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("face-up candidate is offered")
+            .presentation
+            .candidates
+            .contains(&hidden_object));
+        events.clear();
+        engine
+            .state
+            .objects
+            .get_mut(&hidden_object)
+            .expect("linked object")
+            .face_down = true;
+
+        engine
+            .reconcile_pending_linked_exile_after_departure(&mut events)
+            .expect("reconcile a linked choice after hidden state changes");
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.objects[&hidden_object].zone, Zone::Exile);
+        assert_no_hidden_linked_identity(&events, hidden_object);
+    }
+
+    #[test]
+    fn program_linked_choice_answer_rejects_a_candidate_that_became_hidden() {
+        let (mut engine, top, _key, hidden_object) = synthetic_hidden_linked_program_fixture(false);
+        let (outcome, mut events) = open_synthetic_linked_program_choice(&mut engine, &top);
+        assert!(matches!(outcome, EffectOutcome::Suspended));
+        engine
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("publish the initial linked-card prompt ID");
+        let prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("pending linked choice")
+            .resolution_prompt_id
+            .get();
+        engine
+            .state
+            .objects
+            .get_mut(&hidden_object)
+            .expect("linked object")
+            .face_down = true;
+        let before = engine
+            .diagnostic_snapshot()
+            .expect("snapshot before hidden-card answer");
+        let command_index = engine.state.command_index;
+        let answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    chosen_object_ids: vec![hidden_object],
+                    decision: rv1::ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                },
+            )),
+        };
+
+        assert!(engine.apply_scenario_command(1, &answer).is_err());
+
+        assert_eq!(
+            engine
+                .diagnostic_snapshot()
+                .expect("snapshot after rejected hidden-card answer"),
+            before,
+            "rejecting a now-hidden candidate must preserve the parked operation atomically"
+        );
+        assert_eq!(engine.state.command_index, command_index);
+        assert_eq!(engine.state.objects[&hidden_object].zone, Zone::Exile);
+        assert!(engine.state.pending_resolution.is_some());
+    }
+
+    #[test]
+    fn program_linked_choice_observer_restore_revalidates_visibility_before_republication() {
+        let (mut engine, top, key, hidden_object) = synthetic_hidden_linked_program_fixture(false);
+        let permission_key = (
+            key,
+            hidden_object,
+            engine.state.zone_change_generation[&hidden_object],
+        );
+        assert!(engine.state.hideaway_look_permissions[&permission_key].contains(&1));
+        assert!(!engine.state.hideaway_look_permissions[&permission_key].contains(&0));
+
+        let (outcome, mut initial_events) = open_synthetic_linked_program_choice(&mut engine, &top);
+        assert!(matches!(outcome, EffectOutcome::Suspended));
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .expect("publish the old controller's face-up offer");
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("the original linked-card offer is saved below the observer");
+        assert_eq!(original_pending.presentation.candidates, [hidden_object]);
+        let departing_controller = engine.state.player_idx(1).unwrap();
+        engine.state.players[departing_controller].has_lost = true;
+        engine
+            .state
+            .objects
+            .get_mut(&hidden_object)
+            .expect("linked object")
+            .face_down = true;
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+
+        let observer = engine
+            .state
+            .pending_observer_return_batch
+            .take()
+            .expect("synthetic observer-return batch");
+        let mut restored_events = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                observer.suspended_resolution,
+                observer.suspended_replacement_event,
+                &mut restored_events,
+            )
+            .expect("restore and reconcile the saved linked-card offer"));
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.objects[&hidden_object].zone, Zone::Exile);
+        assert!(engine.state.objects[&hidden_object].face_down);
+        assert_no_hidden_linked_identity(&restored_events, hidden_object);
+    }
+
+    #[test]
+    fn real_concede_saves_and_restores_the_linked_program_below_an_aura_observer() {
+        let (mut engine, top, key, linked_object) = synthetic_hidden_linked_program_fixture(false);
+        let source = top.source_permanent_id.expect("linked Program source");
+        let source_generation = top.source_zone_change;
+        let aura = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == 0 && object.card_id == "linked_observer_aura")
+            .map(|object| object.id)
+            .expect("owner has the observer Aura in their library");
+        let target = *engine.state.players[2]
+            .library
+            .front()
+            .expect("P2 has a creature to enchant");
+        let mut setup_events = Vec::new();
+        engine
+            .commit_observed_zone_move(aura, Zone::Exile, None, &mut setup_events)
+            .expect("exile the Aura for its paired return observer");
+        engine
+            .commit_observed_zone_move(target, Zone::Battlefield, Some(2), &mut setup_events)
+            .expect("put a legal Aura target on P2's battlefield");
+        let aura_generation = engine.state.zone_change_generation[&aura];
+        engine
+            .state
+            .active_event_observers
+            .push(crate::state::ActiveEventObserver {
+                watched: Some(crate::state::TriggerObjectRef {
+                    object_id: source,
+                    zone_change_generation: source_generation,
+                    controller_at_event: 1,
+                }),
+                matcher: crate::state::EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+                payload: crate::state::EventObserverPayload::ReturnExiledObject {
+                    exiled: crate::state::TriggerObjectRef {
+                        object_id: aura,
+                        zone_change_generation: aura_generation,
+                        controller_at_event: 0,
+                    },
+                },
+            });
+
+        let (outcome, mut initial_events) = open_synthetic_linked_program_choice(&mut engine, &top);
+        assert!(matches!(outcome, EffectOutcome::Suspended));
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .expect("publish the original linked-card prompt");
+        let original_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("original linked-card choice")
+            .resolution_prompt_id
+            .get();
+        assert_ne!(original_prompt_id, 0);
+        assert_eq!(engine.state.objects[&linked_object].zone, Zone::Exile);
+
+        let concede_batch = engine
+            .apply_scenario_command(
+                1,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("the linked Program controller/source owner concedes");
+        assert!(engine.state.players[engine.state.player_idx(1).unwrap()].has_lost);
+        assert!(!engine.state.objects.contains_key(&source));
+        let saved = engine
+            .state
+            .pending_observer_return_batch
+            .as_ref()
+            .and_then(|batch| batch.suspended_resolution.as_ref())
+            .expect("the real Aura return saves the delegated linked Program");
+        assert_eq!(
+            resolution_choice_delegate_candidates(&engine.state, 1, 1),
+            [0, 2],
+            "both surviving players are eligible to choose the original controller's delegate"
+        );
+        let saved_prompt_id = saved.resolution_prompt_id.get();
+        let ResolutionContinuation::LinkedExileChoice {
+            stack,
+            key: saved_key,
+            stage:
+                PendingLinkedExileChoiceStage::Selecting {
+                    delegate_candidates,
+                },
+            candidate_generations,
+            action:
+                PendingLinkedExileAction::Move {
+                    destination:
+                        tricerules_card_model::primitives::LinkedExiledCardDestination::OwnerGraveyard,
+                    optional: false,
+                },
+            ..
+        } = &saved.continuation
+        else {
+            panic!(
+                "the observer batch retains the exact mandatory linked Program delegate: {:?}",
+                saved.continuation
+            );
+        };
+        assert_eq!(saved_key, &key);
+        assert!(stack.program.is_some());
+        assert_eq!(saved.deciding_player, 1);
+        assert!(delegate_candidates.is_empty());
+        assert_eq!(
+            candidate_generations,
+            &[(
+                linked_object,
+                engine.state.zone_change_generation[&linked_object]
+            )]
+        );
+        assert_eq!(saved_prompt_id, original_prompt_id);
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::AuraReturn { .. })
+        ));
+        let aura_prompt = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the owner chooses the Aura's return target");
+        assert_eq!(aura_prompt.deciding_player, 0);
+        assert_eq!(aura_prompt.presentation.candidates, [target]);
+        assert!(concede_batch.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == rv1::ChoiceKind::AuraPermanent as i32
+                    && choice.deciding_player_id == 0
+                    && choice.candidate_object_ids == [target]
+        )));
+
+        let aura_prompt_id = aura_prompt.resolution_prompt_id.get();
+        let aura_completed = engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: aura_prompt_id,
+                            chosen_object_ids: vec![target],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("P0 completes the independent Aura return");
+        let restored_selector = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the saved Program is restored as a fresh selector");
+        assert_eq!(restored_selector.deciding_player, 2);
+        assert_eq!(
+            restored_selector.presentation.choice_kind,
+            rv1::ChoiceKind::ResolutionBranch
+        );
+        assert_ne!(restored_selector.resolution_prompt_id.get(), 0);
+        assert!(aura_completed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32
+                    && choice.deciding_player_id == 2
+        )));
+        assert!(engine.state.pending_observer_return_batch.is_none());
+
+        let selector_prompt_id = restored_selector.resolution_prompt_id.get();
+        let delegated = engine
+            .apply_scenario_command(
+                2,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: selector_prompt_id,
+                            decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                            selected_branch_index: 0,
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("P2 delegates the original linked choice to P0");
+        let linked_prompt = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("P0 receives the resumed linked-card offer");
+        assert_eq!(linked_prompt.deciding_player, 0);
+        assert_eq!(
+            linked_prompt.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(linked_prompt.presentation.candidates, [linked_object]);
+        assert_ne!(linked_prompt.resolution_prompt_id.get(), 0);
+        assert!(delegated.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == rv1::ChoiceKind::LinkedExileCards as i32
+                    && choice.deciding_player_id == 0
+                    && choice.candidate_object_ids == [linked_object]
+        )));
+
+        let linked_prompt_id = linked_prompt.resolution_prompt_id.get();
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: linked_prompt_id,
+                            chosen_object_ids: vec![linked_object],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("P0 completes the saved linked Program after the real Concede");
+        assert_eq!(engine.state.objects[&linked_object].zone, Zone::Graveyard);
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(crate::state::AttachmentRecipient::Object(target))
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_observer_return_batch.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
 
     #[test]
     fn choose_card_requires_a_committed_public_live_output_incarnation() {

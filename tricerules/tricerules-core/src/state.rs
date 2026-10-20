@@ -1587,6 +1587,27 @@ pub(crate) enum PendingLinkedExileAction {
     },
 }
 
+/// A mandatory Program linked-Exile move may need a replacement player to answer after its
+/// original chooser leaves. The selecting state also retains delegate slots so repeated
+/// departures cannot make an old branch index point at a different player.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PendingLinkedExileChoiceStage {
+    Selecting {
+        delegate_candidates: Vec<Option<PlayerId>>,
+    },
+    ChoosingDelegate {
+        candidates: Vec<Option<PlayerId>>,
+    },
+}
+
+impl Default for PendingLinkedExileChoiceStage {
+    fn default() -> Self {
+        Self::Selecting {
+            delegate_candidates: Vec::new(),
+        }
+    }
+}
+
 /// One resolving occurrence of a linked exile play instruction. The frozen generation-bound
 /// cohort survives the individual play/cast transactions; the persistent linked record itself is
 /// left intact when a card is declined or selected for this occurrence.
@@ -1785,6 +1806,8 @@ pub enum ResolutionContinuation {
         key: LinkedExileKey,
         action: PendingLinkedExileAction,
         candidate_generations: Vec<(ObjectId, u64)>,
+        #[serde(default)]
+        stage: PendingLinkedExileChoiceStage,
         spell_label: String,
     },
     Sacrifice {

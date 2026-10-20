@@ -656,6 +656,43 @@ imported discard are typed producer examples; this compiler surface does not est
 readiness for other owners. The effect-list `CardResultCount` form remains a separate legacy
 surface.
 
+`ChooseLinkedExiledCard` has one authored Program shape: a mandatory (`optional: false`)
+ability-owned `Perform` leaf with destination `OwnerGraveyard`. The result slot is a typed
+`LinkedExileCardResultCohort` keyed to the exact `producer_ability_id` and `linked_exile_id`, with
+cardinality 0..1. When a player accepts an offered card, the engine records that exact selected
+object's pre-move `ActionFacts` and effective type snapshot, then attempts the move to its owner's
+graveyard. A following `CardResultCount` reads the selection facts, not a guessed result from a
+successful destination move; if a replacement changes the attempted destination, the selected
+card's recorded type still drives the printed type condition. An empty eligible cohort completes with
+an empty result. The linked key retains the physical source ObjectId and zone-change generation,
+producer identity, link ID, and occurrence.
+The chooser sees only current linked records that still match the filter and exact live generation.
+For this Program profile, candidates must be face-up in Exile when first offered, when a saved offer
+is refreshed, and when an answer is validated. A prior Hideaway viewer's private look permission
+never grants a delegated chooser access; registry admission rejects a Hideaway producer for the
+matching mandatory Program consumer.
+
+The handwritten [Currency Converter definition](../data/currency_converter.ron) and
+[review map](review-maps/currency_converter.json) pin its three Oracle lines to the actual-card
+scenario coverage. The begun mandatory choice keeps its original ability-controller attribution and
+Program cursor through the narrow active/saved departure path for this profile. When that ability
+has begun resolving, CR 800.4a makes its departed controller's noncard stack object cease to exist;
+CR 608.2m requires the already-resolving ability to finish. The retained Program is execution state,
+not a new stack object. A source leave does not rebind the begun occurrence to a later source
+incarnation. If the chooser has left, CR 800.4g lets the ability controller choose a replacement
+chooser. If that controller has also left, this runtime applies CR 800.4h so the next live player
+makes that selector choice. This two-step selector policy is an explicit engine interpretation, not
+an example stated by the rules.
+Delegation changes who supplies the resolution choice, not the ability-controller attribution or
+result's recorded card owner. If every offered card is no longer available, the instruction completes
+with an empty cohort. A later `CreateTokens(..., who: Controller)` instruction does not create a
+token for the departed original controller (CR 800.4b). This is specialized to the existing Currency
+Converter return ability and does not widen other linked choices or general ability-departure
+behavior. Nautiloid Ship's optional `ChooseLinkedExiledCard` return-to-controller-battlefield path
+remains unchanged; `PlayLinkedExiledCard` is the separate legacy path for Hideaway play permissions.
+Neither path is admitted by this Program form, which also excludes optional linked choices and other
+destinations.
+
 `Mill` may bind a typed `CardResultCohort`. In a spell or triggered-ability program, `ChooseCard`
 accepts two exact source shapes: `WholeCurrentGraveyard`, which searches the controller's current
 graveyard without an input, or `CardResultCohort(players: ...)`, which requires

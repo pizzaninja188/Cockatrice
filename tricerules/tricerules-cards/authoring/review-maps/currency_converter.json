@@ -25,7 +25,15 @@
       "start_line": 3,
       "end_line": 3,
       "typed_paths": [
-        "/faces/0/activated_abilities/1"
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/program/body/steps/0",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Perform/ChooseLinkedExiledCard",
+        "/faces/0/activated_abilities/1/program/body/steps/1/kind/IfResult",
+        "/faces/0/activated_abilities/1/program/body/steps/1/kind/IfResult/condition/CardResultCount",
+        "/faces/0/activated_abilities/1/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/CreateTokens",
+        "/faces/0/activated_abilities/1/program/body/steps/2/kind/IfResult",
+        "/faces/0/activated_abilities/1/program/body/steps/2/kind/IfResult/condition/CardResultCount",
+        "/faces/0/activated_abilities/1/program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/CreateTokens"
       ]
     }
   ],
@@ -73,6 +81,38 @@
     {
       "test": "scenario deck_coverage_linked_exile_choice::currency_converter_rejects_a_stale_linked_exile_answer_without_consuming_the_choice",
       "covers": "wrong-player, malformed and stale linked-choice answers fail without consuming the pending choice or changing state"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_linked_choice_rejects_unrelated_player_fields_atomically",
+      "covers": "the mandatory linked-card answer rejects unrelated player-selection fields without changing the active offer"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_linked_program_rejects_every_unrelated_card_answer_field_atomically",
+      "covers": "the linked Program answer rejects every unrelated choice field before consuming its prompt"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_keeps_the_begun_linked_program_after_its_controller_concedes",
+      "covers": "a begun mandatory return survives its controller's Concede, delegates the card choice, and does not create a tail token for the departed controller"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_program_continues_with_empty_cohort_when_source_and_candidates_owner_concede",
+      "covers": "source-owner departure prunes unavailable linked cards and completes the mandatory Program with an empty result"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_reselects_a_four_player_delegate_with_stable_tombstones_and_prompt_ids",
+      "covers": "four-player departure reselects a live delegate, retains tombstones, and rejects the stale prompt atomically"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_moves_selector_after_the_current_delegate_picker_concedes",
+      "covers": "when a delegate picker concedes, the next live selector receives a fresh offer and can complete the exact linked choice"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_return_program_cannot_read_old_link_records_after_source_reentry",
+      "covers": "the begun old activation retains its original source generation and link while a new source incarnation cannot consume old linked records"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_full_saved_observer_accepted_stream_replays_exactly",
+      "covers": "a real Currency Program saved under an Aura return resumes after Concede, moves the selected linked card, runs its tail once, and replays every accepted command batch and final state exactly"
     }
   ],
   "complete_definition_review_confirmed": true,
@@ -84,6 +124,22 @@
     {
       "symbol": "SpellEffectKind::Discard",
       "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseLinkedExiledCard",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/0/kind/Perform/ChooseLinkedExiledCard"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/1/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/CreateTokens"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/CreateTokens"
     }
   ]
 }

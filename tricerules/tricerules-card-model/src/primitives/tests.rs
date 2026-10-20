@@ -2325,6 +2325,374 @@ fn linked_exile_choice_requires_its_exact_trigger_object_or_graveyard_exile_prod
 }
 
 #[test]
+fn mandatory_program_owner_graveyard_linked_choice_rejects_hideaway_look_permission() {
+    let hideaway_owner_graveyard_return = r#"(
+        id: "hideaway_linked_program_return", name: "Hideaway Linked Program Return",
+        face_id: "hideaway_linked_program_return", types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "hideaway", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [Hideaway(count: 1, linked_exile_id: "exiled_cards")],
+        )],
+        activated_abilities: [(
+            ability_id: "return_linked_card", presentation: Fallback, costs: [Tap],
+            effect: [], program: Some((body: (steps: [
+                (id: "choose_linked_card", bind: ["chosen"], input: None,
+                    kind: Perform(ChooseLinkedExiledCard(
+                        producer_ability_id: "hideaway",
+                        linked_exile_id: "exiled_cards",
+                        filter: (card_type: Some(Creature)),
+                        destination: OwnerGraveyard,
+                        optional: false,
+                    ))),
+            ], yields: []), target_bindings: [])),
+        )],
+    )"#;
+
+    let error = crate::CardRegistry::from_chunks_and_tokens(
+        &[hideaway_owner_graveyard_return],
+        &[],
+    )
+    .expect_err(
+        "a delegated Program chooser must not inherit a prior Hideaway viewer's look permission",
+    );
+    assert!(
+        error.to_string().contains(
+            "mandatory Program OwnerGraveyard linked Exile choices cannot use Hideaway producers"
+        ),
+        "unexpected hidden linked-choice admission error: {error}"
+    );
+
+    let legacy_hideaway_play = r#"(
+        id: "legacy_hideaway_play", name: "Legacy Hideaway Play", face_id: "legacy_hideaway_play",
+        types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "hideaway", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [Hideaway(count: 1, linked_exile_id: "exiled_cards")],
+        )],
+        activated_abilities: [(
+            ability_id: "play_linked_card", presentation: Fallback, costs: [Tap],
+            effect: [PlayLinkedExiledCard(
+                producer_ability_id: "hideaway",
+                linked_exile_id: "exiled_cards",
+                filter: None,
+                play_kind: Play,
+                return_source_to_owner_hand_if_cast: false,
+            )],
+        )],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[legacy_hideaway_play], &[])
+        .expect("legacy Hideaway play permissions remain supported");
+}
+
+#[test]
+fn currency_converter_linked_choice_program_binds_a_typed_land_and_nonland_result() {
+    let currency = r#"(
+        id: "currency_converter", name: "Currency Converter",
+        face_id: "currency_converter", mana_cost: "{1}", types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "discard_to_exile", presentation: OracleLines([1]),
+            trigger: WheneverPlayerDiscardsCard(player: Controller),
+            effect: [Exile(subject: TriggerObject, linked_exile_id: Some("exiled_cards"))],
+        )],
+        activated_abilities: [(
+            ability_id: "return_linked_card", presentation: OracleLines([3]),
+            source_zone: Battlefield, costs: [Tap], effect: [],
+            program: Some((body: (steps: [
+                (id: "choose_linked_card", bind: ["chosen"], input: None,
+                    kind: Perform(ChooseLinkedExiledCard(
+                        producer_ability_id: "discard_to_exile",
+                        linked_exile_id: "exiled_cards",
+                        filter: (any_of: Some([
+                            (card_type: Some(Creature)),
+                            (card_type: Some(Noncreature)),
+                        ])),
+                        destination: OwnerGraveyard,
+                        optional: false,
+                    ))),
+                (id: "create_treasure_for_land", bind: [], input: None,
+                    kind: IfResult(
+                        condition: CardResultCount(result: "chosen", card_type: Some(Land),
+                            min: Some(1), max: None),
+                        yes: (steps: [(id: "create_treasure", bind: [], input: None,
+                            kind: Perform(CreateTokens(token: "treasure", count: 1,
+                                who: Controller, tapped: false, sacrifice_timing: None)))],
+                            yields: []),
+                        no: (steps: [], yields: []),
+                    )),
+                (id: "create_rogue_for_nonland", bind: [], input: None,
+                    kind: IfResult(
+                        condition: CardResultCount(result: "chosen", card_type: Some(Nonland),
+                            min: Some(1), max: None),
+                        yes: (steps: [(id: "create_rogue", bind: [], input: None,
+                            kind: Perform(CreateTokens(token: "rogue_b_2_2", count: 1,
+                                who: Controller, tapped: false, sacrifice_timing: None)))],
+                            yields: []),
+                        no: (steps: [], yields: []),
+                    )),
+            ], yields: []), target_bindings: [])),
+        )],
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(
+        &[currency],
+        &[
+            include_str!("../../../tricerules-cards/data/tokens/treasure.ron"),
+            include_str!("../../../tricerules-cards/data/tokens/rogue_b_2_2.ron"),
+        ],
+    )
+    .unwrap_or_else(|error| {
+        panic!("Currency Converter's linked-choice Program must compile: {error}")
+    });
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "currency_converter".into(),
+        face_id: crate::CardFaceId::new("currency_converter").unwrap(),
+        ability_path: vec![crate::AbilityId::new("return_linked_card").unwrap()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the actual return-linked-card ability has a compiled Program owner");
+    assert_eq!(program.owner, owner);
+    assert_eq!(program.context, crate::primitives::EffectContext::Ability);
+    let choose = &program.body.steps[0];
+    assert_eq!(choose.id, "choose_linked_card");
+    assert_eq!(choose.outputs.len(), 1);
+    let result_type = &program.slot(choose.outputs[0]).unwrap().result_type;
+    let crate::primitives::ResultType::LinkedExileCardResultCohort {
+        producer_ability_id,
+        linked_exile_id,
+        cardinality,
+    } = result_type
+    else {
+        panic!("linked choice retains its exact origin and owner-local cohort facts");
+    };
+    assert_eq!(
+        producer_ability_id,
+        &crate::AbilityId::new("discard_to_exile").unwrap()
+    );
+    assert_eq!(
+        linked_exile_id,
+        &crate::AbilityLinkId::new("exiled_cards").unwrap()
+    );
+    assert_eq!(
+        *cardinality,
+        crate::primitives::Cardinality {
+            min: 0,
+            max: Some(1),
+        }
+    );
+    assert_eq!(program.body.steps.len(), 3);
+}
+
+#[test]
+fn linked_choice_program_link_ids_and_producer_abilities_are_validated() {
+    let definition = |named_producer: &str, linked_id: &str| {
+        format!(
+            r#"(
+                id: "linked_choice_program_link_fixture", name: "Linked Choice Program Link Fixture",
+                face_id: "linked_choice_program_link_fixture", types: ["Artifact"],
+                triggered_abilities: [(
+                    ability_id: "exile_cards", presentation: Fallback,
+                    trigger: WheneverPlayerDiscardsCard(player: Controller),
+                    effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_cards"))],
+                )],
+                activated_abilities: [(
+                    ability_id: "choose_card", presentation: Fallback, costs: [Tap], effect: [],
+                    program: Some((body: (steps: [
+                        (id: "choose_linked_card", bind: ["chosen"], kind: Perform(
+                            ChooseLinkedExiledCard(
+                                producer_ability_id: "{named_producer}",
+                                linked_exile_id: "{linked_id}",
+                                filter: (card_type: Some(Creature)),
+                                destination: OwnerGraveyard,
+                                optional: false,
+                            )
+                        )),
+                    ], yields: []), target_bindings: [])),
+                )],
+            )"#
+        )
+    };
+
+    let wrong_producer = definition("another_ability", "linked_cards");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_producer], &[])
+        .expect_err("Program chooser must name the unique exact producer ability");
+    assert!(
+        error.to_string().contains(
+            "linked Exile choice must name its matching TriggerObject or graveyard-exile producer"
+        ),
+        "unexpected producer error: {error}"
+    );
+
+    let wrong_link = definition("exile_cards", "another_link");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_link], &[])
+        .expect_err("Program consumer must share the producer's link ID");
+    assert!(
+        error
+            .to_string()
+            .contains("requires exactly one producer and one consumer"),
+        "unexpected linked-pair error: {error}"
+    );
+}
+
+#[test]
+fn currency_linked_choice_leaf_is_admitted_as_a_typed_program_result() {
+    let body = r#"(steps: [
+        (id: "choose_linked_card", bind: ["chosen"], kind: Perform(
+            ChooseLinkedExiledCard(
+                producer_ability_id: "discard_to_exile",
+                linked_exile_id: "exiled_cards",
+                filter: (any_of: Some([
+                    (card_type: Some(Creature)),
+                    (card_type: Some(Noncreature)),
+                ])),
+                destination: OwnerGraveyard,
+                optional: false,
+            )
+        )),
+    ], yields: [])"#;
+    let authored: crate::CardProgram =
+        ron::from_str(&format!("(body: {body})")).expect("linked choice body parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "currency_converter".into(),
+        face_id: crate::CardFaceId::new("currency_converter").unwrap(),
+        ability_path: vec![crate::AbilityId::new("return_linked_card").unwrap()],
+    });
+    let compiled = crate::primitives::CompiledProgram::compile(
+        owner,
+        crate::primitives::EffectContext::Ability,
+        &authored,
+    );
+    assert!(
+        compiled.is_ok(),
+        "the exact mandatory OwnerGraveyard linked-card move needs a typed Program result: {compiled:?}"
+    );
+
+    for (invalid, reason) in [
+        (
+            body.replace("optional: false", "optional: true"),
+            "optional linked-card choices are outside the admitted result profile",
+        ),
+        (
+            body.replace(
+                "destination: OwnerGraveyard",
+                "destination: ControllerBattlefield",
+            ),
+            "controller battlefield moves have a different result profile",
+        ),
+    ] {
+        let authored: crate::CardProgram =
+            ron::from_str(&format!("(body: {invalid})")).expect("variant body parses");
+        let error = crate::primitives::CompiledProgram::compile(
+            crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                card_id: "currency_converter".into(),
+                face_id: crate::CardFaceId::new("currency_converter").unwrap(),
+                ability_path: vec![crate::AbilityId::new("return_linked_card").unwrap()],
+            }),
+            crate::primitives::EffectContext::Ability,
+            &authored,
+        )
+        .expect_err(reason);
+        assert!(
+            error.contains("mandatory ability-owned OwnerGraveyard"),
+            "{error}"
+        );
+    }
+
+    let spell: crate::CardProgram =
+        ron::from_str(&format!("(body: {body})")).expect("spell body parses");
+    let error = crate::primitives::CompiledProgram::compile(
+        crate::ProgramOwnerId::face(
+            "linked_choice_spell_fixture",
+            crate::CardFaceId::new("linked_choice_spell_fixture").unwrap(),
+        ),
+        crate::primitives::EffectContext::Spell,
+        &spell,
+    )
+    .expect_err("linked card choice result is ability-owned");
+    assert!(
+        error.contains("mandatory ability-owned OwnerGraveyard"),
+        "{error}"
+    );
+}
+
+#[test]
+fn linked_choice_program_result_joins_only_the_same_producer_and_link() {
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "currency_converter".into(),
+        face_id: crate::CardFaceId::new("currency_converter").unwrap(),
+        ability_path: vec![crate::AbilityId::new("return_linked_card").unwrap()],
+    });
+    let body = |right_producer: &str, right_link: &str| {
+        format!(
+            r#"(body: (steps: [(id: "branch", bind: ["chosen"], kind: If(
+                condition: Void,
+                yes: (steps: [(id: "left_choice", bind: ["left"], kind: Perform(
+                    ChooseLinkedExiledCard(
+                        producer_ability_id: "discard_to_exile",
+                        linked_exile_id: "exiled_cards",
+                        filter: (card_type: Some(Creature)),
+                        destination: OwnerGraveyard,
+                        optional: false,
+                    )
+                ))], yields: ["left"]),
+                no: (steps: [(id: "right_choice", bind: ["right"], kind: Perform(
+                    ChooseLinkedExiledCard(
+                        producer_ability_id: "{right_producer}",
+                        linked_exile_id: "{right_link}",
+                        filter: (card_type: Some(Creature)),
+                        destination: OwnerGraveyard,
+                        optional: false,
+                    )
+                ))], yields: ["right"]),
+            ))], yields: []), target_bindings: [])"#
+        )
+    };
+
+    let same_origin: crate::CardProgram =
+        ron::from_str(&body("discard_to_exile", "exiled_cards")).unwrap();
+    let compiled = crate::primitives::CompiledProgram::compile(
+        owner.clone(),
+        crate::primitives::EffectContext::Ability,
+        &same_origin,
+    )
+    .expect("same linked result origin may join across branches");
+    let joined = &compiled
+        .slot(compiled.body.steps[0].outputs[0])
+        .unwrap()
+        .result_type;
+    assert!(matches!(
+        joined,
+        crate::primitives::ResultType::LinkedExileCardResultCohort {
+            producer_ability_id,
+            linked_exile_id,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        } if producer_ability_id.as_str() == "discard_to_exile"
+            && linked_exile_id.as_str() == "exiled_cards"
+    ));
+
+    for (producer, link) in [
+        ("another_producer", "exiled_cards"),
+        ("discard_to_exile", "another_link"),
+    ] {
+        let different_origin: crate::CardProgram = ron::from_str(&body(producer, link)).unwrap();
+        let error = crate::primitives::CompiledProgram::compile(
+            owner.clone(),
+            crate::primitives::EffectContext::Ability,
+            &different_origin,
+        )
+        .expect_err("distinct linked result origins cannot join");
+        assert!(
+            error.contains("mismatched explicit yield types"),
+            "unexpected error for producer={producer}, link={link}: {error}"
+        );
+    }
+}
+
+#[test]
 fn return_other_linked_exiled_cards_requires_its_exact_imprint_producer_and_receipt() {
     let definition = |producer: &str, link: &str, previous: &str| {
         format!(

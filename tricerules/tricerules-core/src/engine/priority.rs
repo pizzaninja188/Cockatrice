@@ -100,6 +100,31 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
+        let pending_linked_program_choice =
+            self.state.pending_resolution.as_ref().and_then(|pending| {
+                match &pending.continuation {
+                    ResolutionContinuation::LinkedExileChoice {
+                        stack, key, action, ..
+                    } if self.is_mandatory_program_linked_owner_graveyard_choice(
+                        stack, key, *action,
+                    ) =>
+                    {
+                        Some((
+                            stack.item.id,
+                            stack.item.source_zone_change,
+                            key.source_object_id,
+                        ))
+                    }
+                    _ => None,
+                }
+            });
+        let pending_linked_source_departed =
+            pending_linked_program_choice.is_some_and(|(_, _, source_id)| {
+                self.state
+                    .objects
+                    .get(&source_id)
+                    .is_some_and(|object| departed.contains(&object.owner))
+            });
         let discard_departed_suspended_resolution = self
             .state
             .pending_observer_return_batch
@@ -120,10 +145,32 @@ impl GameEngine {
                     ResolutionContinuation::PlayerSetDiscard { discard, .. } => Some(discard),
                     _ => None,
                 };
-                Some((stack, discard))
+                let linked_program = match &pending.continuation {
+                    ResolutionContinuation::LinkedExileChoice {
+                        stack,
+                        key,
+                        action,
+                        ..
+                    } if self.is_mandatory_program_linked_owner_graveyard_choice(
+                        stack, key, *action,
+                    ) => Some(key.source_object_id),
+                    _ => None,
+                };
+                Some((stack, discard, linked_program))
             })
-            .is_some_and(|(stack, discard)| {
-                if !is_departed(stack) {
+            .is_some_and(|(stack, discard, linked_program)| {
+                let linked_source_departed = linked_program.is_some_and(|source_id| {
+                    self.state
+                        .objects
+                        .get(&source_id)
+                        .is_some_and(|object| departed.contains(&object.owner))
+                });
+                if !is_departed(stack) && !linked_source_departed {
+                    return false;
+                }
+                if linked_program.is_some() {
+                    // The independently owed observer return remains active while this exact
+                    // begun Program waits below it; restore-time reconciliation refreshes it.
                     return false;
                 }
                 if let Some(discard) = discard {
@@ -201,11 +248,20 @@ impl GameEngine {
                 .pending_resolution
                 .as_ref()
                 .and_then(|pending| {
-                    (!independent_entry)
-                        .then(|| pending.continuation.stack())
-                        .flatten()
+                    if independent_entry {
+                        return None;
+                    }
+                    let stack = pending.continuation.stack()?;
+                    let is_pending_linked_root = pending_linked_program_choice.is_some_and(
+                        |(root_id, root_generation, _)| {
+                            stack.item.id == root_id
+                                && stack.item.source_zone_change == root_generation
+                        },
+                    );
+                    (is_departed(stack)
+                        || (is_pending_linked_root && pending_linked_source_departed))
+                        .then_some(stack)
                 })
-                .filter(|stack| is_departed(stack))
                 .cloned()
         }
         .or_else(|| {
@@ -327,6 +383,14 @@ impl GameEngine {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
                     // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
+                ResolutionContinuation::LinkedExileChoice { .. }
+                    if pending_linked_program_choice.is_some() =>
+                {
+                    // CR 608.2m preserves this exact in-flight mandatory Program leaf even when
+                    // its controller or physical source owner leaves. Its offered cohort is
+                    // reconciled only after departed-owned objects have been removed.
                     preserve = true;
                 }
                 ResolutionContinuation::ProgramProliferate { .. } => {

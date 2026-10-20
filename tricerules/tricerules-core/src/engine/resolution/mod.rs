@@ -64,6 +64,187 @@ pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
 mod tokens;
 pub(in crate::engine) mod zones;
 
+impl GameEngine {
+    /// Keep begun ability Programs alive only for the compiled mandatory linked-Exile move
+    /// contract approved for this runtime. Legacy linked play/battlefield choices keep their
+    /// existing departure policy.
+    pub(in crate::engine) fn is_mandatory_program_linked_owner_graveyard_choice(
+        &self,
+        stack: &ParkedStackResolution,
+        key: &crate::state::LinkedExileKey,
+        action: crate::state::PendingLinkedExileAction,
+    ) -> bool {
+        use tricerules_card_model::primitives::{LinkedExiledCardDestination, SpellEffectKind};
+
+        if !matches!(
+            action,
+            crate::state::PendingLinkedExileAction::Move {
+                destination: LinkedExiledCardDestination::OwnerGraveyard,
+                optional: false,
+            }
+        ) {
+            return false;
+        }
+        let Some(run) = stack.program.as_ref() else {
+            return false;
+        };
+        if run.in_flight.is_none()
+            || stack.item.source_permanent_id != Some(key.source_object_id)
+            || stack.item.source_zone_change != key.source_zone_change
+        {
+            return false;
+        }
+        let tricerules_card_model::ProgramOwnerId::Ability(owner) = &run.owner else {
+            return false;
+        };
+        if owner.card_id != key.producer.card_id || owner.face_id != key.producer.face_id {
+            return false;
+        }
+        let Some(producer_ability_id) = key.producer.ability_path.last() else {
+            return false;
+        };
+        matches!(
+            self.current_program_perform(run),
+            Ok(SpellEffectKind::ChooseLinkedExiledCard {
+                producer_ability_id: current_producer,
+                linked_exile_id,
+                destination: LinkedExiledCardDestination::OwnerGraveyard,
+                optional: false,
+                ..
+            }) if current_producer == *producer_ability_id
+                && linked_exile_id == key.ability_link_id
+        )
+    }
+}
+
+/// Rebuild a linked-card or delegate offer from its private continuation after departure or
+/// observer restoration. Existing LinkedExileCards and ResolutionBranch payloads are sufficient.
+pub(in crate::engine) fn linked_exile_choice_event(engine: &GameEngine) -> Option<rv1::RuledEvent> {
+    use crate::state::PendingLinkedExileChoiceStage;
+
+    let pending = engine.state.pending_resolution.as_ref()?;
+    let ResolutionContinuation::LinkedExileChoice {
+        stack,
+        key,
+        action,
+        stage,
+        ..
+    } = &pending.continuation
+    else {
+        return None;
+    };
+    if !engine.is_mandatory_program_linked_owner_graveyard_choice(stack, key, *action) {
+        return None;
+    }
+    let (
+        choice_kind,
+        candidate_object_ids,
+        candidate_card_ids,
+        candidate_names,
+        candidate_source_zones,
+        resolution_branches,
+        min,
+        max,
+    ) = match stage {
+        PendingLinkedExileChoiceStage::ChoosingDelegate { candidates } => {
+            let eligible = resolution_choice_delegate_candidates(
+                &engine.state,
+                stack.item.controller,
+                stack.item.controller,
+            );
+            let options = candidates
+                .iter()
+                .enumerate()
+                .map(|(index, candidate)| {
+                    let selectable = candidate.is_some_and(|candidate| {
+                        eligible.contains(&candidate)
+                            && engine
+                                .state
+                                .player_idx(candidate)
+                                .is_some_and(|seat| !engine.state.players[seat].has_lost)
+                    });
+                    let label = candidate.map_or_else(
+                        || "Unavailable player".to_string(),
+                        |candidate| format!("P{candidate} makes the choice"),
+                    );
+                    rv1::ResolutionBranchOption {
+                        branch_index: index as u32,
+                        label: label.clone(),
+                        selectable,
+                        presentation: Some(rv1::PresentationRef {
+                            fallback_text: label,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }
+                })
+                .collect();
+            (
+                rv1::ChoiceKind::ResolutionBranch,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                options,
+                1,
+                1,
+            )
+        }
+        PendingLinkedExileChoiceStage::Selecting { .. } => {
+            let candidate_object_ids = pending.presentation.candidates.clone();
+            let (candidate_card_ids, candidate_names) =
+                candidate_identities(engine, &candidate_object_ids);
+            let candidate_source_zones =
+                vec![rv1::ChoiceCandidateSourceZone::Exile as i32; candidate_object_ids.len()];
+            (
+                rv1::ChoiceKind::LinkedExileCards,
+                candidate_object_ids,
+                candidate_card_ids,
+                candidate_names,
+                candidate_source_zones,
+                Vec::new(),
+                pending.presentation.min,
+                pending.presentation.max,
+            )
+        }
+    };
+    Some(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: pending.resolution_prompt_id.get(),
+                accepted_permanent_selections: Vec::new(),
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: pending.deciding_player,
+                source_object_id: pending.presentation.source_object_id,
+                prompt_text: pending.presentation.prompt.clone(),
+                choice_kind: choice_kind as i32,
+                candidate_object_ids,
+                candidate_card_ids,
+                min,
+                max,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                resolution_branches,
+                mana_cost: String::new(),
+                candidate_selectable: Vec::new(),
+                public_reveal: None,
+                candidate_source_zones,
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    })
+}
+
 /// Shared resolution context for one primitive effect.
 struct EffectCx<'a> {
     engine: &'a mut GameEngine,
@@ -3236,7 +3417,11 @@ impl GameEngine {
         let mut entries = Vec::new();
         let mut logs = Vec::new();
         for pid in recipients {
-            if self.state.player_idx(pid).is_none() {
+            if self
+                .state
+                .player_idx(pid)
+                .is_none_or(|index| self.state.players[index].has_lost)
+            {
                 continue;
             }
             let replaced_count = self.token_creation_replaced_count(pid, count);
