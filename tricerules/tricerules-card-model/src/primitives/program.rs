@@ -15,10 +15,11 @@
 use super::{
     Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
     CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
-    EffectSubject, GameCondition, LibraryBottomOrder, LifeAmount, PlayerRecipient,
-    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, SearchDestination,
-    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
-    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
+    EffectSubject, GameCondition, GraveyardDestination, LibraryBottomOrder, LifeAmount,
+    PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost,
+    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
+    SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
+    ZoneCardFilter,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -445,8 +446,9 @@ pub struct CompiledProgram {
     pub slots: Vec<CompiledSlot>,
 }
 
-struct Compiler {
+struct Compiler<'a> {
     context: EffectContext,
+    targeting: Option<&'a TargetingDef>,
     target_references: Vec<ProgramTargetReference>,
     cast_payment_profile: Option<ProgramCastPaymentProfile>,
     cast_cost_options: HashMap<ChoiceId, HashSet<ChoiceId>>,
@@ -516,6 +518,7 @@ impl CompiledProgram {
             owner,
             context,
             program,
+            targeting,
             cast_cost_groups,
             cast_payment_profile,
         )?;
@@ -565,6 +568,7 @@ impl CompiledProgram {
         owner: ProgramOwnerId,
         context: EffectContext,
         program: &CardProgram,
+        targeting: Option<&TargetingDef>,
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
@@ -577,6 +581,7 @@ impl CompiledProgram {
         let target_projection = owner.target_projection();
         let mut compiler = Compiler {
             context,
+            targeting,
             target_references: program.target_bindings.clone(),
             cast_payment_profile,
             cast_cost_options: cast_cost_groups
@@ -656,13 +661,61 @@ fn spell_hand_discard_target_group(
     Ok(reference.target_group_index)
 }
 
+fn ability_graveyard_exile_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+) -> Result<(u32, u32), String> {
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "ability_program MoveGraveyardCards Exile instruction '{instruction_id}' requires one explicit Target binding"
+        ));
+    };
+    if reference.role != ProgramTargetRole::Target || matches.next().is_some() {
+        return Err(format!(
+            "ability_program MoveGraveyardCards Exile instruction '{instruction_id}' requires exactly one explicit Target binding"
+        ));
+    }
+    let targeting = targeting.ok_or_else(|| {
+        "ability_program graveyard Exile result requires an authored target group".to_string()
+    })?;
+    if targeting.groups.len() != 1 {
+        return Err(
+            "ability_program graveyard Exile result requires exactly one target group".into(),
+        );
+    }
+    let target_group_index = reference.target_group_index;
+    let group = targeting
+        .groups
+        .get(target_group_index as usize)
+        .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
+    if group.chooser != super::TargetChooser::Controller
+        || group.min != 0
+        || group.max != 2
+        || !group.same_graveyard
+        || !group.effect_indices.is_empty()
+        || !group.distinct_from.is_empty()
+        || group.cast_cost_expansion.is_some()
+    {
+        return Err(
+            "ability_program graveyard Exile result requires one controller-chosen 0..2 same-graveyard target group".into(),
+        );
+    }
+    Ok((target_group_index, group.max))
+}
+
 fn validate_target_card_result_groups(
     program: &CompiledProgram,
     schema: &TargetSchema<'_, '_>,
 ) -> Result<(), String> {
     for slot in &program.slots {
         let ResultType::TargetCardResultCohort {
-            target_group_index, ..
+            action,
+            target_group_index,
+            ..
         } = &slot.result_type
         else {
             continue;
@@ -671,17 +724,33 @@ fn validate_target_card_result_groups(
             .groups
             .get(*target_group_index as usize)
             .ok_or_else(|| "targeted card result references an unknown target group".to_string())?;
-        if group.min != 1 || group.max != 1 {
-            let label = match slot.result_type {
-                ResultType::TargetCardResultCohort {
-                    action: CardResultAction::Discard,
-                    ..
-                } => "ChooseHandCards discard",
-                _ => "Destroy",
-            };
-            return Err(format!(
-                "{label} result requires a target group whose bounds are exactly 1..1"
-            ));
+        match action {
+            CardResultAction::Discard | CardResultAction::Destroy
+                if group.min == 1 && group.max == 1 => {}
+            CardResultAction::Exile
+                if program.context == EffectContext::Ability
+                    && schema.groups.len() == 1
+                    && group.chooser == super::TargetChooser::Controller
+                    && group.min == 0
+                    && group.max == 2
+                    && group.same_graveyard
+                    && group.bindings.len() == 1
+                    && matches!(group.bindings[0].role, super::TargetRole::GraveyardCard(_)) => {}
+            CardResultAction::Exile => {
+                return Err(
+                    "ability_program graveyard Exile result requires one controller-chosen 0..2 same-graveyard card target group".into(),
+                );
+            }
+            action => {
+                let label = match action {
+                    CardResultAction::Discard => "ChooseHandCards discard",
+                    CardResultAction::Destroy => "Destroy",
+                    _ => "targeted card result",
+                };
+                return Err(format!(
+                    "{label} result requires a target group whose bounds are exactly 1..1"
+                ));
+            }
         }
     }
     Ok(())
@@ -709,6 +778,13 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
                 subject: EffectSubject::Chosen(_),
             },
             ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::MoveGraveyardCards {
+                destination: GraveyardDestination::Exile,
+                ..
+            },
+            ProgramTargetRole::Target,
         )
         | (
             SpellEffectKind::ChooseCohortPartition {
@@ -876,7 +952,7 @@ fn compile_group_inputs(
     Ok(inputs)
 }
 
-impl Compiler {
+impl Compiler<'_> {
     fn compile_block(
         &mut self,
         authored: &AuthoredBlock,
@@ -940,6 +1016,7 @@ impl Compiler {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
+                    let mut target_group_max = None;
                     let target_group_index = if self.context == EffectContext::Spell {
                         match effect.as_ref() {
                             SpellEffectKind::Destroy {
@@ -956,11 +1033,32 @@ impl Compiler {
                             }
                             _ => None,
                         }
+                    } else if self.context == EffectContext::Ability {
+                        match effect.as_ref() {
+                            SpellEffectKind::MoveGraveyardCards {
+                                destination: GraveyardDestination::Exile,
+                                ..
+                            } => {
+                                let (group_index, group_max) =
+                                    ability_graveyard_exile_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                    )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            _ => None,
+                        }
                     } else {
                         None
                     };
-                    let result_types =
-                        validate_and_result_types(effect, self.context, target_group_index)?;
+                    let result_types = validate_and_result_types(
+                        effect,
+                        self.context,
+                        target_group_index,
+                        target_group_max,
+                    )?;
                     if target_group_index.is_some()
                         && matches!(
                             effect.as_ref(),
@@ -978,6 +1076,21 @@ impl Compiler {
                             };
                         return Err(format!(
                             "spell_program {label} instruction '{}' must bind its single typed result",
+                            instruction.id
+                        ));
+                    }
+                    if target_group_index.is_some()
+                        && matches!(
+                            effect.as_ref(),
+                            SpellEffectKind::MoveGraveyardCards {
+                                destination: GraveyardDestination::Exile,
+                                ..
+                            }
+                        )
+                        && (instruction.bind.len() != 1 || result_types.len() != 1)
+                    {
+                        return Err(format!(
+                            "ability_program MoveGraveyardCards Exile instruction '{}' must bind its single typed result",
                             instruction.id
                         ));
                     }
@@ -1985,8 +2098,45 @@ fn validate_and_result_types(
     effect: &SpellEffectKind,
     context: EffectContext,
     target_group_index: Option<u32>,
+    target_group_max: Option<u32>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
+        SpellEffectKind::MoveGraveyardCards {
+            filter,
+            destination: GraveyardDestination::Exile,
+            linked_exile_id,
+            entry_modifiers,
+        } if context == EffectContext::Ability => {
+            let target_group_index = target_group_index.ok_or_else(|| {
+                "ability_program MoveGraveyardCards Exile requires one explicit Target binding"
+                    .to_string()
+            })?;
+            let max = target_group_max.ok_or_else(|| {
+                "ability_program graveyard Exile result requires a validated target group".to_string()
+            })?;
+            if linked_exile_id.is_some() || !entry_modifiers.is_empty() {
+                return Err(
+                    "ability_program MoveGraveyardCards Exile does not support linked exile or entry modifiers".into(),
+                );
+            }
+            if filter.mana_value_less_than_trigger_object {
+                return Err(
+                    "ability_program MoveGraveyardCards Exile cannot depend on a trigger object".into(),
+                );
+            }
+            effect.validate(context)?;
+            Ok(vec![ResultType::TargetCardResultCohort {
+                action: CardResultAction::Exile,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(max),
+                },
+                target_group_index,
+            }])
+        }
+        SpellEffectKind::MoveGraveyardCards { .. } => Err(
+            "MoveGraveyardCards in a resolution program supports only a targeted ability-owned graveyard Exile".into(),
+        ),
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(filter),
         } if context == EffectContext::Ability
@@ -3267,5 +3417,39 @@ fn discard_upper_bound(quantity: &super::DiscardQuantity) -> Option<u32> {
         | super::DiscardQuantity::UpTo(count) => Some(*count),
         super::DiscardQuantity::AnyNumber | super::DiscardQuantity::All => None,
         super::DiscardQuantity::UnlessOne { count, .. } => Some(*count),
+    }
+}
+
+#[cfg(test)]
+mod result_type_join_tests {
+    use super::{join_result_types, CardResultAction, Cardinality, ResultType};
+
+    fn cohort(action: CardResultAction, target_group_index: u32) -> ResultType {
+        ResultType::TargetCardResultCohort {
+            action,
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(2),
+            },
+            target_group_index,
+        }
+    }
+
+    #[test]
+    fn targeted_card_cohort_joins_preserve_action_and_group_origin() {
+        let exile = cohort(CardResultAction::Exile, 0);
+        assert_eq!(
+            join_result_types(&exile, &exile),
+            Some(exile.clone()),
+            "matching Exile cohorts from the same target group can join"
+        );
+        assert!(
+            join_result_types(&exile, &cohort(CardResultAction::Exile, 1)).is_none(),
+            "cohorts from different target groups cannot join"
+        );
+        assert!(
+            join_result_types(&exile, &cohort(CardResultAction::Destroy, 0)).is_none(),
+            "different card actions cannot join even when they share a target group"
+        );
     }
 }

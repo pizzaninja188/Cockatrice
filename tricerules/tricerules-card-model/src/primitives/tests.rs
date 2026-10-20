@@ -13879,3 +13879,367 @@ fn source_sacrifice_reflexive_damage_accepts_any_positive_fixed_all_creature_amo
         );
     }
 }
+
+#[test]
+fn ability_program_binds_same_graveyard_exile_result_to_its_target_group() {
+    let program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "exile", bind: ["exiled"], input: None,
+                kind: Perform(MoveGraveyardCards(
+                    filter: (owner: AnyPlayer), destination: Exile,
+                    linked_exile_id: None, entry_modifiers: [],
+                ))),
+            (id: "drain_if_creature", bind: [], input: None,
+                kind: IfResult(
+                    condition: CardResultCount(result: "exiled",
+                        card_type: Some(Creature), min: Some(1), max: None),
+                    yes: (steps: [
+                        (id: "lose_life", bind: [], input: None,
+                            kind: Perform(LoseLife(amount: Fixed(2), who: EachOpponent))),
+                        (id: "gain_life", bind: [], input: None,
+                            kind: Perform(GainLife(amount: 2))),
+                    ], yields: []),
+                    no: (steps: [], yields: []),
+                )),
+        ], yields: []), target_bindings: [
+            (instruction_id: "exile", role: Target, target_group_index: 0),
+        ])"#,
+    )
+    .expect("Soul-Shackled Zombie's authored Program parses");
+    let targeting: crate::primitives::TargetingDef = ron::from_str(
+        r#"(groups: [(
+            min: 0, max: 2,
+            prompt: "Choose up to two target cards from a single graveyard",
+            effect_indices: [], distinct_from: [], same_graveyard: true,
+            cast_cost_expansion: None,
+        )])"#,
+    )
+    .expect("one owner-local same-graveyard group parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "program_graveyard_exile_fixture".into(),
+        face_id: crate::CardFaceId::new("program_graveyard_exile_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = crate::primitives::CompiledProgram::compile_with_targeting(
+        owner,
+        crate::primitives::EffectContext::Ability,
+        &program,
+        Some(&targeting),
+    )
+    .expect("an ability Program may bind its synchronous targeted graveyard Exile result");
+
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(compiled.target_bindings[0].role_index, 0);
+    let [exile, count_gate] = compiled.body.steps.as_slice() else {
+        panic!("the Exile result is followed by its count gate");
+    };
+    let [exile_result] = exile.outputs.as_slice() else {
+        panic!("the Exile instruction binds its typed result");
+    };
+    assert_eq!(
+        compiled.slot(*exile_result).unwrap().result_type,
+        crate::primitives::ResultType::TargetCardResultCohort {
+            action: crate::primitives::CardResultAction::Exile,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(2),
+            },
+            target_group_index: 0,
+        }
+    );
+    let crate::primitives::CompiledInstructionKind::If { condition, .. } = &count_gate.kind else {
+        panic!("the typed Exile cohort feeds the named creature count");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Result(
+            crate::primitives::CompiledProgramResultCondition::CardResultCount {
+                result,
+                card_type: Some(crate::primitives::CardTypeFilter::Creature),
+                min: Some(1),
+                max: None,
+            }
+        ) if *result == *exile_result
+    ));
+}
+
+#[test]
+fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
+    let compile = |context: crate::primitives::EffectContext,
+                   effect: &str,
+                   output_bindings: &str,
+                   target_bindings: &str,
+                   target_group: Option<&str>,
+                   count_result: &str,
+                   count_min: &str,
+                   count_max: &str|
+     -> Result<crate::primitives::CompiledProgram, String> {
+        let source = r#"(body: (steps: [
+            (id: "exile", bind: [__OUTPUT_BINDINGS__], input: None,
+                kind: Perform(__EFFECT__)),
+            (id: "count", bind: [], input: None,
+                kind: IfResult(condition: CardResultCount(result: "__COUNT_RESULT__",
+                    card_type: Some(Creature), min: __COUNT_MIN__, max: __COUNT_MAX__),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: [])))
+        ], yields: []), target_bindings: [__TARGET_BINDINGS__])"#
+            .replace("__OUTPUT_BINDINGS__", output_bindings)
+            .replace("__EFFECT__", effect)
+            .replace("__COUNT_RESULT__", count_result)
+            .replace("__COUNT_MIN__", count_min)
+            .replace("__COUNT_MAX__", count_max)
+            .replace("__TARGET_BINDINGS__", target_bindings);
+        let program: crate::CardProgram =
+            ron::from_str(&source).expect("Program fixture parses before compiler validation");
+        let targeting = target_group.map(|group| {
+            ron::from_str::<crate::primitives::TargetingDef>(
+                &r#"(groups: [__GROUP__])"#.replace("__GROUP__", group),
+            )
+            .expect("target-group fixture parses before compiler validation")
+        });
+        let owner = match context {
+            crate::primitives::EffectContext::Ability => {
+                crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                    card_id: "graveyard_exile_profile_fixture".into(),
+                    face_id: crate::CardFaceId::new("graveyard_exile_profile_fixture").unwrap(),
+                    ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                })
+            }
+            crate::primitives::EffectContext::Spell => crate::ProgramOwnerId::face(
+                "graveyard_exile_profile_fixture",
+                crate::CardFaceId::new("graveyard_exile_profile_fixture").unwrap(),
+            ),
+        };
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner,
+            context,
+            &program,
+            targeting.as_ref(),
+        )
+    };
+
+    const EXILE: &str = "MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: None, entry_modifiers: [])";
+    const TARGET: &str = "(instruction_id: \"exile\", role: Target, target_group_index: 0)";
+    const GROUP: &str = "(min: 0, max: 2, prompt: \"Choose up to two cards from one graveyard\", effect_indices: [], same_graveyard: true)";
+    let compile_default = |context, effect, bindings, group| {
+        compile(
+            context,
+            effect,
+            "\"exiled\"",
+            bindings,
+            group,
+            "exiled",
+            "Some(1)",
+            "None",
+        )
+    };
+
+    assert!(
+        compile_default(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some(GROUP)
+        )
+        .is_ok(),
+        "the exact ability-owned Exile signature remains admitted"
+    );
+
+    let cases = [
+        (
+            "spell owner",
+            crate::primitives::EffectContext::Spell,
+            EXILE,
+            TARGET,
+            Some(GROUP),
+        ),
+        (
+            "non-Exile destination",
+            crate::primitives::EffectContext::Ability,
+            "MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Hand, linked_exile_id: None, entry_modifiers: [])",
+            TARGET,
+            Some(GROUP),
+        ),
+        (
+            "linked Exile",
+            crate::primitives::EffectContext::Ability,
+            "MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some(\"linked\"), entry_modifiers: [])",
+            TARGET,
+            Some(GROUP),
+        ),
+        (
+            "entry modifiers",
+            crate::primitives::EffectContext::Ability,
+            "MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: None, entry_modifiers: [AddTypes((creature_types: [\"Phyrexian\"]))])",
+            TARGET,
+            Some(GROUP),
+        ),
+        (
+            "event-dependent graveyard filter",
+            crate::primitives::EffectContext::Ability,
+            "MoveGraveyardCards(filter: (owner: AnyPlayer, mana_value_less_than_trigger_object: true), destination: Exile, linked_exile_id: None, entry_modifiers: [])",
+            TARGET,
+            Some(GROUP),
+        ),
+        (
+            "missing Target binding",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "",
+            Some(GROUP),
+        ),
+        (
+            "wrong target role",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"exile\", role: Subject, target_group_index: 0)",
+            Some(GROUP),
+        ),
+        (
+            "repeated Target binding",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"exile\", role: Target, target_group_index: 0), (instruction_id: \"exile\", role: Target, target_group_index: 0)",
+            Some(GROUP),
+        ),
+        (
+            "mismatched instruction binding",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"other\", role: Target, target_group_index: 0)",
+            Some(GROUP),
+        ),
+        (
+            "unknown target group",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"exile\", role: Target, target_group_index: 1)",
+            Some(GROUP),
+        ),
+        (
+            "unknown instruction reference",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"exile\", role: Target, target_group_index: 0), (instruction_id: \"missing\", role: Target, target_group_index: 0)",
+            Some(GROUP),
+        ),
+        (
+            "legacy effect-index group",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [0], same_graveyard: true)"),
+        ),
+        (
+            "too many targets",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(min: 0, max: 3, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+        ),
+        (
+            "mandatory target minimum",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(min: 1, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+        ),
+        (
+            "cross-graveyard selection",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: false)"),
+        ),
+        (
+            "opponent-chosen group",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(chooser: ChosenOpponent, min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+        ),
+    ];
+    for (label, context, effect, bindings, group) in cases {
+        assert!(
+            compile_default(context, effect, bindings, group).is_err(),
+            "the Exile result profile must reject {label}"
+        );
+    }
+    assert!(
+        compile_default(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            None,
+        )
+        .is_err(),
+        "the Exile result requires an authored target group"
+    );
+    assert!(
+        compile_default(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            TARGET,
+            Some("(min: 0, max: 2, prompt: \"First group\", effect_indices: [], same_graveyard: true), (min: 0, max: 1, prompt: \"Second group\", effect_indices: [], same_graveyard: true)"),
+        )
+        .is_err(),
+        "the Exile result profile admits exactly one target group"
+    );
+
+    assert!(
+        compile(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "",
+            TARGET,
+            Some(GROUP),
+            "exiled",
+            "Some(1)",
+            "None",
+        )
+        .is_err(),
+        "the Exile producer must bind its single typed result"
+    );
+    assert!(
+        compile(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "\"exiled\", \"extra\"",
+            TARGET,
+            Some(GROUP),
+            "exiled",
+            "Some(1)",
+            "None",
+        )
+        .is_err(),
+        "the Exile producer cannot bind duplicate or additional result slots"
+    );
+    assert!(
+        compile(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "\"exiled\"",
+            TARGET,
+            Some(GROUP),
+            "missing",
+            "Some(1)",
+            "None",
+        )
+        .is_err(),
+        "the result count must read the exact Exile result slot"
+    );
+    assert!(
+        compile(
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "\"exiled\"",
+            TARGET,
+            Some(GROUP),
+            "exiled",
+            "Some(2)",
+            "Some(1)",
+        )
+        .is_err(),
+        "the named count must have valid lower and upper bounds"
+    );
+}

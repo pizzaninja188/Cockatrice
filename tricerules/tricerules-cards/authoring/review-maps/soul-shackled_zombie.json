@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "f81ca3a5-356d-4b5d-afc2-a33aa774816b",
+  "spans": [
+    {
+      "face_id": "soul_shackled_zombie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/MoveGraveyardCards",
+        "/faces/0/triggered_abilities/0/program/target_bindings/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/condition/CardResultCount",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/LoseLife",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/1/kind/Perform/GainLife",
+        "/faces/0/triggered_abilities/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "standard_registry::current_standard_graveyard_trigger_batch::soul_shackled_zombie_loses_life_only_when_a_creature_was_exiled",
+      "covers": "registered ETB owner, typed result slot and target binding, creature-count gate, and ordered life effects"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled",
+      "covers": "a creature in the successful Exile cohort causes each opponent to lose 2 life and the controller to gain 2 life; damage prevention does not apply"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_allows_zero_targets_and_does_not_drain_for_two_noncreatures",
+      "covers": "zero targets and two noncreature Exiles both skip the life branch"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_drains_when_only_the_creature_target_survives",
+      "covers": "target revalidation publishes only the creature that remains legal when the instruction resolves"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_all_illegal_targets_do_not_resolve_and_rejections_are_atomic",
+      "covers": "all-illegal targets fizzle; cross-graveyard, duplicate, and over-count target selections reject atomically"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_rejects_the_same_object_after_a_graveyard_round_trip",
+      "covers": "the same engine object ID with a newer zone-change generation is not accepted as the original target"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_etb_resolves_after_its_source_leaves",
+      "covers": "the already-triggered ability resolves from its captured owner after the Zombie leaves the battlefield"
+    },
+    {
+      "test": "scenario issue_107_graveyard_actions::soul_shackled_zombie_three_player_cast_replays_the_same_events_and_life_changes",
+      "covers": "a three-player cast produces 22/18/18 life totals and replays accepted commands, event batches, and final state identically"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_keeps_its_result_while_destroy_waits_for_an_aura_return_choice",
+      "covers": "shared runtime proof: a TargetCardResultCohort is captured before the instruction boundary, retained while an observer choice parks the Program, then read by its named-count tail after resumption. This Shredder fixture is not a natural Soul-Shackled Zombie event."
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/MoveGraveyardCards"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/LoseLife"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/1/kind/Perform/GainLife"
+    }
+  ]
+}

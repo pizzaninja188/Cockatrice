@@ -204,6 +204,20 @@ Technique with a different action and target group. Its [review map](../tricerul
 indexes the Oracle paragraph and the actual-card scenarios. This adds no card admission or
 protocol, relay, or client change.
 
+The bounded Soul-Shackled Zombie migration uses an ability-owned graveyard Exile result. Its
+single `Target` binding selects up to two cards from one graveyard and produces an Exile
+`TargetCardResultCohort` whose bounds come from the validated target group. The named creature
+count reads successful Exile receipts; it causes each opponent to lose 2 life and the controller
+to gain 2 life once. Scenarios distinguish zero targets, two noncreatures, partial and all-illegal
+targets, a same-ObjectId/new-generation round trip, source departure, atomic malformed selections,
+and two creatures in a three-player cast with 22/18/18 life and identical accepted-command replay.
+The synchronous producer uses the existing cohort capture and Program instruction boundary;
+Shredder's saved-result observer fixture supplies shared interruption evidence, not a natural
+Zombie/Aura interaction. The [review map](../tricerules/tricerules-cards/authoring/review-maps/soul-shackled_zombie.json)
+indexes the whole Oracle paragraph and its actual-card evidence. This follows CR 113.7a, 115,
+603, 608.2b-c/h-i, 701.13a, 400.7 and 119.3. This adds no card admission or protocol, relay, or
+client production change.
+
 The bounded 2026-10-20 Currency Converter increment moves only the `return_linked_card` activated
 ability in the [handwritten definition](../tricerules/tricerules-cards/data/currency_converter.ron)
 to a mandatory ability-owned `ChooseLinkedExiledCard` Program with destination `OwnerGraveyard`.

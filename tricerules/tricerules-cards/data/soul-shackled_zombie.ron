@@ -1,4 +1,4 @@
-// Oracle checked 2026-08-24. The branch reads the exact cards this instruction actually exiled.
+// Oracle checked 2026-10-20. The named Exile result counts successful target-card Exile actions.
 (
   id: "soul-shackled_zombie",
   name: "Soul-Shackled Zombie",
@@ -11,42 +11,39 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [
-      MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile),
-      ChooseResolutionBranch(
-        selection: FirstApplicable,
-        branches: [
-          (
-            branch_id: "drain_each_opponent", presentation: Fallback,
-            cost: None,
-            requirement: CardResultCount(
-              filter: (
-                source: PreviousEffect,
-                action: Exile,
-                players: All,
-                card_type: Some(Creature),
-              ),
-              min: Some(1),
-            ),
-            effects: [
-              LoseLife(amount: Fixed(2), who: EachOpponent),
-              GainLife(amount: 2),
-            ],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "exile_graveyard_cards", bind: ["exiled"], input: None,
+        kind: Perform(MoveGraveyardCards(
+          filter: (owner: AnyPlayer),
+          destination: Exile,
+          linked_exile_id: None,
+          entry_modifiers: [],
+        ))),
+      (id: "drain_if_creature_exiled", bind: [], input: None,
+        kind: IfResult(
+          condition: CardResultCount(
+            result: "exiled",
+            card_type: Some(Creature),
+            min: Some(1),
+            max: None,
           ),
-          (
-            branch_id: "no_additional_effect", presentation: Fallback,
-            cost: None,
-            requirement: Always,
-            effects: [],
-          ),
-        ],
-      ),
-    ],
+          yes: (steps: [
+            (id: "lose_life", bind: [], input: None,
+              kind: Perform(LoseLife(amount: Fixed(2), who: EachOpponent))),
+            (id: "gain_life", bind: [], input: None,
+              kind: Perform(GainLife(amount: 2))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+    ], yields: []), target_bindings: [
+      (instruction_id: "exile_graveyard_cards", role: Target, target_group_index: 0),
+    ])),
     targeting: Some((groups: [(
       min: 0,
       max: 2,
       prompt: "Choose up to two target cards from a single graveyard",
-      effect_indices: [0],
+      effect_indices: [],
       same_graveyard: true,
     )])),
   )],

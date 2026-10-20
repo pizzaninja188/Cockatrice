@@ -433,6 +433,21 @@ unrevealed Library of Leng discard has undefined characteristics and contributes
 choosers, visibility, filters, optional choices, target-group sizes, and ability-owned forms remain
 unsupported.
 
+An ability Program may bind `MoveGraveyardCards` only with destination `Exile`, no linked Exile,
+no entry modifiers, and an ordinary validated graveyard filter that does not depend on a trigger
+object. It requires one explicit `ProgramTargetRole::Target` reference to the instruction and one
+controller-chosen graveyard-card group with bounds `0..2`, `same_graveyard: true`, and empty legacy
+`effect_indices`. The compiler derives `TargetCardResultCohort { action: Exile, cardinality: 0..2,
+target_group_index }` from that validated group. Named `CardResultCount` consumes only successful
+Exile receipts, including their captured card types and exact owner/ObjectId/generation facts.
+Soul-Shackled Zombie uses this profile when at least one creature was exiled: each opponent loses
+2 life and its controller gains 2 life once. Arashin Sunshield uses the same underlying targeted Exile
+operation but remains on its existing path. Zero targets and a surviving noncreature alone cause
+no life change. Illegal or stale targets contribute no receipt; an already-triggered ability
+survives source departure. Spell-owned forms, other destinations, multiple groups, other group
+bounds, and event-dependent filters remain unsupported. This does not widen the separate Destroy
+or targeted hand-discard profiles.
+
 Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
 `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.
