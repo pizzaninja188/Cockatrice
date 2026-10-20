@@ -8,17 +8,33 @@ use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1 as rv1;
 
 fn start() -> (GameEngine, u32) {
-    let deck = deck_with("forest", &[]);
+    start_with_abundance(false)
+}
+
+fn start_with_abundance(include_abundance: bool) -> (GameEngine, u32) {
+    let plain_deck = deck_with("forest", &[]);
+    let decks = if include_abundance {
+        Some(vec![
+            deck_with("forest", &["abundance"]),
+            plain_deck.clone(),
+            plain_deck,
+        ])
+    } else {
+        Some(vec![plain_deck.clone(), plain_deck.clone(), plain_deck])
+    };
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
-        512_001,
+        if include_abundance { 512_004 } else { 512_001 },
         &[10, 20, 30],
         20,
-        Some(vec![deck.clone(), deck.clone(), deck]),
+        decks,
         true,
     )
     .expect("complete Standstill registration");
     advance_to_main1_from_game_start(&mut engine);
+    if include_abundance {
+        move_ready_to_battlefield(&mut engine, 0, "abundance");
+    }
     let source = inject_permanent_on_battlefield(&mut engine, 1, "standstill");
     engine.apply_scenario_command(10, &pass()).unwrap();
     engine.apply_scenario_command(20, &pass()).unwrap();
@@ -32,6 +48,20 @@ fn start() -> (GameEngine, u32) {
     );
     inject_card_into_hand(&mut engine, 2, "lightning_bolt");
     (engine, source)
+}
+
+fn put_cards_on_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32> {
+    let object_ids = card_ids
+        .iter()
+        .map(|card_id| inject_library_card(engine, player, card_id))
+        .collect::<Vec<_>>();
+    engine.state.players[player]
+        .library
+        .retain(|object_id| !object_ids.contains(object_id));
+    for object_id in object_ids.iter().rev() {
+        engine.state.players[player].library.push_front(*object_id);
+    }
+    object_ids
 }
 
 fn pending() -> (GameEngine, u32) {
@@ -48,6 +78,46 @@ fn pending() -> (GameEngine, u32) {
     assert_eq!(trigger.source_permanent_id, Some(source));
     assert_eq!(trigger.trigger_context.affected_player, Some(30));
     (engine, source)
+}
+
+fn pending_with_abundance() -> (GameEngine, u32, Vec<u32>) {
+    let (mut engine, source) = start_with_abundance(true);
+    let replacement_cards = put_cards_on_top(
+        &mut engine,
+        0,
+        &["grizzly_bears", "storm_crow", "llanowar_elves"],
+    );
+    let slot = hand_index_for_card(&engine, 2, "lightning_bolt");
+    engine
+        .apply_scenario_command(30, &cast_spell(slot, target_player(10)))
+        .unwrap();
+    assert_eq!(engine.state.stack.len(), 2);
+    let trigger = engine.state.stack.last().unwrap();
+    assert!(trigger.is_triggered);
+    assert_eq!(trigger.card_id, "standstill");
+    assert_eq!(trigger.controller, 20);
+    assert_eq!(trigger.source_permanent_id, Some(source));
+    assert_eq!(trigger.trigger_context.affected_player, Some(30));
+    (engine, source, replacement_cards)
+}
+
+fn choose_standstill_branch(
+    engine: &mut GameEngine,
+    player: i32,
+    branch_index: u32,
+) -> Result<rv1::RuledEventBatch, tricerules_core::EngineError> {
+    engine.apply_scenario_command(player, &standstill_branch_command(branch_index))
+}
+
+fn standstill_branch_command(branch_index: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
+            decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+            selected_branch_index: branch_index,
+            ..Default::default()
+        })),
+    }
 }
 
 #[test]
@@ -94,6 +164,50 @@ fn standstill_sacrifices_then_draws_three_for_casters_opponents_before_spell() {
     );
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.players[0].life, 17);
+}
+
+#[test]
+fn standstill_missing_captured_caster_fails_before_program_instruction_zero_atomically() {
+    let (mut engine, source) = pending();
+    let trigger = engine.state.stack.last_mut().unwrap();
+    assert_eq!(trigger.trigger_context.affected_player, Some(30));
+    trigger.trigger_context.affected_player = None;
+
+    let active_players = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count();
+    for _ in 1..active_players {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("earlier players in the priority round pass");
+    }
+
+    let actor = engine.state.priority_player_id();
+    let before = engine
+        .diagnostic_snapshot()
+        .expect("full pre-resolution diagnostic snapshot");
+    let error = engine
+        .apply_scenario_command(actor, &pass())
+        .expect_err("missing captured caster must fail before resolving Standstill's Program");
+    assert!(matches!(
+        error,
+        tricerules_core::EngineError::ProgramInvariant(reason)
+            if reason == "resolution program is missing its captured affected player"
+    ));
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("post-rejection diagnostic snapshot"),
+        before,
+        "failed preflight must be atomic"
+    );
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert_eq!(engine.state.stack.len(), 2);
+    assert!(engine.state.pending_resolution.is_none());
 }
 
 fn move_source(engine: &mut GameEngine, zone: rv1::DevZone) {
@@ -250,6 +364,170 @@ fn standstill_first_successful_of_two_cast_triggers_draws_only_that_casters_oppo
         assert_eq!(&engine.state.players[seat].hand, hand);
     }
     assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn standstill_abundance_draw_replacement_parks_resumes_and_replays_once() {
+    let (mut engine, source, replacement_cards) = pending_with_abundance();
+    let (mut replay, replay_source, replay_cards) = pending_with_abundance();
+    assert_eq!(source, replay_source);
+    assert_eq!(replacement_cards, replay_cards);
+    let spell_id = engine.state.stack[0].id;
+    let hands: Vec<_> = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.hand.clone())
+        .collect();
+    let libraries: Vec<_> = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.library.clone())
+        .collect();
+    let assert_later_recipients_and_caster_unchanged = |engine: &GameEngine| {
+        for seat in [1, 2] {
+            assert_eq!(engine.state.players[seat].hand, hands[seat]);
+            assert_eq!(engine.state.players[seat].library, libraries[seat]);
+        }
+    };
+
+    let active_players = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count();
+    let mut accepted_commands = Vec::new();
+    let mut accepted_batches = Vec::new();
+    let mut batch = None;
+    for _ in 0..active_players {
+        let actor = engine.state.priority_player_id();
+        let command = pass();
+        let result = engine
+            .apply_scenario_command(actor, &command)
+            .expect("pass until Standstill's actual trigger begins resolving");
+        accepted_commands.push((actor, command));
+        accepted_batches.push(result.clone());
+        batch = Some(result);
+    }
+    let mut batch = batch.expect("the priority round produces a resolution batch");
+    let first_replacement = find_resolution_choice(&batch)
+        .expect("the first caster-excluded recipient parks on Abundance");
+    assert_eq!(first_replacement.deciding_player_id, 10);
+    assert_eq!(
+        first_replacement.choice_kind(),
+        rv1::ChoiceKind::ResolutionBranch
+    );
+    assert!(first_replacement.public_reveal.is_none());
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert!(engine.state.players[1].graveyard.contains(&source));
+    assert_eq!(
+        engine.state.stack[0].id, spell_id,
+        "the original Bolt remains below the trigger"
+    );
+    assert_later_recipients_and_caster_unchanged(&engine);
+
+    let before_wrong_actor = engine
+        .diagnostic_snapshot()
+        .expect("pre-rejection diagnostic snapshot");
+    assert!(choose_standstill_branch(&mut engine, 30, 0).is_err());
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("post-rejection diagnostic snapshot"),
+        before_wrong_actor,
+        "another player cannot answer the recipient's private replacement choice"
+    );
+
+    for (draw_index, expected_card) in replacement_cards.iter().copied().enumerate() {
+        let replacement = find_resolution_choice(&batch)
+            .expect("each of the recipient's three draws receives its own replacement choice");
+        assert_eq!(replacement.deciding_player_id, 10);
+        assert_eq!(replacement.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
+        assert!(replacement.public_reveal.is_none());
+
+        let replace_command = standstill_branch_command(0);
+        batch = engine
+            .apply_scenario_command(10, &replace_command)
+            .expect("choose Abundance for this draw");
+        accepted_commands.push((10, replace_command));
+        accepted_batches.push(batch.clone());
+
+        let kind_choice = find_resolution_choice(&batch).expect("choose land or nonland");
+        assert_eq!(kind_choice.deciding_player_id, 10);
+        assert_eq!(kind_choice.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
+        assert!(kind_choice.public_reveal.is_none());
+        let nonland_command = standstill_branch_command(1);
+        batch = engine
+            .apply_scenario_command(10, &nonland_command)
+            .expect("take the first nonland revealed by Abundance");
+        accepted_commands.push((10, nonland_command));
+        accepted_batches.push(batch.clone());
+
+        let revealed = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(Ev::CardsRevealed(revealed)) => Some(revealed),
+                _ => None,
+            })
+            .expect("Abundance reveals through the requested nonland");
+        assert_eq!(
+            revealed
+                .cards
+                .iter()
+                .map(|card| card.object_id)
+                .collect::<Vec<_>>(),
+            vec![expected_card]
+        );
+        assert!(engine.state.players[0].hand.contains(&expected_card));
+        if draw_index + 1 < replacement_cards.len() {
+            assert_later_recipients_and_caster_unchanged(&engine);
+            let next = find_resolution_choice(&batch)
+                .expect("the next draw parks independently on Abundance");
+            assert_eq!(next.deciding_player_id, 10);
+            assert_eq!(next.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
+        }
+    }
+
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, spell_id);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    for (seat, before_hand) in hands.iter().enumerate() {
+        let expected_draws = match seat {
+            0 | 1 => 3,
+            _ => 0,
+        };
+        assert_eq!(
+            engine.state.players[seat].hand.len(),
+            before_hand.len() + expected_draws
+        );
+    }
+    for object_id in &replacement_cards {
+        assert!(engine.state.players[0].hand.contains(object_id));
+    }
+    for seat in [0, 1] {
+        assert_eq!(
+            engine.state.players[seat].library.len(),
+            libraries[seat].len() - 3
+        );
+    }
+    assert_eq!(engine.state.players[2].hand, hands[2]);
+    assert_eq!(engine.state.players[2].library, libraries[2]);
+
+    for (index, (actor, command)) in accepted_commands.iter().enumerate() {
+        let replayed = replay
+            .apply_scenario_command(*actor, command)
+            .expect("replay every accepted Standstill and Abundance choice command");
+        assert_eq!(replayed, accepted_batches[index]);
+    }
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap()
+    );
 }
 
 #[test]

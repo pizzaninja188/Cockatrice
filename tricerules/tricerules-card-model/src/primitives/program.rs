@@ -164,7 +164,15 @@ pub enum ProgramCondition {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum ProgramResultCondition {
+    CardResultCount {
+        result: String,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     DiscardCount {
         result: String,
         players: RelativePlayerSet,
@@ -215,6 +223,11 @@ pub enum CompiledProgramCondition {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompiledProgramResultCondition {
+    CardResultCount {
+        result: ResultSlotId,
+        min: Option<u32>,
+        max: Option<u32>,
+    },
     DiscardCount {
         result: ResultSlotId,
         players: RelativePlayerSet,
@@ -1271,7 +1284,8 @@ fn operation_needs_affected_player(effect: &SpellEffectKind) -> bool {
     matches!(
         effect,
         SpellEffectKind::Draw {
-            who: PlayerRecipient::AffectedPlayer,
+            who: PlayerRecipient::AffectedPlayer
+                | PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
             ..
         } | SpellEffectKind::Discard {
             who: PlayerRecipient::AffectedPlayer,
@@ -1292,6 +1306,39 @@ fn compile_program_condition(
         ProgramCondition::Game(condition) => {
             validate_program_condition(condition)?;
             Ok(CompiledProgramCondition::Game(condition.clone()))
+        }
+        ProgramCondition::Result(ProgramResultCondition::CardResultCount { result, min, max }) => {
+            if min.is_none() && max.is_none() {
+                return Err("card result count requires a minimum or maximum".into());
+            }
+            if min
+                .zip(*max)
+                .is_some_and(|(minimum, maximum)| minimum > maximum)
+            {
+                return Err("card result count minimum cannot exceed its maximum".into());
+            }
+            let slot = result_slot(result, names, slots)?;
+            let ResultType::CardResultCohort { cardinality, .. } =
+                &slots[slot.0 as usize].result_type
+            else {
+                return Err(format!(
+                    "result '{result}' is not a compatible card-result cohort"
+                ));
+            };
+            if cardinality.max.is_some_and(|upper| {
+                min.is_some_and(|minimum| minimum > upper) || max.is_some_and(|bound| bound > upper)
+            }) {
+                return Err(format!(
+                    "card result '{result}' predicate exceeds its typed cohort cardinality"
+                ));
+            }
+            Ok(CompiledProgramCondition::Result(
+                CompiledProgramResultCondition::CardResultCount {
+                    result: slot,
+                    min: *min,
+                    max: *max,
+                },
+            ))
         }
         ProgramCondition::Result(ProgramResultCondition::DiscardCount {
             result,
@@ -1692,7 +1739,7 @@ fn validate_and_result_types(
         ),
         SpellEffectKind::Draw { who, count } => {
             effect.validate(context)?;
-            validate_program_recipient(*who, context, "Draw recipient")?;
+            validate_program_draw_recipient(*who, context)?;
             validate_program_amount(count)?;
             validate_fixed_program_amount("Draw count", count)?;
             // Replacement effects may expand the committed draw cohort, so the authored count
@@ -2606,6 +2653,18 @@ fn validate_program_recipient(
             "{role} uses a recipient outside the finite resolution-program input contract"
         )),
     }
+}
+
+fn validate_program_draw_recipient(
+    recipient: PlayerRecipient,
+    context: EffectContext,
+) -> Result<(), String> {
+    if recipient == PlayerRecipient::EachOtherPlayerThanAffectedPlayer
+        && context == EffectContext::Ability
+    {
+        return Ok(());
+    }
+    validate_program_recipient(recipient, context, "Draw recipient")
 }
 
 fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {

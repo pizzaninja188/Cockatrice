@@ -1840,6 +1840,18 @@ fn program_result_condition_holds(
     condition: &CompiledProgramResultCondition,
 ) -> Result<bool, EngineError> {
     match condition {
+        CompiledProgramResultCondition::CardResultCount { result, min, max } => {
+            let Some(ProgramValue::CardResultCohort(result)) =
+                run.slots.get(result.0 as usize).and_then(Option::as_ref)
+            else {
+                return Err(EngineError::ProgramInvariant(
+                    "card result count condition read an unavailable or wrong-typed slot",
+                ));
+            };
+            let count = result.cards.len().min(u32::MAX as usize) as u32;
+            Ok(min.is_none_or(|minimum| count >= minimum)
+                && max.is_none_or(|maximum| count <= maximum))
+        }
         CompiledProgramResultCondition::CounterPayment { result, outcome } => {
             let Some(ProgramValue::CounterPaymentOutcome(actual)) =
                 run.slots.get(result.0 as usize).and_then(Option::as_ref)
@@ -2504,6 +2516,75 @@ mod invariant_rollback_tests {
             },
         )
         .expect("count condition evaluates"));
+    }
+
+    #[test]
+    fn card_result_count_uses_typed_cohort_entry_count_and_rejects_unavailable_values() {
+        use crate::state::{CardResultCohort, CardResultEntry, CardResultProvenance};
+        use tricerules_card_model::primitives::CardResultAction;
+
+        let engine = program_resolution_fixture();
+        let top = engine.state.stack.last().expect("resolving spell").clone();
+        let entry = |object_id| CardResultEntry {
+            action: CardResultAction::Sacrifice,
+            affected_player: 0,
+            object_id,
+            zone_change_generation: 0,
+            matched_card_types: Vec::new(),
+            provenance: CardResultProvenance::ActionFacts,
+        };
+        let cohort_value = |count| {
+            ProgramValue::CardResultCohort(CardResultCohort {
+                cards: [entry(1), entry(2)].into_iter().take(count).collect(),
+                program_discard_result: None,
+            })
+        };
+        let evaluate = |slot, min, max| {
+            let run = ProgramRunState {
+                owner: tricerules_card_model::ProgramOwnerId::face(
+                    "brainstorm",
+                    tricerules_card_model::CardFaceId::new("brainstorm").unwrap(),
+                ),
+                pending_owners: Vec::new(),
+                frames: Vec::new(),
+                slots: vec![slot],
+                in_flight: None,
+                in_flight_produced_object_provenance: None,
+            };
+            program_result_condition_holds(
+                &engine.state,
+                &top,
+                &run,
+                &CompiledProgramResultCondition::CardResultCount {
+                    result: ResultSlotId(0),
+                    min,
+                    max,
+                },
+            )
+        };
+
+        assert!(!evaluate(Some(cohort_value(0)), Some(1), None).unwrap());
+        assert!(evaluate(Some(cohort_value(1)), Some(1), None).unwrap());
+        assert!(evaluate(Some(cohort_value(2)), Some(2), Some(2)).unwrap());
+        assert!(!evaluate(Some(cohort_value(1)), Some(2), None).unwrap());
+        assert!(matches!(
+            evaluate(
+                Some(ProgramValue::CounterPaymentOutcome(
+                    tricerules_card_model::primitives::CounterPaymentOutcome::Paid
+                )),
+                Some(1),
+                None,
+            ),
+            Err(EngineError::ProgramInvariant(
+                "card result count condition read an unavailable or wrong-typed slot"
+            ))
+        ));
+        assert!(matches!(
+            evaluate(None, Some(1), None),
+            Err(EngineError::ProgramInvariant(
+                "card result count condition read an unavailable or wrong-typed slot"
+            ))
+        ));
     }
 
     fn token_copy_batch_capture_fixture() -> (CompiledProgram, ProgramRunState) {

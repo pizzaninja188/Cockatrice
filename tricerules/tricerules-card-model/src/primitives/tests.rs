@@ -552,6 +552,292 @@ fn registry_requires_a_draw_step_producer_for_affected_player_program_input() {
     );
 }
 
+fn named_card_result_count_card(id: &str, producer_step: &str, condition: &str) -> String {
+    format!(
+        r#"(id: "{id}", name: "Named Card Result Count Fixture",
+            face_id: "{id}", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    {producer_step},
+                    (id: "count", kind: IfResult(condition: {condition},
+                        yes: (steps: [], yields: []), no: (steps: [], yields: [])))
+                ], yields: []))), modal: None, targeting: None,
+                may: false, intervening_if: None, triggers_only_once: false,
+                max_triggers_per_turn: None)])"#
+    )
+}
+
+fn expect_named_count_rejection(id: &str, producer_step: &str, condition: &str, reason: &str) {
+    let card = named_card_result_count_card(id, producer_step, condition);
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+        .expect_err("invalid typed card-result count predicate must be rejected");
+    assert!(
+        format!("{error}").contains(reason),
+        "expected {reason:?} in {error}; card: {card}"
+    );
+}
+
+#[test]
+fn registry_compiles_named_card_result_count_for_source_sacrifice_and_mill_cohorts() {
+    let cases = [
+        (
+            "named_count_source_sacrifice",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Sacrifice(subject: Source)))"#,
+            r#"CardResultCount(result: "cohort", min: Some(1), max: None)"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Sacrifice,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            },
+            "min: Some(1), max: None",
+        ),
+        (
+            "named_count_source_sacrifice_bounded",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Sacrifice(subject: Source)))"#,
+            r#"CardResultCount(result: "cohort", min: Some(1), max: Some(1))"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Sacrifice,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            },
+            "min: Some(1), max: Some(1)",
+        ),
+        (
+            "named_count_mill_bounded",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+            r#"CardResultCount(result: "cohort", min: Some(1), max: Some(3))"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(3),
+                },
+            },
+            "min: Some(1), max: Some(3)",
+        ),
+        (
+            "named_count_mill_higher_minimum",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+            r#"CardResultCount(result: "cohort", min: Some(2), max: Some(3))"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(3),
+                },
+            },
+            "min: Some(2), max: Some(3)",
+        ),
+        (
+            "named_count_mill_max_only",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+            r#"CardResultCount(result: "cohort", min: None, max: Some(1))"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(3),
+                },
+            },
+            "min: None, max: Some(1)",
+        ),
+    ];
+
+    for (id, producer_step, condition, expected_type, expected_bounds) in cases {
+        let card = named_card_result_count_card(id, producer_step, condition);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+            .expect("a named count over a typed card-result cohort should compile");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: id.into(),
+            face_id: crate::CardFaceId::new(id).unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        });
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the triggered owner should compile");
+        assert_eq!(
+            program
+                .slot(crate::primitives::ResultSlotId(0))
+                .unwrap()
+                .result_type,
+            expected_type
+        );
+        let crate::primitives::CompiledInstructionKind::If { condition, .. } =
+            &program.body.steps[1].kind
+        else {
+            panic!("named result count should compile as an IfResult condition");
+        };
+        let compiled = format!("{condition:?}");
+        assert!(compiled.contains("CardResultCount"), "{compiled}");
+        assert!(compiled.contains("result: ResultSlotId(0)"), "{compiled}");
+        assert!(compiled.contains(expected_bounds), "{compiled}");
+    }
+}
+
+#[test]
+fn registry_rejects_invalid_named_card_result_count_bounds() {
+    let producer =
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#;
+    expect_named_count_rejection(
+        "named_count_empty_bounds",
+        producer,
+        r#"CardResultCount(result: "cohort", min: None, max: None)"#,
+        "requires a minimum or maximum",
+    );
+    expect_named_count_rejection(
+        "named_count_inverted_bounds",
+        producer,
+        r#"CardResultCount(result: "cohort", min: Some(2), max: Some(1))"#,
+        "minimum cannot exceed its maximum",
+    );
+    expect_named_count_rejection(
+        "named_count_above_typed_upper_bound",
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Sacrifice(subject: Source)))"#,
+        r#"CardResultCount(result: "cohort", min: Some(2), max: None)"#,
+        "exceeds its typed cohort cardinality",
+    );
+    expect_named_count_rejection(
+        "named_count_max_above_typed_upper_bound",
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Sacrifice(subject: Source)))"#,
+        r#"CardResultCount(result: "cohort", min: None, max: Some(2))"#,
+        "exceeds its typed cohort cardinality",
+    );
+
+    let legacy_filter = named_card_result_count_card(
+        "named_count_rejects_ambient_legacy_filter",
+        producer,
+        r#"CardResultCount(result: "cohort",
+            filter: (source: PreviousEffect, action: Sacrifice, players: Controller),
+            min: Some(1), max: None)"#,
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&legacy_filter], &[]).is_err(),
+        "a named typed-result count does not reintroduce ambient legacy filter arguments"
+    );
+}
+
+#[test]
+fn registry_rejects_unbound_and_out_of_scope_named_card_result_count_slots() {
+    expect_named_count_rejection(
+        "named_count_unbound_slot",
+        r#"(id: "produce", kind: Perform(Sacrifice(subject: Source)))"#,
+        r#"CardResultCount(result: "cohort", min: Some(1), max: None)"#,
+        "result 'cohort' is not in scope",
+    );
+    expect_named_count_rejection(
+        "named_count_out_of_scope_slot",
+        r#"(id: "branch", kind: If(condition: Void,
+            yes: (steps: [(id: "produce", bind: ["cohort"],
+                kind: Perform(Sacrifice(subject: Source)))], yields: []),
+            no: (steps: [], yields: [])))"#,
+        r#"CardResultCount(result: "cohort", min: Some(1), max: None)"#,
+        "result 'cohort' is not in scope",
+    );
+}
+
+#[test]
+fn registry_rejects_named_card_result_count_on_non_cohort_slot() {
+    expect_named_count_rejection(
+        "named_count_wrong_result_type",
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Draw(who: Controller, count: 1)))"#,
+        r#"CardResultCount(result: "cohort", min: Some(1), max: None)"#,
+        "not a compatible card-result cohort",
+    );
+}
+
+#[test]
+fn registry_admits_draw_to_each_other_player_from_captured_ability_actor_only() {
+    let make_card = |id: &str, trigger: &str, effect: &str| {
+        format!(
+            r#"(id: "{id}", name: "Each Other Draw Fixture", face_id: "{id}",
+                types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger}, effect: [],
+                    program: Some((body: (steps: [(id: "effect", kind: Perform({effect}))],
+                        yields: []))), modal: None, targeting: None,
+                    may: false, intervening_if: None, triggers_only_once: false,
+                    max_triggers_per_turn: None)])"#
+        )
+    };
+    let effect = "Draw(who: EachOtherPlayerThanAffectedPlayer, count: 1)";
+    let valid = make_card(
+        "each_other_draw_valid",
+        "WheneverPlayerCastsSpell(caster: AnyPlayer)",
+        effect,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("spell-cast ability can draw for each player other than its captured caster");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "each_other_draw_valid".into(),
+        face_id: crate::CardFaceId::new("each_other_draw_valid").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    assert_eq!(
+        registry
+            .compiled_program_for_owner(&owner)
+            .unwrap()
+            .required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+
+    let unsupported_trigger = make_card(
+        "each_other_draw_unsupported_trigger",
+        "WhenSelfEntersBattlefield",
+        effect,
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_trigger], &[])
+        .expect_err("draw recipient requires a trigger with a captured affected player");
+    assert!(format!("{error}").contains("trigger does not supply that input"));
+
+    let spell = r#"(id: "each_other_draw_spell_stays_unsupported",
+        name: "Each Other Draw Spell Fixture", face_id: "each_other_draw_spell_stays_unsupported",
+        types: ["Sorcery"], spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "draw", kind: Perform(Draw(
+                who: EachOtherPlayerThanAffectedPlayer, count: 1
+            )))
+        ], yields: []), target_bindings: [])))"#;
+    assert!(spell.contains("EachOtherPlayerThanAffectedPlayer"));
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[spell], &[])
+        .expect_err("ability-only Draw exception must not widen spell recipients");
+    assert!(
+        format!("{error}").contains("spells cannot reference triggering-spell context"),
+        "{error}"
+    );
+
+    for (id, other_effect, reason) in [
+        (
+            "each_other_discard_stays_unsupported",
+            "Discard(who: EachOtherPlayerThanAffectedPlayer, quantity: Exact(1))",
+            "EachOtherPlayerThanAffectedPlayer is supported only by Draw",
+        ),
+        (
+            "each_other_mill_stays_unsupported",
+            "Mill(who: EachOtherPlayerThanAffectedPlayer, count: 1)",
+            "EachOtherPlayerThanAffectedPlayer is supported only by Draw",
+        ),
+    ] {
+        let card = make_card(
+            id,
+            "WheneverPlayerCastsSpell(caster: AnyPlayer)",
+            other_effect,
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+            .expect_err("only Draw receives the new affected-player recipient exception");
+        assert!(format!("{error}").contains(reason), "{error}");
+    }
+}
+
 #[test]
 fn resultless_program_can_copy_its_trigger_observed_object() {
     let program: crate::CardProgram = ron::from_str(

@@ -1260,12 +1260,14 @@ impl TriggerCondition {
     }
 
     /// Whether this trigger contract captures the event player for a compiled ability input.
-    /// Draw-step and becomes-target abilities capture the player associated with their event.
+    /// Draw-step, upkeep, spell-cast, and becomes-target abilities capture the player associated
+    /// with their event.
     pub(crate) fn supplies_program_affected_player(&self) -> bool {
         matches!(
             self,
             Self::AtBeginningOfDrawStep { .. }
                 | Self::AtBeginningOfUpkeep { .. }
+                | Self::WheneverPlayerCastsSpell { .. }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverSpellBecomesTarget { .. }

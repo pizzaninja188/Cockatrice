@@ -1,6 +1,6 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-19): target design with a bounded authored-owner implementation increment,
+Status (2026-10-20): target design with a bounded authored-owner implementation increment,
 cross-component resolution-prompt identity, exact compiled owner identities, immutable ability
 binding, and mandatory retirement of the `DrawDiscard` compatibility family. The runner supports
 targetless program operations and four targetful role signatures on spell faces, modal modes,
@@ -135,6 +135,16 @@ Replacement choices finish before the threshold tail, so two Doubling Seasons tu
 four, then the child resolves once for six damage to each creature. These ordered checks follow CR
 603.12a, 608.2c/h, 701.21a, 122.2, 400.7, 120.4b, and 616.1e-f. This adds no card admissions or
 protocol, relay, or client changes.
+The bounded 2026-10-20 Standstill migration moves only its exact spell-cast trigger owner into an
+ability Program. It binds the direct `Sacrifice(Source)` result, then uses
+`IfResult(CardResultCount(result: "sacrificed", min: Some(1), max: None))` to gate Draw 3 for
+`EachOtherPlayerThanAffectedPlayer`; the cast trigger supplies the event-time caster and registry
+requires that input before instruction zero. The Program predicate counts the named in-scope
+`CardResultCohort` with ordinary optional bounds and no ambient source, action, player, or card-type
+filter. Existing effect-list `CardResultCount` remains on its legacy path. Bound `Sacrifice(Source)`
+and `Mill` are typed producer examples for this condition, not a claim that other cards are complete.
+Automated Standstill scenarios cover the missing-caster preflight, first successful sacrifice among
+two cast triggers, and an Abundance replacement park/resume/replay. Its complete definition and updated review map have independent semantic approval. This adds no card admission or protocol, relay, or client change.
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

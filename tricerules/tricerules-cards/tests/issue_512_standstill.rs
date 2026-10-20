@@ -1,5 +1,7 @@
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityId, AbilityPresentation, CardRegistry, ProgramOwnerId,
+};
 
 #[test]
 fn standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_opponent_draw() {
@@ -32,69 +34,226 @@ fn standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_op
             ordinal_scope: Default::default(),
         }
     );
-    let [SpellEffectKind::Sacrifice {
-        subject: EffectSubject::Source,
-    }, SpellEffectKind::ChooseResolutionBranch {
-        selection,
-        branches,
-        chooser,
-        optional,
-        otherwise,
-        ..
-    }] = trigger.effect.as_slice()
-    else {
-        panic!("exact sacrifice and conditional draw")
-    };
-    assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-    assert_eq!(*chooser, PlayerRecipient::Controller);
-    assert!(!optional && otherwise.is_empty());
-    assert_eq!(branches.len(), 2);
-    assert_eq!(branches[0].cost, ResolutionCost::None);
+    assert!(
+        trigger.effect.is_empty(),
+        "Standstill uses its Program body"
+    );
+
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "standstill".into(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![trigger.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Standstill's exact trigger owner has a compiled Program");
     assert_eq!(
-        branches[0].requirement,
-        ResolutionBranchRequirement::CardResultCount {
-            filter: CardResultFilter {
-                source: CardResultSource::PreviousEffect,
-                action: CardResultAction::Sacrifice,
-                players: RelativePlayerSet::Controller,
-                card_type: None
-            },
-            min: Some(1),
-            max: None,
+        program.required_inputs,
+        vec![ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+    let [sacrifice, count_gate] = program.body.steps.as_slice() else {
+        panic!("Standstill sacrifices its source before testing the bound result")
+    };
+    assert_eq!(sacrifice.id, "sacrifice");
+    assert!(sacrifice.input.is_none());
+    let [sacrificed_result] = sacrifice.outputs.as_slice() else {
+        panic!("the source sacrifice binds its typed card-result cohort")
+    };
+    let CompiledInstructionKind::Perform(effect) = &sacrifice.kind else {
+        panic!("the first instruction sacrifices the source")
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::Sacrifice {
+            subject: EffectSubject::Source,
         }
     );
     assert_eq!(
-        branches[0].effects,
-        [SpellEffectKind::Draw {
-            count: Amount::Fixed(3),
-            who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer
-        }]
+        program.slot(*sacrificed_result).unwrap().result_type,
+        ResultType::CardResultCohort {
+            action: CardResultAction::Sacrifice,
+            who: PlayerRecipient::Controller,
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(1)
+            },
+        }
     );
-    assert_eq!(branches[1].cost, ResolutionCost::None);
-    assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
-    assert!(branches[1].effects.is_empty());
+
+    let CompiledInstructionKind::If { condition, yes, no } = &count_gate.kind else {
+        panic!("the typed source-sacrifice count guards the draw")
+    };
+    let CompiledProgramCondition::Result(CompiledProgramResultCondition::CardResultCount {
+        result,
+        min,
+        max,
+    }) = condition.as_ref()
+    else {
+        panic!("the guard counts its named typed result")
+    };
+    assert_eq!(*result, *sacrificed_result);
+    assert_eq!((*min, *max), (Some(1), None));
+    let [draw] = yes.steps.as_slice() else {
+        panic!("a successful sacrifice has one draw operation")
+    };
+    let CompiledInstructionKind::Perform(effect) = &draw.kind else {
+        panic!("the successful sacrifice draws for the captured caster's opponents")
+    };
+    assert_eq!(
+        **effect,
+        SpellEffectKind::Draw {
+            count: Amount::Fixed(3),
+            who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+        }
+    );
+    assert!(no.steps.is_empty() && no.yields.is_empty());
 }
 
 #[test]
-fn sacrifice_receipt_validation_accepts_real_producers_and_rejects_wrong_or_missing_predecessor() {
+fn standstill_trigger_is_owned_by_a_compiled_program() {
+    let card = tricerules_cards::registry::global()
+        .get("standstill")
+        .expect("Standstill is admitted as a complete card");
+    let [trigger] = card.primary_face().triggered_abilities.as_slice() else {
+        panic!("one Standstill trigger")
+    };
+    assert!(
+        trigger.program.is_some() && trigger.effect.is_empty(),
+        "Standstill's source-sacrifice gate and caster-relative draw belong to its Program"
+    );
+    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "standstill".into(),
+        face_id: card.primary_face().face_id.clone(),
+        ability_path: vec![AbilityId::new("triggered_01").unwrap()],
+    });
+    assert_eq!(
+        tricerules_cards::registry::global()
+            .compiled_program_for_owner(&owner)
+            .expect("the exact Standstill owner is registered")
+            .owner,
+        owner
+    );
+}
+
+#[test]
+fn standstill_named_count_uses_typed_cohorts_and_rejects_missing_or_wrong_results() {
     let source = include_str!("../data/standstill.ron");
-    for producer in [
+    let source_step =
+        "(id: \"sacrifice\", bind: [\"sacrificed\"], kind: Perform(Sacrifice(subject: Source)))";
+    let mill_step =
+        "(id: \"sacrifice\", bind: [\"sacrificed\"], kind: Perform(Mill(who: Controller, count: 1)))";
+    assert!(
+        source.contains(source_step),
+        "the fixture names its source result"
+    );
+    let mill_cohort = source.replace(source_step, mill_step);
+    assert_ne!(
+        mill_cohort, source,
+        "the producer replacement must take effect"
+    );
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[&mill_cohort], &[]).is_ok(),
+        "the generic count condition accepts another existing typed card-result producer"
+    );
+
+    let missing_binding = source.replace("bind: [\"sacrificed\"]", "bind: []");
+    assert_ne!(
+        missing_binding, source,
+        "the missing-binding replacement must take effect"
+    );
+    let wrong_type = source.replace(
         "Sacrifice(subject: Source)",
-        "SacrificeAll(players: Controller, filter: (kind: AnyPermanent))",
-    ] {
-        let ron = source.replace("Sacrifice(subject: Source)", producer);
+        "Draw(who: Controller, count: 1)",
+    );
+    assert_ne!(
+        wrong_type, source,
+        "the wrong-type replacement must take effect"
+    );
+    let missing_slot = source.replace("result: \"sacrificed\"", "result: \"unbound\"");
+    assert_ne!(
+        missing_slot, source,
+        "the out-of-scope replacement must take effect"
+    );
+    for invalid in [&missing_binding, &wrong_type, &missing_slot] {
         assert!(
-            CardRegistry::from_chunks_and_tokens(&[&ron], &[]).is_ok(),
-            "{producer}"
+            CardRegistry::from_chunks_and_tokens(&[invalid], &[]).is_err(),
+            "an invalid or unavailable named cohort cannot authorize the conditional draw"
         );
     }
-    for ron in [
-        source.replace("Sacrifice(subject: Source),", ""),
-        source.replace("Sacrifice(subject: Source)", "Draw(count: 1)"),
-        source.replace("action: Sacrifice", "action: Discard"),
-    ] {
-        assert!(matches!(CardRegistry::from_chunks_and_tokens(&[&ron], &[]),
-            Err(tricerules_cards::registry::RegistryError::InvalidCard { reason, .. })
-                if reason.contains("immediately preceding compatible")));
-    }
+}
+
+#[test]
+fn legacy_previous_effect_sacrifice_count_still_requires_an_immediate_compatible_producer() {
+    // Preserve the existing effect-list contract separately from Standstill's new named Program
+    // result: a PreviousEffect count reads only the immediately preceding matching movement.
+    let legacy = r#"(
+        id: "standstill_legacy_receipt_fixture",
+        name: "Standstill Legacy Receipt Fixture",
+        face_id: "standstill_legacy_receipt_fixture",
+        types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "triggered_01",
+            presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [
+                SacrificeAll(players: Controller, filter: (kind: AnyPermanent)),
+                ChooseResolutionBranch(
+                    selection: FirstApplicable,
+                    branches: [
+                        (
+                            branch_id: "after_sacrifice",
+                            presentation: Fallback,
+                            cost: None,
+                            requirement: CardResultCount(
+                                filter: (source: PreviousEffect, action: Sacrifice,
+                                    players: Controller, card_type: None),
+                                min: Some(1), max: None,
+                            ),
+                            effects: [GainLife(amount: 1)],
+                        ),
+                        (
+                            branch_id: "no_sacrifice",
+                            presentation: Fallback,
+                            cost: None,
+                            requirement: Always,
+                            effects: [],
+                        ),
+                    ],
+                ),
+            ],
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        )],
+    )"#;
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[legacy], &[]).is_ok(),
+        "legacy PreviousEffect accepts the immediately preceding controller SacrificeAll cohort"
+    );
+
+    let wrong_action = legacy.replace("action: Sacrifice", "action: Discard");
+    assert_ne!(
+        wrong_action, legacy,
+        "the action replacement must take effect"
+    );
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[&wrong_action], &[]).is_err(),
+        "a PreviousEffect discard count cannot read a sacrifice cohort"
+    );
+
+    let missing_producer = legacy.replace(
+        "SacrificeAll(players: Controller, filter: (kind: AnyPermanent)),",
+        "",
+    );
+    assert_ne!(
+        missing_producer, legacy,
+        "the missing-producer replacement must take effect"
+    );
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[&missing_producer], &[]).is_err(),
+        "legacy PreviousEffect does not infer an absent sacrifice producer"
+    );
 }

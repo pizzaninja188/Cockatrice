@@ -213,10 +213,13 @@ and `GainLife`,
 plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
 accepted targetless forms, are described below. Spell-face and modal-spell
-programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
+programs limit draw/discard recipients to `Controller`. Triggered ability programs may also use
 `AffectedPlayer` for a draw/discard recipient or as a `Choose` chooser when their trigger supplies
-that captured event-time player. Activated programs do not have that trigger input. Ability
-programs admit `Discard(EachOpponent, Exact(1))` as a combined
+that captured event-time player. For `Draw`, ability programs also admit
+`EachOtherPlayerThanAffectedPlayer`, anchored to the same required input; this recipient is not
+admitted for other effect kinds. Activated programs do not have that trigger input. Standstill uses
+this Program draw form; Zenith Chronicler and Heartwood Storyteller are existing effect-list
+analogues. Ability programs admit `Discard(EachOpponent, Exact(1))` as a combined
 opponent cohort and the narrow `Discard(EachPlayer, Exact(1))` shape used by Fanatic of the
 Harrowing; neither has a fixed aggregate maximum. For an `EachPlayer` result, only an unfiltered
 controller `DiscardCount` with `min: Some(1)` and `max: None` is admitted, so the condition tests
@@ -552,10 +555,11 @@ accepted in authored programs. A copied permanent source requires exactly one ta
 
 Ability programs use the ability context. A triggered program may use `AffectedPlayer` for a
 draw/discard recipient or as a `Choose` chooser only when its trigger supplies that event-time
-player; registry validation requires the captured input before instruction zero. Activated programs
-have no trigger input and cannot use `AffectedPlayer`. If the captured chooser has left, the pending
-decision delegates with a fresh per-deciding-player prompt ID; this does not change the ability
-controller or a compiled payer. Effect-created activated or triggered
+player; registry validation requires the captured input before instruction zero. For `Draw`, a
+triggered program may also use `EachOtherPlayerThanAffectedPlayer` with that required captured
+player. Activated programs have no trigger input and cannot use these event-player forms. If the
+captured chooser has left, the pending decision delegates with a fresh per-deciding-player prompt
+ID; this does not change the ability controller or a compiled payer. Effect-created activated or triggered
 abilities cannot own authored programs (including modal program bodies) except for the Koya child
 shape specified above. Do not author targetful activated abilities with `ChosenOpponent` target
 groups from Hand or Graveyard: the opponent-choice activation path is
@@ -602,6 +606,14 @@ selection. There is no implicit "previous instruction" input. Bindings cannot be
 read forward/across sibling scopes. Each branch explicitly lists its `yields`; both arms must
 yield compatible types, and an `If` binding exports their joined result to its parent.
 Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
+
+`IfResult(CardResultCount(result: "name", min: ..., max: ...))` checks the whole cohort in an
+earlier in-scope `CardResultCohort` binding. It has only the named result and ordinary optional
+minimum/maximum bounds: at least one bound is required, and a bound cannot exceed the producer's
+declared cardinality. It has no ambient `PreviousEffect` or `Payment` source, action/player
+selector, or `card_type` filter. `Sacrifice(Source)` in an ability Program and `Mill` are supported
+typed producer examples; this compiler surface does not establish complete-card readiness for
+other owners. The effect-list `CardResultCount` form remains a separate legacy surface.
 
 `Mill` may bind a typed `CardResultCohort`. In a spell or triggered-ability program, `ChooseCard`
 accepts two exact source shapes: `WholeCurrentGraveyard`, which searches the controller's current
