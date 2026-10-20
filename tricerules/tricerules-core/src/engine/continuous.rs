@@ -549,7 +549,11 @@ impl GameEngine {
     /// Future upward setters must use the gain funnel; exchanges and gain-life costs must
     /// consult this query before committing any part of their transaction (CR 119.5 / 119.7).
     pub(super) fn can_player_gain_life(&self, player: PlayerId) -> bool {
-        if self.state.player_idx(player).is_none() {
+        if self
+            .state
+            .player_idx(player)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
             return false;
         }
         !self.state.objects.keys().any(|&oid| {

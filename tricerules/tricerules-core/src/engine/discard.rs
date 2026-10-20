@@ -5,6 +5,71 @@ use super::*;
 use crate::state::{DiscardBatch, DiscardCause, DiscardReceipt};
 
 impl GameEngine {
+    /// A begun target-hand-discard Program cannot be reassigned after its target leaves. Retire
+    /// only its uncommitted hand-choice or Library of Leng transaction with an empty typed result;
+    /// completed discard batches continue through their existing receipt path.
+    pub(super) fn reconcile_departed_target_hand_discard_program(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let target = match &pending.continuation {
+            ResolutionContinuation::HandChoice { stack, hand_choice }
+                if !hand_choice.program_selection && self.is_target_hand_discard_program(stack) =>
+            {
+                hand_choice.affected_player
+            }
+            ResolutionContinuation::DiscardReplacement { stack }
+                if self.is_target_hand_discard_program(stack) =>
+            {
+                let Some(PendingReplacementEvent::Discard(batch)) =
+                    self.state.pending_replacement_event.as_ref()
+                else {
+                    return Err(EngineError::ProgramInvariant(
+                        "targeted hand-discard replacement lost its pending batch",
+                    ));
+                };
+                let Some(first) = batch.cards.first() else {
+                    return Err(EngineError::ProgramInvariant(
+                        "targeted hand-discard replacement has no selected card",
+                    ));
+                };
+                if batch.cards.iter().any(|card| card.player != first.player) {
+                    return Err(EngineError::ProgramInvariant(
+                        "targeted hand-discard batch spans multiple target players",
+                    ));
+                }
+                first.player
+            }
+            _ => return Ok(false),
+        };
+        let target_has_left = self
+            .state
+            .player_idx(target)
+            .is_none_or(|index| self.state.players[index].has_lost);
+        if !target_has_left {
+            return Ok(false);
+        }
+
+        let pending = self
+            .state
+            .pending_resolution
+            .take()
+            .expect("the targeted hand-discard pending choice was checked above");
+        let stack = match pending.continuation {
+            ResolutionContinuation::HandChoice { stack, .. }
+            | ResolutionContinuation::DiscardReplacement { stack } => stack,
+            _ => unreachable!("the exact target-hand-discard continuation was checked above"),
+        };
+        self.state.pending_replacement_event = None;
+        let completed =
+            self.complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?;
+        events.extend(completed.events);
+        Ok(true)
+    }
+
     /// Commit one card of a semantic discard action without publishing trigger events. Callers
     /// performing a multi-card action collect receipts and publish one batch per player through
     /// [`Self::fire_discard_batches`], so a single instruction triggers "one or more cards" once.

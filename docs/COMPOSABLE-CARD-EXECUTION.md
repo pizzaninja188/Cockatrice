@@ -183,6 +183,27 @@ This follows CR 608.2b, 608.2h-i, 613.1, 613.1d, 701.8a-c, 701.19a-b, 702.12b, 6
 and 400.7. Mortify has the same chosen Creature-or-Enchantment Destroy shape but remains on its
 existing path. This adds no card admission or protocol, relay, or client change.
 
+The bounded 2026-10-20 Gerrard's Verdict migration uses a spell-owned targeted hand-discard result.
+The `ChooseHandCards(Discard)` instruction binds `AffectedPlayer` to its exact singleton player
+target group and records the existing typed card cohort; its compiled target-origin descriptor
+records `Discard`, `0..2` cardinality, and that group. Named `CardResultCount` checks the captured
+card-type facts: two visible Lands gain 6 life, one gains 3, and no Lands gain none. An unrevealed
+Library of Leng discard has undefined characteristics and does not count as a Land (CR 701.9c).
+Scenarios cover one/two/no Land results, empty/one-card hands, mixed and all-hidden Library of Leng
+destinations with replay, target and caster departure at both hand-choice and Library replacement
+stages, stale and malformed atomic answers, and a synthetic saved-observer refresh for the actual
+Gerrard Program. That Rust fixture does not inspect client-delivered privacy payloads. The separate
+two-client `GerrardsVerdictUsesRecipientFilteredLengEvidence` E2E test checks recipient-filtered
+hand candidates, concealed physical events and library views, public graveyard identity, the owner
+HAND-to-library physical-id aliases and selected top order, and post-draw owner hand snapshots while
+the observer's hand snapshots stay blank. A target who leaves after the choice begins contributes
+an empty result without
+delegation; a begun spell continues after its caster leaves, while that player receives no life
+(CR 608.2m, 800.4a). This reuses the target-bound cohort/count contract also used by Shredder's
+Technique with a different action and target group. Its [review map](../tricerules/tricerules-cards/authoring/review-maps/gerrards_verdict.json)
+indexes the Oracle paragraph and the actual-card scenarios. This adds no card admission or
+protocol, relay, or client change.
+
 The bounded 2026-10-20 Currency Converter increment moves only the `return_linked_card` activated
 ability in the [handwritten definition](../tricerules/tricerules-cards/data/currency_converter.ron)
 to a mandatory ability-owned `ChooseLinkedExiledCard` Program with destination `OwnerGraveyard`.

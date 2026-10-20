@@ -1,51 +1,32 @@
-// Oracle checked 2026-08-24. The life gain reads the exact cards discarded by the targeted
-// player, including their card types at the moment they moved (CR 608.2c, 701.9a).
+// Oracle checked 2026-10-20. The target discards two cards; count the exact visible discard
+// result (CR 608.2c, 701.9b) so hidden Library of Leng cards do not contribute card types.
 (
   id: "gerrards_verdict",
   name: "Gerrard's Verdict",
   face_id: "gerrard_s_verdict",
   mana_cost: "{W}{B}",
   types: ["Sorcery"],
-  spell_effect: [
-    ChooseHandCards(action: Discard, count: 2, target: (kind: AnyPlayer)),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "gain_6_life", presentation: Fallback,
-          cost: None,
-          requirement: CardResultCount(
-            filter: (
-              source: PreviousEffect,
-              action: Discard,
-              players: All,
-              card_type: Some(Land),
-            ),
-            min: Some(2),
-          ),
-          effects: [GainLife(amount: 6)],
-        ),
-        (
-          branch_id: "gain_3_life", presentation: Fallback,
-          cost: None,
-          requirement: CardResultCount(
-            filter: (
-              source: PreviousEffect,
-              action: Discard,
-              players: All,
-              card_type: Some(Land),
-            ),
-            min: Some(1),
-          ),
-          effects: [GainLife(amount: 3)],
-        ),
-        (
-          branch_id: "gain_no_life", presentation: Fallback,
-          cost: None,
-          requirement: Always,
-          effects: [],
-        ),
-      ],
-    ),
-  ],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "discard", bind: ["discarded"], input: None,
+      kind: Perform(ChooseHandCards(action: Discard, count: 2,
+        target: (kind: AnyPlayer), chooser: AffectedPlayer,
+        card_filter: None, optional: false))),
+    (id: "gain_six", bind: [], input: None,
+      kind: IfResult(condition: CardResultCount(result: "discarded",
+        card_type: Some(Land), min: Some(2)),
+        yes: (steps: [(id: "six_life", bind: [], input: None,
+          kind: Perform(GainLife(amount: 6)))], yields: []),
+        no: (steps: [(id: "gain_three", bind: [], input: None,
+          kind: IfResult(condition: CardResultCount(result: "discarded",
+            card_type: Some(Land), min: Some(1)),
+            yes: (steps: [(id: "three_life", bind: [], input: None,
+              kind: Perform(GainLife(amount: 3)))], yields: []),
+            no: (steps: [], yields: [])))], yields: []))),
+  ], yields: []), target_bindings: [
+    (instruction_id: "discard", role: Target, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target player", effect_indices: [],
+  )])),
 )

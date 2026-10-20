@@ -118,6 +118,686 @@ public:
     }
 };
 
+class GerrardEvidenceDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    bool captureEvidence = false;
+    std::vector<Event_GameStateChanged> physicalZoneSnapshots;
+    std::vector<Event_MoveCard> capturedMoves;
+    std::vector<ruled::v1::ZoneViewSync> receivedZoneViews;
+    std::vector<ruled::v1::ResolutionChoiceRequired> receivedChoices;
+    std::vector<quint32> gerrardStackOids;
+    std::set<quint32> resolvedGerrardStackOids;
+
+    void onPhysicalEvent(const GameEvent &event) override
+    {
+        if (!captureEvidence) {
+            return;
+        }
+        if (event.HasExtension(Event_GameStateChanged::ext)) {
+            physicalZoneSnapshots.push_back(event.GetExtension(Event_GameStateChanged::ext));
+        } else if (event.HasExtension(Event_MoveCard::ext)) {
+            capturedMoves.push_back(event.GetExtension(Event_MoveCard::ext));
+        }
+    }
+
+    void onRuledEvent(const ruled::v1::RuledEvent &event) override
+    {
+        OpeningDriver::onRuledEvent(event);
+        if (!captureEvidence) {
+            return;
+        }
+        if (event.has_zone_view()) {
+            receivedZoneViews.push_back(event.zone_view());
+        }
+        if (event.has_resolution_choice_required()) {
+            receivedChoices.push_back(event.resolution_choice_required());
+        }
+        if (event.has_stack_pushed() && event.stack_pushed().card_id() == "gerrards_verdict") {
+            gerrardStackOids.push_back(event.stack_pushed().object_id());
+        }
+        if (event.has_stack_resolved() && gerrardStackOids.end() !=
+                                                std::find(gerrardStackOids.begin(), gerrardStackOids.end(),
+                                                          event.stack_resolved().object_id())) {
+            resolvedGerrardStackOids.insert(event.stack_resolved().object_id());
+        }
+    }
+};
+
+TEST_F(RuledE2ESmokeTest, GerrardsVerdictUsesRecipientFilteredLengEvidence)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    GerrardEvidenceDriver p1(true, QStringLiteral("gerrardp1"), &transcript);
+    GerrardEvidenceDriver p2(false, QStringLiteral("gerrardp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Gerrard start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Gerrard start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](GerrardEvidenceDriver &sender, const ruled::v1::RuledCommand &command,
+                    const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int player, const char *name, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(ready);
+        return send(p1, command, QStringLiteral("Gerrard fixture put %1").arg(name));
+    };
+    auto addMana = [&](int player, int white, int blue, int black, int colorless) {
+        ruled::v1::RuledCommand command;
+        auto *mana = command.mutable_dev_command();
+        mana->set_target_player_id(player);
+        auto *pool = mana->mutable_add_mana();
+        pool->set_w(white);
+        pool->set_u(blue);
+        pool->set_b(black);
+        pool->set_c(colorless);
+        return send(p1, command, QStringLiteral("Gerrard fixture mana"));
+    };
+    auto pass = [&](GerrardEvidenceDriver &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("Gerrard pass priority"));
+    };
+    auto choose = [&](GerrardEvidenceDriver &client, std::initializer_list<quint32> objectIds) {
+        ruled::v1::RuledCommand command;
+        for (const quint32 objectId : objectIds) {
+            command.mutable_submit_resolution_choice()->add_chosen_object_ids(objectId);
+        }
+        client.pendingChoice.reset();
+        return send(client, command, QStringLiteral("Gerrard resolution choice"));
+    };
+
+    struct HandCandidate
+    {
+        std::string cardId;
+        std::string name;
+        quint32 objectId = 0;
+        int serverCardId = -1;
+    };
+    struct TopInsertion
+    {
+        int libraryCardId = -1;
+        std::string cardId;
+        std::string name;
+    };
+    auto findCandidate = [](const ruled::v1::ResolutionChoiceRequired &choice, const std::string &cardId) {
+        HandCandidate result;
+        for (int index = 0; index < choice.candidate_card_ids_size(); ++index) {
+            if (choice.candidate_card_ids(index) != cardId) {
+                continue;
+            }
+            result.cardId = choice.candidate_card_ids(index);
+            result.name = choice.candidate_names(index);
+            result.objectId = choice.candidate_object_ids(index);
+            result.serverCardId = choice.candidate_server_card_ids(index);
+            break;
+        }
+        return result;
+    };
+    auto findCandidateByName = [](const ruled::v1::ResolutionChoiceRequired &choice, const std::string &name) {
+        HandCandidate result;
+        for (int index = 0; index < choice.candidate_names_size(); ++index) {
+            if (choice.candidate_names(index) != name) {
+                continue;
+            }
+            result.name = choice.candidate_names(index);
+            if (index < choice.candidate_object_ids_size()) {
+                result.objectId = choice.candidate_object_ids(index);
+            }
+            if (index < choice.candidate_card_ids_size()) {
+                result.cardId = choice.candidate_card_ids(index);
+            }
+            if (index < choice.candidate_server_card_ids_size()) {
+                result.serverCardId = choice.candidate_server_card_ids(index);
+            }
+            break;
+        }
+        return result;
+    };
+    auto findReceivedChoice = [](const GerrardEvidenceDriver &client, quint32 sourceObjectId,
+                                 ruled::v1::ChoiceKind kind) -> const ruled::v1::ResolutionChoiceRequired * {
+        for (auto it = client.receivedChoices.rbegin(); it != client.receivedChoices.rend(); ++it) {
+            if (it->source_object_id() == sourceObjectId && it->choice_kind() == kind) {
+                return &*it;
+            }
+        }
+        return nullptr;
+    };
+    auto findReceivedChoiceSince = [](const GerrardEvidenceDriver &client, size_t firstIndex,
+                                      quint32 sourceObjectId,
+                                      ruled::v1::ChoiceKind kind) -> const ruled::v1::ResolutionChoiceRequired * {
+        for (size_t index = client.receivedChoices.size(); index > firstIndex; --index) {
+            const auto &choice = client.receivedChoices[index - 1];
+            if (choice.source_object_id() == sourceObjectId && choice.choice_kind() == kind) {
+                return &choice;
+            }
+        }
+        return nullptr;
+    };
+    auto pumpUntilFreshChoice = [&](GerrardEvidenceDriver &client, size_t firstIndex, quint32 sourceObjectId,
+                                    ruled::v1::ChoiceKind kind, bool ordered) {
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+            for (size_t index = firstIndex; index < client.receivedChoices.size(); ++index) {
+                const auto &choice = client.receivedChoices[index];
+                if (choice.source_object_id() == sourceObjectId && choice.choice_kind() == kind &&
+                    choice.ordered() == ordered) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    auto assertCandidatePayloadRedacted = [](const ruled::v1::ResolutionChoiceRequired &choice) {
+        EXPECT_EQ(choice.candidate_object_ids_size(), 0);
+        EXPECT_EQ(choice.candidate_card_ids_size(), 0);
+        EXPECT_EQ(choice.candidate_names_size(), 0);
+        EXPECT_EQ(choice.candidate_server_card_ids_size(), 0);
+        EXPECT_FALSE(choice.has_public_reveal());
+    };
+    auto assertRedactedHandChoice = [&](const ruled::v1::ResolutionChoiceRequired &choice) {
+        assertCandidatePayloadRedacted(choice);
+        EXPECT_EQ(choice.prompt_text(), "Opponent is making a resolution choice.");
+    };
+    auto assertNoConcealedPayload = [](const GerrardEvidenceDriver &client) {
+        for (const auto &sync : client.receivedZoneViews) {
+            for (const auto &player : sync.per_player()) {
+                EXPECT_EQ(player.hand_cards_size(), 0) << "private hand identity leaked to a recipient";
+                EXPECT_EQ(player.library_cards_size(), 0) << "concealed library identity leaked to a recipient";
+                EXPECT_FALSE(player.has_private_library_top());
+            }
+        }
+        for (const auto &snapshot : client.physicalZoneSnapshots) {
+            for (const auto &player : snapshot.player_list()) {
+                const int playerId = player.properties().player_id();
+                for (const auto &zone : player.zone_list()) {
+                    if (zone.name() == ZoneNames::DECK) {
+                        EXPECT_EQ(zone.card_list_size(), 0) << "concealed library contents leaked";
+                    } else if (zone.name() == ZoneNames::HAND && playerId != client.myId) {
+                        for (const auto &card : zone.card_list()) {
+                            EXPECT_TRUE(card.name().empty()) << "opponent hand name leaked";
+                            EXPECT_EQ(card.id(), -1) << "opponent hand card id leaked";
+                        }
+                    }
+                }
+            }
+        }
+    };
+    auto assertHiddenPhysicalMovesRedacted = [&](const GerrardEvidenceDriver &observer) {
+        for (const auto &move : observer.capturedMoves) {
+            if (move.start_player_id() != p2.myId || move.target_player_id() != p2.myId) {
+                continue;
+            }
+            const bool hiddenHandToLibrary = move.start_zone() == ZoneNames::HAND && move.target_zone() == ZoneNames::DECK;
+            const bool hiddenLibraryToHand = move.start_zone() == ZoneNames::DECK && move.target_zone() == ZoneNames::HAND;
+            if (!hiddenHandToLibrary && !hiddenLibraryToHand) {
+                continue;
+            }
+            EXPECT_EQ(move.card_id(), -1);
+            EXPECT_EQ(move.new_card_id(), -1);
+            EXPECT_TRUE(move.card_name().empty());
+        }
+    };
+    auto topInsertionsSince = [&](size_t firstMove, const std::vector<HandCandidate> &selected) {
+        std::vector<TopInsertion> result;
+        for (size_t index = firstMove; index < p2.capturedMoves.size(); ++index) {
+            const auto &move = p2.capturedMoves[index];
+            if (move.start_player_id() != p2.myId || move.target_player_id() != p2.myId ||
+                move.start_zone() != ZoneNames::HAND || move.target_zone() != ZoneNames::DECK) {
+                continue;
+            }
+            const auto candidate = std::find_if(selected.begin(), selected.end(), [&](const HandCandidate &entry) {
+                return entry.serverCardId == move.card_id();
+            });
+            if (candidate == selected.end()) {
+                result.push_back({move.new_card_id(), {}, {}});
+                continue;
+            }
+            result.push_back({move.new_card_id(), candidate->cardId, candidate->name});
+        }
+        return result;
+    };
+    auto verifyHandChoice = [&](quint32 spellObjectId, const std::vector<std::string> &selectedCardIds) -> void {
+        ASSERT_TRUE(p2.pendingChoice.has_value());
+        const auto handChoice = *p2.pendingChoice;
+        ASSERT_EQ(handChoice.choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+        EXPECT_EQ(handChoice.deciding_player_id(), p2.myId);
+        EXPECT_EQ(handChoice.source_object_id(), spellObjectId);
+        EXPECT_EQ(handChoice.min(), 2u);
+        EXPECT_EQ(handChoice.max(), 2u);
+        EXPECT_EQ(handChoice.candidate_card_ids_size(), handChoice.candidate_object_ids_size());
+        EXPECT_EQ(handChoice.candidate_card_ids_size(), handChoice.candidate_names_size());
+        EXPECT_EQ(handChoice.candidate_card_ids_size(), handChoice.candidate_server_card_ids_size());
+        const auto *ownerChoice = findReceivedChoice(p2, spellObjectId, ruled::v1::CHOICE_KIND_HAND_CARDS);
+        ASSERT_NE(ownerChoice, nullptr);
+        const auto *observerChoice = findReceivedChoice(p1, spellObjectId, ruled::v1::CHOICE_KIND_HAND_CARDS);
+        ASSERT_NE(observerChoice, nullptr);
+        assertRedactedHandChoice(*observerChoice);
+        for (const auto &cardId : selectedCardIds) {
+            const auto candidate = findCandidate(handChoice, cardId);
+            const auto receivedCandidate = findCandidate(*ownerChoice, cardId);
+            ASSERT_NE(candidate.objectId, 0u) << "missing private candidate " << cardId;
+            ASSERT_GE(candidate.serverCardId, 0) << "missing owner-scoped physical id for " << cardId;
+            EXPECT_FALSE(candidate.name.empty());
+            EXPECT_EQ(receivedCandidate.objectId, candidate.objectId);
+            EXPECT_EQ(receivedCandidate.serverCardId, candidate.serverCardId);
+            EXPECT_EQ(receivedCandidate.name, candidate.name);
+        }
+    };
+
+    ASSERT_TRUE(put(p2.myId, "Library of Leng", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p2.myId, "Forest", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p2.myId, "Plains", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p1.myId, "Gerrard's Verdict", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(addMana(p1.myId, 1, 0, 1, 0));
+    const auto *firstAction = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Gerrard's Verdict"));
+    ASSERT_NE(firstAction, nullptr);
+    ruled::v1::RuledCommand firstCast;
+    firstCast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    firstCast.mutable_cast_spell()->mutable_source()->set_hand_index(firstAction->hand_index());
+    auto *firstTarget = firstCast.mutable_cast_spell()->add_targets();
+    firstTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    firstTarget->set_object_id(p2.myId);
+    transcript.clear(); // End the public Dev fixture log before the actual spell cast.
+    p1.captureEvidence = true;
+    p2.captureEvidence = true;
+    ASSERT_TRUE(send(p1, firstCast, QStringLiteral("cast Gerrard's Verdict mixed Leng case")));
+    ASSERT_EQ(p1.gerrardStackOids.size(), 1u);
+    ASSERT_EQ(p2.gerrardStackOids.size(), 1u);
+    const quint32 firstSpellOid = p2.gerrardStackOids.back();
+    EXPECT_EQ(p1.gerrardStackOids.back(), firstSpellOid);
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    verifyHandChoice(firstSpellOid, {"forest", "plains"});
+    const auto firstHandChoice = *p2.pendingChoice;
+    const auto forest = findCandidate(firstHandChoice, "forest");
+    const auto plains = findCandidate(firstHandChoice, "plains");
+    ASSERT_EQ(forest.name, "Forest");
+    ASSERT_EQ(plains.name, "Plains");
+    const size_t firstMove = p2.capturedMoves.size();
+    ASSERT_TRUE(choose(p2, {forest.objectId, plains.objectId}));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    const auto *firstReplacementObserver =
+        findReceivedChoice(p1, firstSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(firstReplacementObserver, nullptr);
+    assertCandidatePayloadRedacted(*firstReplacementObserver);
+    ASSERT_TRUE(choose(p2, {1})); // Library of Leng puts the first selected land on top.
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_TRUE(choose(p2, {0})); // The second selected land goes to the public graveyard.
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p1.lifeByPlayer[p1.myId], 23);
+    EXPECT_EQ(p2.lifeByPlayer[p1.myId], 23);
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p2.stackDepth, 0);
+    ASSERT_EQ(p1.resolvedGerrardStackOids.count(firstSpellOid), 1u);
+    ASSERT_EQ(p2.resolvedGerrardStackOids.count(firstSpellOid), 1u);
+    auto topCards = topInsertionsSince(firstMove, {forest, plains});
+    ASSERT_EQ(topCards.size(), 1u);
+    ASSERT_EQ(topCards.front().cardId, "forest");
+    ASSERT_GE(topCards.front().libraryCardId, 0);
+
+    for (const auto *client : {&p1, &p2}) {
+        const auto visibleGraveMove = std::find_if(client->capturedMoves.begin(), client->capturedMoves.end(),
+                                                   [&](const Event_MoveCard &move) {
+            return move.start_player_id() == p2.myId && move.start_zone() == ZoneNames::HAND &&
+                   move.target_player_id() == p2.myId && move.target_zone() == ZoneNames::GRAVE &&
+                   move.card_name() == "Plains";
+        });
+        EXPECT_NE(visibleGraveMove, client->capturedMoves.end()) << "visible discard identity was not public";
+    }
+
+    p1.captureEvidence = false;
+    p2.captureEvidence = false;
+    ASSERT_TRUE(put(p2.myId, "Swamp", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p2.myId, "Mountain", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p1.myId, "Gerrard's Verdict", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(addMana(p1.myId, 1, 0, 1, 0));
+    const auto *secondAction = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Gerrard's Verdict"));
+    ASSERT_NE(secondAction, nullptr);
+    ruled::v1::RuledCommand secondCast;
+    secondCast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    secondCast.mutable_cast_spell()->mutable_source()->set_hand_index(secondAction->hand_index());
+    auto *secondTarget = secondCast.mutable_cast_spell()->add_targets();
+    secondTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    secondTarget->set_object_id(p2.myId);
+    transcript.clear(); // Reset the public fixture boundary for the second actual cast.
+    p1.captureEvidence = true;
+    p2.captureEvidence = true;
+    ASSERT_TRUE(send(p1, secondCast, QStringLiteral("cast Gerrard's Verdict all-hidden Leng case")));
+    ASSERT_EQ(p1.gerrardStackOids.size(), 2u);
+    ASSERT_EQ(p2.gerrardStackOids.size(), 2u);
+    const quint32 secondSpellOid = p2.gerrardStackOids.back();
+    EXPECT_EQ(p1.gerrardStackOids.back(), secondSpellOid);
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    verifyHandChoice(secondSpellOid, {"swamp", "mountain"});
+    const auto secondHandChoice = *p2.pendingChoice;
+    const auto swamp = findCandidate(secondHandChoice, "swamp");
+    const auto mountain = findCandidate(secondHandChoice, "mountain");
+    ASSERT_EQ(swamp.name, "Swamp");
+    ASSERT_EQ(mountain.name, "Mountain");
+    const size_t secondMove = p2.capturedMoves.size();
+    ASSERT_TRUE(choose(p2, {swamp.objectId, mountain.objectId}));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    auto replacementObserver = findReceivedChoice(p1, secondSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(replacementObserver, nullptr);
+    assertCandidatePayloadRedacted(*replacementObserver);
+    const size_t secondDestinationOwnerStart = p2.receivedChoices.size();
+    const size_t secondDestinationObserverStart = p1.receivedChoices.size();
+    ASSERT_TRUE(choose(p2, {1}));
+    ASSERT_TRUE(pumpUntilFreshChoice(p2, secondDestinationOwnerStart, secondSpellOid,
+                                     ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT, false));
+    ASSERT_TRUE(pumpUntilFreshChoice(p1, secondDestinationObserverStart, secondSpellOid,
+                                     ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT, false));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    EXPECT_FALSE(p2.pendingChoice->ordered());
+    EXPECT_EQ(p2.pendingChoice->min(), 1u);
+    EXPECT_EQ(p2.pendingChoice->max(), 1u);
+    const auto *ownerSecondDestination = findReceivedChoiceSince(
+        p2, secondDestinationOwnerStart, secondSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(ownerSecondDestination, nullptr);
+    EXPECT_FALSE(ownerSecondDestination->ordered());
+    EXPECT_EQ(ownerSecondDestination->candidate_object_ids_size(), 2);
+    EXPECT_EQ(ownerSecondDestination->candidate_names_size(), 2);
+    const auto *observerSecondDestination = findReceivedChoiceSince(
+        p1, secondDestinationObserverStart, secondSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(observerSecondDestination, nullptr);
+    assertCandidatePayloadRedacted(*observerSecondDestination);
+
+    const size_t orderOwnerStart = p2.receivedChoices.size();
+    const size_t orderObserverStart = p1.receivedChoices.size();
+    ASSERT_TRUE(choose(p2, {1}));
+    ASSERT_TRUE(pumpUntilFreshChoice(p2, orderOwnerStart, secondSpellOid,
+                                     ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT, true));
+    ASSERT_TRUE(pumpUntilFreshChoice(p1, orderObserverStart, secondSpellOid,
+                                     ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT, true));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    const auto orderChoice = *p2.pendingChoice;
+    EXPECT_TRUE(orderChoice.ordered());
+    EXPECT_EQ(orderChoice.min(), 2u);
+    EXPECT_EQ(orderChoice.max(), 2u);
+    EXPECT_EQ(orderChoice.candidate_object_ids_size(), 2);
+    EXPECT_EQ(orderChoice.candidate_names_size(), 2);
+    EXPECT_EQ(orderChoice.candidate_server_card_ids_size(), 2);
+    const auto orderedMountain = findCandidateByName(orderChoice, "Mountain");
+    const auto orderedSwamp = findCandidateByName(orderChoice, "Swamp");
+    ASSERT_NE(orderedMountain.objectId, 0u);
+    ASSERT_NE(orderedSwamp.objectId, 0u);
+    EXPECT_NE(orderedMountain.objectId, orderedSwamp.objectId);
+    EXPECT_EQ(orderedMountain.objectId, mountain.objectId);
+    EXPECT_EQ(orderedSwamp.objectId, swamp.objectId);
+    EXPECT_EQ(orderedMountain.name, "Mountain");
+    EXPECT_EQ(orderedSwamp.name, "Swamp");
+    ASSERT_GE(orderedMountain.serverCardId, 0);
+    ASSERT_GE(orderedSwamp.serverCardId, 0);
+    EXPECT_LT(orderedMountain.serverCardId, 2);
+    EXPECT_LT(orderedSwamp.serverCardId, 2);
+    EXPECT_NE(orderedMountain.serverCardId, orderedSwamp.serverCardId);
+    EXPECT_EQ(orderedMountain.serverCardId + orderedSwamp.serverCardId, 1);
+    const auto *ownerOrderChoice = findReceivedChoiceSince(
+        p2, orderOwnerStart, secondSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(ownerOrderChoice, nullptr);
+    EXPECT_TRUE(ownerOrderChoice->ordered());
+    EXPECT_EQ(ownerOrderChoice->candidate_object_ids_size(), 2);
+    const auto ownerOrderedMountain = findCandidateByName(*ownerOrderChoice, "Mountain");
+    const auto ownerOrderedSwamp = findCandidateByName(*ownerOrderChoice, "Swamp");
+    EXPECT_EQ(ownerOrderedMountain.objectId, orderedMountain.objectId);
+    EXPECT_EQ(ownerOrderedMountain.name, "Mountain");
+    EXPECT_EQ(ownerOrderedSwamp.objectId, orderedSwamp.objectId);
+    EXPECT_EQ(ownerOrderedSwamp.name, "Swamp");
+    const auto *observerOrderChoice = findReceivedChoiceSince(
+        p1, orderObserverStart, secondSpellOid, ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    ASSERT_NE(observerOrderChoice, nullptr);
+    assertCandidatePayloadRedacted(*observerOrderChoice);
+    EXPECT_TRUE(observerOrderChoice->ordered());
+    EXPECT_EQ(observerOrderChoice->min(), 2u);
+    EXPECT_EQ(observerOrderChoice->max(), 2u);
+
+    // The engine commits the batched HAND->DECK moves only after this explicit order response.
+    ASSERT_TRUE(choose(p2, {orderedMountain.objectId, orderedSwamp.objectId}));
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    QElapsedTimer orderedResolution;
+    orderedResolution.start();
+    while ((p1.stackDepth != 0 || p2.stackDepth != 0 ||
+            p1.resolvedGerrardStackOids.count(secondSpellOid) != 1u ||
+            p2.resolvedGerrardStackOids.count(secondSpellOid) != 1u) &&
+           orderedResolution.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    EXPECT_EQ(p1.lifeByPlayer[p1.myId], 23);
+    EXPECT_EQ(p2.lifeByPlayer[p1.myId], 23);
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p2.stackDepth, 0);
+    ASSERT_EQ(p1.resolvedGerrardStackOids.count(secondSpellOid), 1u);
+    ASSERT_EQ(p2.resolvedGerrardStackOids.count(secondSpellOid), 1u);
+
+    auto secondTopCards = topInsertionsSince(secondMove, {swamp, mountain});
+    ASSERT_EQ(secondTopCards.size(), 2u);
+    EXPECT_NE(secondTopCards[0].libraryCardId, secondTopCards[1].libraryCardId);
+    for (const auto &card : secondTopCards) {
+        EXPECT_TRUE(card.cardId == "swamp" || card.cardId == "mountain");
+        EXPECT_GE(card.libraryCardId, 0);
+    }
+    const auto mountainInsertion = std::find_if(secondTopCards.begin(), secondTopCards.end(), [](const TopInsertion &card) {
+        return card.cardId == "mountain";
+    });
+    const auto swampInsertion = std::find_if(secondTopCards.begin(), secondTopCards.end(), [](const TopInsertion &card) {
+        return card.cardId == "swamp";
+    });
+    ASSERT_NE(mountainInsertion, secondTopCards.end());
+    ASSERT_NE(swampInsertion, secondTopCards.end());
+    EXPECT_EQ(mountainInsertion->cardId, mountain.cardId);
+    EXPECT_EQ(mountainInsertion->name, orderedMountain.name);
+    EXPECT_EQ(swampInsertion->cardId, swamp.cardId);
+    EXPECT_EQ(swampInsertion->name, orderedSwamp.name);
+    topCards = {*mountainInsertion, *swampInsertion, topCards.front()};
+    ASSERT_EQ(topCards.size(), 3u);
+
+    p1.captureEvidence = false;
+    p2.captureEvidence = false;
+    ASSERT_TRUE(put(p2.myId, "Think Twice", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p2.myId, "Think Twice", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(put(p2.myId, "Think Twice", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(addMana(p2.myId, 0, 3, 0, 3));
+    p1.captureEvidence = true;
+    p2.captureEvidence = true;
+    auto waitBoth = [&](auto ready) {
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000) {
+            const bool bothInMain1 = p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1;
+            if (bothInMain1 && ready()) {
+                return true;
+            }
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 && ready();
+    };
+    auto ownerHandSnapshotCard = [&](size_t firstIndex, const TopInsertion &expected) -> const ServerInfo_Card * {
+        for (size_t index = p2.physicalZoneSnapshots.size(); index > firstIndex; --index) {
+            const auto &snapshot = p2.physicalZoneSnapshots[index - 1];
+            for (const auto &player : snapshot.player_list()) {
+                if (player.properties().player_id() != p2.myId) {
+                    continue;
+                }
+                for (const auto &zone : player.zone_list()) {
+                    if (zone.name() != ZoneNames::HAND) {
+                        continue;
+                    }
+                    for (const auto &card : zone.card_list()) {
+                        if (card.name() == expected.name) {
+                            return &card;
+                        }
+                    }
+                }
+            }
+        }
+        return nullptr;
+    };
+    auto latestOwnerHandSnapshot = [&]() -> const ServerInfo_Zone * {
+        if (p2.physicalZoneSnapshots.empty()) {
+            return nullptr;
+        }
+        const auto &snapshot = p2.physicalZoneSnapshots.back();
+        for (const auto &player : snapshot.player_list()) {
+            if (player.properties().player_id() != p2.myId) {
+                continue;
+            }
+            for (const auto &zone : player.zone_list()) {
+                if (zone.name() == ZoneNames::HAND) {
+                    return &zone;
+                }
+            }
+        }
+        return nullptr;
+    };
+    auto observerHandSnapshotIsBlank = [&](size_t firstIndex) {
+        for (size_t index = p1.physicalZoneSnapshots.size(); index > firstIndex; --index) {
+            const auto &snapshot = p1.physicalZoneSnapshots[index - 1];
+            for (const auto &player : snapshot.player_list()) {
+                if (player.properties().player_id() != p2.myId) {
+                    continue;
+                }
+                for (const auto &zone : player.zone_list()) {
+                    if (zone.name() == ZoneNames::HAND) {
+                        return zone.card_list_size() == 0;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+    for (auto &expectedTop : topCards) {
+        ASSERT_TRUE(waitBoth([&] {
+            return p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId && p1.stackDepth == 0 &&
+                   p2.stackDepth == 0;
+        })) << "timed out waiting for P1 priority between Think Twice draws";
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(waitBoth([&] {
+            return p1.priorityPlayer == p2.myId && p2.priorityPlayer == p2.myId && p1.stackDepth == 0 &&
+                   p2.stackDepth == 0;
+        })) << "timed out waiting for P1 to pass priority to P2";
+        const auto *drawAction = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Think Twice"));
+        ASSERT_NE(drawAction, nullptr);
+        ruled::v1::RuledCommand drawSpell;
+        drawSpell.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        drawSpell.mutable_cast_spell()->mutable_source()->set_hand_index(drawAction->hand_index());
+        const auto *preDrawOwnerHand = latestOwnerHandSnapshot();
+        ASSERT_NE(preDrawOwnerHand, nullptr) << "latest owner snapshot must include the owner's hand before drawing";
+        const bool expectedTopAlreadyInHand = std::any_of(
+            preDrawOwnerHand->card_list().begin(), preDrawOwnerHand->card_list().end(), [&](const ServerInfo_Card &card) {
+                return card.id() == expectedTop.libraryCardId;
+            });
+        ASSERT_FALSE(expectedTopAlreadyInHand)
+            << "latest owner hand snapshot already contains the physical card expected from the library top";
+        const size_t ownerSnapshotStart = p2.physicalZoneSnapshots.size();
+        const size_t observerSnapshotStart = p1.physicalZoneSnapshots.size();
+        const int stackDepthBeforeDraw = p1.stackDepth;
+        ASSERT_TRUE(send(p2, drawSpell, QStringLiteral("cast Think Twice to verify Leng top order")));
+        ASSERT_TRUE(waitBoth([&] {
+            return p1.priorityPlayer == p2.myId && p2.priorityPlayer == p2.myId &&
+                   p1.stackDepth == stackDepthBeforeDraw + 1 && p2.stackDepth == stackDepthBeforeDraw + 1;
+        })) << "timed out waiting for Think Twice stack/priority publication to both clients";
+        ASSERT_TRUE(pass(p2));
+        ASSERT_TRUE(waitBoth([&] {
+            return p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId &&
+                   p1.stackDepth == stackDepthBeforeDraw + 1 && p2.stackDepth == stackDepthBeforeDraw + 1;
+        })) << "timed out waiting for P2 to pass priority to P1";
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(waitBoth([&] {
+            return p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId &&
+                   p1.stackDepth == stackDepthBeforeDraw && p2.stackDepth == stackDepthBeforeDraw;
+        })) << "timed out waiting for Think Twice resolution";
+        ASSERT_TRUE(waitBoth([&] {
+            return ownerHandSnapshotCard(ownerSnapshotStart, expectedTop) != nullptr &&
+                   observerHandSnapshotIsBlank(observerSnapshotStart);
+        })) << "timed out waiting for recipient-filtered hand snapshots after draw";
+        const auto *drawnCard = ownerHandSnapshotCard(ownerSnapshotStart, expectedTop);
+        ASSERT_NE(drawnCard, nullptr);
+        EXPECT_EQ(drawnCard->name(), expectedTop.name);
+        EXPECT_EQ(drawnCard->id(), expectedTop.libraryCardId)
+            << "owner hand snapshot must preserve the physical id from the prior HAND->DECK move";
+        EXPECT_TRUE(observerHandSnapshotIsBlank(observerSnapshotStart));
+    }
+
+    EXPECT_TRUE(p1.libraryDetailsStayedConcealed);
+    EXPECT_TRUE(p2.libraryDetailsStayedConcealed);
+    assertNoConcealedPayload(p1);
+    assertNoConcealedPayload(p2);
+    assertHiddenPhysicalMovesRedacted(p1);
+    for (const auto &choice : p1.receivedChoices) {
+        if ((choice.source_object_id() == firstSpellOid || choice.source_object_id() == secondSpellOid) &&
+            (choice.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS ||
+             choice.choice_kind() == ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT)) {
+            assertCandidatePayloadRedacted(choice);
+            if (choice.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
+                EXPECT_EQ(choice.prompt_text(), "Opponent is making a resolution choice.");
+            }
+        }
+    }
+    for (const auto *client : {&p1, &p2}) {
+        EXPECT_EQ(client->lifeByPlayer.at(p1.myId), 23);
+        EXPECT_EQ(client->stackDepth, 0);
+        for (const quint32 spellOid : {firstSpellOid, secondSpellOid}) {
+            EXPECT_EQ(client->resolvedGerrardStackOids.count(spellOid), 1u);
+        }
+    }
+}
+
 TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
 {
     const auto started = startServers();

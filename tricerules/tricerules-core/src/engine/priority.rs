@@ -125,6 +125,52 @@ impl GameEngine {
                     .get(&source_id)
                     .is_some_and(|object| departed.contains(&object.owner))
             });
+        let pending_target_hand_discard =
+            self.state.pending_resolution.as_ref().and_then(|pending| {
+                match &pending.continuation {
+                    ResolutionContinuation::HandChoice { stack, hand_choice }
+                        if !hand_choice.program_selection
+                            && self.is_target_hand_discard_program(stack) =>
+                    {
+                        Some((
+                            stack.item.id,
+                            stack.item.source_zone_change,
+                            hand_choice.affected_player,
+                        ))
+                    }
+                    ResolutionContinuation::DiscardReplacement { stack }
+                        if self.is_target_hand_discard_program(stack) =>
+                    {
+                        let Some(super::replacement::PendingReplacementEvent::Discard(batch)) =
+                            self.state.pending_replacement_event.as_ref()
+                        else {
+                            return None;
+                        };
+                        let first = batch.cards.first()?;
+                        batch
+                            .cards
+                            .iter()
+                            .all(|card| card.player == first.player)
+                            .then_some((stack.item.id, stack.item.source_zone_change, first.player))
+                    }
+                    _ => None,
+                }
+            });
+        let pending_target_hand_discard_program = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| match &pending.continuation {
+                ResolutionContinuation::HandChoice { stack, hand_choice } => {
+                    !hand_choice.program_selection && self.is_target_hand_discard_program(stack)
+                }
+                ResolutionContinuation::DiscardReplacement { stack } => {
+                    self.is_target_hand_discard_program(stack)
+                }
+                _ => false,
+            });
+        let pending_target_hand_discard_departed =
+            pending_target_hand_discard.is_some_and(|(_, _, target)| departed.contains(&target));
         let discard_departed_suspended_resolution = self
             .state
             .pending_observer_return_batch
@@ -156,9 +202,23 @@ impl GameEngine {
                     ) => Some(key.source_object_id),
                     _ => None,
                 };
-                Some((stack, discard, linked_program))
+                let target_hand_discard_program = match &pending.continuation {
+                    ResolutionContinuation::HandChoice { stack, hand_choice }
+                        if !hand_choice.program_selection
+                            && self.is_target_hand_discard_program(stack) =>
+                    {
+                        Some(())
+                    }
+                    ResolutionContinuation::DiscardReplacement { stack }
+                        if self.is_target_hand_discard_program(stack) =>
+                    {
+                        Some(())
+                    }
+                    _ => None,
+                };
+                Some((stack, discard, linked_program, target_hand_discard_program))
             })
-            .is_some_and(|(stack, discard, linked_program)| {
+            .is_some_and(|(stack, discard, linked_program, target_hand_discard_program)| {
                 let linked_source_departed = linked_program.is_some_and(|source_id| {
                     self.state
                         .objects
@@ -171,6 +231,11 @@ impl GameEngine {
                 if linked_program.is_some() {
                     // The independently owed observer return remains active while this exact
                     // begun Program waits below it; restore-time reconciliation refreshes it.
+                    return false;
+                }
+                if target_hand_discard_program.is_some() {
+                    // Keep the begun target discard below the observer. Restoration refreshes
+                    // the live target's private hand offer or retires it if that target departed.
                     return false;
                 }
                 if let Some(discard) = discard {
@@ -258,8 +323,15 @@ impl GameEngine {
                                 && stack.item.source_zone_change == root_generation
                         },
                     );
+                    let is_pending_target_hand_discard_root = pending_target_hand_discard
+                        .is_some_and(|(root_id, root_generation, _)| {
+                            stack.item.id == root_id
+                                && stack.item.source_zone_change == root_generation
+                        });
                     (is_departed(stack)
-                        || (is_pending_linked_root && pending_linked_source_departed))
+                        || (is_pending_linked_root && pending_linked_source_departed)
+                        || (is_pending_target_hand_discard_root
+                            && pending_target_hand_discard_departed))
                         .then_some(stack)
                 })
                 .cloned()
@@ -383,6 +455,15 @@ impl GameEngine {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
                     // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
+                ResolutionContinuation::HandChoice { .. }
+                | ResolutionContinuation::DiscardReplacement { .. }
+                    if pending_target_hand_discard_program =>
+                {
+                    // This exact begun target-hand discard survives controller departure. If the
+                    // affected player leaves, post-cleanup reconciliation retires their
+                    // uncommitted choice with an empty typed result instead of delegating it.
                     preserve = true;
                 }
                 ResolutionContinuation::LinkedExileChoice { .. }
@@ -922,6 +1003,7 @@ impl GameEngine {
         }
         self.discard_departed_triggered_abilities();
         self.reindex_battlefield_control(events);
+        self.reconcile_departed_target_hand_discard_program(events)?;
         let stranded: Vec<_> = self
             .state
             .objects
@@ -1297,7 +1379,7 @@ impl GameEngine {
                     };
                     match self.start_draw_transaction(vec![(ap, 1)], completion, "draw step", ev)? {
                         super::draw::DrawProgress::Parked => {
-                            return Ok(finish_with_events(self, std::mem::take(ev)))
+                            return Ok(finish_with_events(self, std::mem::take(ev)));
                         }
                         super::draw::DrawProgress::Complete(_) => {}
                         super::draw::DrawProgress::GameEnded => {

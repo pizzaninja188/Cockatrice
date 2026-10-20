@@ -14,8 +14,9 @@ use crate::state::{
 };
 use tricerules_card_model::primitives::{
     CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstructionKind,
-    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition,
-    ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType,
+    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, HandCardAction,
+    HandCardChooser, HandChoiceVisibility, ProgramRequiredInput, ResolutionCost, ResultSlotId,
+    ResultType, SpellEffectKind, TargetFilter, TargetKind,
 };
 
 #[cfg(test)]
@@ -328,7 +329,121 @@ fn trip_program_failpoint(point: ProgramFailpoint) -> Result<(), EngineError> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::engine) struct TargetHandDiscardProgramSignature {
+    pub instruction_address: u32,
+    pub target_group_index: u32,
+    pub card_count: u32,
+    pub cardinality: tricerules_card_model::primitives::Cardinality,
+    pub result_slot: ResultSlotId,
+}
+
 impl GameEngine {
+    /// Describe the exact compiled target-hand-discard operation while its card-choice
+    /// transaction is still in flight. The immutable instruction, target binding, and typed
+    /// result are one signature used by answer validation and every parked-continuation path.
+    pub(in crate::engine) fn target_hand_discard_program_signature(
+        &self,
+        stack: &ParkedStackResolution,
+    ) -> Option<TargetHandDiscardProgramSignature> {
+        let program_state = stack.program.as_ref()?;
+        let compiled = self
+            .registry
+            .compiled_program_for_owner(&program_state.owner)?;
+        if compiled.owner != program_state.owner
+            || compiled.context != tricerules_card_model::primitives::EffectContext::Spell
+        {
+            return None;
+        }
+        let frame = program_state.frames.last()?;
+        let instruction_index = frame.next_instruction.checked_sub(1)? as usize;
+        let block = block_at_path(compiled, &frame.path).ok()?;
+        let instruction = block.steps.get(instruction_index)?;
+        let CompiledInstructionKind::Perform(effect) = &instruction.kind else {
+            return None;
+        };
+        let card_count = match effect.as_ref() {
+            SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::Discard,
+                count,
+                target,
+                chooser: HandCardChooser::AffectedPlayer,
+                card_filter: None,
+                optional: false,
+                visibility: HandChoiceVisibility::PrivateLook,
+            } if *count > 0
+                && target
+                    == &(TargetFilter {
+                        kind: TargetKind::AnyPlayer,
+                        ..TargetFilter::default()
+                    }) =>
+            {
+                *count
+            }
+            _ => return None,
+        };
+        if instruction.input.is_some() {
+            return None;
+        }
+        let bindings = compiled
+            .target_bindings
+            .iter()
+            .filter(|binding| binding.instruction_address == instruction.instruction_address)
+            .collect::<Vec<_>>();
+        let [binding] = bindings.as_slice() else {
+            return None;
+        };
+        if binding.role_index != 0 {
+            return None;
+        }
+        let target_group_index = binding.target_group_index;
+        let projected =
+            program_target_context(&stack.item, compiled, instruction.instruction_address).ok()?;
+        if !projected.has_bindings
+            || projected.targets.len() != 1
+            || projected.target_group_indices.as_slice() != [target_group_index]
+        {
+            return None;
+        }
+
+        let [output] = instruction.outputs.as_slice() else {
+            return None;
+        };
+        let Some([in_flight]) = program_state.in_flight.as_deref() else {
+            return None;
+        };
+        if output != in_flight {
+            return None;
+        }
+        let slot = compiled.slots.get(output.0 as usize)?;
+        let cardinality = match &slot.result_type {
+            ResultType::TargetCardResultCohort {
+                action: tricerules_card_model::primitives::CardResultAction::Discard,
+                cardinality:
+                    cardinality @ tricerules_card_model::primitives::Cardinality {
+                        min: 0,
+                        max: Some(max),
+                    },
+                target_group_index: result_group,
+            } if *max == card_count && *result_group == target_group_index => *cardinality,
+            _ => return None,
+        };
+        Some(TargetHandDiscardProgramSignature {
+            instruction_address: instruction.instruction_address,
+            target_group_index,
+            card_count,
+            cardinality,
+            result_slot: *output,
+        })
+    }
+
+    pub(in crate::engine) fn is_target_hand_discard_program(
+        &self,
+        stack: &ParkedStackResolution,
+    ) -> bool {
+        self.target_hand_discard_program_signature(stack).is_some()
+    }
+
     /// Select the exact immutable program units for this stack occurrence. A compiled modal
     /// container owns every sibling mode, so any missing sibling is an invariant failure rather
     /// than a reason to mix program execution with the legacy flattened effect list.
@@ -1154,7 +1269,7 @@ impl GameEngine {
                             _ => {
                                 return Err(EngineError::ProgramInvariant(
                                     "resolution program input has the wrong type",
-                                ))
+                                ));
                             }
                         }
                     }
@@ -1618,7 +1733,7 @@ impl GameEngine {
             | crate::state::PendingProgramChooseStage::PayingBlight { .. }
             | crate::state::PendingProgramChooseStage::PayingPermanentCost { .. }
             | crate::state::PendingProgramChooseStage::ChoosingCommanderDestination { .. } => {
-                return None
+                return None;
             }
         };
         Some(rv1::RuledEvent {
@@ -1787,7 +1902,7 @@ fn block_at_path<'a>(
             _ => {
                 return Err(EngineError::ProgramInvariant(
                     "resolution program frame is not a branch",
-                ))
+                ));
             }
         };
     }
@@ -1849,7 +1964,7 @@ fn capture_program_outputs(
                 _ => {
                     return Err(EngineError::ProgramInvariant(
                         "retained library search did not publish its exact cohort",
-                    ))
+                    ));
                 }
             },
             ResultType::RevealedLibraryCohort => match result.program_value.as_ref() {
@@ -1857,7 +1972,7 @@ fn capture_program_outputs(
                 _ => {
                     return Err(EngineError::ProgramInvariant(
                         "cohort reveal did not publish its typed result",
-                    ))
+                    ));
                 }
             },
             ResultType::CardPartition => match result.program_value.as_ref() {
@@ -1865,7 +1980,7 @@ fn capture_program_outputs(
                 _ => {
                     return Err(EngineError::ProgramInvariant(
                         "cohort split did not publish its typed partition",
-                    ))
+                    ));
                 }
             },
             ResultType::TokenCopyBatch => {

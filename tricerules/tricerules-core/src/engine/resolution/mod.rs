@@ -2744,6 +2744,9 @@ impl GameEngine {
         if self.reconcile_pending_player_set_discard_departure(events, true)? {
             return Ok(true);
         }
+        if self.reconcile_departed_target_hand_discard_program(events)? {
+            return Ok(true);
+        }
         if self.refresh_suspended_program_draw_replacement(events)?
             || self.refresh_suspended_program_discard_replacement(events)?
             || self.refresh_suspended_program_choice(events)?
@@ -2804,7 +2807,9 @@ impl GameEngine {
         };
         let stack = match &pending.continuation {
             ResolutionContinuation::HandChoice { stack, hand_choice }
-                if hand_choice.program_selection && stack.program.is_some() =>
+                if stack.program.is_some()
+                    && (hand_choice.program_selection
+                        || self.is_target_hand_discard_program(stack)) =>
             {
                 stack.clone()
             }
@@ -2816,12 +2821,40 @@ impl GameEngine {
         let Some(mut program) = stack.program.clone() else {
             return Ok(false);
         };
+        let target_hand_discard_target = match &pending.continuation {
+            ResolutionContinuation::HandChoice { stack, hand_choice }
+                if !hand_choice.program_selection && self.is_target_hand_discard_program(stack) =>
+            {
+                Some(hand_choice.affected_player)
+            }
+            _ => None,
+        };
+        if target_hand_discard_target.is_some_and(|target| {
+            self.state
+                .player_idx(target)
+                .is_none_or(|index| self.state.players[index].has_lost)
+        }) {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            let resumed = self.complete_parked_stack_with_previous(
+                stack,
+                EffectResult::default(),
+                Vec::new(),
+            )?;
+            events.extend(resumed.events);
+            return Ok(true);
+        }
         let effect = self.current_program_perform(&program)?;
         let chooser_leaf = match &pending.continuation {
             ResolutionContinuation::HandChoice { hand_choice, .. }
                 if hand_choice.program_selection =>
             {
                 matches!(effect, SpellEffectKind::SelectHandCards { .. })
+            }
+            ResolutionContinuation::HandChoice { stack, hand_choice }
+                if !hand_choice.program_selection && self.is_target_hand_discard_program(stack) =>
+            {
+                matches!(effect, SpellEffectKind::ChooseHandCards { .. })
             }
             ResolutionContinuation::PermanentChoice { .. } => matches!(
                 effect,
@@ -4788,6 +4821,495 @@ mod attached_subject_tests {
                 _ => None,
             })
             .expect("resolution-choice offer")
+    }
+
+    #[test]
+    fn admitted_target_hand_discard_profile_is_not_card_name_bound() {
+        let card = r#"(
+            id: "alternate_target_discard_fixture",
+            name: "Alternate Target Discard Fixture",
+            face_id: "alternate_target_discard_fixture",
+            mana_cost: "{0}",
+            types: ["Instant"],
+            spell_effect: [],
+            spell_program: Some((body: (steps: [
+                (id: "destroy", bind: ["destroyed"], input: None,
+                    kind: Perform(Destroy(subject: Chosen((kind: AnyPermanent))))),
+                (id: "discard", bind: ["discarded"], input: None,
+                    kind: Perform(ChooseHandCards(action: Discard, count: 1,
+                        target: (kind: AnyPlayer), chooser: AffectedPlayer,
+                        card_filter: None, optional: false))),
+            ], yields: []), target_bindings: [
+                (instruction_id: "destroy", role: Subject, target_group_index: 0),
+                (instruction_id: "discard", role: Target, target_group_index: 1),
+            ])),
+            targeting: Some((groups: [
+                (min: 1, max: 1, prompt: "Choose target permanent", effect_indices: []),
+                (min: 1, max: 1, prompt: "Choose target player", effect_indices: []),
+            ])),
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card], &[])
+                .expect("alternate owner with count 1 and target group 1 compiles"),
+        ));
+        let card_id = "alternate_target_discard_fixture";
+        let decks = Some(vec![
+            vec![card_id.to_string(); 30],
+            vec![card_id.to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, 494_041, &[0, 1], 20, decks, true)
+            .expect("alternate target-discard engine");
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            card_id,
+            tricerules_card_model::CardFaceId::new(card_id).unwrap(),
+        );
+        let compiled = engine
+            .registry
+            .compiled_program_for_owner(&owner)
+            .expect("alternate target-discard Program compiled");
+        assert_eq!(compiled.target_bindings.len(), 2);
+        let discard = compiled
+            .body
+            .steps
+            .get(1)
+            .expect("discard is second instruction");
+        let [discard_output] = discard.outputs.as_slice() else {
+            panic!("targeted hand discard binds one typed result");
+        };
+        assert!(matches!(
+            compiled
+                .slots
+                .get(discard_output.0 as usize)
+                .map(|slot| &slot.result_type),
+            Some(
+                tricerules_card_model::primitives::ResultType::TargetCardResultCohort {
+                    action: tricerules_card_model::primitives::CardResultAction::Discard,
+                    cardinality: tricerules_card_model::primitives::Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                    target_group_index: 1,
+                }
+            )
+        ));
+
+        let spell = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture spell dealt");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("put fixture spell on the stack");
+        let mut item = engine.observer_return_item(spell, 0);
+        item.card_id = card_id.to_string();
+        item.ability_text = None;
+        item.is_copy = false;
+        item.cast_by = Some(0);
+        item.targets = vec![
+            crate::state::StackTarget {
+                object_id: 99,
+                group_index: 0,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                zone_change_generation: None,
+                required_controller: None,
+            },
+            crate::state::StackTarget {
+                object_id: 1,
+                group_index: 1,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Player as i32,
+                zone_change_generation: None,
+                required_controller: None,
+            },
+        ];
+        let mut run = engine
+            .begin_program_run(&item, vec![owner.clone()])
+            .expect("alternate target-discard Program starts");
+        run.frames.last_mut().unwrap().next_instruction = 2;
+        run.in_flight = Some(discard.outputs.clone());
+        let mut parked = ParkedStackResolution::new(item);
+        parked.program = Some(run);
+
+        let signature = engine
+            .target_hand_discard_program_signature(&parked)
+            .expect(
+                "derive the count, result slot, and nonzero target group from compiled metadata",
+            );
+        assert_eq!(signature.card_count, 1);
+        assert_eq!(signature.target_group_index, 1);
+        assert_eq!(
+            signature.cardinality,
+            tricerules_card_model::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            }
+        );
+        assert_eq!(signature.result_slot, *discard_output);
+        assert!(
+            engine.is_target_hand_discard_program(&parked),
+            "the admitted alternate owner must share the same target-hand-discard continuation profile"
+        );
+
+        let mut wrong_output = parked.clone();
+        wrong_output.program.as_mut().unwrap().in_flight =
+            Some(compiled.body.steps[0].outputs.clone());
+        assert!(
+            !engine.is_target_hand_discard_program(&wrong_output),
+            "a current hand-discard leaf with another instruction's result must fail closed"
+        );
+
+        let mut wrong_cursor = parked.clone();
+        wrong_cursor
+            .program
+            .as_mut()
+            .unwrap()
+            .frames
+            .last_mut()
+            .unwrap()
+            .next_instruction = 1;
+        assert!(
+            !engine.is_target_hand_discard_program(&wrong_cursor),
+            "the typed discard output cannot classify a different current operation"
+        );
+
+        let mut wrong_group = parked;
+        wrong_group.item.targets[1].group_index = 0;
+        assert!(
+            !engine.is_target_hand_discard_program(&wrong_group),
+            "the current target projection must match the compiled result group"
+        );
+    }
+
+    #[test]
+    fn synthetic_observer_restore_of_actual_gerrard_choice_rebuilds_private_hand_candidates() {
+        // The owed observer return is staged synthetically; the parked chooser is the actual
+        // Gerrard's Verdict hand-choice effect and its target remains the only private recipient.
+        let mut engine = observer_restore_test_engine(494_040);
+        let spell = add_observer_restore_zone_card(&mut engine, 0, "gerrards_verdict", Zone::Hand);
+        let original_candidate =
+            add_observer_restore_zone_card(&mut engine, 1, "forest", Zone::Hand);
+        let departed_candidate =
+            add_observer_restore_zone_card(&mut engine, 1, "mountain", Zone::Hand);
+
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("put actual Gerrard's Verdict on the stack");
+        let source_generation = engine.state.zone_change_generation[&spell];
+        let mut item = engine.observer_return_item(spell, 0);
+        item.card_id = "gerrards_verdict".into();
+        item.controller = 0;
+        item.is_copy = false;
+        item.ability_text = None;
+        item.source_owner = Some(0);
+        item.source_zone_change = source_generation;
+        item.cast_by = Some(0);
+        item.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(source_generation),
+        });
+        item.targets = vec![crate::state::StackTarget {
+            object_id: 1,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Player as i32,
+            zone_change_generation: None,
+            required_controller: None,
+        }];
+
+        let owners = engine
+            .compiled_resolution_program_owners(&item)
+            .expect("inspect actual Gerrard's Verdict owners")
+            .expect("the actual spell face owns a compiled Program");
+        let program = engine
+            .begin_program_run(&item, owners)
+            .expect("start the actual Gerrard's Verdict Program");
+        let mut initial_events = Vec::new();
+        assert_eq!(
+            engine
+                .run_program_with_previous(
+                    &item,
+                    program,
+                    EffectResult::default(),
+                    &mut initial_events,
+                )
+                .expect("run actual Gerrard's Verdict to its target's hand choice"),
+            ResolutionProgress::Parked
+        );
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .expect("publish the actual targeted hand choice");
+        let initial_offer = resolution_choice_offer(&initial_events);
+        assert_eq!(initial_offer.deciding_player_id, 1);
+        assert_eq!(
+            initial_offer.candidate_object_ids,
+            [original_candidate, departed_candidate]
+        );
+        assert_eq!((initial_offer.min, initial_offer.max), (2, 2));
+        let original_prompt_id = initial_offer.resolution_prompt_id;
+
+        let original_pending = engine
+            .state
+            .pending_resolution
+            .take()
+            .expect("the actual hand choice is suspended for the synthetic observer");
+        let crate::state::ResolutionContinuation::HandChoice { stack, hand_choice } =
+            &original_pending.continuation
+        else {
+            panic!("actual Gerrard remains parked on its targeted hand choice");
+        };
+        assert_eq!(stack.item.id, spell);
+        assert_eq!(hand_choice.affected_player, 1);
+        assert_eq!(hand_choice.candidate_generations.len(), 2);
+        assert!(!hand_choice.program_selection);
+        let program = stack
+            .program
+            .as_ref()
+            .expect("actual Gerrard choice retains its compiled Program cursor");
+        assert_eq!(
+            program.owner,
+            tricerules_card_model::ProgramOwnerId::face(
+                "gerrards_verdict",
+                tricerules_card_model::CardFaceId::new("gerrard_s_verdict").unwrap(),
+            )
+        );
+        assert_eq!(program.frames.last().unwrap().next_instruction, 1);
+        assert_eq!(program.in_flight.as_deref().unwrap().len(), 1);
+        let output = program.in_flight.as_ref().unwrap()[0];
+        assert!(matches!(
+            engine
+                .registry
+                .compiled_program_for_owner(&program.owner)
+                .unwrap()
+                .slots
+                .get(output.0 as usize)
+                .map(|slot| &slot.result_type),
+            Some(
+                tricerules_card_model::primitives::ResultType::TargetCardResultCohort {
+                    action: tricerules_card_model::primitives::CardResultAction::Discard,
+                    cardinality: tricerules_card_model::primitives::Cardinality {
+                        min: 0,
+                        max: Some(2),
+                    },
+                    target_group_index: 0,
+                }
+            )
+        ));
+        assert!(engine.is_target_hand_discard_program(stack));
+        assert_eq!(
+            hand_choice
+                .candidate_generations
+                .iter()
+                .map(|(object_id, _)| *object_id)
+                .collect::<Vec<_>>(),
+            [original_candidate, departed_candidate]
+        );
+        assert!(hand_choice
+            .candidate_generations
+            .iter()
+            .all(|(object_id, generation)| {
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == *generation
+            }));
+
+        for departed in [1, 0] {
+            let mut saved_engine = engine.clone();
+            let owed_aura =
+                add_observer_restore_zone_card(&mut saved_engine, 2, "pacifism", Zone::Hand);
+            move_object_to_zone(
+                &mut saved_engine.state,
+                saved_engine.registry,
+                owed_aura,
+                Zone::Exile,
+                None,
+            )
+            .expect("stage the synthetic owed Aura's Exile incarnation");
+            let aura_generation = saved_engine.state.zone_change_generation[&owed_aura];
+            let aura_target = add_battlefield_object(&mut saved_engine, 2, "grizzly_bears");
+            saved_engine.state.pending_observer_return_batch =
+                Some(crate::state::PendingObserverReturnBatch {
+                    ready: Vec::new(),
+                    remaining: Default::default(),
+                    resume_stack: None,
+                    suspended_resolution: Some(original_pending.clone()),
+                    suspended_replacement_event: None,
+                });
+            saved_engine.state.pending_resolution = Some(crate::state::PendingResolution {
+                deciding_player: 2,
+                presentation: crate::state::PendingResolutionPresentation {
+                    source_object_id: owed_aura,
+                    candidates: vec![aura_target],
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    prompt: "Synthetic owed Aura-return choice".into(),
+                    choice_kind: rv1::ChoiceKind::AuraPermanent,
+                    unique_names: false,
+                },
+                continuation: crate::state::ResolutionContinuation::AuraReturn {
+                    stack: None,
+                    exiled: TriggerObjectRef {
+                        object_id: owed_aura,
+                        zone_change_generation: aura_generation,
+                        controller_at_event: 2,
+                    },
+                },
+                // The synthetic top Aura prompt was already published before this fixture's
+                // leave command; only the saved Gerrard prompt will be freshly rebuilt below.
+                resolution_prompt_id: crate::state::ResolutionPromptId::assigned(1).unwrap(),
+                resolution_prompt_semantics: None,
+            });
+            saved_engine
+                .apply_command(
+                    departed,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                    },
+                )
+                .expect("a player can leave while the Gerrard choice waits below an observer");
+            assert!(
+                saved_engine.state.players[saved_engine
+                    .state
+                    .player_idx(departed)
+                    .expect("departing player")]
+                .has_lost
+            );
+            let saved_observer = saved_engine
+                .state
+                .pending_observer_return_batch
+                .take()
+                .expect("the synthetic owed observer remains pending");
+            assert!(matches!(
+                saved_engine
+                    .state
+                    .pending_resolution
+                    .take()
+                    .expect("the synthetic Aura return still has its own choice")
+                    .continuation,
+                crate::state::ResolutionContinuation::AuraReturn { .. }
+            ));
+            let mut restored_events = Vec::new();
+            assert!(saved_engine
+                .restore_suspended_observer_resolution(
+                    saved_observer.suspended_resolution,
+                    saved_observer.suspended_replacement_event,
+                    &mut restored_events,
+                )
+                .expect("restore or retire the saved Gerrard choice"));
+
+            if departed == 1 {
+                assert!(
+                    saved_engine.state.pending_resolution.is_none(),
+                    "a saved choice for the departed target completes with an empty cohort"
+                );
+                assert!(saved_engine.state.stack.is_empty());
+                assert_eq!(saved_engine.state.players[0].life, 20);
+                assert!(restored_events.iter().all(|event| !matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                        if choice.deciding_player_id == 2
+                )));
+            } else {
+                saved_engine
+                    .publish_resolution_prompt_ids(&mut restored_events)
+                    .expect("restoration publishes a fresh live-target prompt");
+                let restored_offer = resolution_choice_offer(&restored_events);
+                assert_eq!(restored_offer.deciding_player_id, 1);
+                assert_ne!(restored_offer.resolution_prompt_id, original_prompt_id);
+                assert_eq!(
+                    restored_offer.candidate_object_ids,
+                    [original_candidate, departed_candidate]
+                );
+                saved_engine
+                    .apply_command(
+                        1,
+                        &submit_choice_command(
+                            restored_offer.resolution_prompt_id,
+                            vec![original_candidate, departed_candidate],
+                        ),
+                    )
+                    .expect("the live target finishes the saved discard");
+                assert!(saved_engine.state.pending_resolution.is_none());
+                assert!(saved_engine.state.stack.is_empty());
+                assert_eq!(saved_engine.state.players[0].life, 20);
+                assert_eq!(saved_engine.state.players[1].life, 20);
+                assert_eq!(saved_engine.state.players[2].life, 20);
+            }
+        }
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            departed_candidate,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("observer resolves while one original candidate leaves the hand");
+        let replacement_candidate =
+            add_observer_restore_zone_card(&mut engine, 1, "plains", Zone::Hand);
+
+        engine.state.pending_observer_return_batch =
+            Some(crate::state::PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: Default::default(),
+                resume_stack: None,
+                suspended_resolution: Some(original_pending),
+                suspended_replacement_event: None,
+            });
+        let observer = engine
+            .state
+            .pending_observer_return_batch
+            .take()
+            .expect("synthetic owed Aura-return observer batch");
+        let mut restored = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                observer.suspended_resolution,
+                observer.suspended_replacement_event,
+                &mut restored,
+            )
+            .expect("restore the saved actual Gerrard choice"));
+        engine
+            .publish_resolution_prompt_ids(&mut restored)
+            .expect("restoration publishes a fresh target-only prompt");
+
+        let restored_offer = resolution_choice_offer(&restored);
+        assert_ne!(restored_offer.resolution_prompt_id, original_prompt_id);
+        assert_eq!(restored_offer.deciding_player_id, 1);
+        assert_eq!(
+            restored_offer.candidate_object_ids,
+            [original_candidate, replacement_candidate],
+            "the private offer is rebuilt from P1's current hand"
+        );
+        assert_eq!((restored_offer.min, restored_offer.max), (2, 2));
+        let before_stale_answer = engine.diagnostic_snapshot().unwrap();
+        let command_index_before_stale_answer = engine.state.command_index;
+        let stale = engine
+            .apply_command(
+                1,
+                &submit_choice_command(
+                    original_prompt_id,
+                    vec![original_candidate, replacement_candidate],
+                ),
+            )
+            .expect_err("the old same-player prompt cannot answer the refreshed offer");
+        assert!(stale.to_string().contains("stale"));
+        assert_eq!(
+            engine.state.command_index,
+            command_index_before_stale_answer
+        );
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before_stale_answer);
+        assert!(restored.iter().all(|event| match &event.ev {
+            Some(rv1::ruled_event::Ev::Log(log)) => {
+                !log.text.contains("Forest")
+                    && !log.text.contains("Mountain")
+                    && !log.text.contains("Plains")
+            }
+            _ => true,
+        }));
     }
 
     fn submit_choice_command(
@@ -8119,7 +8641,8 @@ mod attached_subject_tests {
             engine.state.zone_change_generation[&live_owner_spell],
             original_generation
         );
-        assert_eq!(engine.state.players[0].life, 22);
+        // The conceded caster is no longer a live recipient of the trailing life-gain effect.
+        assert_eq!(engine.state.players[0].life, 20);
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.pending_linked_exile_play.is_none());
     }

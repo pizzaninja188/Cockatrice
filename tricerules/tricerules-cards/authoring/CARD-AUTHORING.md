@@ -415,6 +415,24 @@ shape if migrated to this result form; its existing definition remains unchanged
 subjects, mass or attached Destroy, missing/repeated/mismatched Subject bindings, and target groups
 other than exactly one remain unsupported. The target remains subject to the usual resolution-time
 legality checks and destruction/replacement rules.
+
+One separate spell-only profile binds a targeted hand discard. `ChooseHandCards` must use
+`action: Discard`, a positive fixed count, `target: AnyPlayer`, `chooser: AffectedPlayer`, no card
+filter, `optional: false`, and private-look visibility. Bind its result once with
+`ProgramTargetRole::Target` to that instruction's target group, whose schema is exactly one
+`AnyPlayer`. The compiler emits `TargetCardResultCohort { action: Discard, cardinality: 0..count,
+target_group_index }`; the range reflects a target with fewer cards than requested. `CardResultCount`
+is its only consumer and may filter the captured `matched_card_types` snapshot. Gerrard's Verdict
+uses this form to gain 6 life for two visible discarded Lands, otherwise 3 for one; it shares the
+same target-origin cohort and count operation as Shredder's Technique's successful chosen Destroy
+result, while each retains its own action and exact target-group origin. A target that leaves after
+the hand choice begins contributes an empty result without delegation; a begun spell continues
+after its caster leaves, but a departed caster receives no life gain (CR 608.2m, 800.4a). An
+unrevealed Library of Leng discard has undefined characteristics and contributes no card-type match
+(CR 701.9c); never recover those types from the server's hidden card identity. Other hand actions,
+choosers, visibility, filters, optional choices, target-group sizes, and ability-owned forms remain
+unsupported.
+
 Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
 `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.

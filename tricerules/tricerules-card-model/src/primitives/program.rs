@@ -296,8 +296,8 @@ pub enum ResultType {
         linked_exile_id: crate::AbilityLinkId,
         cardinality: Cardinality,
     },
-    /// Successful chosen-Destroy facts tied to the exact singleton target group that supplied
-    /// the Destroy instruction's Subject role. Runtime values reuse CardResultCohort.
+    /// Card-action facts tied to the producer's exact target-group binding, such as chosen
+    /// Destroy or targeted-player Discard. Runtime values reuse CardResultCohort.
     TargetCardResultCohort {
         action: CardResultAction,
         cardinality: Cardinality,
@@ -636,6 +636,26 @@ fn spell_destroy_target_group(
     Ok(reference.target_group_index)
 }
 
+fn spell_hand_discard_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+) -> Result<u32, String> {
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "spell_program ChooseHandCards instruction '{instruction_id}' requires one explicit Target binding"
+        ));
+    };
+    if reference.role != ProgramTargetRole::Target || matches.next().is_some() {
+        return Err(format!(
+            "spell_program ChooseHandCards instruction '{instruction_id}' requires exactly one explicit Target binding"
+        ));
+    }
+    Ok(reference.target_group_index)
+}
+
 fn validate_target_card_result_groups(
     program: &CompiledProgram,
     schema: &TargetSchema<'_, '_>,
@@ -650,11 +670,18 @@ fn validate_target_card_result_groups(
         let group = schema
             .groups
             .get(*target_group_index as usize)
-            .ok_or_else(|| "Destroy result references an unknown target group".to_string())?;
+            .ok_or_else(|| "targeted card result references an unknown target group".to_string())?;
         if group.min != 1 || group.max != 1 {
-            return Err(
-                "Destroy result requires a target group whose bounds are exactly 1..1".into(),
-            );
+            let label = match slot.result_type {
+                ResultType::TargetCardResultCohort {
+                    action: CardResultAction::Discard,
+                    ..
+                } => "ChooseHandCards discard",
+                _ => "Destroy",
+            };
+            return Err(format!(
+                "{label} result requires a target group whose bounds are exactly 1..1"
+            ));
         }
     }
     Ok(())
@@ -689,7 +716,8 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
                 ..
             },
             ProgramTargetRole::Target,
-        ) => Some(0),
+        )
+        | (SpellEffectKind::ChooseHandCards { .. }, ProgramTargetRole::Target) => Some(0),
         _ => None,
     }
 }
@@ -912,27 +940,44 @@ impl Compiler {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
-                    let destroy_target_group = if self.context == EffectContext::Spell
-                        && matches!(
-                            effect.as_ref(),
+                    let target_group_index = if self.context == EffectContext::Spell {
+                        match effect.as_ref() {
                             SpellEffectKind::Destroy {
                                 subject: EffectSubject::Chosen(_),
+                            } => Some(spell_destroy_target_group(
+                                &instruction.id,
+                                &self.target_references,
+                            )?),
+                            SpellEffectKind::ChooseHandCards { .. } => {
+                                Some(spell_hand_discard_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                )?)
                             }
-                        ) {
-                        Some(spell_destroy_target_group(
-                            &instruction.id,
-                            &self.target_references,
-                        )?)
+                            _ => None,
+                        }
                     } else {
                         None
                     };
                     let result_types =
-                        validate_and_result_types(effect, self.context, destroy_target_group)?;
-                    if destroy_target_group.is_some()
+                        validate_and_result_types(effect, self.context, target_group_index)?;
+                    if target_group_index.is_some()
+                        && matches!(
+                            effect.as_ref(),
+                            SpellEffectKind::Destroy {
+                                subject: EffectSubject::Chosen(_),
+                            } | SpellEffectKind::ChooseHandCards { .. }
+                        )
                         && (instruction.bind.len() != 1 || result_types.len() != 1)
                     {
+                        let label =
+                            if matches!(effect.as_ref(), SpellEffectKind::ChooseHandCards { .. }) {
+                                "ChooseHandCards"
+                            } else {
+                                "Destroy"
+                            };
                         return Err(format!(
-                            "spell_program Destroy instruction '{}' must bind its single typed result",
+                            "spell_program {label} instruction '{}' must bind its single typed result",
                             instruction.id
                         ));
                     }
@@ -1939,7 +1984,7 @@ fn join_choose_yield_types(
 fn validate_and_result_types(
     effect: &SpellEffectKind,
     context: EffectContext,
-    destroy_target_group_index: Option<u32>,
+    target_group_index: Option<u32>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::Destroy {
@@ -1959,7 +2004,7 @@ fn validate_and_result_types(
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(filter),
         } if context == EffectContext::Spell => {
-            let target_group_index = destroy_target_group_index.ok_or_else(|| {
+            let target_group_index = target_group_index.ok_or_else(|| {
                 "spell_program Destroy requires exactly one explicit Subject target binding".to_string()
             })?;
             effect.validate(context)?;
@@ -1978,6 +2023,49 @@ fn validate_and_result_types(
         ),
         SpellEffectKind::Destroy { .. } => Err(
             "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
+        ),
+        SpellEffectKind::ChooseHandCards {
+            action,
+            count,
+            target,
+            chooser,
+            card_filter,
+            optional,
+            visibility,
+        } if context == EffectContext::Spell => {
+            let exact_target = TargetFilter {
+                kind: TargetKind::AnyPlayer,
+                ..TargetFilter::default()
+            };
+            if *action != super::HandCardAction::Discard
+                || *count == 0
+                || target != &exact_target
+                || *chooser != super::HandCardChooser::AffectedPlayer
+                || card_filter.is_some()
+                || *optional
+                || *visibility != super::HandChoiceVisibility::PrivateLook
+            {
+                return Err(
+                    "ChooseHandCards in spell_program supports only a positive, unfiltered, nonoptional affected-player discard from one AnyPlayer target".into(),
+                );
+            }
+            let target_group_index = target_group_index.ok_or_else(|| {
+                "spell_program ChooseHandCards requires exactly one explicit Target binding"
+                    .to_string()
+            })?;
+            effect.validate(context)?;
+            validate_program_target_filter(target, "ChooseHandCards target")?;
+            Ok(vec![ResultType::TargetCardResultCohort {
+                action: CardResultAction::Discard,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(*count),
+                },
+                target_group_index,
+            }])
+        }
+        SpellEffectKind::ChooseHandCards { .. } => Err(
+            "ChooseHandCards in a resolution program supports only the exact spell target-discard profile".into(),
         ),
         SpellEffectKind::Draw { who, count } => {
             effect.validate(context)?;

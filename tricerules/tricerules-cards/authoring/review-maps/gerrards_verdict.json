@@ -1,0 +1,100 @@
+{
+  "format_version": 1,
+  "oracle_id": "670b5dfb-ffdf-43ed-acc3-855006e352fc",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "gerrard_s_verdict",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/targeting/groups/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/ChooseHandCards",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/GainLife",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/condition/CardResultCount",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+      ]
+    }
+  ],
+  "tokens": [],
+  "primitive_references": [
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/ChooseHandCards"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_uses_its_compiled_target_bound_program_owner",
+      "covers": "the exact Gerrard's Verdict face is registered with the target-bound spell Program"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_counts_the_exact_discarded_land_cohort_after_resume",
+      "covers": "one Land gains 3 life and two Lands gain 6 from the exact discarded cohort"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_handles_no_lands_and_zero_or_one_card_hands",
+      "covers": "no Lands, an empty hand, and a one-card hand complete with the correct result"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_counts_only_visible_library_of_leng_discard_types_and_replays",
+      "covers": "a mixed visible/hidden Land discard gains 3, all-hidden Lands gain none, and accepted commands replay; this Rust fixture does not inspect recipient-filtered payloads"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_retires_the_hand_choice_when_its_target_concedes",
+      "covers": "a target departure retires the in-flight hand choice with an empty result and no delegated discard"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_keeps_its_begun_program_after_the_caster_concedes_without_gaining_life",
+      "covers": "a live target finishes the begun discard after caster departure without resurrecting the spell or gaining life for the departed caster"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_library_replacement_retires_when_the_target_concedes",
+      "covers": "target departure at the Library of Leng replacement stage completes the uncommitted cohort empty"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_library_replacement_survives_the_caster_conceding",
+      "covers": "a committed Library destination, the next destination prompt, and selected top order survive caster departure"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_rejects_a_stale_discard_choice_without_losing_the_prompt",
+      "covers": "stale candidate generations reject atomically without changing the active offer"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::gerrards_verdict_hand_choice_rejects_malformed_answers_atomically",
+      "covers": "wrong actor, unrelated player fields, duplicate objects, and over-count answers preserve the full state and prompt"
+    }
+  ]
+}

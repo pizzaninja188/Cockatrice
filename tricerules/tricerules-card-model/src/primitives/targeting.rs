@@ -2,8 +2,8 @@
 
 use super::{
     CastCostReceiptCondition, Color, CompiledBlock, CompiledInstructionKind, CompiledProgram,
-    ConditionObjectRef, Keyword, PermanentChoiceConstraint, PlayerRecipient, SpellEffectKind,
-    ZoneCardFilter,
+    ConditionObjectRef, HandCardAction, HandCardChooser, HandChoiceVisibility, Keyword,
+    PermanentChoiceConstraint, PlayerRecipient, SpellEffectKind, ZoneCardFilter,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -493,6 +493,49 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     return Err(
                         "ChooseCohortPartition requires its bound caster-chosen singleton player target group"
                             .into(),
+                    );
+                }
+            }
+            if group_program_bindings.iter().any(|binding| {
+                effects_by_address
+                    .get(&binding.instruction_address)
+                    .is_some_and(|effect| matches!(effect, SpellEffectKind::ChooseHandCards { .. }))
+            }) {
+                let expected_target = TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                };
+                let hand_discard_matches_group = group_program_bindings.len() == 1
+                    && group.min == 1
+                    && group.max == 1
+                    && group.chooser == TargetChooser::Controller
+                    && group_program_bindings.iter().all(|binding| {
+                        effects_by_address
+                            .get(&binding.instruction_address)
+                            .is_some_and(|effect| match effect {
+                                SpellEffectKind::ChooseHandCards {
+                                    action,
+                                    count,
+                                    target,
+                                    chooser,
+                                    card_filter,
+                                    optional,
+                                    visibility,
+                                } => {
+                                    *action == HandCardAction::Discard
+                                        && *count > 0
+                                        && target == &expected_target
+                                        && *chooser == HandCardChooser::AffectedPlayer
+                                        && card_filter.is_none()
+                                        && !*optional
+                                        && *visibility == HandChoiceVisibility::PrivateLook
+                                }
+                                _ => false,
+                            })
+                    });
+                if !hand_discard_matches_group {
+                    return Err(
+                        "ChooseHandCards discard requires its own singleton controller-chosen AnyPlayer target group".into(),
                     );
                 }
             }

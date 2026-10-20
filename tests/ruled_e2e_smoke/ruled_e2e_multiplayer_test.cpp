@@ -496,6 +496,48 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
         command.mutable_pass_priority();
         return sendAndSettle(sender, command, QStringLiteral("pass priority in stack departure scenario"));
     };
+    auto waitForStackAndPriority = [&](int expectedStackDepth, int expectedPriorityPlayer,
+                                       const char *what) -> ::testing::AssertionResult {
+        QElapsedTimer wait;
+        wait.start();
+        const auto allAtExpectedState = [&] {
+            return std::all_of(clients.begin(), clients.end(), [&](const auto *client) {
+                return client->gameStarted && client->stackDepth == expectedStackDepth &&
+                       client->priorityPlayer == expectedPriorityPlayer;
+            });
+        };
+        while (!allAtExpectedState() && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        if (!allAtExpectedState()) {
+            return ::testing::AssertionFailure()
+                   << "timed out waiting for " << what << " at every recipient (stack " << expectedStackDepth
+                   << ", priority player " << expectedPriorityPlayer << ")";
+        }
+        return ::testing::AssertionSuccess();
+    };
+    auto waitForConvolutePaymentChoice = [&]() -> ::testing::AssertionResult {
+        QElapsedTimer wait;
+        wait.start();
+        const auto allAtExpectedState = [&] {
+            return std::all_of(clients.begin(), clients.end(), [](const auto *client) {
+                return client->gameStarted && client->stackDepth == 3;
+            }) && p2.pendingChoice.has_value() &&
+                   p2.pendingChoice->choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT &&
+                   p2.pendingChoice->deciding_player_id() == p2.myId && !p1.pendingChoice.has_value() &&
+                   !p3.pendingChoice.has_value();
+        };
+        while (!allAtExpectedState() && wait.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+        }
+        if (!allAtExpectedState()) {
+            return ::testing::AssertionFailure()
+                   << "timed out waiting for Convolute's stack state and P2's private mana-payment offer";
+        }
+        return ::testing::AssertionSuccess();
+    };
 
     ASSERT_TRUE(devPut(p2.myId, "Lightning Bolt"));
     ASSERT_TRUE(devMana(p2.myId, 1, 0, 2));
@@ -505,6 +547,7 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
     ASSERT_TRUE(devMana(p1.myId, 0, 1, 2));
 
     ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(waitForStackAndPriority(0, p2.myId, "P1's pass to reach P2"));
     ASSERT_EQ(p2.priorityPlayer, p2.myId);
     const auto *boltForPayer = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"));
     ASSERT_NE(boltForPayer, nullptr);
@@ -515,8 +558,10 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
     payerBoltTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
     payerBoltTarget->set_object_id(p1.myId);
     ASSERT_TRUE(sendAndSettle(p2, castPayerBolt, QStringLiteral("B casts Lightning Bolt")));
+    ASSERT_TRUE(waitForStackAndPriority(1, p2.myId, "P2's committed Bolt cast"));
     ASSERT_EQ(p2.priorityPlayer, p2.myId);
     ASSERT_TRUE(passPriority(p2));
+    ASSERT_TRUE(waitForStackAndPriority(1, p3.myId, "P2's pass to reach P3"));
     ASSERT_EQ(p3.priorityPlayer, p3.myId);
     ASSERT_EQ(p3.lightningBoltStackOids.size(), 1u);
     const quint32 payerBoltOid = p3.lightningBoltStackOids.back();
@@ -533,6 +578,7 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
     survivorBoltTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
     survivorBoltTarget->set_object_id(p1.myId);
     ASSERT_TRUE(sendAndSettle(p3, castSurvivorBolt, QStringLiteral("C casts same-name Lightning Bolt")));
+    ASSERT_TRUE(waitForStackAndPriority(2, p3.myId, "P3's committed Bolt cast"));
     ASSERT_EQ(p3.lightningBoltStackOids.size(), 2u);
     const quint32 survivorBoltOid = p3.lightningBoltStackOids.back();
     ASSERT_NE(payerBoltOid, survivorBoltOid);
@@ -544,6 +590,7 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
 
     ASSERT_EQ(p3.priorityPlayer, p3.myId);
     ASSERT_TRUE(passPriority(p3));
+    ASSERT_TRUE(waitForStackAndPriority(2, p1.myId, "P3's pass to reach P1"));
     ASSERT_EQ(p1.priorityPlayer, p1.myId);
     const auto *convolute = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Convolute"));
     ASSERT_NE(convolute, nullptr);
@@ -554,12 +601,16 @@ TEST_F(RuledE2ESmokeTest, DepartedPayerSpellLeavesCanonicalPhysicalStackBeforeAn
     convoluteTarget->set_kind(ruled::v1::TARGET_REF_KIND_STACK);
     convoluteTarget->set_object_id(payerBoltOid);
     ASSERT_TRUE(sendAndSettle(p1, castConvolute, QStringLiteral("A casts Convolute at B's Bolt")));
+    ASSERT_TRUE(waitForStackAndPriority(3, p1.myId, "P1's committed Convolute cast"));
     ASSERT_EQ(p1.priorityPlayer, p1.myId);
     ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(waitForStackAndPriority(3, p2.myId, "P1's pass to reach P2"));
     ASSERT_EQ(p2.priorityPlayer, p2.myId);
     ASSERT_TRUE(passPriority(p2));
+    ASSERT_TRUE(waitForStackAndPriority(3, p3.myId, "P2's pass to reach P3"));
     ASSERT_EQ(p3.priorityPlayer, p3.myId);
     ASSERT_TRUE(passPriority(p3));
+    ASSERT_TRUE(waitForConvolutePaymentChoice());
     ASSERT_TRUE(p2.pendingChoice.has_value());
     ASSERT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_MANA_PAYMENT);
     ASSERT_FALSE(p1.pendingChoice.has_value());

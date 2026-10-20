@@ -9535,6 +9535,117 @@ fn spell_chosen_destroy_program_captures_a_single_subject_result_for_card_type_c
 }
 
 #[test]
+fn spell_targeted_hand_discard_program_captures_target_group_result_for_card_type_count() {
+    let verdict = r#"(id: "gerrards_verdict_result_fixture", name: "Gerrard's Verdict Result Fixture",
+        face_id: "gerrards_verdict_result_fixture", mana_cost: "{W}{B}", types: ["Sorcery"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(ChooseHandCards(action: Discard, count: 2,
+                    target: (kind: AnyPlayer), chooser: AffectedPlayer,
+                    card_filter: None, optional: false))),
+            (id: "gain_six", bind: [], input: None,
+                kind: IfResult(condition: CardResultCount(result: "discarded",
+                    card_type: Some(Land), min: Some(2), max: Some(2)),
+                    yes: (steps: [(id: "six_life", bind: [], input: None,
+                        kind: Perform(GainLife(amount: 6)))], yields: []),
+                    no: (steps: [(id: "gain_three", bind: [], input: None,
+                        kind: IfResult(condition: CardResultCount(result: "discarded",
+                            card_type: Some(Land), min: Some(1), max: Some(1)),
+                            yes: (steps: [(id: "three_life", bind: [], input: None,
+                                kind: Perform(GainLife(amount: 3)))], yields: []),
+                            no: (steps: [], yields: [])))], yields: [])))
+        ], yields: []), target_bindings: [
+            (instruction_id: "discard", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target player", effect_indices: [],
+        )])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[verdict], &[])
+        .expect("targeted affected-player discard binds a bounded typed result");
+    let owner = crate::ProgramOwnerId::face(
+        "gerrards_verdict_result_fixture",
+        crate::CardFaceId::new("gerrards_verdict_result_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the fixture sorcery owns the typed resolution Program");
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    let discard = compiled
+        .slots
+        .iter()
+        .find(|slot| slot.name == "discarded")
+        .expect("discard instruction exposes its named result");
+    let crate::primitives::ResultType::TargetCardResultCohort {
+        action,
+        cardinality,
+        target_group_index,
+    } = &discard.result_type
+    else {
+        panic!("targeted discard binds a target-origin result cohort");
+    };
+    assert_eq!(*action, crate::primitives::CardResultAction::Discard);
+    assert_eq!(
+        *cardinality,
+        crate::primitives::Cardinality {
+            min: 0,
+            max: Some(2),
+        }
+    );
+    assert_eq!(*target_group_index, 0);
+
+    let no_target_bindings = verdict.replace(
+        "target_bindings: [\n            (instruction_id: \"discard\", role: Target, target_group_index: 0),\n        ]",
+        "target_bindings: []",
+    );
+    let negative_profiles = [
+        ("missing Target role binding", no_target_bindings),
+        (
+            "wrong target role",
+            verdict.replace("role: Target", "role: Subject"),
+        ),
+        (
+            "non-singleton target group",
+            verdict.replace("min: 1, max: 1, prompt", "min: 0, max: 1, prompt"),
+        ),
+        (
+            "non-player target",
+            verdict.replace("target: (kind: AnyPlayer)", "target: (kind: Creature)"),
+        ),
+        (
+            "controller-selected hand cards",
+            verdict.replace("chooser: AffectedPlayer", "chooser: Controller"),
+        ),
+        (
+            "exile instead of discard",
+            verdict.replace("action: Discard", "action: Exile"),
+        ),
+        (
+            "filtered hand selection",
+            verdict.replace("card_filter: None", "card_filter: Some(Land)"),
+        ),
+        (
+            "optional hand selection",
+            verdict.replace("optional: false", "optional: true"),
+        ),
+        (
+            "publicly revealed hand",
+            verdict.replace(
+                "optional: false))",
+                "optional: false, visibility: PublicReveal))",
+            ),
+        ),
+    ];
+    for (case, source) in negative_profiles {
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[source.as_str()], &[]).is_err(),
+            "unsupported targeted hand-discard profile must fail closed: {case}"
+        );
+    }
+}
+
+#[test]
 fn chosen_destroy_program_requires_one_singleton_subject_binding_and_joins_only_same_origin() {
     let fixture = |id: &str, body: &str, bindings: &str, groups: &str| {
         format!(

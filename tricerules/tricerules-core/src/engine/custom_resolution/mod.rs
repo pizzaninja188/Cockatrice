@@ -752,7 +752,7 @@ impl GameEngine {
             _ => {
                 return Err(EngineError::Illegal(
                     "invalid special-cast commander destination",
-                ))
+                ));
             }
         };
         let prompt = format!(
@@ -875,7 +875,7 @@ impl GameEngine {
                 _ => {
                     return Err(EngineError::Illegal(
                         "invalid special-cast cleanup destination",
-                    ))
+                    ));
                 }
             };
             move_object_to_zone(&mut self.state, self.registry, object_id, destination, None)?;
@@ -931,6 +931,30 @@ impl GameEngine {
         player: PlayerId,
         answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
+        let target_hand_discard_choice =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| match &pending.continuation {
+                    ResolutionContinuation::HandChoice { stack, hand_choice } => {
+                        !hand_choice.program_selection && self.is_target_hand_discard_program(stack)
+                    }
+                    _ => false,
+                });
+        if target_hand_discard_choice
+            && (answer.decision != rv1::ResolutionChoiceDecision::Unspecified as i32
+                || answer.selected_branch_index != 0
+                || !answer.chosen_player_ids.is_empty()
+                || answer.cast_spell.is_some()
+                || answer.spell_cast_announcement.is_some()
+                || answer.chosen_combat_defender.is_some()
+                || answer.payment.is_some()
+                || !answer.restricted_mana.is_empty())
+        {
+            return Err(EngineError::Illegal(
+                "targeted hand-discard Program choice has unrelated resolution data",
+            ));
+        }
         if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
             &self.state.pending_replacement_event
         {
