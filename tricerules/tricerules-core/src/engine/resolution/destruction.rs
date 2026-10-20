@@ -12,6 +12,7 @@ pub(super) struct DestroySnapshot {
     pub indestructible: bool,
     pub owner: Option<PlayerId>,
     pub source: Option<TriggerSourceSnapshot>,
+    pub characteristics: Option<Characteristics>,
     pub was_creature: bool,
 }
 
@@ -49,6 +50,7 @@ pub(super) fn attempt_destroy(
         indestructible,
         owner,
         source,
+        characteristics,
         was_creature,
     } = snapshot;
     if indestructible {
@@ -83,13 +85,21 @@ pub(super) fn attempt_destroy(
     let receipt = owner.map(|owner_id| {
         // Successful destruction counts even when a replacement changes the destination.
         // Indestructible and regeneration never reach this point.
-        let receipt = payment::card_result_entry(
+        let mut receipt = payment::card_result_entry(
             &engine.state,
             engine.registry,
             CardResultAction::Destroy,
             owner_id,
             object_id,
         );
+        receipt.matched_card_types = characteristics.map_or_else(Vec::new, |snapshot| {
+            CardTypeFilter::ALL
+                .into_iter()
+                .filter(|card_type| {
+                    payment::card_type_filter_matches_characteristics(*card_type, &snapshot)
+                })
+                .collect()
+        });
         events.push(permanent_moved_event(
             &engine.state,
             object_id,

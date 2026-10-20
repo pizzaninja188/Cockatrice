@@ -167,6 +167,21 @@ to each opponent only when the paid card snapshot is nonland. Six Grab the Prize
 land/nonland payments, mandatory-cost rejection, Abundance resume/replay, competing multiplayer
 prevention, zone changes/copies, and copy resolution after the original payer concedes. This adds
 no card admission or protocol, relay, or client change.
+
+The bounded 2026-10-20 Shredder's Technique migration binds the result of one spell-owned
+`Destroy(Chosen(filter))` instruction to its exact `Subject` target group, which must be `1..1`.
+The compiler records a `TargetCardResultCohort` with the `Destroy` action, `0..1` cardinality,
+and target-group origin; the existing `ProgramValue::CardResultCohort` carries its successful
+`CardResultEntry` into the named `CardResultCount`. Its matched card types come from effective
+characteristics at the Destroy evaluation boundary, while owner, ObjectId, post-move generation,
+and committed-action provenance stay on the existing entry. Shredder loses 2 life as the spell
+controller only after a successful Destroy of an Enchantment; exile replacement still counts,
+while indestructible, regeneration, and an illegal target produce no result. Scenarios cover
+Enchantment gained, lost, or copied before resolution, a different target owner and controller,
+replacement, stale identity, and a parked Aura-return choice that resumes through the tail once.
+This follows CR 608.2b, 608.2h-i, 613.1, 613.1d, 701.8a-c, 701.19a-b, 702.12b, 614.1a, 616.1,
+and 400.7. Mortify has the same chosen Creature-or-Enchantment Destroy shape but remains on its
+existing path. This adds no card admission or protocol, relay, or client change.
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

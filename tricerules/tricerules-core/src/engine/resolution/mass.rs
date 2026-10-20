@@ -66,8 +66,9 @@ pub(super) fn destroy_attached(
             let indestructible = engine.effective_has_keyword(oid, Keyword::Indestructible);
             let owner = engine.state.objects.get(&oid).map(|object| object.owner);
             let source = engine.trigger_source_snapshot(oid);
-            let was_creature = engine
-                .characteristics(oid)
+            let characteristics = engine.characteristics(oid);
+            let was_creature = characteristics
+                .as_ref()
                 .is_some_and(|characteristics| characteristics.is_creature());
             DestroySnapshot {
                 object_id: oid,
@@ -75,6 +76,7 @@ pub(super) fn destroy_attached(
                 indestructible,
                 owner,
                 source,
+                characteristics,
                 was_creature,
             }
         })
@@ -279,15 +281,19 @@ pub(super) fn destroy_all(
     // its departure must not change whether a later member of the cohort is indestructible.
     let victims = battlefield_objects_matching(engine, &kind)
         .into_iter()
-        .map(|tid| DestroySnapshot {
-            object_id: tid,
-            indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
-            name: object_display_name(&engine.state, engine.registry, tid),
-            owner: engine.state.objects.get(&tid).map(|object| object.owner),
-            source: engine.trigger_source_snapshot(tid),
-            was_creature: engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature()),
+        .map(|tid| {
+            let characteristics = engine.characteristics(tid);
+            DestroySnapshot {
+                object_id: tid,
+                indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
+                name: object_display_name(&engine.state, engine.registry, tid),
+                owner: engine.state.objects.get(&tid).map(|object| object.owner),
+                source: engine.trigger_source_snapshot(tid),
+                was_creature: characteristics
+                    .as_ref()
+                    .is_some_and(|value| value.is_creature()),
+                characteristics,
+            }
         })
         .collect::<Vec<_>>();
     let zone_snapshot = engine.snapshot_zone_event();

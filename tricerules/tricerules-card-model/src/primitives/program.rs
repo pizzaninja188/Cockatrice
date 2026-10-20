@@ -288,6 +288,13 @@ pub enum ResultType {
         who: PlayerRecipient,
         cardinality: Cardinality,
     },
+    /// Successful chosen-Destroy facts tied to the exact singleton target group that supplied
+    /// the Destroy instruction's Subject role. Runtime values reuse CardResultCohort.
+    TargetCardResultCohort {
+        action: CardResultAction,
+        cardinality: Cardinality,
+        target_group_index: u32,
+    },
     /// Exact card objects used to pay the owning spell's one admitted mandatory discard cost.
     /// The payment payer is intentionally not represented as an effect recipient.
     CastPaymentCohort {
@@ -432,6 +439,7 @@ pub struct CompiledProgram {
 
 struct Compiler {
     context: EffectContext,
+    target_references: Vec<ProgramTargetReference>,
     cast_payment_profile: Option<ProgramCastPaymentProfile>,
     cast_cost_options: HashMap<ChoiceId, HashSet<ChoiceId>>,
     slots: Vec<CompiledSlot>,
@@ -540,6 +548,7 @@ impl CompiledProgram {
             return Err("program target binding requires an authored target group".into());
         }
         let schema = TargetSchema::compile_program(&compiled, targeting)?;
+        validate_target_card_result_groups(&compiled, &schema)?;
         compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
         Ok(compiled)
     }
@@ -560,6 +569,7 @@ impl CompiledProgram {
         let target_projection = owner.target_projection();
         let mut compiler = Compiler {
             context,
+            target_references: program.target_bindings.clone(),
             cast_payment_profile,
             cast_cost_options: cast_cost_groups
                 .iter()
@@ -596,6 +606,50 @@ impl CompiledProgram {
     pub fn slot(&self, id: ResultSlotId) -> Option<&CompiledSlot> {
         self.slots.get(id.0 as usize)
     }
+}
+
+fn spell_destroy_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+) -> Result<u32, String> {
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "spell_program Destroy instruction '{instruction_id}' requires one explicit Subject target binding"
+        ));
+    };
+    if reference.role != ProgramTargetRole::Subject || matches.next().is_some() {
+        return Err(format!(
+            "spell_program Destroy instruction '{instruction_id}' requires exactly one explicit Subject target binding"
+        ));
+    }
+    Ok(reference.target_group_index)
+}
+
+fn validate_target_card_result_groups(
+    program: &CompiledProgram,
+    schema: &TargetSchema<'_, '_>,
+) -> Result<(), String> {
+    for slot in &program.slots {
+        let ResultType::TargetCardResultCohort {
+            target_group_index, ..
+        } = &slot.result_type
+        else {
+            continue;
+        };
+        let group = schema
+            .groups
+            .get(*target_group_index as usize)
+            .ok_or_else(|| "Destroy result references an unknown target group".to_string())?;
+        if group.min != 1 || group.max != 1 {
+            return Err(
+                "Destroy result requires a target group whose bounds are exactly 1..1".into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole) -> Option<usize> {
@@ -850,7 +904,30 @@ impl Compiler {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
-                    let result_types = validate_and_result_types(effect, self.context)?;
+                    let destroy_target_group = if self.context == EffectContext::Spell
+                        && matches!(
+                            effect.as_ref(),
+                            SpellEffectKind::Destroy {
+                                subject: EffectSubject::Chosen(_),
+                            }
+                        ) {
+                        Some(spell_destroy_target_group(
+                            &instruction.id,
+                            &self.target_references,
+                        )?)
+                    } else {
+                        None
+                    };
+                    let result_types =
+                        validate_and_result_types(effect, self.context, destroy_target_group)?;
+                    if destroy_target_group.is_some()
+                        && (instruction.bind.len() != 1 || result_types.len() != 1)
+                    {
+                        return Err(format!(
+                            "spell_program Destroy instruction '{}' must bind its single typed result",
+                            instruction.id
+                        ));
+                    }
                     if matches!(
                         effect.as_ref(),
                         SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
@@ -1406,6 +1483,7 @@ fn compile_program_condition(
             let slot = result_slot(result, names, slots)?;
             let cardinality = match &slots[slot.0 as usize].result_type {
                 ResultType::CardResultCohort { cardinality, .. }
+                | ResultType::TargetCardResultCohort { cardinality, .. }
                 | ResultType::CastPaymentCohort { cardinality, .. } => cardinality,
                 _ => {
                     return Err(format!(
@@ -1773,6 +1851,22 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             cardinality: union(*ac, *bc),
         },
         (
+            ResultType::TargetCardResultCohort {
+                action: aa,
+                cardinality: ac,
+                target_group_index: ag,
+            },
+            ResultType::TargetCardResultCohort {
+                action: ba,
+                cardinality: bc,
+                target_group_index: bg,
+            },
+        ) if aa == ba && ag == bg => ResultType::TargetCardResultCohort {
+            action: *aa,
+            cardinality: union(*ac, *bc),
+            target_group_index: *ag,
+        },
+        (
             ResultType::CastPaymentCohort {
                 action: aa,
                 cardinality: ac,
@@ -1820,6 +1914,7 @@ fn join_choose_yield_types(
 fn validate_and_result_types(
     effect: &SpellEffectKind,
     context: EffectContext,
+    destroy_target_group_index: Option<u32>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::Destroy {
@@ -1836,6 +1931,26 @@ fn validate_and_result_types(
             validate_program_target_filter(filter, "Destroy target")?;
             Ok(Vec::new())
         }
+        SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(filter),
+        } if context == EffectContext::Spell => {
+            let target_group_index = destroy_target_group_index.ok_or_else(|| {
+                "spell_program Destroy requires exactly one explicit Subject target binding".to_string()
+            })?;
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Destroy target")?;
+            Ok(vec![ResultType::TargetCardResultCohort {
+                action: CardResultAction::Destroy,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+                target_group_index,
+            }])
+        }
+        SpellEffectKind::Destroy { .. } if context == EffectContext::Spell => Err(
+            "spell_program Destroy requires a chosen permanent target with one explicit Subject binding".into(),
+        ),
         SpellEffectKind::Destroy { .. } => Err(
             "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
         ),

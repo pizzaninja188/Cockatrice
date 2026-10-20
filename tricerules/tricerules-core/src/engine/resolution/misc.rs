@@ -151,15 +151,17 @@ pub(super) fn destroy(
     let zone_snapshot = engine.snapshot_zone_event();
     let mut trigger_events = Vec::new();
     for tid in subjects {
+        let characteristics = engine.characteristics(tid);
         let snapshot = DestroySnapshot {
             object_id: tid,
             name: object_display_name(&engine.state, engine.registry, tid),
             indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
             owner: engine.state.objects.get(&tid).map(|object| object.owner),
             source: zone_snapshot.source(tid),
-            was_creature: engine
-                .characteristics(tid)
+            was_creature: characteristics
+                .as_ref()
                 .is_some_and(|value| value.is_creature()),
+            characteristics,
         };
         match attempt_destroy(
             engine,

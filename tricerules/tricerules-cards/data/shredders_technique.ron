@@ -7,37 +7,29 @@
   mana_cost: "{2}{B}",
   sneak_cost: Some("{B}"),
   types: ["Sorcery"],
-  spell_effect: [
-    Destroy(subject: Chosen((any_of: Some([
-      (kind: Creature),
-      (kind: AnyPermanent, permanent_types: [Enchantment]),
-    ])))),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "lose_life",
-          presentation: OracleLines([2]),
-          cost: None,
-          requirement: CardResultCount(
-            filter: (
-              source: PreviousEffect,
-              action: Destroy,
-              players: All,
-              card_type: Some(Enchantment),
-            ),
-            min: Some(1),
-          ),
-          effects: [LoseLife(amount: Fixed(2))],
-        ),
-        (
-          branch_id: "no_life_loss",
-          presentation: Fallback,
-          cost: None,
-          requirement: Always,
-          effects: [],
-        ),
-      ],
-    ),
-  ],
+  spell_program: Some((
+    body: (steps: [
+      (id: "destroy", bind: ["destroyed"], input: None,
+        kind: Perform(Destroy(subject: Chosen((any_of: Some([
+          (kind: Creature),
+          (kind: AnyPermanent, permanent_types: [Enchantment]),
+        ])))))),
+      (id: "lose_life_if_enchantment", bind: [], input: None,
+        kind: IfResult(
+          condition: CardResultCount(result: "destroyed", card_type: Some(Enchantment),
+            min: Some(1), max: None),
+          yes: (steps: [
+            (id: "controller_loses_life", bind: [], input: None,
+              kind: Perform(LoseLife(amount: Fixed(2), who: Controller)))
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+    ], yields: []),
+    target_bindings: [
+      (instruction_id: "destroy", role: Subject, target_group_index: 0),
+    ],
+  )),
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target creature or enchantment", effect_indices: [],
+  )])),
 )

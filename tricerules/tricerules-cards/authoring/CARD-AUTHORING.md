@@ -388,16 +388,33 @@ the current condition evaluator and adds no runtime operation.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
-`Destroy` has one ability-Program shape: resultless `Destroy` of a `Chosen` permanent with exactly
-`kind: AnyPermanent`, `permanent_types: [Artifact]`, and all other `TargetFilter` fields at their
-defaults. Bind its `ProgramTargetRole::Subject` to the matching target group owned by that ability
-or selected modal mode. The target remains subject to resolution-time legality checks (CR 608.2b),
-and the shared destroy operation applies the normal destruction and replacement rules (CR
-701.8a-c). Gearbane Orangutan uses this shape for its zero-or-one target artifact mode. This reuses
-the existing Destroy operation used by Abrade and Ancient Grudge; no other Destroy filter or
-subject, DestroyPreventingRegeneration, or spell-Program form is admitted. A source that has left
-uses last-known information where applicable (CR 608.2h, 608.2m), while a returned card is a new
-object (CR 400.7).
+`Destroy` has two distinct Program shapes. An ability Program may use only resultless `Destroy` of
+a `Chosen` permanent with exactly `kind: AnyPermanent`, `permanent_types: [Artifact]`, and all
+other `TargetFilter` fields at their defaults. Bind its `ProgramTargetRole::Subject` to the matching
+target group owned by that ability or selected modal mode. Gearbane Orangutan uses this form for
+its zero-or-one target artifact mode. It reuses the existing Destroy operation also used by Abrade
+and Ancient Grudge; it does not admit another ability-side filter or subject, or
+`DestroyPreventingRegeneration`.
+
+A spell Program may bind the result of `Destroy(subject: Chosen(filter))` when the existing effect
+and Program target-filter validators accept `filter`. Its producer must bind the result and have
+exactly one `ProgramTargetRole::Subject` reference to that same instruction and target group, with
+the group schema fixed to exactly `1..1`. The compiler represents the output as
+`TargetCardResultCohort { action: Destroy, cardinality: 0..1, target_group_index }`; this is a
+compiled slot type, not authored syntax, and `CardResultCount` is its only admitted consumer. The
+existing runtime cohort keeps the successful `CardResultEntry`: target owner, ObjectId, post-move
+generation, and `ActionFacts` provenance remain intact, while matched card types come from the
+target's effective characteristics captured at the Destroy evaluation boundary before movement.
+A successful Destroy still counts when a replacement changes its destination; indestructible and
+regeneration produce no result. A stale or illegal target follows the normal target-legality gate,
+so the spell does not resolve and produces neither result nor tail (CR 608.2b, 608.2h-i, 613.1,
+613.1d, 701.8a-c, 701.19a-b, 702.12b, 614.1a, 616.1, 400.7). Shredder's Technique counts
+Enchantment and makes its spell controller lose 2 life after a successful Destroy, even when
+another player owns the target. Mortify has the same Creature-or-Enchantment chosen-Destroy
+shape if migrated to this result form; its existing definition remains unchanged. Non-chosen
+subjects, mass or attached Destroy, missing/repeated/mismatched Subject bindings, and target groups
+other than exactly one remain unsupported. The target remains subject to the usual resolution-time
+legality checks and destruction/replacement rules.
 Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
 `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.

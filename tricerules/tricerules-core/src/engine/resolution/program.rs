@@ -1830,7 +1830,7 @@ fn capture_program_outputs(
             ResultType::HandSelection { .. } => {
                 ProgramValue::HandSelection(result.selected_hand_cards.clone())
             }
-            ResultType::CardResultCohort { .. } => {
+            ResultType::CardResultCohort { .. } | ResultType::TargetCardResultCohort { .. } => {
                 ProgramValue::CardResultCohort(crate::state::CardResultCohort {
                     cards: result.cards.clone(),
                     program_discard_result: None,

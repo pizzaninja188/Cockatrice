@@ -1,0 +1,115 @@
+{
+  "format_version": 1,
+  "oracle_id": "d92714c0-4e22-47f9-a4d4-405894e734d0",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "shredders_technique",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/sneak_cost"
+      ]
+    },
+    {
+      "face_id": "shredders_technique",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/0/kind",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/1/permanent_types",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount",
+        "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/LoseLife",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "sneak_cost",
+      "typed_path": "/faces/0/sneak_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/0/kind"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/1/permanent_types"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/LoseLife"
+    },
+    {
+      "symbol": "ProgramTargetRole::Subject",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredders_technique_loses_life_only_after_destroying_an_enchantment",
+      "covers": "the actual Shredder's Technique Program destroys a legal Creature or Enchantment and loses life only when an Enchantment was successfully destroyed"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_counts_enchantment_gained_before_destroy_and_loses_life_as_controller",
+      "covers": "an Enchantment added before resolution is counted, and the Shredder controller loses life when the target has another owner"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_uses_destroy_time_types_after_enchantment_is_lost_before_resolution",
+      "covers": "current types at the Destroy boundary govern the condition after the target loses Enchantment and remains a Creature"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_counts_a_copied_enchantment_creature_and_keeps_target_owner",
+      "covers": "copied effective types are captured while the successful result retains the target owner's identity"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_counts_successful_destroy_replaced_with_exile",
+      "covers": "a successful Destroy still yields its result and conditional life loss when a replacement exiles the permanent"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_loses_no_life_when_destroy_is_prevented_by_indestructible_or_regeneration",
+      "covers": "indestructible and regeneration prevent the Destroy result and its life-loss tail"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_does_not_resolve_for_a_stale_target_generation",
+      "covers": "a stale target incarnation produces no result or conditional tail"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_shredder_keeps_its_result_while_destroy_waits_for_an_aura_return_choice",
+      "covers": "the named Destroy result survives a parked Aura-return choice and its conditional tail executes once after resume"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_sneak_is_published_after_blockers_with_a_generation_bound_return_cost",
+      "covers": "Sneak is offered in the declare blockers window with a generation-bound attacker return cost"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_sneak_returns_the_attacker_atomically_and_records_the_method",
+      "covers": "the Sneak payment returns its selected attacker atomically and records the casting method"
+    },
+    {
+      "test": "scenario issue_179_sneak::issue_179_sneak_creature_enters_tapped_and_attacking_the_same_player",
+      "covers": "the resolved Sneak creature enters tapped and attacking the original defender"
+    }
+  ]
+}

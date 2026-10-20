@@ -1,7 +1,10 @@
 //! Issue #196: characterize the three destruction callers before sharing execution.
 use super::*;
 use crate::state::ActiveDeathReplacement;
-use tricerules_card_model::primitives::{CastTriggerPlayer, ControllerReference};
+use tricerules_card_model::primitives::{
+    CardResultAction, CardTypeFilter, CastTriggerPlayer, ControllerReference, PermanentTypeFilter,
+    TypeLineAddition,
+};
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[derive(Clone, Copy, Debug)]
@@ -544,4 +547,58 @@ fn issue_196_departed_or_new_generation_source_is_not_destroyed() {
         assert_eq!(engine.state.objects[&oid].zone, zone);
         assert_eq!(engine.state.zone_change_generation[&oid], generation);
     }
+}
+
+#[test]
+fn issue_196_destroy_result_records_effective_types_before_the_move() {
+    let mut engine = setup();
+    let oid = subject(&mut engine, Caller::Chosen, 1);
+    let owner = engine.state.objects[&oid].owner;
+    let controller = engine.state.players[0].id;
+    engine.state.players[1]
+        .battlefield
+        .retain(|object| *object != oid);
+    engine.state.players[0].battlefield.push(oid);
+    {
+        let object = engine.state.objects.get_mut(&oid).unwrap();
+        object.controller = controller;
+        object.base_controller = controller;
+    }
+    assert_eq!(engine.characteristics(oid).unwrap().controller, controller);
+    assert_ne!(controller, owner);
+    modify(
+        &mut engine,
+        oid,
+        ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            card_types: vec![PermanentTypeFilter::Enchantment],
+            ..Default::default()
+        }),
+    );
+    assert!(engine.characteristics(oid).unwrap().is_creature());
+    assert!(engine.characteristics(oid).unwrap().has_type("Enchantment"));
+
+    let (events, result) = resolve(&mut engine, Caller::Chosen, &[oid], false);
+    assert_eq!(moves(&events).len(), 1);
+    assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
+    let [receipt] = result.cards.as_slice() else {
+        panic!("successful Destroy creates one card-result receipt");
+    };
+    assert_eq!(receipt.action, CardResultAction::Destroy);
+    assert_eq!(receipt.affected_player, owner);
+    assert_eq!(owner, engine.state.players[1].id);
+    assert_eq!(receipt.object_id, oid);
+    assert_eq!(
+        receipt.zone_change_generation,
+        engine.state.zone_change_generation[&oid]
+    );
+    assert!(matches!(
+        receipt.provenance,
+        crate::state::CardResultProvenance::ActionFacts
+    ));
+    assert!(
+        receipt
+            .matched_card_types
+            .contains(&CardTypeFilter::Enchantment),
+        "the Destroy result must retain the effective Enchantment type captured before movement: {receipt:?}"
+    );
 }

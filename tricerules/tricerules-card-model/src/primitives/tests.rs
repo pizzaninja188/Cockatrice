@@ -9112,6 +9112,145 @@ fn chosen_artifact_destroy_ability_mode_requires_exact_subject_binding() {
 }
 
 #[test]
+fn spell_chosen_destroy_program_captures_a_single_subject_result_for_card_type_count() {
+    let shredder = r#"(id: "shredder_destroy_result_fixture", name: "Shredder Destroy Result Fixture",
+        face_id: "shredder_destroy_result_fixture", mana_cost: "{2}{B}", types: ["Sorcery"],
+        spell_program: Some((body: (steps: [
+            (id: "destroy", bind: ["destroyed"], input: None,
+                kind: Perform(Destroy(subject: Chosen((any_of: Some([
+                    (kind: Creature),
+                    (kind: AnyPermanent, permanent_types: [Enchantment]),
+                ])))))),
+            (id: "enchantment_count", bind: [], input: None,
+                kind: IfResult(condition: CardResultCount(result: "destroyed",
+                    card_type: Some(Enchantment), min: Some(1), max: Some(1)),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: [])))
+        ], yields: []), target_bindings: [
+            (instruction_id: "destroy", role: Subject, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target creature or enchantment", effect_indices: [],
+        )])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[shredder], &[])
+        .expect("spell-owned chosen Destroy binds a typed result for its Enchantment count");
+    let owner = crate::ProgramOwnerId::face(
+        "shredder_destroy_result_fixture",
+        crate::CardFaceId::new("shredder_destroy_result_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact Shredder spell face owns its compiled Program");
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    let destroy = compiled
+        .slots
+        .iter()
+        .find(|slot| slot.name == "destroyed")
+        .expect("the Destroy instruction exposes its named result");
+    let crate::primitives::ResultType::TargetCardResultCohort {
+        action,
+        cardinality,
+        target_group_index,
+    } = &destroy.result_type
+    else {
+        panic!("chosen Destroy binds a target-origin result cohort");
+    };
+    assert_eq!(*action, crate::primitives::CardResultAction::Destroy);
+    assert_eq!(
+        *cardinality,
+        crate::primitives::Cardinality {
+            min: 0,
+            max: Some(1),
+        }
+    );
+    assert_eq!(*target_group_index, 0);
+}
+
+#[test]
+fn chosen_destroy_program_requires_one_singleton_subject_binding_and_joins_only_same_origin() {
+    let fixture = |id: &str, body: &str, bindings: &str, groups: &str| {
+        format!(
+            r#"(id: "{id}", name: "Chosen Destroy Result Fixture", face_id: "{id}",
+                mana_cost: "{{2}}", types: ["Sorcery"],
+                spell_program: Some((body: {body}, target_bindings: {bindings})),
+                targeting: Some((groups: [{groups}])))"#
+        )
+    };
+    let destroy = |instruction_id: &str| {
+        format!(
+            r#"(id: "{instruction_id}", bind: ["destroyed"], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: Creature)))))"#
+        )
+    };
+    let body =
+        |instruction_id: &str| format!(r#"(steps: [{}], yields: [])"#, destroy(instruction_id));
+    let group = |min: u32, max: u32| {
+        format!(r#"(min: {min}, max: {max}, prompt: "Choose a target", effect_indices: [])"#)
+    };
+    let subject0 = r#"[(instruction_id: "destroy", role: Subject, target_group_index: 0)]"#;
+
+    for (id, bindings, groups) in [
+        ("destroy_without_subject", "[]", group(1, 1)),
+        (
+            "destroy_wrong_subject_role",
+            r#"[(instruction_id: "destroy", role: Target, target_group_index: 0)]"#,
+            group(1, 1),
+        ),
+        (
+            "destroy_mismatched_subject_instruction",
+            r#"[(instruction_id: "other", role: Subject, target_group_index: 0)]"#,
+            group(1, 1),
+        ),
+        (
+            "destroy_repeated_subject_binding",
+            r#"[(instruction_id: "destroy", role: Subject, target_group_index: 0),
+                (instruction_id: "destroy", role: Subject, target_group_index: 0)]"#,
+            group(1, 1),
+        ),
+        ("destroy_nontarget_group_0_1", subject0, group(0, 1)),
+        ("destroy_nontarget_group_1_2", subject0, group(1, 2)),
+        ("destroy_nontarget_group_2_2", subject0, group(2, 2)),
+    ] {
+        let spell = fixture(id, &body("destroy"), bindings, &groups);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]).is_err(),
+            "{id} must fail closed"
+        );
+    }
+
+    let same_group = r#"(steps: [(id: "branch", bind: ["joined"], input: None,
+        kind: If(condition: Void,
+            yes: (steps: [(id: "left_destroy", bind: ["left"], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: Creature)))))], yields: ["left"]),
+            no: (steps: [(id: "right_destroy", bind: ["right"], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: Creature)))))], yields: ["right"])))],
+        yields: [])"#;
+    let same_bindings = r#"[(instruction_id: "left_destroy", role: Subject, target_group_index: 0),
+        (instruction_id: "right_destroy", role: Subject, target_group_index: 0)]"#;
+    let same = fixture(
+        "destroy_same_group_join",
+        same_group,
+        same_bindings,
+        &group(1, 1),
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&same], &[])
+        .expect("branch Destroy result cohorts with the same action and target origin join");
+
+    let different_bindings = r#"[(instruction_id: "left_destroy", role: Subject, target_group_index: 0),
+        (instruction_id: "right_destroy", role: Subject, target_group_index: 1)]"#;
+    let different = fixture(
+        "destroy_different_group_join",
+        same_group,
+        different_bindings,
+        &format!("{}, {}", group(1, 1), group(1, 1)),
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&different], &[]).is_err(),
+        "branch cohorts from distinct target groups cannot join"
+    );
+}
+
+#[test]
 fn ward_program_admission_is_ability_owned_and_requires_its_exact_trigger_producer() {
     fn triggered_definition(trigger: &str, cost: &str) -> String {
         format!(
