@@ -10750,7 +10750,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "Always",
             "None",
-            "supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
+            "supports Controller, SourceController/AffectedPlayer on an ability program, or an optional OpponentPlayer target on a spell or ability program, as chooser",
         ),
         (
             "SourceController chooser on Spell",
@@ -10758,7 +10758,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "Always",
             "None",
-            "supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
+            "supports Controller, SourceController/AffectedPlayer on an ability program, or an optional OpponentPlayer target on a spell or ability program, as chooser",
         ),
         (
             "object-payment cost",
@@ -14728,4 +14728,634 @@ fn registry_rejects_duplicate_direct_delayed_ids_across_program_and_legacy_sibli
         &duplicate,
         "duplicate direct delayed child ability id 'delayed_01'",
     );
+}
+
+mod combustible_gearhulk_program_compiler_tests {
+    use crate::primitives::{
+        AuthoredBlock, CardProgram, CompiledInstructionKind, CompiledProgram, EffectContext,
+        PlayerRecipient, ProgramTargetReference, ProgramTargetRole, TargetChooser, TargetFilter,
+        TargetGroupDef, TargetKind, TargetRole, TargetSchema, TargetingDef,
+    };
+
+    fn owner() -> crate::ProgramOwnerId {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "combustible_gearhulk_program_fixture".into(),
+            face_id: crate::CardFaceId::new("combustible_gearhulk_program_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        })
+    }
+
+    fn targeting_with_bounds(min: u32, max: u32) -> TargetingDef {
+        TargetingDef {
+            groups: vec![TargetGroupDef {
+                chooser: TargetChooser::Controller,
+                min,
+                max,
+                prompt: "Choose target opponent".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        }
+    }
+
+    fn opponent_targeting() -> TargetingDef {
+        targeting_with_bounds(1, 1)
+    }
+
+    fn target_binding(
+        instruction_id: &str,
+        role: ProgramTargetRole,
+        target_group_index: u32,
+    ) -> ProgramTargetReference {
+        ProgramTargetReference {
+            instruction_id: instruction_id.into(),
+            role,
+            target_group_index,
+        }
+    }
+
+    fn damage_target_binding() -> Vec<ProgramTargetReference> {
+        vec![target_binding("damage", ProgramTargetRole::Target, 0)]
+    }
+
+    fn compile_with_targeting(
+        body: &str,
+        target_bindings: Vec<ProgramTargetReference>,
+        targeting: &TargetingDef,
+    ) -> Result<CompiledProgram, String> {
+        compile_with_context(body, target_bindings, targeting, EffectContext::Ability)
+    }
+
+    fn compile_with_context(
+        body: &str,
+        target_bindings: Vec<ProgramTargetReference>,
+        targeting: &TargetingDef,
+        context: EffectContext,
+    ) -> Result<CompiledProgram, String> {
+        let program = CardProgram {
+            body: ron::from_str::<AuthoredBlock>(body)
+                .expect("the authored Program fixture parses"),
+            target_bindings,
+        };
+        CompiledProgram::compile_with_targeting(
+            match context {
+                EffectContext::Ability => owner(),
+                EffectContext::Spell => crate::ProgramOwnerId::face(
+                    "combustible_gearhulk_program_fixture",
+                    crate::CardFaceId::new("combustible_gearhulk_program_fixture").unwrap(),
+                ),
+            },
+            context,
+            &program,
+            Some(targeting),
+        )
+    }
+
+    fn compile(
+        body: &str,
+        target_bindings: Vec<ProgramTargetReference>,
+    ) -> Result<CompiledProgram, String> {
+        compile_with_targeting(body, target_bindings, &opponent_targeting())
+    }
+
+    fn targeted_choose_damage_body(
+        chooser_group: u32,
+        chooser_kind: &str,
+        damage_group: u32,
+    ) -> String {
+        format!(
+            r#"(steps: [
+                (id: "choose", bind: [], input: None, kind: Choose(
+                    choice: "draw_or_mill", chooser: TargetedPlayer(
+                        group_index: {chooser_group}, kind: {chooser_kind},
+                    ), optional: true,
+                    branches: [(
+                        branch_id: "draw", presentation: Fallback,
+                        cost: None, requirement: Always,
+                        body: (steps: [
+                            (id: "draw_three", bind: [], input: None,
+                                kind: Perform(Draw(who: Controller, count: 3))),
+                        ], yields: []),
+                    )],
+                    otherwise: (steps: [
+                        (id: "damage", bind: [], input: None,
+                            kind: Perform(DamagePlayer(amount: 2, who: TargetedPlayer(
+                                group_index: {damage_group}, kind: OpponentPlayer,
+                            )))),
+                    ], yields: []),
+                )),
+            ], yields: [])"#
+        )
+    }
+
+    fn compile_targeted_choose_with_branch_cost(cost: &str) -> Result<CompiledProgram, String> {
+        let body = targeted_choose_damage_body(0, "OpponentPlayer", 0).replace(
+            "cost: None, requirement: Always",
+            &format!("cost: {cost}, requirement: Always"),
+        );
+        compile(&body, damage_target_binding())
+    }
+
+    fn targeted_mill_damage_body(amount: &str, input: &str) -> String {
+        format!(
+            r#"(steps: [
+                (id: "choose", bind: [], input: None, kind: Choose(
+                    choice: "draw_or_mill", chooser: TargetedPlayer(
+                        group_index: 0, kind: OpponentPlayer,
+                    ), optional: true,
+                    branches: [(
+                        branch_id: "draw", presentation: Fallback,
+                        cost: None, requirement: Always,
+                        body: (steps: [
+                            (id: "draw_three", bind: [], input: None,
+                                kind: Perform(Draw(who: Controller, count: 3))),
+                        ], yields: []),
+                    )],
+                    otherwise: (steps: [
+                        (id: "mill", bind: ["milled"], input: None,
+                            kind: Perform(Mill(count: 3, who: Controller))),
+                        (id: "damage", bind: [], input: {input},
+                            kind: Perform(DamagePlayer(
+                                amount: {amount},
+                                who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                            ))),
+                    ], yields: []),
+                )),
+            ], yields: [])"#
+        )
+    }
+
+    #[test]
+    fn program_compiler_accepts_gearhulk_targeted_choose_and_damage_group() {
+        let compiled = compile(
+            &targeted_choose_damage_body(0, "OpponentPlayer", 0),
+            damage_target_binding(),
+        )
+        .expect("a triggered Program can pair the target chooser and damage recipient");
+
+        assert_eq!(compiled.target_bindings.len(), 1);
+        assert_eq!(compiled.target_bindings[0].instruction_address, 2);
+        assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+        assert_eq!(compiled.target_bindings[0].role_index, 0);
+
+        let targeting = opponent_targeting();
+        let schema = TargetSchema::compile_program(&compiled, Some(&targeting))
+            .expect("the compiled target group has one supported binding");
+        assert_eq!(schema.groups.len(), 1);
+        assert_eq!(schema.groups[0].bindings.len(), 1);
+        assert_eq!(schema.groups[0].bindings[0].effect_index, 2);
+        assert!(matches!(
+            schema.groups[0].bindings[0].role,
+            TargetRole::Filtered(filter) if filter == &TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..TargetFilter::default()
+            }
+        ));
+
+        let spell = compile_with_context(
+            &targeted_choose_damage_body(0, "OpponentPlayer", 0),
+            damage_target_binding(),
+            &targeting,
+            EffectContext::Spell,
+        )
+        .expect("the closed opponent target profile supports spell programs too");
+        assert_eq!(spell.target_bindings[0].instruction_address, 2);
+
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the target choice is the Program's only top-level instruction");
+        };
+        let CompiledInstructionKind::Choose {
+            chooser:
+                PlayerRecipient::TargetedPlayer {
+                    group_index: 0,
+                    kind: TargetKind::OpponentPlayer,
+                },
+            otherwise,
+            ..
+        } = &choose.kind
+        else {
+            panic!("the opponent chosen by the target group controls the resolution choice");
+        };
+        assert!(matches!(
+            otherwise.steps.as_slice(),
+            [instruction] if instruction.instruction_address == 2
+                && matches!(
+                    &instruction.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
+                            who: PlayerRecipient::TargetedPlayer {
+                                group_index: 0,
+                                kind: TargetKind::OpponentPlayer,
+                            },
+                            ..
+                        })
+                )
+        ));
+    }
+
+    #[test]
+    fn program_compiler_rejects_paid_mana_targeted_optional_choose() {
+        let error = compile_targeted_choose_with_branch_cost("Mana(\"{1}\")")
+            .expect_err("a targeted optional Choose branch must not carry a Mana cost");
+        assert!(error.contains("only supports a free cost"), "{error}");
+    }
+
+    #[test]
+    fn program_compiler_rejects_paid_waterbend_targeted_optional_choose() {
+        let error = compile_targeted_choose_with_branch_cost("Waterbend(\"{1}\")")
+            .expect_err("a targeted optional Choose branch must not carry a Waterbend cost");
+        assert!(error.contains("only supports a free cost"), "{error}");
+    }
+
+    #[test]
+    fn program_compiler_recursively_accepts_gearhulk_targeted_choose_in_otherwise() {
+        let compiled = compile(
+            r#"(steps: [
+                (id: "outer_choice", bind: [], input: None, kind: Choose(
+                    choice: "outer", chooser: Controller, optional: true,
+                    branches: [(
+                        branch_id: "outer_draw", presentation: Fallback,
+                        cost: None, requirement: Always,
+                        body: (steps: [
+                            (id: "outer_draw_one", bind: [], input: None,
+                                kind: Perform(Draw(who: Controller, count: 1))),
+                        ], yields: []),
+                    )],
+                    otherwise: (steps: [
+                        (id: "choose", bind: [], input: None, kind: Choose(
+                            choice: "draw_or_mill", chooser: TargetedPlayer(
+                                group_index: 0, kind: OpponentPlayer,
+                            ), optional: true,
+                            branches: [(
+                                branch_id: "draw", presentation: Fallback,
+                                cost: None, requirement: Always,
+                                body: (steps: [
+                                    (id: "draw_three", bind: [], input: None,
+                                        kind: Perform(Draw(who: Controller, count: 3))),
+                                ], yields: []),
+                            )],
+                            otherwise: (steps: [
+                                (id: "damage", bind: [], input: None,
+                                    kind: Perform(DamagePlayer(amount: 2, who: TargetedPlayer(
+                                        group_index: 0, kind: OpponentPlayer,
+                                    )))),
+                            ], yields: []),
+                        )),
+                    ], yields: []),
+                )),
+            ], yields: [])"#,
+            damage_target_binding(),
+        )
+        .expect("targeted choice and matching damage compile recursively in Otherwise");
+
+        assert_eq!(compiled.target_bindings[0].instruction_address, 4);
+        let [outer] = compiled.body.steps.as_slice() else {
+            panic!("the outer choice is the only top-level instruction");
+        };
+        let CompiledInstructionKind::Choose { otherwise, .. } = &outer.kind else {
+            panic!("the outer instruction is a choice");
+        };
+        let [inner] = otherwise.steps.as_slice() else {
+            panic!("the target choice is in the outer Otherwise block");
+        };
+        let CompiledInstructionKind::Choose { otherwise, .. } = &inner.kind else {
+            panic!("the nested instruction is the targeted choice");
+        };
+        assert!(matches!(
+            otherwise.steps.as_slice(),
+            [damage] if damage.instruction_address == 4
+                && matches!(
+                    &damage.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer { .. })
+                )
+        ));
+    }
+
+    #[test]
+    fn program_compiler_accepts_gearhulk_typed_mill_input_for_targeted_damage() {
+        let compiled = compile(
+            &targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")"),
+            damage_target_binding(),
+        )
+        .expect("the direct mana-value sum consumes its named immediate Mill result");
+
+        assert_eq!(compiled.target_bindings.len(), 1);
+        assert_eq!(compiled.target_bindings[0].instruction_address, 3);
+        let Some(milled_slot) = compiled.slots.iter().find(|slot| slot.name == "milled") else {
+            panic!("the Otherwise Mill instruction binds its typed result");
+        };
+        assert!(matches!(
+            &milled_slot.result_type,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: PlayerRecipient::Controller,
+                ..
+            }
+        ));
+
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the target choice is the Program's only top-level instruction");
+        };
+        let CompiledInstructionKind::Choose { otherwise, .. } = &choose.kind else {
+            panic!("the target choice owns the Otherwise block");
+        };
+        let [mill, damage] = otherwise.steps.as_slice() else {
+            panic!("the Otherwise block contains the Mill and its direct damage consumer");
+        };
+        assert_eq!(mill.id, "mill");
+        assert!(mill.outputs.contains(&milled_slot.id));
+        assert_eq!(damage.id, "damage");
+        assert_eq!(damage.input, Some(milled_slot.id));
+        assert!(matches!(
+            &damage.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
+                    amount: crate::primitives::Amount::Count(
+                        crate::primitives::CountExpression::PreviousMillManaValueSum
+                    ),
+                    who: PlayerRecipient::TargetedPlayer {
+                        group_index: 0,
+                        kind: TargetKind::OpponentPlayer,
+                    },
+                })
+        ));
+    }
+
+    #[test]
+    fn program_compiler_rejects_unbound_or_wrapped_gearhulk_mill_sum() {
+        for (label, amount, input) in [
+            (
+                "unbound direct sum",
+                "Count(PreviousMillManaValueSum)",
+                "None",
+            ),
+            (
+                "affine-wrapped sum",
+                "Count(Affine(terms: [(coefficient: 1, quantity: PreviousMillManaValueSum)]))",
+                "None",
+            ),
+            (
+                "divide-wrapped sum",
+                "DivideRoundedDown(amount: Count(PreviousMillManaValueSum), divisor: 2)",
+                "None",
+            ),
+        ] {
+            let error = compile(
+                &targeted_mill_damage_body(amount, input),
+                damage_target_binding(),
+            )
+            .expect_err(&format!("the Program compiler admitted {label}"));
+            if label == "unbound direct sum" {
+                assert!(
+                    error.contains("instruction requires an explicitly bound input result"),
+                    "{error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn program_compiler_requires_the_immediately_preceding_controller_mill_slot() {
+        let valid =
+            targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")");
+        let intervening_operation = valid.replace(
+            "(id: \"damage\"",
+            "(id: \"intervening_life\", bind: [], input: None, kind: Perform(GainLife(amount: 1))),\n                        (id: \"damage\"",
+        );
+        let error = compile(&intervening_operation, damage_target_binding())
+            .expect_err("an intervening operation breaks the immediate Mill contract");
+        assert!(
+            error.contains("immediately preceding Controller Mill"),
+            "{error}"
+        );
+
+        let older_named_slot = valid.replace(
+            "(id: \"damage\"",
+            "(id: \"second_mill\", bind: [\"recent\"], input: None, kind: Perform(Mill(count: 1, who: Controller))),\n                        (id: \"damage\"",
+        );
+        let error = compile(&older_named_slot, damage_target_binding())
+            .expect_err("the consumer cannot select an older Mill slot");
+        assert!(
+            error.contains("result bound by the immediately preceding Controller Mill"),
+            "{error}"
+        );
+
+        let inherited_branch_slot = r#"(steps: [
+            (id: "outer_mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 3, who: Controller))),
+            (id: "choose", bind: [], input: None, kind: Choose(
+                choice: "draw_or_mill", chooser: TargetedPlayer(
+                    group_index: 0, kind: OpponentPlayer,
+                ), optional: true,
+                branches: [(
+                    branch_id: "draw", presentation: Fallback,
+                    cost: None, requirement: Always,
+                    body: (steps: [
+                        (id: "draw_three", bind: [], input: None,
+                            kind: Perform(Draw(who: Controller, count: 3))),
+                    ], yields: []),
+                )],
+                otherwise: (steps: [
+                    (id: "damage", bind: [], input: Some("milled"),
+                        kind: Perform(DamagePlayer(
+                            amount: Count(PreviousMillManaValueSum),
+                            who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                        ))),
+                ], yields: []),
+            )),
+        ], yields: [])"#;
+        let error = compile(inherited_branch_slot, damage_target_binding())
+            .expect_err("a branch cannot consume an inherited older Mill result");
+        assert!(error.contains("same program block"), "{error}");
+    }
+
+    #[test]
+    fn program_compiler_limits_mill_sum_input_to_controller_mill_targeted_damage() {
+        let valid =
+            targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")");
+        let wrong_action = valid.replace(
+            "kind: Perform(Mill(count: 3, who: Controller))",
+            "kind: Perform(Draw(who: Controller, count: 3))",
+        );
+        let error = compile(&wrong_action, damage_target_binding())
+            .expect_err("a non-Mill result cannot supply PreviousMillManaValueSum");
+        assert!(error.contains("wrong type for this instruction"), "{error}");
+
+        let wrong_mill_recipient = valid.replace(
+            "kind: Perform(Mill(count: 3, who: Controller))",
+            "kind: Perform(Mill(count: 3, who: AffectedPlayer))",
+        );
+        let error = compile(&wrong_mill_recipient, damage_target_binding())
+            .expect_err("only the controller's Mill cohort supplies this amount");
+        assert!(error.contains("wrong type for this instruction"), "{error}");
+
+        let wrong_damage_recipient = valid.replace(
+            "who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),",
+            "who: Controller,",
+        );
+        let error = compile(&wrong_damage_recipient, damage_target_binding())
+            .expect_err("the typed input is limited to targeted-opponent DamagePlayer");
+        assert!(error.contains("does not accept an input result"), "{error}");
+
+        let ambient_reader = valid.replace(
+            "(id: \"damage\"",
+            "(id: \"ambient_gain\", bind: [], input: None, kind: Perform(GainLife(amount: Count(PreviousMillManaValueSum)))),\n                        (id: \"damage\"",
+        );
+        let error = compile(&ambient_reader, damage_target_binding())
+            .expect_err("other Program operations cannot read the implicit Mill sum");
+        assert!(
+            error.contains("immediate controller Mill result"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn program_compiler_rejects_invalid_gearhulk_target_group_contracts() {
+        let valid_body = targeted_choose_damage_body(0, "OpponentPlayer", 0);
+        let valid_binding = damage_target_binding();
+        let invalid_role = vec![target_binding("damage", ProgramTargetRole::Spell, 0)];
+        let unknown_group = vec![target_binding("damage", ProgramTargetRole::Target, 1)];
+        let extra_damage_binding = vec![
+            target_binding("damage", ProgramTargetRole::Target, 0),
+            target_binding("choose", ProgramTargetRole::Target, 0),
+        ];
+        let mismatched_group_body = targeted_choose_damage_body(1, "OpponentPlayer", 1);
+        let wrong_kind_body = targeted_choose_damage_body(0, "AnyPlayer", 0);
+        let unpaired_damage_body = targeted_choose_damage_body(0, "OpponentPlayer", 1);
+        let damage_without_chooser_body = r#"(steps: [
+            (id: "damage", bind: [], input: None,
+                kind: Perform(DamagePlayer(amount: 2, who: TargetedPlayer(
+                    group_index: 0, kind: OpponentPlayer,
+                )))),
+        ], yields: [])"#;
+
+        let mut wrong_group_chooser = opponent_targeting();
+        wrong_group_chooser.groups[0].chooser = TargetChooser::ChosenOpponent;
+        let mut extra_group = opponent_targeting();
+        extra_group.groups.push(extra_group.groups[0].clone());
+        let mut distinct_target_group = opponent_targeting();
+        distinct_target_group.groups[0].distinct_from.push(1);
+        let mut same_graveyard_target_group = opponent_targeting();
+        same_graveyard_target_group.groups[0].same_graveyard = true;
+        let mut cast_cost_expansion_target_group = opponent_targeting();
+        cast_cost_expansion_target_group.groups[0].cast_cost_expansion =
+            Some(crate::primitives::CastCostTargetExpansion {
+                condition: crate::primitives::CastCostReceiptCondition {
+                    group_id: crate::ChoiceId::new("cost_group").unwrap(),
+                    option_id: crate::ChoiceId::new("cost_option").unwrap(),
+                    expected_selected: true,
+                },
+                without_cost: TargetFilter::default(),
+            });
+
+        let cases = [
+            (
+                "missing target-role binding",
+                valid_body.as_str(),
+                Vec::new(),
+                opponent_targeting(),
+            ),
+            (
+                "duplicate target-role binding",
+                valid_body.as_str(),
+                vec![valid_binding[0].clone(), valid_binding[0].clone()],
+                opponent_targeting(),
+            ),
+            (
+                "wrong target-role kind",
+                valid_body.as_str(),
+                invalid_role,
+                opponent_targeting(),
+            ),
+            (
+                "unknown target group",
+                valid_body.as_str(),
+                unknown_group,
+                opponent_targeting(),
+            ),
+            (
+                "unsupported player target kind",
+                wrong_kind_body.as_str(),
+                valid_binding.clone(),
+                opponent_targeting(),
+            ),
+            (
+                "plural player target group",
+                valid_body.as_str(),
+                valid_binding.clone(),
+                targeting_with_bounds(1, 2),
+            ),
+            (
+                "extra Choose target binding",
+                valid_body.as_str(),
+                extra_damage_binding,
+                opponent_targeting(),
+            ),
+            (
+                "extra target group",
+                valid_body.as_str(),
+                valid_binding.clone(),
+                extra_group,
+            ),
+            (
+                "distinct target groups",
+                valid_body.as_str(),
+                valid_binding.clone(),
+                distinct_target_group,
+            ),
+            (
+                "same graveyard target constraint",
+                valid_body.as_str(),
+                valid_binding.clone(),
+                same_graveyard_target_group,
+            ),
+            (
+                "cast-cost target expansion",
+                valid_body.as_str(),
+                valid_binding.clone(),
+                cast_cost_expansion_target_group,
+            ),
+            (
+                "chooser and bound group mismatch",
+                mismatched_group_body.as_str(),
+                valid_binding.clone(),
+                opponent_targeting(),
+            ),
+            (
+                "unpaired targeted DamagePlayer",
+                unpaired_damage_body.as_str(),
+                valid_binding.clone(),
+                opponent_targeting(),
+            ),
+            (
+                "targeted DamagePlayer without a matching chooser",
+                damage_without_chooser_body,
+                valid_binding.clone(),
+                opponent_targeting(),
+            ),
+            (
+                "opponent-selected rather than controller-selected target group",
+                valid_body.as_str(),
+                valid_binding,
+                wrong_group_chooser,
+            ),
+        ];
+
+        for (label, body, bindings, targeting) in cases {
+            let result = compile_with_targeting(body, bindings, &targeting);
+            assert!(result.is_err(), "the Program compiler admitted {label}");
+        }
+
+        let zero_damage_body =
+            targeted_choose_damage_body(0, "OpponentPlayer", 0).replace("amount: 2", "amount: 0");
+        let zero_damage_error = compile(&zero_damage_body, damage_target_binding())
+            .expect_err("TargetedPlayer damage must have a positive amount");
+        assert!(
+            zero_damage_error.contains("positive fixed amount"),
+            "{zero_damage_error}"
+        );
+    }
 }

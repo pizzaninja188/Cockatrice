@@ -20,6 +20,7 @@ pub use costs::*;
 pub use effects::*;
 pub use keywords::*;
 pub use program::*;
+pub(crate) use targeting::program_effect_target_roles;
 pub use targeting::*;
 
 #[cfg(test)]

@@ -787,6 +787,33 @@ and the same movement path.
 when an effect allows any currently matching graveyard card, or reverse that substitution when the
 Oracle instruction limits the choice to cards moved by one specific instruction.
 
+Combustible Gearhulk uses a deliberately narrower targeted-choice profile. `Choose` may use
+`chooser: TargetedPlayer(OpponentPlayer)` only when it is optional and every branch has `cost: None`.
+Its compiled target binding pairs exactly one `DamagePlayer` with that same singleton opponent
+target group. The group is resolved recursively through nested blocks and through the owning
+ability or mode's local target context. In `Otherwise`, `Mill(who: Controller)` must bind a named
+result; the immediately following `DamagePlayer` in that same block must read it with
+`input: Some("milled")` and `Count(PreviousMillManaValueSum)`. No wrapper, ambient previous-result
+read, intervening instruction, alternative player recipient, or paid targeted-chooser form is
+accepted. Delegating the pending choice after target departure changes the chooser only. The
+original target remains the damage recipient, and the resolving trigger retains Gearhulk source LKI
+after source departure (CR 113.7a, 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). Its actual-card scenarios
+cover the exact Mill receipts, short-library draw branch, Narset's controller-scoped draw, target
+departure, delegated replay, and ordered prevention. Compiler regressions also reject paid Mana and
+Waterbend branches, non-immediate or wrapped Mill inputs, and mismatched target groups. The model
+tests `program_compiler_accepts_gearhulk_targeted_choose_and_damage_group`,
+`program_compiler_recursively_accepts_gearhulk_targeted_choose_in_otherwise`,
+`program_compiler_accepts_gearhulk_typed_mill_input_for_targeted_damage`,
+`program_compiler_rejects_unbound_or_wrapped_gearhulk_mill_sum`,
+`program_compiler_rejects_invalid_gearhulk_target_group_contracts`,
+`program_compiler_rejects_paid_mana_targeted_optional_choose`, and
+`program_compiler_rejects_paid_waterbend_targeted_optional_choose` cover the compiler contract.
+The controller loses when the chosen draw-three instruction attempts to draw from a library with
+fewer than three cards (CR 121.2, 104.3c).
+This does not change existing `Controller`, `AffectedPlayer`, or `SourceController` chooser profiles;
+other paid or targeted-player forms remain outside this subset. Ordinary Mill receipt coverage does
+not establish a general Mill zone-replacement contract; Rest in Peace is not covered.
+
 `Discard` produces a typed result containing committed discard batches, captured card-type
 knowledge and a separate outcome. `IfResult` can inspect an earlier in-scope discard binding:
 `DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1))`

@@ -8,6 +8,13 @@ use super::{
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+static PROGRAM_OPPONENT_PLAYER_TARGET_FILTER: LazyLock<TargetFilter> =
+    LazyLock::new(|| TargetFilter {
+        kind: TargetKind::OpponentPlayer,
+        ..TargetFilter::default()
+    });
 
 /// Authored target declaration for one spell, mode, activated ability, or triggered ability.
 /// Omit it to retain the legacy single required group containing every targeted effect.
@@ -104,6 +111,23 @@ impl TargetRole<'_> {
             Self::CreaturePermanent => true,
             Self::StackSpell(_) | Self::StackAbility | Self::GraveyardCard(_) => false,
         }
+    }
+}
+
+/// Program target-role projection for operation-owned bindings. Opponent-targeted player damage
+/// has no role in the public legacy effect vocabulary, so authored Programs supply its canonical
+/// opponent role here without changing legacy effect discovery.
+pub(crate) fn program_effect_target_roles(effect: &SpellEffectKind) -> Vec<TargetRole<'_>> {
+    match effect {
+        SpellEffectKind::DamagePlayer {
+            who:
+                PlayerRecipient::TargetedPlayer {
+                    kind: TargetKind::OpponentPlayer,
+                    ..
+                },
+            ..
+        } => vec![TargetRole::Filtered(&PROGRAM_OPPONENT_PLAYER_TARGET_FILTER)],
+        _ => effect.target_roles(),
     }
 }
 
@@ -409,21 +433,31 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         targeting: Option<&'targeting TargetingDef>,
     ) -> Result<Self, String> {
         let mut effects_by_address = HashMap::new();
-        collect_program_effects(&program.body, &mut effects_by_address);
+        let mut roles_by_address = HashMap::new();
+        let mut targeted_choosers_by_address = HashMap::new();
+        let mut targeted_damages_by_address = HashMap::new();
+        collect_program_target_roles(
+            &program.body,
+            &mut effects_by_address,
+            &mut roles_by_address,
+            &mut targeted_choosers_by_address,
+            &mut targeted_damages_by_address,
+        );
         let mut effect_role_counts = vec![
             0usize;
-            effects_by_address
+            roles_by_address
                 .keys()
                 .copied()
                 .max()
                 .map_or(0, |address| address as usize + 1)
         ];
-        for (&address, effect) in &effects_by_address {
-            effect_role_counts[address as usize] = effect.target_roles().len();
+        for (&address, roles) in &roles_by_address {
+            effect_role_counts[address as usize] = roles.len();
         }
 
         let Some(targeting) = targeting else {
             if !program.target_bindings.is_empty()
+                || !targeted_choosers_by_address.is_empty()
                 || effect_role_counts.iter().any(|&count| count > 0)
             {
                 return Err("targeted program instruction has no authored target group".into());
@@ -436,10 +470,90 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         if targeting.groups.is_empty() {
             return Err("targeting requires at least one group".into());
         }
+        if !targeted_choosers_by_address.is_empty() || !targeted_damages_by_address.is_empty() {
+            if targeting.groups.len() != 1 {
+                return Err(
+                    "TargetedPlayer DamagePlayer and Choose require exactly one owner-local target group"
+                        .into(),
+                );
+            }
+            for (&chooser_address, &(chooser_group, chooser_kind)) in &targeted_choosers_by_address
+            {
+                if chooser_kind != TargetKind::OpponentPlayer || chooser_group != 0 {
+                    return Err(
+                        "TargetedPlayer Choose currently requires its OpponentPlayer target group 0"
+                            .into(),
+                    );
+                }
+                let matching_damage_addresses = targeted_damages_by_address
+                    .iter()
+                    .filter_map(|(&address, &(damage_group, damage_kind))| {
+                        (damage_group == chooser_group && damage_kind == chooser_kind)
+                            .then_some(address)
+                    })
+                    .collect::<Vec<_>>();
+                if matching_damage_addresses.len() != 1 {
+                    return Err(format!(
+                        "TargetedPlayer Choose instruction at address {chooser_address} requires exactly one matching DamagePlayer target"
+                    ));
+                }
+                let damage_address = matching_damage_addresses[0];
+                let damage_bindings = program
+                    .target_bindings
+                    .iter()
+                    .filter(|binding| {
+                        binding.instruction_address == damage_address
+                            && binding.target_group_index == chooser_group
+                            && binding.role_index == 0
+                    })
+                    .count();
+                if damage_bindings != 1 {
+                    return Err(format!(
+                        "TargetedPlayer Choose instruction at address {chooser_address} requires the matching DamagePlayer target to own the group-0 Target role"
+                    ));
+                }
+            }
+            for (&damage_address, &(damage_group, damage_kind)) in &targeted_damages_by_address {
+                if damage_kind != TargetKind::OpponentPlayer || damage_group != 0 {
+                    return Err(
+                        "TargetedPlayer DamagePlayer currently requires its OpponentPlayer target group 0"
+                            .into(),
+                    );
+                }
+                let matching_chooser_count = targeted_choosers_by_address
+                    .values()
+                    .filter(|(chooser_group, chooser_kind)| {
+                        *chooser_group == damage_group && *chooser_kind == damage_kind
+                    })
+                    .count();
+                let damage_bindings = program
+                    .target_bindings
+                    .iter()
+                    .filter(|binding| binding.instruction_address == damage_address)
+                    .collect::<Vec<_>>();
+                if matching_chooser_count != 1
+                    || damage_bindings.len() != 1
+                    || damage_bindings[0].target_group_index != damage_group
+                    || damage_bindings[0].role_index != 0
+                {
+                    return Err(format!(
+                        "TargetedPlayer DamagePlayer instruction at address {damage_address} requires one matching Choose and its own group-0 Target role"
+                    ));
+                }
+            }
+        }
 
         let mut bound_roles = HashMap::<u32, Vec<bool>>::new();
-        for (&address, effect) in &effects_by_address {
-            bound_roles.insert(address, vec![false; effect.target_roles().len()]);
+        for (&address, roles) in &roles_by_address {
+            bound_roles.insert(address, vec![false; roles.len()]);
+        }
+        for &(_, kind) in targeted_choosers_by_address.values() {
+            if kind != TargetKind::OpponentPlayer {
+                return Err(
+                    "TargetedPlayer Choose instruction currently supports only OpponentPlayer targets"
+                        .into(),
+                );
+            }
         }
         let mut groups = Vec::with_capacity(targeting.groups.len());
         for (group_index, group) in targeting.groups.iter().enumerate() {
@@ -539,6 +653,48 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     );
                 }
             }
+            let targeted_damage_bindings = group_program_bindings
+                .iter()
+                .filter_map(|binding| {
+                    targeted_damages_by_address
+                        .get(&binding.instruction_address)
+                        .map(|(damage_group, kind)| (binding, *damage_group, *kind))
+                })
+                .collect::<Vec<_>>();
+            if !targeted_damage_bindings.is_empty() {
+                let matching_chooser_count = targeted_choosers_by_address
+                    .values()
+                    .filter(|(chooser_group, kind)| {
+                        *chooser_group as usize == group_index
+                            && *kind == TargetKind::OpponentPlayer
+                    })
+                    .count();
+                let damage_matches_group = targeted_damage_bindings.len() == 1
+                    && targeted_damage_bindings
+                        .iter()
+                        .all(|(binding, damage_group, kind)| {
+                            binding.role_index == 0
+                                && *damage_group as usize == group_index
+                                && *kind == TargetKind::OpponentPlayer
+                        });
+                let targeting_profile_matches = targeting.groups.len() == 1
+                    && group.min == 1
+                    && group.max == 1
+                    && group.chooser == TargetChooser::Controller
+                    && group_program_bindings.len() == 1
+                    && group.distinct_from.is_empty()
+                    && !group.same_graveyard
+                    && group.cast_cost_expansion.is_none();
+                if !damage_matches_group
+                    || !targeting_profile_matches
+                    || matching_chooser_count != 1
+                {
+                    return Err(
+                        "TargetedPlayer DamagePlayer requires one controller-chosen singleton OpponentPlayer target group bound only to that DamagePlayer and its matching Choose"
+                            .into(),
+                    );
+                }
+            }
             if let Some(expansion) = &group.cast_cost_expansion {
                 if group_program_bindings.len() != 1 {
                     return Err(
@@ -550,16 +706,20 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
 
             let mut bindings = Vec::new();
             for binding in group_program_bindings {
-                let effect = effects_by_address
+                let roles = roles_by_address
                     .get(&binding.instruction_address)
                     .ok_or_else(|| {
                         "program target binding references an unknown instruction".to_string()
                     })?;
                 let role_index = binding.role_index as usize;
-                let role = *effect.target_roles().get(role_index).ok_or_else(|| {
+                let role = *roles.get(role_index).ok_or_else(|| {
                     "program target binding references an unknown target role".to_string()
                 })?;
-                if matches!(effect, SpellEffectKind::CreateTokenCopies { .. })
+                if effects_by_address
+                    .get(&binding.instruction_address)
+                    .is_some_and(|effect| {
+                        matches!(effect, SpellEffectKind::CreateTokenCopies { .. })
+                    })
                     && (group.min != 1 || group.max != 1)
                 {
                     return Err("CreateTokenCopies requires exactly one source target".into());
@@ -866,29 +1026,70 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
     }
 }
 
-fn collect_program_effects<'a>(
+fn collect_program_target_roles<'a>(
     block: &'a CompiledBlock,
     effects: &mut HashMap<u32, &'a SpellEffectKind>,
+    roles: &mut HashMap<u32, Vec<TargetRole<'a>>>,
+    targeted_choosers: &mut HashMap<u32, (u32, TargetKind)>,
+    targeted_damages: &mut HashMap<u32, (u32, TargetKind)>,
 ) {
     for instruction in &block.steps {
         match &instruction.kind {
             CompiledInstructionKind::ImportCastPayment => {}
             CompiledInstructionKind::Perform(effect) => {
                 effects.insert(instruction.instruction_address, effect.as_ref());
+                if let SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::TargetedPlayer { group_index, kind },
+                    ..
+                } = effect.as_ref()
+                {
+                    targeted_damages.insert(instruction.instruction_address, (*group_index, *kind));
+                }
+                let effect_roles = program_effect_target_roles(effect.as_ref());
+                roles.insert(instruction.instruction_address, effect_roles);
             }
             CompiledInstructionKind::If { yes, no, .. } => {
-                collect_program_effects(yes, effects);
-                collect_program_effects(no, effects);
+                collect_program_target_roles(
+                    yes,
+                    effects,
+                    roles,
+                    targeted_choosers,
+                    targeted_damages,
+                );
+                collect_program_target_roles(
+                    no,
+                    effects,
+                    roles,
+                    targeted_choosers,
+                    targeted_damages,
+                );
             }
             CompiledInstructionKind::Choose {
+                chooser,
                 branches,
                 otherwise,
                 ..
             } => {
-                for branch in branches {
-                    collect_program_effects(&branch.body, effects);
+                if let PlayerRecipient::TargetedPlayer { group_index, kind } = chooser {
+                    targeted_choosers
+                        .insert(instruction.instruction_address, (*group_index, *kind));
                 }
-                collect_program_effects(otherwise, effects);
+                for branch in branches {
+                    collect_program_target_roles(
+                        &branch.body,
+                        effects,
+                        roles,
+                        targeted_choosers,
+                        targeted_damages,
+                    );
+                }
+                collect_program_target_roles(
+                    otherwise,
+                    effects,
+                    roles,
+                    targeted_choosers,
+                    targeted_damages,
+                );
             }
         }
     }

@@ -558,6 +558,7 @@ impl CompiledProgram {
         } else if !program.target_bindings.is_empty() {
             return Err("program target binding requires an authored target group".into());
         }
+        validate_targeted_player_damage_pairs(&compiled)?;
         let schema = TargetSchema::compile_program(&compiled, targeting)?;
         validate_target_card_result_groups(&compiled, &schema)?;
         compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
@@ -759,6 +760,17 @@ fn validate_target_card_result_groups(
 fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole) -> Option<usize> {
     match (effect, role) {
         (SpellEffectKind::DamageTarget { .. }, ProgramTargetRole::Target)
+        | (
+            SpellEffectKind::DamagePlayer {
+                who:
+                    PlayerRecipient::TargetedPlayer {
+                        kind: TargetKind::OpponentPlayer,
+                        ..
+                    },
+                ..
+            },
+            ProgramTargetRole::Target,
+        )
         | (SpellEffectKind::CounterTargetSpell { .. }, ProgramTargetRole::Spell)
         | (
             SpellEffectKind::CreateTokenCopies {
@@ -836,6 +848,126 @@ fn find_instruction_by_id<'a>(
         }
     }
     None
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TargetedPlayerProgramUse {
+    instruction_address: u32,
+    group_index: u32,
+    kind: TargetKind,
+    is_damage: bool,
+}
+
+fn collect_targeted_player_program_uses(
+    block: &CompiledBlock,
+    uses: &mut Vec<TargetedPlayerProgramUse>,
+) {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            CompiledInstructionKind::ImportCastPayment => {}
+            CompiledInstructionKind::Perform(effect) => {
+                if let SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::TargetedPlayer { group_index, kind },
+                    ..
+                } = effect.as_ref()
+                {
+                    uses.push(TargetedPlayerProgramUse {
+                        instruction_address: instruction.instruction_address,
+                        group_index: *group_index,
+                        kind: *kind,
+                        is_damage: true,
+                    });
+                }
+            }
+            CompiledInstructionKind::If { yes, no, .. } => {
+                collect_targeted_player_program_uses(yes, uses);
+                collect_targeted_player_program_uses(no, uses);
+            }
+            CompiledInstructionKind::Choose {
+                chooser,
+                branches,
+                otherwise,
+                ..
+            } => {
+                if let PlayerRecipient::TargetedPlayer { group_index, kind } = chooser {
+                    uses.push(TargetedPlayerProgramUse {
+                        instruction_address: instruction.instruction_address,
+                        group_index: *group_index,
+                        kind: *kind,
+                        is_damage: false,
+                    });
+                }
+                for branch in branches {
+                    collect_targeted_player_program_uses(&branch.body, uses);
+                }
+                collect_targeted_player_program_uses(otherwise, uses);
+            }
+        }
+    }
+}
+
+fn validate_targeted_player_damage_pairs(program: &CompiledProgram) -> Result<(), String> {
+    let mut uses = Vec::new();
+    collect_targeted_player_program_uses(&program.body, &mut uses);
+    for damage in uses.iter().filter(|usage| usage.is_damage) {
+        if damage.kind != TargetKind::OpponentPlayer {
+            return Err(format!(
+                "DamagePlayer instruction at address {} supports only an OpponentPlayer target chooser",
+                damage.instruction_address
+            ));
+        }
+        let chooser_count = uses
+            .iter()
+            .filter(|usage| {
+                !usage.is_damage
+                    && usage.group_index == damage.group_index
+                    && usage.kind == damage.kind
+            })
+            .count();
+        if chooser_count != 1 {
+            return Err(format!(
+                "DamagePlayer instruction at address {} requires exactly one matching TargetedPlayer Choose instruction for group {}",
+                damage.instruction_address, damage.group_index
+            ));
+        }
+        let damage_bindings = program
+            .target_bindings
+            .iter()
+            .filter(|binding| binding.instruction_address == damage.instruction_address)
+            .collect::<Vec<_>>();
+        if damage_bindings.len() != 1
+            || damage_bindings[0].target_group_index != damage.group_index
+            || damage_bindings[0].role_index != 0
+        {
+            return Err(format!(
+                "DamagePlayer instruction at address {} requires exactly one Target role binding to its own OpponentPlayer target group {}",
+                damage.instruction_address, damage.group_index
+            ));
+        }
+    }
+    for chooser in uses.iter().filter(|usage| !usage.is_damage) {
+        if chooser.kind != TargetKind::OpponentPlayer {
+            return Err(format!(
+                "TargetedPlayer Choose instruction at address {} supports only OpponentPlayer targets",
+                chooser.instruction_address
+            ));
+        }
+        let damage_count = uses
+            .iter()
+            .filter(|usage| {
+                usage.is_damage
+                    && usage.group_index == chooser.group_index
+                    && usage.kind == chooser.kind
+            })
+            .count();
+        if damage_count != 1 {
+            return Err(format!(
+                "TargetedPlayer Choose instruction at address {} requires exactly one matching bound DamagePlayer target for group {}",
+                chooser.instruction_address, chooser.group_index
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn find_effect_by_address(block: &CompiledBlock, address: u32) -> Option<&SpellEffectKind> {
@@ -1012,6 +1144,12 @@ impl Compiler<'_> {
                 InstructionKind::Perform(effect) => {
                     let input =
                         compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
+                    validate_previous_mill_mana_value_sum_input(
+                        effect,
+                        input,
+                        steps.last(),
+                        &self.slots,
+                    )?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -1271,14 +1409,23 @@ impl Compiler<'_> {
                             choice
                         ));
                     }
+                    let targeted_opponent_chooser = matches!(
+                        chooser,
+                        PlayerRecipient::TargetedPlayer {
+                            kind: TargetKind::OpponentPlayer,
+                            ..
+                        } if *optional
+                            && matches!(self.context, EffectContext::Spell | EffectContext::Ability)
+                    );
                     let chooser_supported = *chooser == PlayerRecipient::Controller
+                        || targeted_opponent_chooser
                         || (matches!(
                             chooser,
                             PlayerRecipient::SourceController | PlayerRecipient::AffectedPlayer
                         ) && self.context == EffectContext::Ability);
                     if !chooser_supported {
                         return Err(format!(
-                            "Choose instruction '{}' supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
+                            "Choose instruction '{}' supports Controller, SourceController/AffectedPlayer on an ability program, or an optional OpponentPlayer target on a spell or ability program, as chooser",
                             instruction.id
                         ));
                     }
@@ -1314,6 +1461,14 @@ impl Compiler<'_> {
                                 instruction.id, branch.branch_id
                             )
                         })?;
+                        if targeted_opponent_chooser
+                            && !matches!(&branch.cost, ResolutionCost::None)
+                        {
+                            return Err(format!(
+                                "Choose instruction '{}' branch '{}' only supports a free cost for an optional OpponentPlayer target chooser",
+                                instruction.id, branch.branch_id
+                            ));
+                        }
                         match &branch.cost {
                             ResolutionCost::None => has_free_branch = true,
                             ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
@@ -1791,6 +1946,66 @@ fn is_source_sacrifice_reflexive_consumer(effect: &SpellEffectKind) -> bool {
     )
 }
 
+fn is_targeted_opponent_previous_mill_damage(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        EffectOp::DamagePlayer {
+            amount: Amount::Count(super::CountExpression::PreviousMillManaValueSum),
+            who: PlayerRecipient::TargetedPlayer {
+                kind: TargetKind::OpponentPlayer,
+                ..
+            },
+        }
+    )
+}
+
+fn validate_previous_mill_mana_value_sum_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    previous: Option<&CompiledInstruction>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !is_targeted_opponent_previous_mill_damage(effect) {
+        return Ok(());
+    }
+    let slot_id = input.ok_or_else(|| {
+        "PreviousMillManaValueSum requires an explicitly bound input from an immediately preceding Controller Mill instruction".to_string()
+    })?;
+    let previous = previous.ok_or_else(|| {
+        "PreviousMillManaValueSum requires an immediately preceding Controller Mill instruction in the same program block".to_string()
+    })?;
+    if previous.outputs.len() != 1 || previous.outputs[0] != slot_id {
+        return Err(
+            "PreviousMillManaValueSum input must be the result bound by the immediately preceding Controller Mill instruction".into(),
+        );
+    }
+    if !matches!(
+        &previous.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Mill {
+                who: PlayerRecipient::Controller,
+                ..
+            })
+    ) {
+        return Err(
+            "PreviousMillManaValueSum requires an immediately preceding Controller Mill instruction".into(),
+        );
+    }
+    if !matches!(
+        slots.get(slot_id.0 as usize).map(|slot| &slot.result_type),
+        Some(ResultType::CardResultCohort {
+            action: CardResultAction::Mill,
+            who: PlayerRecipient::Controller,
+            ..
+        })
+    ) {
+        return Err(
+            "PreviousMillManaValueSum input must be a Controller Mill card-result cohort".into(),
+        );
+    }
+    Ok(())
+}
+
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
@@ -1811,6 +2026,9 @@ fn compile_input(
         EffectOp::CreateReflexiveTrigger { .. }
             if is_source_sacrifice_reflexive_consumer(effect) =>
         {
+            Some("CardResultCohort")
+        }
+        EffectOp::DamagePlayer { .. } if is_targeted_opponent_previous_mill_damage(effect) => {
             Some("CardResultCohort")
         }
         _ if token_copy_batch_consumer => Some("TokenCopyBatch"),
@@ -1860,6 +2078,18 @@ fn compile_input(
                                 min: 0,
                                 max: Some(1),
                             },
+                        }
+                    )
+                }
+                EffectOp::DamagePlayer { .. }
+                    if is_targeted_opponent_previous_mill_damage(effect) =>
+                {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort {
+                            action: CardResultAction::Mill,
+                            who: PlayerRecipient::Controller,
+                            ..
                         }
                     )
                 }
@@ -2505,6 +2735,27 @@ fn validate_and_result_types(
                 Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
                 _ => Err(
                     "DamagePlayer EachOpponent in spell_program requires a positive fixed amount"
+                        .into(),
+                ),
+            }
+        }
+        SpellEffectKind::DamagePlayer {
+            amount,
+            who:
+                PlayerRecipient::TargetedPlayer {
+                    kind: TargetKind::OpponentPlayer,
+                    ..
+                },
+        } => {
+            effect.validate(context)?;
+            match amount {
+                Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
+                Amount::Count(super::CountExpression::PreviousMillManaValueSum) => {
+                    amount.validate_effect(context)?;
+                    Ok(Vec::new())
+                }
+                _ => Err(
+                    "DamagePlayer TargetedPlayer OpponentPlayer in spell_program requires a positive fixed amount or a direct PreviousMillManaValueSum result"
                         .into(),
                 ),
             }

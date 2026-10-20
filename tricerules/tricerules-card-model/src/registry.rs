@@ -1,7 +1,7 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
-    AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
-    CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
+    program_effect_target_roles, AbilityCost, ActivatedCostModifier, AdditionalCost, Amount,
+    BattlefieldAggregate, CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
     ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput,
     ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind, StaticAbilityDef,
@@ -114,7 +114,7 @@ fn validate_compiled_program_admission(
                             return Err(format!("CreateTokens references unknown token '{token}'"));
                         }
                     }
-                    let roles = effect.target_roles();
+                    let roles = program_effect_target_roles(effect.as_ref());
                     if !roles.is_empty() {
                         for role_index in 0..roles.len() {
                             let binding_index = program

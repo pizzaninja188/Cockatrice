@@ -1021,6 +1021,29 @@ impl GameEngine {
                                 ),
                             )?
                         }
+                        tricerules_card_model::primitives::PlayerRecipient::TargetedPlayer {
+                            group_index,
+                            kind: TargetKind::OpponentPlayer,
+                        } => {
+                            let owner_targets = program_owner_target_records(top, compiled)?;
+                            let mut group_targets = owner_targets
+                                .iter()
+                                .filter(|target| target.group_index == *group_index);
+                            let Some(target) = group_targets.next() else {
+                                return Err(EngineError::ProgramInvariant(
+                                    "TargetedPlayer Choose lacks its captured owner-local target group",
+                                ));
+                            };
+                            let chooser_player = target.object_id as PlayerId;
+                            if group_targets.next().is_some()
+                                || self.state.player_idx(chooser_player).is_none()
+                            {
+                                return Err(EngineError::ProgramInvariant(
+                                    "TargetedPlayer Choose requires exactly one captured player target",
+                                ));
+                            }
+                            chooser_player
+                        }
                         _ => {
                             return Err(EngineError::ProgramInvariant(
                                 "compiled Choose has an unsupported chooser",
@@ -1783,6 +1806,27 @@ struct ProgramTargetContext {
     target_group_indices: Vec<u32>,
 }
 
+/// Return the target records owned by this exact compiled Program projection. Both instruction
+/// role projection and targeted-player chooser resolution must use the same owner-local slice.
+fn program_owner_target_records<'a>(
+    top: &'a StackItem,
+    compiled: &CompiledProgram,
+) -> Result<&'a [StackTarget], EngineError> {
+    match &compiled.target_projection {
+        tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal => {
+            Ok(top.targets.as_slice())
+        }
+        tricerules_card_model::primitives::ProgramTargetProjection::ModeLocal { mode_id } => top
+            .chosen_modes
+            .iter()
+            .find(|chosen| chosen.mode_id == *mode_id)
+            .map(|chosen| chosen.targets.as_slice())
+            .ok_or(EngineError::ProgramInvariant(
+                "mode-local target program has no matching chosen mode",
+            )),
+    }
+}
+
 /// Project the exact target records owned by one compiled instruction address. Mode-local
 /// programs read only their stable mode's target records and never fall back to the stack-wide
 /// flattened target list.
@@ -1816,19 +1860,7 @@ fn program_target_context(
         ));
     }
 
-    let chosen_targets = match &compiled.target_projection {
-        tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal => {
-            top.targets.as_slice()
-        }
-        tricerules_card_model::primitives::ProgramTargetProjection::ModeLocal { mode_id } => top
-            .chosen_modes
-            .iter()
-            .find(|chosen| chosen.mode_id == *mode_id)
-            .map(|chosen| chosen.targets.as_slice())
-            .ok_or(EngineError::ProgramInvariant(
-                "mode-local target program has no matching chosen mode",
-            ))?,
-    };
+    let chosen_targets = program_owner_target_records(top, compiled)?;
     let role_group_indices = bindings
         .iter()
         .map(|binding| binding.target_group_index)
@@ -2664,6 +2696,272 @@ mod invariant_rollback_tests {
         assert!(
             !projected.has_bindings,
             "the target-controller rider consumes a group input without becoming a target role"
+        );
+    }
+
+    #[test]
+    fn mode_local_targeted_choose_uses_only_its_mode_target_and_keeps_original_chooser() {
+        use crate::state::{ChosenMode, StackTarget};
+        use tricerules_card_model::primitives::ProgramTargetProjection;
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        const CARD: &str = r#"(id: "mode_local_targeted_choose_fixture",
+ name: "Mode Local Targeted Choose Fixture", face_id: "mode_local_targeted_choose_fixture",
+ mana_cost: "{0}", types: ["Instant"],
+ modal_spell: (min_modes: 2, max_modes: 2, modes: [
+  (mode_id: "focused", presentation: Fallback, effects: [],
+   program: Some((body: (steps: [
+    (id: "choose", bind: [], input: None, kind: Choose(choice: "choose",
+     chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer), optional: true,
+     branches: [(branch_id: "damage", presentation: Fallback, cost: None,
+      requirement: Always, body: (steps: [
+       (id: "damage", bind: [], input: None, kind: Perform(DamagePlayer(
+        who: TargetedPlayer(group_index: 0, kind: OpponentPlayer), amount: 3)))
+      ], yields: []))], otherwise: (steps: [], yields: [])))
+   ], yields: []), target_bindings: [
+    (instruction_id: "damage", role: Target, target_group_index: 0)
+   ])),
+   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose the focused opponent", effect_indices: [])]))),
+  (mode_id: "other", presentation: Fallback,
+   effects: [],
+   program: Some((body: (steps: [
+    (id: "other_choose", bind: [], input: None, kind: Choose(choice: "other_choice",
+     chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer), optional: true,
+     branches: [(branch_id: "other_damage", presentation: Fallback, cost: None,
+      requirement: Always, body: (steps: [
+       (id: "other_damage", bind: [], input: None,
+        kind: Perform(DamagePlayer(amount: 1,
+         who: TargetedPlayer(group_index: 0, kind: OpponentPlayer))))
+      ], yields: []))], otherwise: (steps: [], yields: [])))
+   ], yields: []), target_bindings: [
+    (instruction_id: "other_damage", role: Target, target_group_index: 0)
+   ])),
+   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose the other opponent", effect_indices: [])])))
+ ]))"#;
+
+        fn fixture(
+            seed: u64,
+        ) -> (
+            GameEngine,
+            StackItem,
+            Vec<tricerules_card_model::ProgramOwnerId>,
+        ) {
+            let card_id = "mode_local_targeted_choose_fixture";
+            let registry = Box::leak(Box::new(
+                tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[CARD], &[])
+                    .expect("ModeLocal target chooser fixture compiles"),
+            ));
+            let decks = Some(
+                (0..4)
+                    .map(|_| vec![card_id.to_string(); 30])
+                    .collect::<Vec<_>>(),
+            );
+            let mut engine = GameEngine::new(registry, seed, &[0, 1, 2, 3], 20, decks, true)
+                .expect("four-player ModeLocal fixture engine");
+            engine.state.opening = None;
+            engine.state.turn_step = TurnStep::Main1;
+            engine.state.active_player_idx = 0;
+            engine.state.priority_idx = 0;
+
+            let spell = *engine.state.players[0]
+                .hand
+                .first()
+                .expect("fixture spell is in hand");
+            move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+                .expect("fixture spell moves to stack");
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&spell)
+                .copied()
+                .unwrap_or(0);
+            let mut top = engine.observer_return_item(spell, 0);
+            top.id = spell;
+            top.controller = 0;
+            top.card_id = card_id.into();
+            top.ability_text = None;
+            top.is_copy = false;
+            top.source_owner = Some(0);
+            top.cast_by = Some(0);
+            top.cast_occurrence = Some(crate::state::StackObjectRef {
+                object_id: spell,
+                zone_change_generation: Some(generation),
+            });
+            let target = |player: i32| StackTarget {
+                object_id: player as u32,
+                group_index: 0,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Player as i32,
+                zone_change_generation: None,
+                required_controller: None,
+            };
+            top.targets = vec![target(3)];
+            top.chosen_modes = vec![
+                ChosenMode {
+                    mode_id: tricerules_card_model::ModeId::new("focused").unwrap(),
+                    targets: vec![target(1)],
+                },
+                ChosenMode {
+                    mode_id: tricerules_card_model::ModeId::new("other").unwrap(),
+                    targets: vec![target(2)],
+                },
+            ];
+            let owners = engine
+                .compiled_resolution_program_owners(&top)
+                .expect("ModeLocal owner lookup")
+                .expect("selected mode has its exact Program owner");
+            assert_eq!(owners.len(), 2);
+            assert!(matches!(
+                &engine
+                    .registry
+                    .compiled_program_for_owner(&owners[0])
+                    .expect("first selected mode Program")
+                    .target_projection,
+                ProgramTargetProjection::ModeLocal { mode_id }
+                    if mode_id.as_str() == "focused"
+            ));
+            assert!(matches!(
+                &engine
+                    .registry
+                    .compiled_program_for_owner(&owners[1])
+                    .expect("second selected mode Program")
+                    .target_projection,
+                ProgramTargetProjection::ModeLocal { mode_id }
+                    if mode_id.as_str() == "other"
+            ));
+            engine.state.stack.push(top.clone());
+            (engine, top, owners)
+        }
+
+        let (mut engine, top, owners) = fixture(91_271);
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let initial_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+        assert_ne!(
+            initial_prompt_id, 0,
+            "targeted chooser receives a real prompt ID"
+        );
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            1,
+            "the focused mode target controls the chooser despite conflicting group zeroes"
+        );
+        assert!(matches!(
+            &engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation,
+            ResolutionContinuation::ProgramChoose { choose, .. }
+                if choose.original_chooser == 1
+        ));
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert_eq!(
+            engine.state.players[1].life, 17,
+            "focused mode's chooser branch damages its own group zero"
+        );
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(engine.state.players[2].life, 20);
+        assert_eq!(
+            engine.state.players[3].life, 20,
+            "the stack-global group zero is not used by the focused mode program"
+        );
+        let other_mode_pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(other_mode_pending.deciding_player, 2);
+        assert!(matches!(
+            &other_mode_pending.continuation,
+            ResolutionContinuation::ProgramChoose { choose, .. }
+                if choose.original_chooser == 2
+        ));
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(engine.state.players[1].life, 17);
+        assert_eq!(engine.state.players[2].life, 19);
+        assert_eq!(engine.state.players[3].life, 20);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+
+        let (mut departed, top, owners) = fixture(91_272);
+        nested_start(
+            &mut departed,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        let original_prompt_id = departed
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+        assert_ne!(
+            original_prompt_id, 0,
+            "the original chooser prompt has a real ID"
+        );
+        departed.state.players[1].has_lost = true;
+        let mut events = Vec::new();
+        departed
+            .refresh_program_choose_departure(&mut events)
+            .expect("the controller receives a delegate-selection prompt");
+        departed
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("delegate-selection prompt receives a real ID");
+        let pending = departed.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.deciding_player, 0);
+        assert_ne!(pending.resolution_prompt_id.get(), 0);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    original_chooser: 1,
+                    stage: crate::state::PendingProgramChooseStage::ChoosingDelegate { candidates },
+                    ..
+                },
+                ..
+            } if candidates == &[Some(2), Some(3)]
+        ));
+        nested_answer(&mut departed, Decision::SelectBranch, 0, Vec::new());
+        assert!(matches!(
+            &departed
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    original_chooser: 1,
+                    delegate_selected: true,
+                    ..
+                },
+                ..
+            }
+        ));
+        assert_eq!(
+            departed
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            2
         );
     }
 

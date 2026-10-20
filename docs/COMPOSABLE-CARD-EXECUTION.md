@@ -347,6 +347,27 @@ copies bind their own face/child owner and captured target controller. `delayed_
 the legacy delayed ability with `OracleLines([2])`. The behavior follows CR 503.1, 603.3b,
 603.7a-b/d, 121.2 and 707.10. This adds no protobuf, relay, or client contract.
 
+The bounded 2026-10-20 Combustible Gearhulk increment admits one narrow composition: an optional,
+cost-free `Choose` by `TargetedPlayer(OpponentPlayer)` is paired with exactly one target-bound
+`DamagePlayer` on the same singleton, controller-chosen opponent group. The compiler resolves that
+group through nested blocks and the owning ability or mode's local target context. In the `Otherwise`
+block, a controller `Mill` binds a named result and the immediately following `DamagePlayer` reads
+that explicit input with `Count(PreviousMillManaValueSum)`. No wrapper, ambient previous-result read,
+intervening instruction, other recipient, or paid targeted-chooser profile is admitted. If the
+target leaves while a choice is pending, delegation changes only who answers; it does not replace
+the captured damage target. The begun trigger retains source LKI if Gearhulk leaves (CR 113.7a,
+608.2b, 608.2h, 608.2m, 800.4a, 800.4g). The six actual-card scenarios cover exact Mill receipts,
+draw failure with a short library, Narset's controller-scoped draw replacement, target departure,
+delegation with deterministic replay, and ordered damage prevention. Model compiler tests cover the
+recursive and owner/mode-local target binding, the immediate named Mill input, and rejected paid,
+wrapped, unbound, and mismatched-group forms. The pinned Oracle identity is
+[Combustible Gearhulk](https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=676036&printed=false);
+its 2016-09-20 Wizards rulings confirm no actions during its resolution, a legal draw-three choice
+with fewer than three library cards, after which the controller loses for the failed draw, and X
+equal to zero in a milled card's mana cost. These tests do not establish a generic Mill
+zone-replacement contract or a Rest in Peace interaction. The relevant current rules include CR
+104.3a, 104.3c, 121.2, 202.3e, 603.3d, 608.2c, 701.17a-b/d, and 800.4g.
+
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.

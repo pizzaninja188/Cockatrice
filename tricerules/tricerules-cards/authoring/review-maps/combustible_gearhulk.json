@@ -13,11 +13,28 @@
       "start_line": 2,
       "end_line": 2,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0",
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0",
-        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0",
-        "/faces/0/triggered_abilities/0/targeting"
+        "/faces/0/triggered_abilities/0/presentation",
+        "/faces/0/triggered_abilities/0/program",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser/TargetedPlayer/group_index",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser/TargetedPlayer/kind",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/optional",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw/who",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw/count",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Mill/who",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Mill/count",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/input",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/who/TargetedPlayer/group_index",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/who/TargetedPlayer/kind",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count",
+        "/faces/0/triggered_abilities/0/program/target_bindings/0/instruction_id",
+        "/faces/0/triggered_abilities/0/program/target_bindings/0/role",
+        "/faces/0/triggered_abilities/0/program/target_bindings/0/target_group_index",
+        "/faces/0/triggered_abilities/0/targeting/groups/0/min",
+        "/faces/0/triggered_abilities/0/targeting/groups/0/max",
+        "/faces/0/triggered_abilities/0/targeting/groups/0/prompt"
       ]
     }
   ],
@@ -27,54 +44,70 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
     },
     {
       "symbol": "PlayerRecipient::TargetedPlayer",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/chooser"
-    },
-    {
-      "symbol": "TargetingDef::groups",
-      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser/TargetedPlayer"
     },
     {
       "symbol": "TargetKind::OpponentPlayer",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/chooser/TargetedPlayer/kind"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser/TargetedPlayer/kind"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
     },
     {
       "symbol": "SpellEffectKind::Mill",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Mill"
     },
     {
       "symbol": "SpellEffectKind::DamagePlayer",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/1"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer"
     },
     {
       "symbol": "CountExpression::PreviousMillManaValueSum",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/1/DamagePlayer/amount/Count"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count"
+    },
+    {
+      "symbol": "TargetingDef::groups",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/triggered_abilities/0/program/target_bindings/0/role"
     }
   ],
   "semantic_fixtures": [
     {
       "test": "scenario deck_coverage_combustible_gearhulk::targeted_opponent_can_decline_and_take_the_sum_of_exact_milled_card_mana_values",
-      "covers": "exact three-player target routing; rejects the controller as target and a wrong branch chooser; sums the exact mill receipts for Fireball with X equal to zero, Fire // Ice, and a Room; damage resolves after Gearhulk leaves using its source LKI"
+      "covers": "the targeted opponent alone chooses and may decline; the controller mills the exact Fireball (X=0), Fire // Ice, and Room receipts for the captured opponent; damage is their exact mana-value sum after the Gearhulk source leaves; a wrong chooser is rejected"
     },
     {
       "test": "scenario deck_coverage_combustible_gearhulk::targeted_opponent_may_choose_the_draw_branch_with_fewer_than_three_cards",
-      "covers": "the targeted opponent may choose the draw branch with one card in the controller's library, after which the controller loses for the failed three-card draw"
+      "covers": "the targeted opponent may choose to have the controller draw three with one library card; the controller loses to the failed draw, and no damage or Mill branch occurs"
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::narset_checks_gearhulks_controller_draw_instead_of_its_unrestricted_chooser",
+      "covers": "Narset's draw restriction applies to the controller receiving the draw, not the targeted opponent choosing the branch"
     },
     {
       "test": "scenario deck_coverage_combustible_gearhulk::trigger_does_not_resolve_if_its_target_opponent_leaves_before_resolution",
-      "covers": "when the sole target leaves before resolution, the trigger does not offer a branch or mill cards"
+      "covers": "a target who leaves before resolution makes the trigger fail its target-legality check without offering a branch or milling cards"
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::departing_target_delegates_the_original_gearhulk_choice_and_replays_exact_commands",
+      "covers": "after the target leaves while the choice is pending, only the chooser is delegated; the original damage target is not replaced, no live player is damaged, source LKI remains usable, and accepted commands replay to identical events and state"
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::gearhulk_mill_cohort_waits_for_ordered_prevention_then_deals_ten_once",
+      "covers": "the exact Mill result remains bound while two damage-prevention effects resolve in order; the cohort is not milled again, the trigger deals ten once, and pending resolution state clears"
     },
     {
       "test": "deck_registry::deck_coverage_combustible_gearhulk::combustible_gearhulk_registers_its_exact_identity_and_etb_choice",
-      "covers": "exact Oracle identity, cost, types, stats, first strike, trigger presentation, target group, branch recipients, mill and damage order, and private result expression"
+      "covers": "exact identity, first strike, ETB trigger, singleton opponent target, optional free Draw/Mill branches, named Mill input, and target-bound damage mapping"
     }
   ],
   "complete_definition_review_confirmed": true
