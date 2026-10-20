@@ -43,7 +43,7 @@ fn spell_cost_filter_matches(
             .all(|subtype| characteristics.has_type(subtype))
 }
 
-fn card_type_filter_matches_characteristics(
+pub(in crate::engine) fn card_type_filter_matches_characteristics(
     filter: CardTypeFilter,
     characteristics: &Characteristics,
 ) -> bool {

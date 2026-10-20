@@ -123,6 +123,7 @@ pub struct Instruction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InstructionKind {
+    ImportCastPayment,
     Perform(Box<EffectOp>),
     If {
         condition: Box<GameCondition>,
@@ -168,6 +169,8 @@ pub enum ProgramCondition {
 pub enum ProgramResultCondition {
     CardResultCount {
         result: String,
+        #[serde(default)]
+        card_type: Option<CardTypeFilter>,
         #[serde(default)]
         min: Option<u32>,
         #[serde(default)]
@@ -225,6 +228,7 @@ pub enum CompiledProgramCondition {
 pub enum CompiledProgramResultCondition {
     CardResultCount {
         result: ResultSlotId,
+        card_type: Option<CardTypeFilter>,
         min: Option<u32>,
         max: Option<u32>,
     },
@@ -284,6 +288,12 @@ pub enum ResultType {
         who: PlayerRecipient,
         cardinality: Cardinality,
     },
+    /// Exact card objects used to pay the owning spell's one admitted mandatory discard cost.
+    /// The payment payer is intentionally not represented as an effect recipient.
+    CastPaymentCohort {
+        action: CardResultAction,
+        cardinality: Cardinality,
+    },
     FoundLibraryCohort,
     RevealedLibraryCohort,
     CardPartition,
@@ -334,6 +344,7 @@ pub struct ProgramGroupInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompiledInstructionKind {
+    ImportCastPayment,
     Perform(Box<EffectOp>),
     If {
         condition: Box<CompiledProgramCondition>,
@@ -421,12 +432,19 @@ pub struct CompiledProgram {
 
 struct Compiler {
     context: EffectContext,
+    cast_payment_profile: Option<ProgramCastPaymentProfile>,
     cast_cost_options: HashMap<ChoiceId, HashSet<ChoiceId>>,
     slots: Vec<CompiledSlot>,
     instruction_ids: HashSet<String>,
     choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     next_instruction_address: u32,
+}
+
+/// The only cast-payment import profile currently compiled for an authored Program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProgramCastPaymentProfile {
+    MandatorySingleDiscard,
 }
 
 impl CompiledProgram {
@@ -459,7 +477,32 @@ impl CompiledProgram {
         targeting: Option<&TargetingDef>,
         cast_cost_groups: &[CastCostGroupDef],
     ) -> Result<Self, String> {
-        let mut compiled = Self::compile_internal(owner, context, program, cast_cost_groups)?;
+        Self::compile_with_targeting_cast_cost_groups_and_payment_profile(
+            owner,
+            context,
+            program,
+            targeting,
+            cast_cost_groups,
+            None,
+        )
+    }
+
+    /// Compile an exact face owner with one closed, face-validated cast-payment import profile.
+    pub(crate) fn compile_with_targeting_cast_cost_groups_and_payment_profile(
+        owner: ProgramOwnerId,
+        context: EffectContext,
+        program: &CardProgram,
+        targeting: Option<&TargetingDef>,
+        cast_cost_groups: &[CastCostGroupDef],
+        cast_payment_profile: Option<ProgramCastPaymentProfile>,
+    ) -> Result<Self, String> {
+        let mut compiled = Self::compile_internal(
+            owner,
+            context,
+            program,
+            cast_cost_groups,
+            cast_payment_profile,
+        )?;
         if context == EffectContext::Spell
             && targeting.is_some_and(TargetingDef::requires_opponent_choice)
         {
@@ -506,6 +549,7 @@ impl CompiledProgram {
         context: EffectContext,
         program: &CardProgram,
         cast_cost_groups: &[CastCostGroupDef],
+        cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
         if owner.effect_context() != context {
             return Err("program owner does not match the supplied effect context".into());
@@ -516,6 +560,7 @@ impl CompiledProgram {
         let target_projection = owner.target_projection();
         let mut compiler = Compiler {
             context,
+            cast_payment_profile,
             cast_cost_options: cast_cost_groups
                 .iter()
                 .map(|group| {
@@ -621,7 +666,7 @@ fn find_instruction_by_id<'a>(
                     return Some(found);
                 }
             }
-            CompiledInstructionKind::Perform(_) => {}
+            CompiledInstructionKind::Perform(_) | CompiledInstructionKind::ImportCastPayment => {}
         }
     }
     None
@@ -635,20 +680,21 @@ fn find_effect_by_address(block: &CompiledBlock, address: u32) -> Option<&SpellE
             }
             return None;
         }
-        let nested = match &instruction.kind {
-            CompiledInstructionKind::If { yes, no, .. } => {
-                find_effect_by_address(yes, address).or_else(|| find_effect_by_address(no, address))
-            }
-            CompiledInstructionKind::Choose {
-                branches,
-                otherwise,
-                ..
-            } => branches
-                .iter()
-                .find_map(|branch| find_effect_by_address(&branch.body, address))
-                .or_else(|| find_effect_by_address(otherwise, address)),
-            CompiledInstructionKind::Perform(_) => None,
-        };
+        let nested =
+            match &instruction.kind {
+                CompiledInstructionKind::If { yes, no, .. } => find_effect_by_address(yes, address)
+                    .or_else(|| find_effect_by_address(no, address)),
+                CompiledInstructionKind::Choose {
+                    branches,
+                    otherwise,
+                    ..
+                } => branches
+                    .iter()
+                    .find_map(|branch| find_effect_by_address(&branch.body, address))
+                    .or_else(|| find_effect_by_address(otherwise, address)),
+                CompiledInstructionKind::Perform(_)
+                | CompiledInstructionKind::ImportCastPayment => None,
+            };
         if nested.is_some() {
             return nested;
         }
@@ -659,6 +705,7 @@ fn find_effect_by_address(block: &CompiledBlock, address: u32) -> Option<&SpellE
 fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInput>) {
     for instruction in &block.steps {
         match &instruction.kind {
+            CompiledInstructionKind::ImportCastPayment => {}
             CompiledInstructionKind::Perform(effect) => {
                 if let SpellEffectKind::DamagePlayer {
                     who: PlayerRecipient::ControllerOfTargetGroup { group_index },
@@ -762,6 +809,40 @@ impl Compiler {
                 .checked_add(1)
                 .ok_or_else(|| "program instruction address exceeds u32".to_string())?;
             let (input, result_types, kind) = match &instruction.kind {
+                InstructionKind::ImportCastPayment => {
+                    if instruction.input.is_some() {
+                        return Err(format!(
+                            "ImportCastPayment instruction '{}' cannot consume an input result",
+                            instruction.id
+                        ));
+                    }
+                    if instruction.bind.len() != 1 {
+                        return Err(format!(
+                            "ImportCastPayment instruction '{}' must bind its typed cohort result",
+                            instruction.id
+                        ));
+                    }
+                    if self.context != EffectContext::Spell
+                        || self.cast_payment_profile
+                            != Some(ProgramCastPaymentProfile::MandatorySingleDiscard)
+                    {
+                        return Err(
+                            "ImportCastPayment requires a validated mandatory single-discard spell cost profile"
+                                .into(),
+                        );
+                    }
+                    (
+                        None,
+                        vec![ResultType::CastPaymentCohort {
+                            action: CardResultAction::Discard,
+                            cardinality: Cardinality {
+                                min: 1,
+                                max: Some(1),
+                            },
+                        }],
+                        CompiledInstructionKind::ImportCastPayment,
+                    )
+                }
                 InstructionKind::Perform(effect) => {
                     let input =
                         compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
@@ -1307,7 +1388,12 @@ fn compile_program_condition(
             validate_program_condition(condition)?;
             Ok(CompiledProgramCondition::Game(condition.clone()))
         }
-        ProgramCondition::Result(ProgramResultCondition::CardResultCount { result, min, max }) => {
+        ProgramCondition::Result(ProgramResultCondition::CardResultCount {
+            result,
+            card_type,
+            min,
+            max,
+        }) => {
             if min.is_none() && max.is_none() {
                 return Err("card result count requires a minimum or maximum".into());
             }
@@ -1318,12 +1404,14 @@ fn compile_program_condition(
                 return Err("card result count minimum cannot exceed its maximum".into());
             }
             let slot = result_slot(result, names, slots)?;
-            let ResultType::CardResultCohort { cardinality, .. } =
-                &slots[slot.0 as usize].result_type
-            else {
-                return Err(format!(
-                    "result '{result}' is not a compatible card-result cohort"
-                ));
+            let cardinality = match &slots[slot.0 as usize].result_type {
+                ResultType::CardResultCohort { cardinality, .. }
+                | ResultType::CastPaymentCohort { cardinality, .. } => cardinality,
+                _ => {
+                    return Err(format!(
+                        "result '{result}' is not a compatible card-result cohort"
+                    ));
+                }
             };
             if cardinality.max.is_some_and(|upper| {
                 min.is_some_and(|minimum| minimum > upper) || max.is_some_and(|bound| bound > upper)
@@ -1335,6 +1423,7 @@ fn compile_program_condition(
             Ok(CompiledProgramCondition::Result(
                 CompiledProgramResultCondition::CardResultCount {
                     result: slot,
+                    card_type: *card_type,
                     min: *min,
                     max: *max,
                 },
@@ -1683,6 +1772,19 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             who: *aw,
             cardinality: union(*ac, *bc),
         },
+        (
+            ResultType::CastPaymentCohort {
+                action: aa,
+                cardinality: ac,
+            },
+            ResultType::CastPaymentCohort {
+                action: ba,
+                cardinality: bc,
+            },
+        ) if aa == ba => ResultType::CastPaymentCohort {
+            action: *aa,
+            cardinality: union(*ac, *bc),
+        },
         (ResultType::FoundLibraryCohort, ResultType::FoundLibraryCohort) => {
             ResultType::FoundLibraryCohort
         }
@@ -2018,6 +2120,22 @@ fn validate_and_result_types(
             }
             validate_program_target_filter(target, "DamageTarget target")?;
             Ok(Vec::new())
+        }
+        SpellEffectKind::DamagePlayer {
+            amount,
+            who: PlayerRecipient::EachOpponent,
+        } => {
+            if context != EffectContext::Spell {
+                return Err("DamagePlayer EachOpponent in spell_program is spell-only".into());
+            }
+            effect.validate(context)?;
+            match amount {
+                Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
+                _ => Err(
+                    "DamagePlayer EachOpponent in spell_program requires a positive fixed amount"
+                        .into(),
+                ),
+            }
         }
         SpellEffectKind::DamagePlayer {
             amount,

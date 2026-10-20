@@ -1,4 +1,4 @@
-// Oracle checked 2026-08-24. CR 118.8/601.2h: the discard is paid with the total cost.
+// Oracle checked 2026-10-20. CR 118.8/601.2h: the discard is paid with the total cost.
 // CR 608.2i and 707.10: resolution and spell copies use the exact paid card snapshot.
 (
   id: "grab_the_prize",
@@ -7,32 +7,23 @@
   mana_cost: "{1}{R}",
   types: ["Sorcery"],
   additional_costs: [DiscardCard],
-  spell_effect: [
-    Draw(count: 2),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "deal_2_damage_to_each_opponent", presentation: Fallback,
-          cost: None,
-          requirement: CardResultCount(
-            filter: (
-              source: Payment,
-              action: Discard,
-              players: All,
-              card_type: Some(Nonland),
-            ),
-            min: Some(1),
-          ),
-          effects: [DamagePlayer(amount: 2, who: EachOpponent)],
-        ),
-        (
-          branch_id: "no_additional_effect", presentation: Fallback,
-          cost: None,
-          requirement: Always,
-          effects: [],
-        ),
-      ],
-    ),
-  ],
+  spell_program: Some((
+    body: (steps: [
+      (id: "import_paid_discard", bind: ["paid_discard"], input: None,
+        kind: ImportCastPayment),
+      (id: "draw_two", bind: [], input: None,
+        kind: Perform(Draw(count: 2))),
+      (id: "check_paid_card_type", bind: [], input: None,
+        kind: IfResult(
+          condition: CardResultCount(result: "paid_discard", card_type: Some(Nonland),
+            min: Some(1), max: None),
+          yes: (steps: [
+            (id: "damage_each_opponent", bind: [], input: None,
+              kind: Perform(DamagePlayer(amount: 2, who: EachOpponent))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+    ], yields: []),
+    target_bindings: [],
+  )),
 )

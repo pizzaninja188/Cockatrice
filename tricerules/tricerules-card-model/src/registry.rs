@@ -3,9 +3,10 @@ use crate::primitives::{
     AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
     CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
-    ObjectContributionKind, ProgramRequiredInput, ResolutionBranchRequirement,
-    SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
-    TargetKind, TargetSchema, TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
+    ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput,
+    ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
+    TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::PresentationFaceMetadata;
@@ -106,6 +107,7 @@ fn validate_compiled_program_admission(
     ) -> Result<(), String> {
         for instruction in &block.steps {
             match &instruction.kind {
+                crate::primitives::CompiledInstructionKind::ImportCastPayment => {}
                 crate::primitives::CompiledInstructionKind::Perform(effect) => {
                     for token in effect.referenced_token_ids() {
                         if !tokens.contains_key(token) {
@@ -3839,12 +3841,31 @@ impl CardRegistry {
                         });
                     }
                     let owner = ProgramOwnerId::face(card.id.clone(), face.face_id.clone());
-                    let compiled = CompiledProgram::compile_with_targeting_and_cast_cost_groups(
+                    let cast_payment_profile = if face.modal_spell.is_none()
+                        && matches!(
+                            face.additional_costs.as_slice(),
+                            [AdditionalCost::DiscardCard]
+                        )
+                        && face.cast_cost_groups.is_empty()
+                        && face.prototype.is_none()
+                        && face.flashback_cost.is_none()
+                        && face.harmonize_cost.is_none()
+                        && face.warp_cost.is_none()
+                        && face.sneak_cost.is_none()
+                        && face.instant_speed_cast_cost.is_none()
+                        && face.cost_modifiers.is_empty()
+                    {
+                        Some(ProgramCastPaymentProfile::MandatorySingleDiscard)
+                    } else {
+                        None
+                    };
+                    let compiled = CompiledProgram::compile_with_targeting_cast_cost_groups_and_payment_profile(
                         owner.clone(),
                         EffectContext::Spell,
                         program,
                         face.targeting.as_ref(),
                         &face.cast_cost_groups,
+                        cast_payment_profile,
                     )
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),

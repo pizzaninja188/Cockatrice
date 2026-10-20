@@ -271,8 +271,26 @@ remains on the battlefield at its expected generation, the recipient is its curr
 after it leaves or changes generation, the recipient is its generation-specific last-known
 controller (CR 608.2h). Heated Argument uses this rider. Chandra's Outrage is the exact
 reference-only `DamagePlayer` leaf analogue (4 damage to a target creature, then 2 to that
-creature's controller); it is not ported by this subset. Other target shapes and ability-owned
-forms remain outside this Program subset.
+creature's controller); it is not ported by this subset. The untargeted
+`DamagePlayer(amount: Fixed(n), who: EachOpponent)` form is also admitted only on spell Programs,
+for positive `n`. It creates no target role and applies ordinary noncombat damage to the spell
+controller's current opponents with normal replacement, trigger, and resume behavior (CR 101.4,
+120.3a). Grab the Prize uses 2; this reuses the existing `DamagePlayer` operation also used by
+Boltwave, Boggart Cursecrafter, and Guttersnipe on their current effect-list surfaces. Zero, X,
+ability-owned, and other recipient forms are not admitted by this shape.
+
+`ImportCastPayment` is a no-input spell-Program instruction that binds one typed
+`CastPaymentCohort(Discard, 1..1)`. Registry admission requires a nonmodal instant or sorcery face
+whose `additional_costs` is exactly `[DiscardCard]`, with no cast-cost groups, prototype,
+flashback, harmonize, warp, sneak, instant-speed cast cost, or cost modifier. It cannot be used by
+ability or modal Programs or with another cost profile. At resolution start, input preflight checks
+for exactly one canonical discard `ActionFacts` entry before instruction zero, even when the import
+is nested. Its compiled slot retains the `CastPaymentCohort` descriptor while runtime stores the
+cloned action-time receipt in the existing `ProgramValue::CardResultCohort`. It does not pay again,
+re-read card characteristics, or require the original payer to remain live. A spell copy retains
+the receipt, including when the original payer has left (CR 118.8, 601.2h, 707.10). Grab the Prize
+uses this narrow import because its resolution condition reads the card paid for its mandatory
+discard cost; other cast-payment profiles remain outside the admitted shape.
 Ability-program `Choose` may also use `SourceController`. The chooser is captured from the exact
 current source incarnation, or its last-known controller after it leaves, when the offer is made;
 that captured player remains the original chooser throughout the occurrence. A paid branch keeps
@@ -607,13 +625,19 @@ read forward/across sibling scopes. Each branch explicitly lists its `yields`; b
 yield compatible types, and an `If` binding exports their joined result to its parent.
 Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
 
-`IfResult(CardResultCount(result: "name", min: ..., max: ...))` checks the whole cohort in an
-earlier in-scope `CardResultCohort` binding. It has only the named result and ordinary optional
+`IfResult(CardResultCount(result: "name", min: ..., max: ..., card_type: ...))` checks a named,
+earlier in-scope `CardResultCohort` or imported `CastPaymentCohort`. It has ordinary optional
 minimum/maximum bounds: at least one bound is required, and a bound cannot exceed the producer's
-declared cardinality. It has no ambient `PreviousEffect` or `Payment` source, action/player
-selector, or `card_type` filter. `Sacrifice(Source)` in an ability Program and `Mill` are supported
-typed producer examples; this compiler surface does not establish complete-card readiness for
-other owners. The effect-list `CardResultCount` form remains a separate legacy surface.
+declared cardinality. Optional `card_type` matches the result's recorded `matched_card_types`;
+runtime does not classify the current card after it moves. Discard-payment receipts retain their
+action-time type knowledge. A bound `Sacrifice(Source)` receipt captures the source's effective
+characteristics, including supertypes needed by `BasicLand`, before any selected permanent moves,
+then keeps its committed Battlefield movement provenance, action, ObjectId, generation and
+instructed player. The predicate has no ambient `PreviousEffect` or `Payment` source or
+action/player selector. `Sacrifice(Source)` in an ability Program, `Mill`, and Grab the Prize's
+imported discard are typed producer examples; this compiler surface does not establish complete-card
+readiness for other owners. The effect-list `CardResultCount` form remains a separate legacy
+surface.
 
 `Mill` may bind a typed `CardResultCohort`. In a spell or triggered-ability program, `ChooseCard`
 accepts two exact source shapes: `WholeCurrentGraveyard`, which searches the controller's current

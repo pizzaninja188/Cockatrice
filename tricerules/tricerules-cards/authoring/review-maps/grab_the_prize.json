@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "a37387f0-9d57-49ff-aa38-2c6b359e8916",
+  "spans": [
+    {
+      "face_id": "grab_the_prize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/additional_costs/0"
+      ]
+    },
+    {
+      "face_id": "grab_the_prize",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/Draw",
+        "/faces/0/spell_program/body/steps/2/kind/IfResult",
+        "/faces/0/spell_program/body/steps/2/kind/IfResult/condition/CardResultCount",
+        "/faces/0/spell_program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/DamagePlayer"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AdditionalCost::DiscardCard",
+      "typed_path": "/faces/0/additional_costs/0"
+    },
+    {
+      "symbol": "InstructionKind::ImportCastPayment",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "ProgramResultCondition::CardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/IfResult/condition/CardResultCount"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/DamagePlayer"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_uses_the_paid_cards_type_snapshot",
+      "covers": "a nonland discard causes two damage while a land discard does not, using the actual compiled Grab the Prize Program owner"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_abundance_draws_resume_once_before_damage_and_replay_identically",
+      "covers": "two Abundance replacement choices resume the draw instruction before the nonland damage tail, with deterministic replay"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_rejects_a_normal_cast_without_its_mandatory_discard_atomically",
+      "covers": "the mandatory additional discard is required and a missing payment selection leaves the cast state unchanged"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_each_opponent_damage_resumes_after_competing_first_player_preventions_once",
+      "covers": "competing prevention choices for one opponent park and resume EachOpponent damage without repeating the draw or damaging that opponent"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_keeps_payment_results_for_copies_and_later_zone_changes",
+      "covers": "the paid nonland type snapshot survives a later zone change and is retained by a Twincast copy"
+    },
+    {
+      "test": "scenario issue_122_result_cohorts::grab_the_prize_copy_keeps_paid_facts_after_original_payer_concedes",
+      "covers": "a copy controlled by another player uses the original discard facts after the payer concedes and damages only its controller's opponents"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

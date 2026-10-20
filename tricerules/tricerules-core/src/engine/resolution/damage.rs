@@ -349,6 +349,7 @@ pub(super) fn damage_player(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    let parked_stack = cx.parked_stack();
     let source_has_lifelink = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
@@ -372,9 +373,9 @@ pub(super) fn damage_player(
             source_has_lifelink,
         })
         .collect();
-    let Some(completed) = cx
-        .engine
-        .process_or_park_damage_batch(cx.top, damage, cx.events)?
+    let Some(completed) =
+        cx.engine
+            .process_or_park_damage_batch_with_stack(parked_stack, damage, cx.events)?
     else {
         return Ok(EffectOutcome::Suspended);
     };

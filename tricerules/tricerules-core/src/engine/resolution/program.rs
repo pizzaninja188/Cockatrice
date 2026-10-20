@@ -89,6 +89,160 @@ mod source_sacrifice_receipt_tests {
     }
 
     #[test]
+    fn source_sacrifice_program_count_uses_effective_pre_move_basic_land_type() {
+        use crate::state::{EffectResult, ProgramRunState};
+        use tricerules_card_model::primitives::{
+            CardTypeFilter, CompiledProgramResultCondition, ResultSlotId,
+        };
+
+        let registry = tricerules_cards::registry::global();
+        let decks = Some(vec![
+            vec!["standstill".to_string(); 24],
+            vec!["forest".to_string(); 24],
+        ]);
+        let mut engine = GameEngine::new(registry, 701_211, &[10, 20], 20, decks, true)
+            .expect("Standstill and Forest registry fixture");
+        let source = engine.state.players[0]
+            .library
+            .pop_front()
+            .expect("Standstill source");
+        engine.state.players[0].battlefield.push(source);
+        let source_object = engine.state.objects.get_mut(&source).unwrap();
+        source_object.zone = Zone::Battlefield;
+        source_object.controller = 10;
+        source_object.base_controller = 10;
+
+        let forest = engine.state.players[1]
+            .library
+            .front()
+            .copied()
+            .expect("Forest copy source");
+        let copied_values = engine
+            .copiable_values_for(forest)
+            .expect("Forest copiable values");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(copied_values);
+        let before = engine
+            .characteristics(source)
+            .expect("copied source characteristics");
+        assert!(before.has_type("Land"));
+        assert!(before.supertypes.iter().any(|value| value == "Basic"));
+        assert!(!before.has_type("Enchantment"));
+        assert!(registry
+            .get("standstill")
+            .unwrap()
+            .primary_face()
+            .matches_card_type(CardTypeFilter::Enchantment));
+
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let top = StackItem {
+            prototyped: false,
+            mana_colors_spent_to_cast: Default::default(),
+            id: 701_212,
+            controller: 10,
+            card_id: "standstill".into(),
+            targets: Vec::new(),
+            ability_text: Some("Whenever a player casts a spell".into()),
+            source_permanent_id: Some(source),
+            source_owner: Some(10),
+            source_zone_change: source_generation,
+            trigger_use_key: None,
+            source_face_change: 0,
+            ability_index: Some(0),
+            activated_ability: None,
+            activated_ability_occurrence: None,
+            triggered_ability: None,
+            is_triggered: true,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: Default::default(),
+            search_results: Default::default(),
+            exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: Default::default(),
+        };
+        let mut events = Vec::new();
+        let mut result = EffectResult::default();
+        let previous = EffectResult::default();
+        let outcome = super::super::misc::sacrifice(
+            &mut EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &[],
+                targets_by_role: &[],
+                target_damage: &[],
+                target_group_indices: &[],
+                top: &top,
+                controller: 10,
+                affected_player: 20,
+                spell_label: "Standstill",
+                previous_effect_result: &previous,
+                effect_result: &mut result,
+                effect_index: 0,
+                resume_previous_result: None,
+                program_state: None,
+            },
+            SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            },
+        )
+        .expect("Standstill source sacrifice");
+        assert_eq!(outcome, EffectOutcome::Continue);
+        assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+        assert_eq!(result.cards.len(), 1);
+
+        let run = ProgramRunState {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "standstill",
+                tricerules_card_model::CardFaceId::new("standstill").unwrap(),
+            ),
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![Some(ProgramValue::CardResultCohort(CardResultCohort {
+                cards: result.cards.clone(),
+                program_discard_result: None,
+            }))],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        };
+        let count_matches = |card_type| {
+            program_result_condition_holds(
+                &engine.state,
+                &top,
+                &run,
+                &CompiledProgramResultCondition::CardResultCount {
+                    result: ResultSlotId(0),
+                    card_type: Some(card_type),
+                    min: Some(1),
+                    max: Some(1),
+                },
+            )
+            .expect("typed Program count condition")
+        };
+        assert!(count_matches(CardTypeFilter::BasicLand));
+        assert!(!count_matches(CardTypeFilter::Enchantment));
+    }
+
+    #[test]
     fn source_sacrifice_projection_requires_exact_committed_input_facts_and_cardinality() {
         let expected = crate::state::TriggerObjectRef {
             object_id: 41,
@@ -641,6 +795,53 @@ impl GameEngine {
 
             let instruction = &block.steps[instruction_index];
             match &instruction.kind {
+                CompiledInstructionKind::ImportCastPayment => {
+                    let [slot_id] = instruction.outputs.as_slice() else {
+                        return Err(EngineError::ProgramInvariant(
+                            "cast-payment import does not have exactly one output slot",
+                        ));
+                    };
+                    let slot = compiled
+                        .slot(*slot_id)
+                        .ok_or(EngineError::ProgramInvariant(
+                            "cast-payment import slot disappeared",
+                        ))?;
+                    if !matches!(
+                        &slot.result_type,
+                        ResultType::CastPaymentCohort {
+                            action: tricerules_card_model::primitives::CardResultAction::Discard,
+                            cardinality: tricerules_card_model::primitives::Cardinality {
+                                min: 1,
+                                max: Some(1),
+                            },
+                        }
+                    ) {
+                        return Err(EngineError::ProgramInvariant(
+                            "cast-payment import has the wrong compiled result type",
+                        ));
+                    }
+                    validate_program_cast_payment_import(top, compiled)?;
+                    let destination = program_state.slots.get_mut(slot_id.0 as usize).ok_or(
+                        EngineError::ProgramInvariant(
+                            "cast-payment import slot is outside the run state",
+                        ),
+                    )?;
+                    if destination.is_some() {
+                        return Err(EngineError::ProgramInvariant(
+                            "cast-payment import slot was already populated",
+                        ));
+                    }
+                    *destination = Some(ProgramValue::CardResultCohort(top.payment_result.clone()));
+                    program_state.frames[frame_index].next_instruction += 1;
+                    if self.finish_program_instruction_boundary(
+                        top,
+                        &program_state,
+                        &previous_result,
+                        events,
+                    )? {
+                        return Ok(ResolutionProgress::Parked);
+                    }
+                }
                 CompiledInstructionKind::If { condition, yes, no } => {
                     let condition = condition.clone();
                     let outputs = instruction.outputs.clone();
@@ -1635,6 +1836,12 @@ fn capture_program_outputs(
                     program_discard_result: None,
                 })
             }
+            ResultType::CastPaymentCohort { .. } => {
+                ProgramValue::CardResultCohort(crate::state::CardResultCohort {
+                    cards: result.cards.clone(),
+                    program_discard_result: None,
+                })
+            }
             ResultType::FoundLibraryCohort => match result.program_value.as_ref() {
                 Some(value @ ProgramValue::FoundLibraryCohort(_)) => value.clone(),
                 _ => {
@@ -1686,6 +1893,7 @@ fn validate_program_unit_inputs(
     top: &StackItem,
     compiled: &CompiledProgram,
 ) -> Result<(), EngineError> {
+    validate_program_cast_payment_import(top, compiled)?;
     if compiled
         .required_inputs
         .contains(&ProgramRequiredInput::TriggerTargetingStackObject)
@@ -1726,6 +1934,49 @@ fn validate_program_unit_inputs(
     {
         return Err(EngineError::ProgramInvariant(
             "resolution program is missing its captured delayed-object reference",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_program_cast_payment_import(
+    top: &StackItem,
+    compiled: &CompiledProgram,
+) -> Result<(), EngineError> {
+    use tricerules_card_model::primitives::{CardResultAction, Cardinality};
+
+    let mut imports = compiled
+        .slots
+        .iter()
+        .filter(|slot| matches!(&slot.result_type, ResultType::CastPaymentCohort { .. }));
+    let Some(slot) = imports.next() else {
+        return Ok(());
+    };
+    let expected_type = ResultType::CastPaymentCohort {
+        action: CardResultAction::Discard,
+        cardinality: Cardinality {
+            min: 1,
+            max: Some(1),
+        },
+    };
+    if slot.result_type != expected_type || imports.any(|slot| slot.result_type != expected_type) {
+        return Err(EngineError::ProgramInvariant(
+            "compiled cast-payment import has an unsupported result descriptor",
+        ));
+    }
+    let [entry] = top.payment_result.cards.as_slice() else {
+        return Err(EngineError::ProgramInvariant(
+            "cast-payment import lacks its exact committed discard snapshot",
+        ));
+    };
+    if entry.action != CardResultAction::Discard
+        || !matches!(
+            entry.provenance,
+            crate::state::CardResultProvenance::ActionFacts
+        )
+    {
+        return Err(EngineError::ProgramInvariant(
+            "cast-payment import does not contain canonical discard action facts",
         ));
     }
     Ok(())
@@ -1840,7 +2091,12 @@ fn program_result_condition_holds(
     condition: &CompiledProgramResultCondition,
 ) -> Result<bool, EngineError> {
     match condition {
-        CompiledProgramResultCondition::CardResultCount { result, min, max } => {
+        CompiledProgramResultCondition::CardResultCount {
+            result,
+            card_type,
+            min,
+            max,
+        } => {
             let Some(ProgramValue::CardResultCohort(result)) =
                 run.slots.get(result.0 as usize).and_then(Option::as_ref)
             else {
@@ -1848,7 +2104,15 @@ fn program_result_condition_holds(
                     "card result count condition read an unavailable or wrong-typed slot",
                 ));
             };
-            let count = result.cards.len().min(u32::MAX as usize) as u32;
+            let count = result
+                .cards
+                .iter()
+                .filter(|entry| match card_type {
+                    Some(card_type) => entry.matched_card_types.contains(card_type),
+                    None => true,
+                })
+                .count()
+                .min(u32::MAX as usize) as u32;
             Ok(min.is_none_or(|minimum| count >= minimum)
                 && max.is_none_or(|maximum| count <= maximum))
         }
@@ -2083,6 +2347,137 @@ mod invariant_rollback_tests {
             .expect("first player passes");
         assert_eq!(engine.state.priority_player_id(), 1);
         engine
+    }
+
+    fn late_nested_cast_payment_fixture(
+        registry: &'static tricerules_card_model::CardRegistry,
+        seed: u64,
+    ) -> GameEngine {
+        let decks = Some(vec![
+            vec!["late_nested_import_fixture".to_string(); 30],
+            vec!["forest".to_string(); 30],
+        ]);
+        let mut engine = GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+            .expect("late nested cast-payment fixture engine");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            expected_zone_change_generation: None,
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                        }),
+                        cost_selections: vec![rv1::CostSelection {
+                            cost_index: 0,
+                            selection: Some(rv1::cost_selection::Selection::HandIndex(1)),
+                        }],
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("fixture spell pays its mandatory discard");
+        engine
+    }
+
+    #[test]
+    fn late_nested_cast_payment_import_fails_atomically_before_visible_prefix() {
+        use tricerules_card_model::primitives::CardResultAction;
+
+        let card = r#"(
+            id: "late_nested_import_fixture",
+            name: "Late Nested Import Fixture",
+            face_id: "late_nested_import_fixture",
+            mana_cost: "{0}",
+            types: ["Instant"],
+            additional_costs: [DiscardCard],
+            spell_program: Some((body: (steps: [
+                (id: "visible_prefix", bind: [], input: None,
+                    kind: Perform(Draw(who: Controller, count: 1))),
+                (id: "nested_import", bind: [], input: None,
+                    kind: If(condition: Void,
+                        yes: (steps: [], yields: []),
+                        no: (steps: [
+                            (id: "import_paid", bind: ["paid"], input: None,
+                                kind: ImportCastPayment),
+                        ], yields: []),
+                    )),
+            ], yields: []), target_bindings: [])),
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    card,
+                    include_str!("../../../../tricerules-cards/data/forest.ron"),
+                ],
+                &[],
+            )
+            .expect("late nested cast-payment fixture compiles"),
+        ));
+        let compiled = registry
+            .compiled_program("late_nested_import_fixture", "late_nested_import_fixture")
+            .expect("fixture Program compiled");
+        assert!(compiled.slots.iter().any(|slot| matches!(
+            &slot.result_type,
+            ResultType::CastPaymentCohort {
+                action: CardResultAction::Discard,
+                ..
+            }
+        )));
+
+        for corruption in ["empty", "wrong action", "two entries"] {
+            let mut engine = late_nested_cast_payment_fixture(registry, 91_260);
+            let top = engine.state.stack.last_mut().expect("cast spell on stack");
+            assert_eq!(top.payment_result.cards.len(), 1);
+            match corruption {
+                "empty" => top.payment_result.cards.clear(),
+                "wrong action" => {
+                    top.payment_result.cards[0].action = CardResultAction::Sacrifice;
+                }
+                "two entries" => {
+                    top.payment_result
+                        .cards
+                        .push(top.payment_result.cards[0].clone());
+                }
+                _ => unreachable!(),
+            }
+
+            let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+            engine
+                .apply_scenario_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .expect("first player passes toward resolution");
+            let before_resolution = command_snapshot(&engine);
+            let failure = engine.apply_scenario_command(
+                1,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            );
+            assert!(
+                matches!(failure, Err(EngineError::ProgramInvariant(_))),
+                "the {corruption} snapshot must fail during resolver preflight, got {failure:?}"
+            );
+            assert!(
+                command_snapshot(&engine) == before_resolution,
+                "the {corruption} failure restores the command snapshot"
+            );
+            assert_eq!(
+                engine.state.turn_history.current.player(0).cards_drawn,
+                draws_before,
+                "the earlier visible Draw instruction did not execute"
+            );
+            assert!(engine.state.pending_resolution.is_none());
+        }
     }
 
     #[test]
@@ -2557,6 +2952,7 @@ mod invariant_rollback_tests {
                 &run,
                 &CompiledProgramResultCondition::CardResultCount {
                     result: ResultSlotId(0),
+                    card_type: None,
                     min,
                     max,
                 },
@@ -2585,6 +2981,150 @@ mod invariant_rollback_tests {
                 "card result count condition read an unavailable or wrong-typed slot"
             ))
         ));
+    }
+
+    #[test]
+    fn card_result_count_filters_captured_card_type_snapshot_without_live_lookup() {
+        use crate::state::{CardResultCohort, CardResultEntry, CardResultProvenance};
+        use tricerules_card_model::primitives::{CardResultAction, CardTypeFilter};
+
+        let engine = program_resolution_fixture();
+        let top = engine.state.stack.last().expect("resolving spell").clone();
+        let cohort = ProgramValue::CardResultCohort(CardResultCohort {
+            cards: vec![
+                CardResultEntry {
+                    action: CardResultAction::Discard,
+                    affected_player: 17,
+                    object_id: 9001,
+                    zone_change_generation: 4,
+                    matched_card_types: vec![CardTypeFilter::Nonland],
+                    provenance: CardResultProvenance::ActionFacts,
+                },
+                CardResultEntry {
+                    action: CardResultAction::Discard,
+                    affected_player: 18,
+                    object_id: 9002,
+                    zone_change_generation: 5,
+                    matched_card_types: vec![CardTypeFilter::Land],
+                    provenance: CardResultProvenance::ActionFacts,
+                },
+            ],
+            program_discard_result: None,
+        });
+        let run = ProgramRunState {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "brainstorm",
+                tricerules_card_model::CardFaceId::new("brainstorm").unwrap(),
+            ),
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![Some(cohort)],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        };
+        let evaluate = |card_type| {
+            program_result_condition_holds(
+                &engine.state,
+                &top,
+                &run,
+                &CompiledProgramResultCondition::CardResultCount {
+                    result: ResultSlotId(0),
+                    card_type,
+                    min: Some(1),
+                    max: Some(1),
+                },
+            )
+        };
+
+        assert!(evaluate(Some(CardTypeFilter::Nonland)).unwrap());
+        assert!(evaluate(Some(CardTypeFilter::Land)).unwrap());
+        assert!(!evaluate(Some(CardTypeFilter::Creature)).unwrap());
+        assert!(
+            !engine.state.objects.contains_key(&9001) && !engine.state.objects.contains_key(&9002),
+            "the count uses captured type facts after the paid cards leave their original objects"
+        );
+    }
+
+    #[test]
+    fn cast_payment_import_preflight_rejects_malformed_snapshot_before_instruction_zero() {
+        use crate::state::{CardResultEntry, CardResultProvenance};
+        use tricerules_card_model::primitives::{
+            CardResultAction, Cardinality, CompiledBlock, CompiledSlot, ProgramTargetProjection,
+        };
+
+        let engine = program_resolution_fixture();
+        let mut top = engine.state.stack.last().expect("resolving spell").clone();
+        let compiled = CompiledProgram {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "brainstorm",
+                tricerules_card_model::CardFaceId::new("brainstorm").unwrap(),
+            ),
+            context: tricerules_card_model::primitives::EffectContext::Spell,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "paid".into(),
+                result_type: ResultType::CastPaymentCohort {
+                    action: CardResultAction::Discard,
+                    cardinality: Cardinality {
+                        min: 1,
+                        max: Some(1),
+                    },
+                },
+            }],
+        };
+        let entry = |action, provenance| CardResultEntry {
+            action,
+            affected_player: 23,
+            object_id: 9001,
+            zone_change_generation: 4,
+            matched_card_types: vec![tricerules_card_model::primitives::CardTypeFilter::Nonland],
+            provenance,
+        };
+
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "cast-payment import lacks its exact committed discard snapshot"
+            ))
+        ));
+        top.payment_result.cards = vec![entry(
+            CardResultAction::Sacrifice,
+            CardResultProvenance::ActionFacts,
+        )];
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "cast-payment import does not contain canonical discard action facts"
+            ))
+        ));
+        top.payment_result.cards = vec![entry(
+            CardResultAction::Discard,
+            CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Hand,
+                input_generation: 3,
+                actual_output_zone: Zone::Graveyard,
+                output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+            },
+        )];
+        assert!(matches!(
+            validate_program_unit_inputs(&engine, &top, &compiled),
+            Err(EngineError::ProgramInvariant(
+                "cast-payment import does not contain canonical discard action facts"
+            ))
+        ));
+        top.payment_result.cards = vec![entry(
+            CardResultAction::Discard,
+            CardResultProvenance::ActionFacts,
+        )];
+        assert!(validate_program_unit_inputs(&engine, &top, &compiled).is_ok());
     }
 
     fn token_copy_batch_capture_fixture() -> (CompiledProgram, ProgramRunState) {
@@ -6346,6 +6886,179 @@ mod invariant_rollback_tests {
         engine
             .apply_scenario_command(actor, &answer)
             .expect("object choice accepted")
+    }
+
+    #[test]
+    fn program_damage_player_replacement_resumes_parent_tail_once() {
+        use crate::state::{
+            ActiveDamagePrevention, DamagePreventionAmount, DamagePreventionScope,
+            ReplacementSourcePresentation,
+        };
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let (mut engine, top, owners, target, own_graveyard, ..) =
+            exile_group_input_fixture("program_exile_group_input_fixture", &[0], true);
+        let own_graveyard = own_graveyard.unwrap();
+        let original_generation = engine.state.zone_change_generation[&own_graveyard];
+        let starting_parent_life = engine.state.players[0].life;
+        let prevention_id = engine.state.next_damage_prevention_effect_id;
+        engine
+            .state
+            .damage_prevention_effects
+            .push(ActiveDamagePrevention {
+                id: prevention_id,
+                static_origin: None,
+                source_id: None,
+                source_label: "test prevention on the target controller".into(),
+                source_presentation: ReplacementSourcePresentation::default(),
+                scope: DamagePreventionScope::Recipient(30),
+                amount: DamagePreventionAmount::All,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                additional_effect: None,
+            });
+        let second_prevention_id = prevention_id.saturating_add(1);
+        assert_ne!(prevention_id, second_prevention_id);
+        engine
+            .state
+            .damage_prevention_effects
+            .push(ActiveDamagePrevention {
+                id: second_prevention_id,
+                static_origin: None,
+                source_id: None,
+                source_label: "another test prevention on the target controller".into(),
+                source_presentation: ReplacementSourcePresentation::default(),
+                scope: DamagePreventionScope::Recipient(30),
+                amount: DamagePreventionAmount::All,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                additional_effect: None,
+            });
+        engine.state.next_damage_prevention_effect_id = second_prevention_id.saturating_add(1);
+
+        nested_start(
+            &mut engine,
+            &top,
+            owners,
+            crate::state::EffectResult::default(),
+        );
+        assert_eq!(engine.state.objects[&target].damage, 1);
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            10
+        );
+        nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::GraveyardCards
+        );
+
+        let paid = nested_select_objects(&mut engine, vec![own_graveyard]);
+        assert_eq!(engine.state.objects[&target].damage, 1);
+        assert_eq!(engine.state.objects[&own_graveyard].zone, Zone::Exile);
+        assert_eq!(
+            engine.state.zone_change_generation[&own_graveyard],
+            original_generation + 1,
+            "the branch cost commits exactly once before the late damage replacement"
+        );
+        assert_eq!(engine.state.players[0].life, starting_parent_life);
+        let moved_cost_count = paid
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                        if moved.object_id == own_graveyard
+                            && moved.destination == rv1::permanent_moved::Destination::Exile as i32
+                )
+            })
+            .count();
+        assert_eq!(moved_cost_count, 1);
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("late DamagePlayer parks on the target controller's prevention");
+        assert_eq!(pending.deciding_player, 30);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect
+        );
+        let parked_stack = match &pending.continuation {
+            ResolutionContinuation::DamageReplacement { stack, .. } => stack,
+            other => panic!("expected Program-carrying damage replacement, got {other:?}"),
+        };
+        assert!(
+            parked_stack.program.is_some(),
+            "the late DamagePlayer replacement retains the active Program and parent cursor"
+        );
+        let replacement_prompt = paid
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                    if choice.choice_kind == rv1::ChoiceKind::ReplacementEffect as i32 =>
+                {
+                    Some(choice)
+                }
+                _ => None,
+            })
+            .expect("the prevention option is published with the replacement prompt");
+        assert_eq!(replacement_prompt.replacement_options.len(), 2);
+        assert_ne!(
+            replacement_prompt.replacement_options[0].application_id,
+            replacement_prompt.replacement_options[1].application_id,
+            "the ordering prompt offers the two distinct prevention effects"
+        );
+        let replacement_id = replacement_prompt.replacement_options[0].application_id;
+
+        let resumed = nested_select_objects(&mut engine, vec![replacement_id]);
+        let tail_life_changes = resumed
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::LifeChanged(change)) if change.delta == 3
+                )
+            })
+            .count();
+        assert_eq!(
+            tail_life_changes, 1,
+            "the parent tail resolves exactly once"
+        );
+        assert!(!resumed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::LifeChanged(change)) if change.delta == -2
+        )));
+        assert_eq!(engine.state.players[0].life, starting_parent_life + 3);
+        assert_eq!(
+            engine.state.players[2].life, 20,
+            "all target-controller damage is prevented"
+        );
+        assert_eq!(
+            engine.state.objects[&target].damage, 1,
+            "the earlier damage is not repeated"
+        );
+        assert_eq!(engine.state.objects[&own_graveyard].zone, Zone::Exile);
+        assert_eq!(
+            engine.state.zone_change_generation[&own_graveyard],
+            original_generation + 1
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.objects[&top.id].zone, Zone::Graveyard);
     }
 
     fn nested_log_count(batch: &tricerules_proto::ruled::v1::RuledEventBatch, text: &str) -> usize {

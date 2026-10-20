@@ -212,7 +212,7 @@ pub(super) fn sacrifice(
         }
     };
     // CR 701.21a: the instructed player cannot sacrifice a permanent they no longer control.
-    // Capture every event's types before any member of this instruction moves.
+    // Capture every event's effective characteristics before any member of this instruction moves.
     let sacrifices: Vec<_> = subjects
         .into_iter()
         .filter_map(|oid| {
@@ -221,20 +221,22 @@ pub(super) fn sacrifice(
                 return None;
             }
             let source = cx.engine.trigger_source_snapshot(oid)?;
+            let characteristics = cx.engine.characteristics(oid)?;
             (source.controller == cx.controller).then(|| {
                 (
                     oid,
                     object.owner,
                     object_display_name(&cx.engine.state, cx.engine.registry, oid),
                     source,
+                    characteristics,
                 )
             })
         })
         .collect();
     let zone_snapshot = cx.engine.snapshot_zone_event();
     let mut committed = Vec::new();
-    for (oid, owner, name, source) in sacrifices {
-        let was_creature = source.types.iter().any(|kind| kind == "Creature");
+    for (oid, owner, name, source, characteristics) in sacrifices {
+        let was_creature = characteristics.is_creature();
         let died = sacrifice_permanent(&mut cx.engine.state, cx.engine.registry, oid)?;
         cx.effect_result.sacrificed_objects.push(TriggerObjectRef {
             object_id: source.object_id,
@@ -242,17 +244,22 @@ pub(super) fn sacrifice(
             controller_at_event: source.controller,
         });
         // CR 118.12: a replacement destination still pays this sacrifice instruction.
-        cx.effect_result
-            .cards
-            .push(payment::committed_card_result_entry(
-                &cx.engine.state,
-                cx.engine.registry,
-                CardResultAction::Sacrifice,
-                cx.controller,
-                oid,
-                Zone::Battlefield,
-                source.zone_change_generation,
-            )?);
+        let mut receipt = payment::committed_card_result_entry(
+            &cx.engine.state,
+            cx.engine.registry,
+            CardResultAction::Sacrifice,
+            cx.controller,
+            oid,
+            Zone::Battlefield,
+            source.zone_change_generation,
+        )?;
+        receipt.matched_card_types = CardTypeFilter::ALL
+            .into_iter()
+            .filter(|card_type| {
+                payment::card_type_filter_matches_characteristics(*card_type, &characteristics)
+            })
+            .collect();
+        cx.effect_result.cards.push(receipt);
         cx.events.push(permanent_moved_event(
             &cx.engine.state,
             oid,

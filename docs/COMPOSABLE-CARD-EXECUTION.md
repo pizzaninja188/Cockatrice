@@ -140,11 +140,33 @@ ability Program. It binds the direct `Sacrifice(Source)` result, then uses
 `IfResult(CardResultCount(result: "sacrificed", min: Some(1), max: None))` to gate Draw 3 for
 `EachOtherPlayerThanAffectedPlayer`; the cast trigger supplies the event-time caster and registry
 requires that input before instruction zero. The Program predicate counts the named in-scope
-`CardResultCohort` with ordinary optional bounds and no ambient source, action, player, or card-type
-filter. Existing effect-list `CardResultCount` remains on its legacy path. Bound `Sacrifice(Source)`
-and `Mill` are typed producer examples for this condition, not a claim that other cards are complete.
+cohort with ordinary optional bounds and no ambient source, action, or player selector. Its optional
+`card_type` predicate uses recorded `matched_card_types` rather than looking up a card after it moves.
+Source-sacrifice receipts capture effective characteristics, including supertypes such as Basic,
+before any selected permanent moves and attach those facts to the existing committed movement
+receipt; the receipt retains its original action, ObjectId, generation, instructed player, and
+provenance.
+Standstill's own count remains unfiltered. Existing effect-list `CardResultCount` remains on its
+legacy path. Bound `Sacrifice(Source)` and `Mill` are typed producer examples for this condition,
+not a claim that other cards are complete.
 Automated Standstill scenarios cover the missing-caster preflight, first successful sacrifice among
 two cast triggers, and an Abundance replacement park/resume/replay. Its complete definition and updated review map have independent semantic approval. This adds no card admission or protocol, relay, or client change.
+
+The bounded 2026-10-20 Grab the Prize migration adds `ImportCastPayment` only for a nonmodal
+spell face with exactly the mandatory single-card `DiscardCard` additional cost and no cast-cost
+groups or alternate-method modifiers. The no-input instruction binds one `CastPaymentCohort` for
+that exact discard; runtime preflight validates the one canonical discard `ActionFacts` entry before
+instruction zero and stores the immutable receipt in the existing typed card-cohort slot. It does
+not inspect the original payer's current liveness or cards, so a copy retains the payment facts
+after that player leaves. Named `CardResultCount` may filter the imported cohort with its captured
+card-type snapshot. The same result predicate also uses the action-time effective-type facts now
+recorded by source sacrifice, including the Basic supertype for `BasicLand` filters.
+`DamagePlayer(positive fixed amount, EachOpponent)` is admitted only in spell Programs and uses
+the ordinary noncombat damage pipeline without adding a target role. Grab draws two, then deals 2
+to each opponent only when the paid card snapshot is nonland. Six Grab the Prize scenarios cover
+land/nonland payments, mandatory-cost rejection, Abundance resume/replay, competing multiplayer
+prevention, zone changes/copies, and copy resolution after the original payer concedes. This adds
+no card admission or protocol, relay, or client change.
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

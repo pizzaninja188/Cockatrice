@@ -624,6 +624,34 @@ fn registry_compiles_named_card_result_count_for_source_sacrifice_and_mill_cohor
             "min: Some(1), max: Some(3)",
         ),
         (
+            "named_count_mill_nonland",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+            r#"CardResultCount(result: "cohort", card_type: Some(Nonland), min: Some(1), max: None)"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(3),
+                },
+            },
+            "min: Some(1), max: None",
+        ),
+        (
+            "named_count_mill_land_bounded",
+            r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+            r#"CardResultCount(result: "cohort", card_type: Some(Land), min: Some(1), max: Some(2))"#,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: crate::primitives::PlayerRecipient::Controller,
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(3),
+                },
+            },
+            "min: Some(1), max: Some(2)",
+        ),
+        (
             "named_count_mill_higher_minimum",
             r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
             r#"CardResultCount(result: "cohort", min: Some(2), max: Some(3))"#,
@@ -655,6 +683,7 @@ fn registry_compiles_named_card_result_count_for_source_sacrifice_and_mill_cohor
 
     for (id, producer_step, condition, expected_type, expected_bounds) in cases {
         let card = named_card_result_count_card(id, producer_step, condition);
+        let expects_type_filter = condition.contains("card_type: Some(");
         let registry = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
             .expect("a named count over a typed card-result cohort should compile");
         let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
@@ -672,15 +701,23 @@ fn registry_compiles_named_card_result_count_for_source_sacrifice_and_mill_cohor
                 .result_type,
             expected_type
         );
-        let crate::primitives::CompiledInstructionKind::If { condition, .. } =
-            &program.body.steps[1].kind
+        let crate::primitives::CompiledInstructionKind::If {
+            condition: compiled_condition,
+            ..
+        } = &program.body.steps[1].kind
         else {
             panic!("named result count should compile as an IfResult condition");
         };
-        let compiled = format!("{condition:?}");
+        let compiled = format!("{compiled_condition:?}");
         assert!(compiled.contains("CardResultCount"), "{compiled}");
         assert!(compiled.contains("result: ResultSlotId(0)"), "{compiled}");
         assert!(compiled.contains(expected_bounds), "{compiled}");
+        if expects_type_filter {
+            assert!(
+                compiled.contains("card_type: Some("),
+                "typed count keeps its exact type predicate: {compiled}"
+            );
+        }
     }
 }
 
@@ -712,6 +749,30 @@ fn registry_rejects_invalid_named_card_result_count_bounds() {
         r#"CardResultCount(result: "cohort", min: None, max: Some(2))"#,
         "exceeds its typed cohort cardinality",
     );
+    expect_named_count_rejection(
+        "named_count_filtered_empty_bounds",
+        producer,
+        r#"CardResultCount(result: "cohort", card_type: Some(Nonland), min: None, max: None)"#,
+        "requires a minimum or maximum",
+    );
+    expect_named_count_rejection(
+        "named_count_filtered_inverted_bounds",
+        producer,
+        r#"CardResultCount(result: "cohort", card_type: Some(Land), min: Some(2), max: Some(1))"#,
+        "minimum cannot exceed its maximum",
+    );
+    expect_named_count_rejection(
+        "named_count_filtered_minimum_above_typed_upper_bound",
+        producer,
+        r#"CardResultCount(result: "cohort", card_type: Some(Nonland), min: Some(4), max: None)"#,
+        "exceeds its typed cohort cardinality",
+    );
+    expect_named_count_rejection(
+        "named_count_filter_wrong_result_type",
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Draw(who: Controller, count: 1)))"#,
+        r#"CardResultCount(result: "cohort", card_type: Some(Nonland), min: Some(1), max: None)"#,
+        "not a compatible card-result cohort",
+    );
 
     let legacy_filter = named_card_result_count_card(
         "named_count_rejects_ambient_legacy_filter",
@@ -742,6 +803,247 @@ fn registry_rejects_unbound_and_out_of_scope_named_card_result_count_slots() {
             no: (steps: [], yields: [])))"#,
         r#"CardResultCount(result: "cohort", min: Some(1), max: None)"#,
         "result 'cohort' is not in scope",
+    );
+    expect_named_count_rejection(
+        "named_count_filtered_unbound_slot",
+        r#"(id: "produce", bind: ["cohort"], kind: Perform(Mill(who: Controller, count: 3)))"#,
+        r#"CardResultCount(result: "missing", card_type: Some(Land), min: Some(1), max: None)"#,
+        "result 'missing' is not in scope",
+    );
+}
+
+#[test]
+fn registry_compiles_cast_payment_import_late_and_inside_a_branch() {
+    let spell = |id: &str, body: &str| {
+        format!(
+            r#"(id: "{id}", name: "Cast Payment Import Fixture", face_id: "{id}",
+                mana_cost: "{{1}}{{R}}", types: ["Sorcery"],
+                additional_costs: [DiscardCard],
+                spell_program: Some((body: {body}, target_bindings: [])))"#
+        )
+    };
+    let late_import = spell(
+        "cast_payment_import_late",
+        r#"(steps: [
+            (id: "draw", bind: [], input: None,
+                kind: Perform(Draw(who: Controller, count: 2))),
+            (id: "import_payment", bind: ["paid"], input: None,
+                kind: ImportCastPayment),
+            (id: "count_nonland", bind: [], input: None,
+                kind: IfResult(
+                    condition: CardResultCount(result: "paid", card_type: Some(Nonland),
+                        min: Some(1), max: None),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: []),
+                )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&late_import], &[])
+        .expect("the exact mandatory discard profile compiles a named cast-payment count");
+    let owner = crate::ProgramOwnerId::face(
+        "cast_payment_import_late",
+        crate::CardFaceId::new("cast_payment_import_late").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact spell face owns its compiled Program");
+    assert_eq!(
+        program
+            .body
+            .steps
+            .iter()
+            .map(|step| step.id.as_str())
+            .collect::<Vec<_>>(),
+        ["draw", "import_payment", "count_nonland"],
+        "import need not be the first authored instruction"
+    );
+    let payment_slot = program
+        .slots
+        .iter()
+        .find(|slot| slot.name == "paid")
+        .expect("the imported payment has a named typed result slot");
+    let payment_type = format!("{:?}", payment_slot.result_type);
+    assert!(payment_type.contains("CastPaymentCohort"), "{payment_type}");
+    assert!(payment_type.contains("Discard"), "{payment_type}");
+    assert!(payment_type.contains("min: 1"), "{payment_type}");
+    assert!(payment_type.contains("max: Some(1)"), "{payment_type}");
+    assert!(
+        !payment_type.contains("who:"),
+        "the imported payer is not reinterpreted as an effect recipient: {payment_type}"
+    );
+    let count = format!("{:?}", program.body.steps[2].kind);
+    assert!(count.contains("CardResultCount"), "{count}");
+    assert!(count.contains("card_type: Some(Nonland)"), "{count}");
+    assert!(count.contains("min: Some(1), max: None"), "{count}");
+
+    let nested_import = spell(
+        "cast_payment_import_nested",
+        r#"(steps: [(id: "route", bind: [], input: None, kind: If(
+            condition: Void,
+            yes: (steps: [(id: "import_payment", bind: ["paid"], input: None,
+                kind: ImportCastPayment)], yields: []),
+            no: (steps: [], yields: []),
+        ))], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&nested_import], &[])
+        .expect("a typed import inside a nested block is admitted for its exact spell owner");
+    let owner = crate::ProgramOwnerId::face(
+        "cast_payment_import_nested",
+        crate::CardFaceId::new("cast_payment_import_nested").unwrap(),
+    );
+    assert!(registry.compiled_program_for_owner(&owner).is_some());
+}
+
+#[test]
+fn registry_rejects_cast_payment_import_outside_exact_mandatory_discard_spell_profile() {
+    let body = r#"(steps: [(id: "import_payment", bind: ["paid"], input: None,
+        kind: ImportCastPayment)], yields: [])"#;
+    let spell = |id: &str, types: &str, face_fields: &str, cost_fields: &str, owner_field: &str| {
+        format!(
+            r#"(id: "{id}", name: "Invalid Cast Payment Import Fixture", face_id: "{id}",
+                mana_cost: "{{1}}{{R}}", types: {types}, {face_fields} {cost_fields}
+                {owner_field})"#
+        )
+    };
+    let program_owner_field = format!("spell_program: Some((body: {body}, target_bindings: []))");
+    let invalid_cost_profiles = [
+        ("cast_payment_import_without_cost", "[\"Instant\"]", "", ""),
+        (
+            "cast_payment_import_mixed_additional_costs",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard, SacrificePermanent(
+                filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]))],"#,
+        ),
+        (
+            "cast_payment_import_with_cast_cost_group",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], cast_cost_groups: [(group_id: "kicker",
+                presentation: Fallback, min: 0, max: 1, options: [Mana(option_id: "kick",
+                    presentation: Fallback, kind: Kicker, cost: "{1}")])],"#,
+        ),
+        (
+            "cast_payment_import_with_flashback_profile",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], flashback_cost: Some("{R}"),"#,
+        ),
+        (
+            "cast_payment_import_with_harmonize_profile",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], harmonize_cost: Some("{R}"),"#,
+        ),
+        (
+            "cast_payment_import_with_sneak_profile",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], sneak_cost: Some("{R}"),"#,
+        ),
+        (
+            "cast_payment_import_with_instant_speed_receipt_profile",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], instant_speed_cast_cost: Some((
+                group_id: "kicker", option_id: "kick", expected_selected: true)),
+                cast_cost_groups: [(group_id: "kicker", presentation: Fallback,
+                    min: 0, max: 1, options: [Mana(option_id: "kick",
+                        presentation: Fallback, kind: Kicker, cost: "{1}")])],"#,
+        ),
+        (
+            "cast_payment_import_with_cost_modifier_profile",
+            "[\"Instant\"]",
+            "",
+            r#"additional_costs: [DiscardCard], cost_modifiers: [GenericReduction(amount: 1)],"#,
+        ),
+    ];
+    for (id, types, face_fields, cost_fields) in invalid_cost_profiles {
+        let definition = spell(id, types, face_fields, cost_fields, &program_owner_field);
+        let _: crate::card_def::RawCardDefinition =
+            ron::from_str(&definition).expect("invalid owner profiles still parse as card data");
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("unsupported cast-payment owner profile must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("ImportCastPayment requires a validated mandatory single-discard spell cost profile"),
+            "{id} must reach the closed-profile compiler diagnostic, got {error}"
+        );
+    }
+
+    // Prototype and Warp require permanent faces, while this registry currently admits authored
+    // spell Programs only on Instant or Sorcery faces. These owners therefore cannot reach the
+    // same compiler profile check as the remaining alternative-cost profiles.
+    let prior_owner_profiles = [
+        (
+            "cast_payment_import_prototype_permanent_owner",
+            "[\"Artifact\", \"Creature\"]",
+            "power: Some(2), toughness: Some(2), prototype: Some((mana_cost: \"{R}\", power: 2, toughness: 2)),",
+            "additional_costs: [DiscardCard],",
+        ),
+        (
+            "cast_payment_import_warp_permanent_owner",
+            "[\"Artifact\"]",
+            "",
+            "additional_costs: [DiscardCard], warp_cost: Some(\"{R}\"),",
+        ),
+    ];
+    for (id, types, face_fields, cost_fields) in prior_owner_profiles {
+        let definition = spell(id, types, face_fields, cost_fields, &program_owner_field);
+        let _: crate::card_def::RawCardDefinition =
+            ron::from_str(&definition).expect("permanent profile fixtures parse as card data");
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("permanent-face Programs are outside the spell owner contract");
+        assert!(
+            error
+                .to_string()
+                .contains("spell_program requires an instant or sorcery face"),
+            "{id} fails at the prior spell-owner validation, got {error}"
+        );
+    }
+
+    let modal = spell(
+        "cast_payment_import_modal_owner",
+        "[\"Instant\"]",
+        "",
+        "additional_costs: [DiscardCard],",
+        &format!(
+            r#"modal_spell: Some((min_modes: 1, max_modes: 1, modes: [(
+                mode_id: "mode_01", presentation: Fallback, effects: [],
+                program: Some((body: {body}, target_bindings: [])),
+            )]))"#
+        ),
+    );
+    let _: crate::card_def::RawCardDefinition =
+        ron::from_str(&modal).expect("modal payment fixture parses");
+    let modal_error = crate::CardRegistry::from_chunks_and_tokens(&[&modal], &[])
+        .expect_err("modal spell-mode owners are outside the initial payment import contract");
+    assert!(
+        modal_error.to_string().contains(
+            "ImportCastPayment requires a validated mandatory single-discard spell cost profile"
+        ),
+        "the modal owner reaches the closed-profile compiler diagnostic: {modal_error}"
+    );
+
+    let ability = format!(
+        r#"(id: "cast_payment_import_ability_owner", name: "Invalid Cast Payment Ability",
+            face_id: "cast_payment_import_ability_owner", types: ["Creature"],
+            power: Some(1), toughness: Some(1),
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: {body}, target_bindings: [])), modal: None,
+                targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None)])"#
+    );
+    let _: crate::card_def::RawCardDefinition =
+        ron::from_str(&ability).expect("ability payment fixture parses");
+    let ability_error = crate::CardRegistry::from_chunks_and_tokens(&[&ability], &[])
+        .expect_err("ability owners cannot import cast payment");
+    assert!(
+        ability_error.to_string().contains(
+            "ImportCastPayment requires a validated mandatory single-discard spell cost profile"
+        ),
+        "the ability owner reaches the closed-profile compiler diagnostic: {ability_error}"
     );
 }
 
@@ -10665,6 +10967,67 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
 }
 
 #[test]
+fn spell_program_admits_positive_fixed_damage_to_each_opponent() {
+    let compile = |card_id: &str, context: crate::primitives::EffectContext, amount: &str| {
+        let body = format!(
+            r#"(steps: [(id: "damage_each_opponent", bind: [], input: None,
+                kind: Perform(DamagePlayer(amount: {amount}, who: EachOpponent)))], yields: [])"#
+        );
+        let program = crate::primitives::CardProgram {
+            body: ron::from_str(&body).expect("EachOpponent damage program parses"),
+            target_bindings: Vec::new(),
+        };
+        let owner = match context {
+            crate::primitives::EffectContext::Spell => {
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap())
+            }
+            crate::primitives::EffectContext::Ability => {
+                crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                    card_id: card_id.into(),
+                    face_id: crate::CardFaceId::new(card_id).unwrap(),
+                    ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                })
+            }
+        };
+        crate::primitives::CompiledProgram::compile(owner, context, &program)
+    };
+
+    let compiled = compile(
+        "positive_each_opponent_damage",
+        crate::primitives::EffectContext::Spell,
+        "2",
+    )
+    .expect("a positive fixed spell amount can damage each opponent");
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
+                amount: crate::primitives::Amount::Fixed(2),
+                who: crate::primitives::PlayerRecipient::EachOpponent,
+            })
+    ));
+    for (amount, id_suffix) in [("0", "zero"), ("\"X\"", "x")] {
+        let error = compile(
+            &format!("invalid_each_opponent_damage_{id_suffix}"),
+            crate::primitives::EffectContext::Spell,
+            amount,
+        )
+        .expect_err("zero and variable all-opponent damage are outside this admission");
+        assert!(
+            error.contains("requires a positive fixed amount"),
+            "{amount}: {error}"
+        );
+    }
+    let ability_error = compile(
+        "each_opponent_damage_ability",
+        crate::primitives::EffectContext::Ability,
+        "2",
+    )
+    .expect_err("this reusable admission stays spell-owned");
+    assert!(ability_error.contains("is spell-only"), "{ability_error}");
+}
+
+#[test]
 fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
     let compile = |card_id: &str,
                    context: crate::primitives::EffectContext,
@@ -10727,7 +11090,7 @@ fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
     };
     let singleton = targeting(1, 1);
 
-    for recipient in ["Controller", "EachOpponent", "SourceController"] {
+    for recipient in ["Controller", "SourceController"] {
         assert!(
             compile(
                 "unsupported_damage_recipient_rejected",

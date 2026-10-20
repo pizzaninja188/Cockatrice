@@ -829,6 +829,7 @@ fn collect_program_effects<'a>(
 ) {
     for instruction in &block.steps {
         match &instruction.kind {
+            CompiledInstructionKind::ImportCastPayment => {}
             CompiledInstructionKind::Perform(effect) => {
                 effects.insert(instruction.instruction_address, effect.as_ref());
             }

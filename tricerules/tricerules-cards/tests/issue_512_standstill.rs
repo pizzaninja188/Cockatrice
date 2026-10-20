@@ -87,12 +87,14 @@ fn standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_op
         result,
         min,
         max,
+        card_type,
     }) = condition.as_ref()
     else {
         panic!("the guard counts its named typed result")
     };
     assert_eq!(*result, *sacrificed_result);
     assert_eq!((*min, *max), (Some(1), None));
+    assert_eq!(*card_type, None);
     let [draw] = yes.steps.as_slice() else {
         panic!("a successful sacrifice has one draw operation")
     };
