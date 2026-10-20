@@ -33,7 +33,7 @@ fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::Copiabl
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 pub(crate) use tricerules_core::state::{
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
-    PendingResolutionBranchStage, ResolutionContinuation,
+    ResolutionContinuation,
 };
 pub(crate) use tricerules_core::{AttachmentRecipient, GameEngine};
 use tricerules_proto::ruled::v1 as rv1;

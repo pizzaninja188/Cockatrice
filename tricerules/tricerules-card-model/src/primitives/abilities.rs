@@ -1265,6 +1265,7 @@ impl TriggerCondition {
         matches!(
             self,
             Self::AtBeginningOfDrawStep { .. }
+                | Self::AtBeginningOfUpkeep { .. }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverSpellBecomesTarget { .. }

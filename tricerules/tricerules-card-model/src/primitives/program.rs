@@ -5,11 +5,11 @@
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals. `If` admits the global `Void` predicate and, on ability programs, direct
-//! `SourceCounterCount` conditions at any nesting depth, plus controller-scoped hand/library
-//! counts, graveyard CardCount filters, and battlefield Count filters. These direct predicates
-//! are not admitted in composite conditions, Choose requirements, or conditional search
-//! predicates. Permanent choices cannot use event-bound filters or cross-object constraints.
+//! literals. `If` admits the global `Void` predicate and, on ability programs, a recursive
+//! source-owned condition family built from bounded `SourceCounterCount`, exact live
+//! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. Choose
+//! requirements use the same source family; conditional search predicates remain narrower.
+//! Permanent choices cannot use event-bound filters or cross-object constraints.
 //! Widening these rules needs a separately typed context/result contract.
 
 use super::{
@@ -733,7 +733,7 @@ impl Compiler {
         inherited: &HashMap<String, ResultSlotId>,
     ) -> Result<(CompiledBlock, Vec<ResultType>), String> {
         let mut names = inherited.clone();
-        let mut steps = Vec::with_capacity(authored.steps.len());
+        let mut steps: Vec<CompiledInstruction> = Vec::with_capacity(authored.steps.len());
         for instruction in &authored.steps {
             if instruction.id.trim().is_empty()
                 || !self.instruction_ids.insert(instruction.id.clone())
@@ -819,19 +819,11 @@ impl Compiler {
                             instruction.id
                         ));
                     }
-                    // Void and SourceCounterCount are admitted only as direct ProgramIf
-                    // conditions. Keep the shared game-condition compiler narrow for Choose
-                    // requirements and conditional search predicates.
-                    let condition = if matches!(
-                        condition.as_ref(),
-                        GameCondition::SourceCounterCount { .. }
-                    ) {
-                        if self.context != EffectContext::Ability {
-                            return Err(format!(
-                                "If instruction '{}' supports SourceCounterCount only on an ability program",
-                                instruction.id
-                            ));
-                        }
+                    // Keep this family ability-owned and coherent: only the source itself may be
+                    // inspected, and composites cannot mix source facts with unrelated contexts.
+                    let condition = if self.context == EffectContext::Ability
+                        && is_ability_source_condition_family(condition)
+                    {
                         condition.validate_live().map_err(|reason| {
                             format!("If instruction '{}': {reason}", instruction.id)
                         })?;
@@ -943,13 +935,19 @@ impl Compiler {
                         ));
                     }
                     let chooser_supported = *chooser == PlayerRecipient::Controller
-                        || (*chooser == PlayerRecipient::SourceController
-                            && self.context == EffectContext::Ability);
+                        || (matches!(
+                            chooser,
+                            PlayerRecipient::SourceController | PlayerRecipient::AffectedPlayer
+                        ) && self.context == EffectContext::Ability);
                     if !chooser_supported {
                         return Err(format!(
-                            "Choose instruction '{}' supports Controller, or SourceController on an ability program, as chooser",
+                            "Choose instruction '{}' supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
                             instruction.id
                         ));
+                    }
+                    if *chooser == PlayerRecipient::AffectedPlayer {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     if branches.is_empty() {
                         return Err(format!(
@@ -1089,17 +1087,29 @@ impl Compiler {
                                 CompiledChooseRequirement::Always
                             }
                             ResolutionBranchRequirement::GameCondition(condition) => {
-                                let compiled = compile_program_condition(
-                                    &ProgramCondition::Game(condition.clone()),
-                                    &names,
-                                    &self.slots,
-                                )
-                                .map_err(|reason| {
-                                    format!(
-                                        "Choose instruction '{}' branch '{}': {reason}",
-                                        instruction.id, branch.branch_id
+                                let compiled = if self.context == EffectContext::Ability
+                                    && is_ability_source_condition_family(condition)
+                                {
+                                    condition.validate_live().map_err(|reason| {
+                                        format!(
+                                            "Choose instruction '{}' branch '{}': {reason}",
+                                            instruction.id, branch.branch_id
+                                        )
+                                    })?;
+                                    CompiledProgramCondition::Game(condition.clone())
+                                } else {
+                                    compile_program_condition(
+                                        &ProgramCondition::Game(condition.clone()),
+                                        &names,
+                                        &self.slots,
                                     )
-                                })?;
+                                    .map_err(|reason| {
+                                        format!(
+                                            "Choose instruction '{}' branch '{}': {reason}",
+                                            instruction.id, branch.branch_id
+                                        )
+                                    })?
+                                };
                                 let CompiledProgramCondition::Game(condition) = compiled else {
                                     unreachable!(
                                         "game branch requirement compiles as a game condition"
@@ -1189,6 +1199,39 @@ impl Compiler {
                     )
                 }
             };
+            if matches!(
+                &instruction.kind,
+                InstructionKind::Perform(effect)
+                    if is_source_sacrifice_reflexive_consumer(effect)
+            ) {
+                let input_slot = input.ok_or_else(|| {
+                    format!(
+                        "CreateReflexiveTrigger instruction '{}' requires the immediately preceding Source sacrifice result",
+                        instruction.id
+                    )
+                })?;
+                let immediately_preceding_source_sacrifice = steps.last().is_some_and(|previous| {
+                    previous.input.is_none()
+                        && previous.outputs.len() == 1
+                        && previous.outputs[0] == input_slot
+                        && matches!(
+                            &previous.kind,
+                            CompiledInstructionKind::Perform(effect)
+                                if matches!(
+                                    effect.as_ref(),
+                                    SpellEffectKind::Sacrifice {
+                                        subject: EffectSubject::Source,
+                                    }
+                                )
+                        )
+                });
+                if !immediately_preceding_source_sacrifice {
+                    return Err(format!(
+                        "CreateReflexiveTrigger instruction '{}' must immediately consume the direct Source sacrifice result in the same block",
+                        instruction.id
+                    ));
+                }
+            }
             let outputs = bind_outputs(
                 &instruction.id,
                 &instruction.bind,
@@ -1361,6 +1404,18 @@ fn result_slot(
     Ok(slot)
 }
 
+fn is_source_sacrifice_reflexive_consumer(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::CreateReflexiveTrigger {
+            when: Some(super::ResolutionReceiptCondition::Sacrificed {
+                object: super::ConditionObjectRef::Source,
+            }),
+            ..
+        }
+    )
+}
+
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
@@ -1378,6 +1433,11 @@ fn compile_input(
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
+        EffectOp::CreateReflexiveTrigger { .. }
+            if is_source_sacrifice_reflexive_consumer(effect) =>
+        {
+            Some("CardResultCohort")
+        }
         _ if token_copy_batch_consumer => Some("TokenCopyBatch"),
         _ => None,
     };
@@ -1412,6 +1472,21 @@ fn compile_input(
                 }
                 EffectOp::MoveCohortPartition { .. } => {
                     matches!(actual.result_type, ResultType::CardPartition)
+                }
+                EffectOp::CreateReflexiveTrigger { .. }
+                    if is_source_sacrifice_reflexive_consumer(effect) =>
+                {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort {
+                            action: CardResultAction::Sacrifice,
+                            who: PlayerRecipient::Controller,
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        }
+                    )
                 }
                 _ if token_copy_batch_consumer => {
                     matches!(actual.result_type, ResultType::TokenCopyBatch)
@@ -2013,11 +2088,27 @@ fn validate_and_result_types(
             counter.validate()?;
             Ok(Vec::new())
         }
+        SpellEffectKind::RemoveCounters {
+            counter,
+            count,
+            subject: EffectSubject::Source,
+        } if context == EffectContext::Ability && *count > 0 => {
+            effect.validate(context)?;
+            counter.validate()?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::Sacrifice {
             subject: EffectSubject::Source,
         } if context == EffectContext::Ability => {
             effect.validate(context)?;
-            Ok(Vec::new())
+            Ok(vec![ResultType::CardResultCohort {
+                action: CardResultAction::Sacrifice,
+                who: PlayerRecipient::Controller,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
         }
         SpellEffectKind::ApplyCombatRestriction {
             scope: super::CombatRestrictionScope::Source,
@@ -2129,9 +2220,31 @@ fn validate_resultless_program_reflexive_trigger(
                 .into(),
         );
     }
-    if when.is_some() || ability.targeting.is_some() || ability.intervening_if.is_some() {
+    if ability.targeting.is_some() || ability.intervening_if.is_some() {
         return Err(
             "CreateReflexiveTrigger supports only the approved resultless target shapes".into(),
+        );
+    }
+
+    if is_source_sacrifice_reflexive_consumer(effect) {
+        if let [SpellEffectKind::DamageAll {
+            amount: Amount::Fixed(amount),
+            players: super::MassPlayerSet::All,
+            kind,
+        }] = ability.effect.as_slice()
+        {
+            if *amount > 0 && kind == &TargetFilter::default_creature() {
+                return Ok(());
+            }
+        }
+        return Err(
+            "Sacrificed(Source) reflexive programs support only positive fixed damage to all creatures"
+                .into(),
+        );
+    }
+    if when.is_some() {
+        return Err(
+            "CreateReflexiveTrigger supports only the approved resultless target shapes or the immediate Source sacrifice receipt".into(),
         );
     }
 
@@ -2550,6 +2663,29 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
         _ => return Err(PROGRAM_CONDITION_UNSUPPORTED.into()),
     }
     condition.validate_live()
+}
+
+/// Ability Programs may inspect only a live source permanent and its own bounded counter total.
+/// Restricting every composite leaf to this family keeps these conditions independent of target,
+/// event, and prior-result context.
+fn is_ability_source_condition_family(condition: &GameCondition) -> bool {
+    match condition {
+        GameCondition::SourceCounterCount { .. } => true,
+        GameCondition::ObjectMatches {
+            object: super::ConditionObjectRef::Source,
+            filter,
+        } => {
+            filter.as_ref()
+                == &TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    ..TargetFilter::default()
+                }
+        }
+        GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
+            !branches.is_empty() && branches.iter().all(is_ability_source_condition_family)
+        }
+        _ => false,
+    }
 }
 
 const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(

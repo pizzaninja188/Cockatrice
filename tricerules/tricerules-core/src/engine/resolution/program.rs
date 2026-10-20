@@ -54,6 +54,98 @@ impl ProgramFailpointGuard {
 }
 
 #[cfg(test)]
+mod source_sacrifice_receipt_tests {
+    use super::*;
+    use crate::state::{CardResultCohort, CardResultEntry, CardResultOutputVisibility};
+    use tricerules_card_model::primitives::{CardResultAction, CardTypeFilter};
+
+    fn entry(
+        action: CardResultAction,
+        affected_player: PlayerId,
+        object_id: ObjectId,
+        input_zone: Zone,
+        input_generation: u64,
+    ) -> CardResultEntry {
+        CardResultEntry {
+            action,
+            affected_player,
+            object_id,
+            zone_change_generation: input_generation + 1,
+            matched_card_types: Vec::<CardTypeFilter>::new(),
+            provenance: crate::state::CardResultProvenance::CommittedMovement {
+                input_zone,
+                input_generation,
+                actual_output_zone: Zone::Graveyard,
+                output_visibility: CardResultOutputVisibility::FaceUpPublic,
+            },
+        }
+    }
+
+    fn cohort(entry: CardResultEntry) -> CardResultCohort {
+        CardResultCohort {
+            cards: vec![entry],
+            program_discard_result: None,
+        }
+    }
+
+    #[test]
+    fn source_sacrifice_projection_requires_exact_committed_input_facts_and_cardinality() {
+        let expected = crate::state::TriggerObjectRef {
+            object_id: 41,
+            zone_change_generation: 7,
+            controller_at_event: 0,
+        };
+        assert_eq!(
+            source_sacrifice_receipt_from_cohort(
+                &cohort(entry(
+                    CardResultAction::Sacrifice,
+                    0,
+                    41,
+                    Zone::Battlefield,
+                    7
+                )),
+                41,
+                7,
+                0,
+            )
+            .unwrap(),
+            Some(expected)
+        );
+        assert_eq!(
+            source_sacrifice_receipt_from_cohort(&CardResultCohort::default(), 41, 7, 0).unwrap(),
+            None,
+            "an empty source-sacrifice result creates no reflexive trigger"
+        );
+
+        let mut action_facts = entry(CardResultAction::Sacrifice, 0, 41, Zone::Battlefield, 7);
+        action_facts.provenance = crate::state::CardResultProvenance::ActionFacts;
+        let invalid_single_entries = [
+            action_facts,
+            entry(CardResultAction::Destroy, 0, 41, Zone::Battlefield, 7),
+            entry(CardResultAction::Sacrifice, 0, 41, Zone::Graveyard, 7),
+            entry(CardResultAction::Sacrifice, 0, 41, Zone::Battlefield, 8),
+            entry(CardResultAction::Sacrifice, 0, 42, Zone::Battlefield, 7),
+            entry(CardResultAction::Sacrifice, 1, 41, Zone::Battlefield, 7),
+        ];
+        for invalid in invalid_single_entries {
+            assert!(source_sacrifice_receipt_from_cohort(&cohort(invalid), 41, 7, 0).is_err());
+        }
+
+        let two_cards = CardResultCohort {
+            cards: vec![
+                entry(CardResultAction::Sacrifice, 0, 41, Zone::Battlefield, 7),
+                entry(CardResultAction::Sacrifice, 0, 41, Zone::Battlefield, 7),
+            ],
+            program_discard_result: None,
+        };
+        assert!(
+            source_sacrifice_receipt_from_cohort(&two_cards, 41, 7, 0).is_err(),
+            "the 0..1 source-sacrifice result rejects multiple cards"
+        );
+    }
+}
+
+#[cfg(test)]
 impl Drop for ProgramFailpointGuard {
     fn drop(&mut self) {
         PROGRAM_FAILPOINT.with(|active| active.set(self.previous));
@@ -606,6 +698,13 @@ impl GameEngine {
                                 "source-controller Choose has no current or last-known source controller",
                             ))?
                         }
+                        tricerules_card_model::primitives::PlayerRecipient::AffectedPlayer => {
+                            top.trigger_context.affected_player.ok_or(
+                                EngineError::ProgramInvariant(
+                                    "compiled AffectedPlayer Choose lacks its captured trigger player",
+                                ),
+                            )?
+                        }
                         _ => {
                             return Err(EngineError::ProgramInvariant(
                                 "compiled Choose has an unsupported chooser",
@@ -679,14 +778,109 @@ impl GameEngine {
                             continue;
                         }
                     }
+                    let (deciding_player, choose_stage, delegate_selected, prompt) =
+                        if choose_controller_live {
+                            (
+                                chooser_player,
+                                crate::state::PendingProgramChooseStage::Selecting,
+                                false,
+                                prompt,
+                            )
+                        } else {
+                            let candidates = super::resolution_choice_delegate_candidates(
+                                &self.state,
+                                top.controller,
+                                chooser_player,
+                            );
+                            match candidates.as_slice() {
+                                [] => {
+                                    events.push(ev_log(
+                                        "No live player can make the departed chooser's resolution choice; Otherwise resolves.".into(),
+                                    ));
+                                    let mut child_path = path;
+                                    child_path.push(ProgramPathStep {
+                                        instruction_index: instruction_index as u32,
+                                        arm: ProgramArm::ChooseOtherwise,
+                                    });
+                                    program_state.frames.push(ProgramFrame {
+                                        path: child_path,
+                                        next_instruction: 0,
+                                        yield_to: instruction.outputs.clone(),
+                                    });
+                                    continue;
+                                }
+                                [delegate] => (
+                                    *delegate,
+                                    crate::state::PendingProgramChooseStage::Selecting,
+                                    true,
+                                    prompt,
+                                ),
+                                _ => {
+                                    let controller_is_live = self
+                                        .state
+                                        .player_idx(top.controller)
+                                        .is_some_and(|idx| !self.state.players[idx].has_lost);
+                                    let selector = if controller_is_live {
+                                        Some(top.controller)
+                                    } else {
+                                        self.state
+                                            .player_idx(top.controller)
+                                            .and_then(|idx| self.state.next_in_game_player_idx(idx))
+                                            .map(|idx| self.state.players[idx].id)
+                                            .or_else(|| {
+                                                self.state
+                                                    .players
+                                                    .iter()
+                                                    .find(|player| !player.has_lost)
+                                                    .map(|player| player.id)
+                                            })
+                                    };
+                                    let Some(selector) = selector else {
+                                        events.push(ev_log(
+                                            "No live player can select a delegate for the departed resolution chooser; Otherwise resolves.".into(),
+                                        ));
+                                        let mut child_path = path;
+                                        child_path.push(ProgramPathStep {
+                                            instruction_index: instruction_index as u32,
+                                            arm: ProgramArm::ChooseOtherwise,
+                                        });
+                                        program_state.frames.push(ProgramFrame {
+                                            path: child_path,
+                                            next_instruction: 0,
+                                            yield_to: instruction.outputs.clone(),
+                                        });
+                                        continue;
+                                    };
+                                    (
+                                        selector,
+                                        crate::state::PendingProgramChooseStage::ChoosingDelegate {
+                                            candidates: candidates
+                                                .iter()
+                                                .copied()
+                                                .map(Some)
+                                                .collect(),
+                                        },
+                                        false,
+                                        format!(
+                                            "P{selector}: choose a player to make P{chooser_player}'s resolution choice."
+                                        ),
+                                    )
+                                }
+                            }
+                        };
                     self.state.pending_resolution = Some(crate::state::PendingResolution {
                         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                         resolution_prompt_semantics: None,
-                        deciding_player: chooser_player,
+                        deciding_player,
                         presentation: crate::state::PendingResolutionPresentation {
                             source_object_id: top.id,
                             candidates: Vec::new(),
-                            min: u32::from(!*optional),
+                            min: u32::from(
+                                matches!(
+                                    &choose_stage,
+                                    crate::state::PendingProgramChooseStage::ChoosingDelegate { .. }
+                                ) || !*optional,
+                            ),
                             max: 1,
                             ordered: false,
                             prompt: prompt.clone(),
@@ -704,8 +898,8 @@ impl GameEngine {
                                 occurrence,
                                 original_chooser: chooser_player,
                                 optional: *optional,
-                                delegate_selected: false,
-                                stage: crate::state::PendingProgramChooseStage::Selecting,
+                                delegate_selected,
+                                stage: choose_stage,
                             },
                         },
                     });
@@ -761,6 +955,16 @@ impl GameEngine {
                                     "resolution program input has the wrong type",
                                 ))
                             }
+                        }
+                    }
+                    if is_program_source_sacrifice_reflexive(&effect) {
+                        if let Some(receipt) = program_source_sacrifice_reflexive_receipt(
+                            compiled,
+                            &program_state,
+                            input,
+                            top,
+                        )? {
+                            previous.sacrificed_objects.push(receipt);
                         }
                     }
                     let mut result = EffectResult::default();
@@ -1525,6 +1729,108 @@ fn validate_program_unit_inputs(
         ));
     }
     Ok(())
+}
+
+fn is_program_source_sacrifice_reflexive(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::CreateReflexiveTrigger {
+            when: Some(
+                tricerules_card_model::primitives::ResolutionReceiptCondition::Sacrificed {
+                    object: tricerules_card_model::primitives::ConditionObjectRef::Source,
+                }
+            ),
+            ..
+        }
+    )
+}
+
+/// Project an explicit typed source-sacrifice input into the existing receipt consumed by the
+/// reflexive-trigger gate. This path is deliberately limited to the one compiled result shape
+/// and never infers success from ambient previous-result state.
+fn program_source_sacrifice_reflexive_receipt(
+    compiled: &CompiledProgram,
+    run: &ProgramRunState,
+    input: Option<ResultSlotId>,
+    top: &StackItem,
+) -> Result<Option<crate::state::TriggerObjectRef>, EngineError> {
+    use tricerules_card_model::primitives::{CardResultAction, Cardinality, PlayerRecipient};
+
+    let slot_id = input.ok_or(EngineError::ProgramInvariant(
+        "source-sacrifice reflexive child is missing its typed input",
+    ))?;
+    let slot = compiled.slot(slot_id).ok_or(EngineError::ProgramInvariant(
+        "source-sacrifice reflexive input slot disappeared",
+    ))?;
+    let expected_type = ResultType::CardResultCohort {
+        action: CardResultAction::Sacrifice,
+        who: PlayerRecipient::Controller,
+        cardinality: Cardinality {
+            min: 0,
+            max: Some(1),
+        },
+    };
+    if slot.result_type != expected_type {
+        return Err(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive input has the wrong compiled result type",
+        ));
+    }
+    let value = run
+        .slots
+        .get(slot_id.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive input is unavailable",
+        ))?;
+    let ProgramValue::CardResultCohort(cohort) = value else {
+        return Err(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive input is not a card-result cohort",
+        ));
+    };
+    let source_id = top
+        .source_permanent_id
+        .ok_or(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive child has no exact source object",
+        ))?;
+    source_sacrifice_receipt_from_cohort(cohort, source_id, top.source_zone_change, top.controller)
+}
+
+fn source_sacrifice_receipt_from_cohort(
+    cohort: &crate::state::CardResultCohort,
+    source_id: crate::state::ObjectId,
+    source_generation: u64,
+    instructed_player: crate::state::PlayerId,
+) -> Result<Option<crate::state::TriggerObjectRef>, EngineError> {
+    if cohort.cards.is_empty() {
+        return Ok(None);
+    }
+    let [entry] = cohort.cards.as_slice() else {
+        return Err(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive input has invalid cardinality",
+        ));
+    };
+    let committed_input_matches = matches!(
+        entry.provenance,
+        crate::state::CardResultProvenance::CommittedMovement {
+            input_zone: Zone::Battlefield,
+            input_generation,
+            ..
+        } if input_generation == source_generation
+    );
+    if entry.action != tricerules_card_model::primitives::CardResultAction::Sacrifice
+        || entry.affected_player != instructed_player
+        || entry.object_id != source_id
+        || !committed_input_matches
+    {
+        return Err(EngineError::ProgramInvariant(
+            "source-sacrifice reflexive input does not prove the instructed source movement",
+        ));
+    }
+    Ok(Some(crate::state::TriggerObjectRef {
+        object_id: source_id,
+        zone_change_generation: source_generation,
+        controller_at_event: instructed_player,
+    }))
 }
 
 fn program_result_condition_holds(

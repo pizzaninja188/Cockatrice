@@ -1,5 +1,5 @@
-// Exact card and rulings checked from Scryfall on 2026-10-08. CR 503.1a, 603.12-603.12a,
-// 608.2h, 701.21a, 122.2, 400.7, and 120.4b govern upkeep choice, reflexive sacrifice, and damage.
+// Exact card and rulings checked from Scryfall on 2026-10-19. CR 503.1a, 603.12a, 608.2c/h,
+// 701.21a, 122.2, 400.7, 120.4b, 616.1e-f, and 800.4g govern upkeep choice and resolution.
 (
   id: "lavabrink_floodgates",
   name: "Lavabrink Floodgates",
@@ -16,48 +16,52 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: AtBeginningOfUpkeep(player: AnyPlayer),
-    effect: [
-      ChooseResolutionBranch(
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_doom_change", kind: Choose(
+        choice: "doom_change",
         chooser: AffectedPlayer,
         optional: true,
         branches: [
-          (
-            branch_id: "add_doom_counter",
-            // Oracle line 2 combines this option with removal and the later threshold instruction.
-            presentation: Fallback,
-            cost: None,
+          (branch_id: "add_doom_counter", presentation: Fallback, cost: None,
             requirement: GameCondition(ObjectMatches(
               object: Source,
               filter: (kind: AnyPermanent),
             )),
-            effects: [PutCounters(counter: Doom, count: 1, subject: Source)],
-          ),
-          (
-            branch_id: "remove_doom_counter",
-            // Oracle line 2 combines this option with addition and the later threshold instruction.
-            presentation: Fallback,
-            cost: None,
+            body: (steps: [(id: "add_doom", kind: Perform(PutCounters(
+              counter: Doom, count: 1, subject: Source,
+            )))], yields: [])),
+          (branch_id: "remove_doom_counter", presentation: Fallback, cost: None,
             requirement: GameCondition(AllOf([
               ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
               SourceCounterCount(counter: Doom, min: Some(1)),
             ])),
-            effects: [RemoveCounters(counter: Doom, count: 1, subject: Source)],
-          ),
+            body: (steps: [(id: "remove_doom", kind: Perform(RemoveCounters(
+              counter: Doom, count: 1, subject: Source,
+            )))], yields: [])),
         ],
-      ),
-      Conditional(
+        otherwise: (steps: [], yields: []),
+      )),
+      (id: "check_doom_threshold", kind: If(
         condition: SourceCounterCount(counter: Doom, min: Some(3)),
-        effect: Sacrifice(subject: Source),
-      ),
-      CreateReflexiveTrigger(
-        when: Some(Sacrificed(object: Source)),
-        ability: (
-          ability_id: "reflexive_01",
-          // The "When you do" damage fragment is part of Oracle line 2's larger upkeep instruction.
-          presentation: Fallback,
-          effect: [DamageAll(amount: 6, kind: (kind: Creature))],
-        ),
-      ),
-    ],
+        yes: (steps: [
+          (id: "sacrifice_source", bind: ["sacrificed"], kind: Perform(
+            Sacrifice(subject: Source),
+          )),
+          (id: "create_reflexive_damage", input: Some("sacrificed"), kind: Perform(
+            CreateReflexiveTrigger(
+              when: Some(Sacrificed(object: Source)),
+              ability: (
+                ability_id: "reflexive_01",
+                // This is the reflexive damage fragment of the source's upkeep ability.
+                presentation: Fallback,
+                effect: [DamageAll(amount: 6, players: All, kind: (kind: Creature))],
+              ),
+            ),
+          )),
+        ], yields: []),
+        no: (steps: [], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
 )

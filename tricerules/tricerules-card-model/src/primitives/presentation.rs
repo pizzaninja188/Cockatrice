@@ -291,6 +291,20 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                         )
                     }
                 }
+                SpellEffectKind::RemoveCounters {
+                    counter,
+                    count,
+                    subject: EffectSubject::Source,
+                } => {
+                    if *count == 1 {
+                        format!("Remove a {} counter from this permanent.", counter.label())
+                    } else {
+                        format!(
+                            "Remove {count} {} counters from this permanent.",
+                            counter.label()
+                        )
+                    }
+                }
                 _ => return None,
             })
         })

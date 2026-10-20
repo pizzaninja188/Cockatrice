@@ -242,13 +242,17 @@ pub(super) fn sacrifice(
             controller_at_event: source.controller,
         });
         // CR 118.12: a replacement destination still pays this sacrifice instruction.
-        cx.effect_result.cards.push(payment::card_result_entry(
-            &cx.engine.state,
-            cx.engine.registry,
-            CardResultAction::Sacrifice,
-            cx.controller,
-            oid,
-        ));
+        cx.effect_result
+            .cards
+            .push(payment::committed_card_result_entry(
+                &cx.engine.state,
+                cx.engine.registry,
+                CardResultAction::Sacrifice,
+                cx.controller,
+                oid,
+                Zone::Battlefield,
+                source.zone_change_generation,
+            )?);
         cx.events.push(permanent_moved_event(
             &cx.engine.state,
             oid,

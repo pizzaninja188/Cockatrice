@@ -1,6 +1,6 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-14): target design with a bounded authored-owner implementation increment,
+Status (2026-10-19): target design with a bounded authored-owner implementation increment,
 cross-component resolution-prompt identity, exact compiled owner identities, immutable ability
 binding, and mandatory retirement of the `DrawDiscard` compatibility family. The runner supports
 targetless program operations and four targetful role signatures on spell faces, modal modes,
@@ -15,8 +15,8 @@ activation, Uthros Scanship's ETB, all three Three Steps Ahead modes, and the ex
 generator pair for Long Lake Nuisance and Patient Instructor. The
 [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
 owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
-Prompt identity applies to legacy resolution choices as well as program choices; it does not widen
-the accepted syntax.
+Resolution prompt IDs are scoped to the deciding player for both legacy and Program choices; answer
+validation checks the actor and that actor's prompt identity. This does not widen accepted syntax.
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
 `Paid`, `Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` follows an accepted, committed payment;
@@ -109,20 +109,32 @@ trigger remains unconditional; the pinned Oracle record `55ede1d4-593d-433c-943a
 ability resolves, so power added in response qualifies and a qualifying creature removed before
 resolution does not (CR 603.4, 608.2c, 608.2h). This reuses the current condition evaluator and leaves
 the registered Dinosaur unchanged. Its complete definition and updated review map have independent semantic approval. It adds no card admission or runtime, protocol, or client change.
-The bounded 2026-10-19 Replicating Ring migration authors its upkeep trigger as a resultless
-Program: put one Night counter on `Source`, check `SourceCounterCount(Night)` at that instruction,
-remove every Night counter from `Source` when the count reaches eight, then create eight named
-Replicated Ring tokens. Ability Programs admit fixed-positive `PutCounters` and resultless
-`RemoveAllCounters` on `Source` for any validated counter kind, plus a direct `SourceCounterCount`
-condition on `If` at any nesting depth. Ring and Lavabrink Floodgates use source-counter placement
-and threshold checks; Ring and Lightning Coils use removal of every counter of one kind.
-`SourceCounterCount` remains unsupported in `AllOf`/`AnyOf`, `Choose` requirements, conditional
-search predicates, and spell Programs; `EffectsApplicable` remains restricted to a complete fixed
-positive `PlusOnePlusOne` source-counter branch. Replacement choices resume the same Program before
-its threshold tail; two Doubling Seasons turn four Night counters into eight, remove only Night,
-and double the eight-token result to 32. The controller privately orders the simultaneous entrants
-before they become public (CR 608.2c, 608.2h, 616.1e-f, 122.2, 111.4, 205.4g). This adds no card
-admission or protocol or client change.
+The 2026-10-19 Replicating Ring and Lavabrink Floodgates migrations use one closed, ability-only
+source-condition family: validated `SourceCounterCount` with ordinary bounds and live
+`ObjectMatches(Source, AnyPermanent)`, recursively composed with nonempty `AllOf`/`AnyOf` for
+Program `If` tests and `Choose` requirements. The leaves keep separate semantics: source-counter
+lookup preserves existing source/LKI behavior, while `ObjectMatches` checks exact live-source
+membership. This source family remains unsupported in spell Programs and conditional-search
+predicates; event-bound leaves and cross-object matching remain closed. Ability Programs admit fixed-positive `PutCounters` and
+`RemoveCounters` on `Source` as ordinary effects, plus the existing resultless `RemoveAllCounters`
+shape; `EffectsApplicable` remains limited to its complete fixed-positive `PlusOnePlusOne`
+source-counter branch.
+
+Ring's upkeep Program places one Night counter, checks the threshold after replacement choices
+resume the same cursor, removes only Night at eight, and creates eight named Replicated Ring tokens.
+Floodgates uses an optional `AffectedPlayer` choice and requires the trigger's captured actor before
+instruction zero. If that actor has left before resolution or while a choice is parked, the existing
+delegation flow publishes a fresh prompt in the selected player's prompt-ID space; delegation does
+not change the ability controller or a compiled cost payer (CR 503.1a, 800.4g). Its threshold binds
+the existing typed `CardResultCohort(Sacrifice, Controller, 0..1)` from `Sacrifice(Source)` and passes
+that explicit result immediately to `CreateReflexiveTrigger(Sacrificed(Source))`. The ordinary child
+uses fixed-positive `DamageAll` for all players with the exact default Creature filter; Floodgates
+uses six, and this does not admit direct Program `DamageAll`. The committed sacrifice must be the
+exact source incarnation; a replacement destination still represents a successful sacrifice.
+Replacement choices finish before the threshold tail, so two Doubling Seasons turn zero Doom into
+four, then the child resolves once for six damage to each creature. These ordered checks follow CR
+603.12a, 608.2c/h, 701.21a, 122.2, 400.7, 120.4b, and 616.1e-f. This adds no card admissions or
+protocol, relay, or client changes.
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed
 nonempty Mana costs without X and three use `DiscardCard(filter: None)`. The generator and

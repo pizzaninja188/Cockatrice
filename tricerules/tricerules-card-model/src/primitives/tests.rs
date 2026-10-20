@@ -6326,7 +6326,7 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
         (
             "SourceCounterCount",
             r#"SourceCounterCount(counter: Quest, min: Some(1))"#,
-            "supports SourceCounterCount only on an ability program",
+            unsupported,
         ),
         (
             "TargetedPlayer at the root",
@@ -6785,7 +6785,7 @@ fn program_accepts_resultless_proliferate_leaf() {
 }
 
 #[test]
-fn program_ability_admits_only_two_resultless_source_effect_leaves() {
+fn program_ability_admits_two_source_effect_leaves_and_types_source_sacrifice() {
     let body = |leaf: &str, bind: &str| {
         format!(
             r#"(steps: [(id: "effect", bind: {bind}, input: None,
@@ -6872,21 +6872,41 @@ fn program_ability_admits_only_two_resultless_source_effect_leaves() {
         );
     }
 
-    for leaf in [
-        "Sacrifice(subject: Source)",
-        "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true))",
-    ] {
-        let name = if leaf.starts_with("Sacrifice") {
-            "sacrifice"
-        } else {
-            "restriction"
-        };
-        let card_id = format!("program_reject_bound_{name}_fixture");
-        assert!(
-            ability_program_fixture(&card_id, &body(leaf, "[\"effect_result\"]")).is_err(),
-            "the resultless {leaf} cannot bind a result"
-        );
-    }
+    let bound_sacrifice = ability_program_fixture(
+        "program_bound_source_sacrifice_fixture",
+        &body("Sacrifice(subject: Source)", "[\"sacrificed\"]"),
+    )
+    .expect("a source sacrifice can bind its typed committed-movement cohort");
+    let [sacrifice] = bound_sacrifice.body.steps.as_slice() else {
+        panic!("the bound source sacrifice remains one direct instruction")
+    };
+    assert_eq!(sacrifice.outputs.len(), 1);
+    assert_eq!(
+        bound_sacrifice
+            .slot(sacrifice.outputs[0])
+            .unwrap()
+            .result_type,
+        crate::primitives::ResultType::CardResultCohort {
+            action: crate::primitives::CardResultAction::Sacrifice,
+            who: crate::primitives::PlayerRecipient::Controller,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        }
+    );
+
+    assert!(
+        ability_program_fixture(
+            "program_bound_source_restriction_fixture",
+            &body(
+                "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true))",
+                "[\"effect_result\"]",
+            ),
+        )
+        .is_err(),
+        "the resultless combat restriction still cannot bind a result"
+    );
 }
 
 #[test]
@@ -9524,7 +9544,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "Always",
             "None",
-            "supports Controller, or SourceController on an ability program, as chooser",
+            "supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
         ),
         (
             "SourceController chooser on Spell",
@@ -9532,7 +9552,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "Always",
             "None",
-            "supports Controller, or SourceController on an ability program, as chooser",
+            "supports Controller, or SourceController/AffectedPlayer on an ability program, as chooser",
         ),
         (
             "object-payment cost",
@@ -11490,6 +11510,23 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
     )
     .expect("SourceCounterCount remains available to a direct ProgramIf inside a Choose body");
 
+    let choose_source_counter_requirement = r#"(steps: [(id: "choose", kind: Choose(
+        choice: "mode", chooser: Controller, optional: false,
+        branches: [(branch_id: "mode", presentation: Fallback,
+            cost: None,
+            requirement: GameCondition(SourceCounterCount(
+                counter: Night, min: Some(8),
+            )),
+            body: (steps: [], yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    compile(
+        "choose_source_counter_requirement_fixture",
+        EffectContext::Ability,
+        choose_source_counter_requirement,
+    )
+    .expect("bounded source-counter conditions are also available to ability Choose requirements");
+
     for (label, body) in [
         (
             "non-source counter placement",
@@ -11527,19 +11564,6 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
             r#"(steps: [(id: "if", kind: If(
                 condition: SourceCounterCount(counter: Night, min: Some(8), max: Some(7)),
                 yes: (steps: [], yields: []), no: (steps: [], yields: []),
-            ))], yields: [])"#,
-        ),
-        (
-            "Choose source-counter requirement",
-            r#"(steps: [(id: "choose", kind: Choose(
-                choice: "mode", chooser: Controller, optional: false,
-                branches: [(branch_id: "mode", presentation: Fallback,
-                    cost: None,
-                    requirement: GameCondition(SourceCounterCount(
-                        counter: Night, min: Some(8),
-                    )),
-                    body: (steps: [], yields: []))],
-                otherwise: (steps: [], yields: []),
             ))], yields: [])"#,
         ),
     ] {
@@ -12047,4 +12071,544 @@ fn choose_cast_cost_receipt_accepts_expected_unselected_and_rejects_ability_owne
         error.contains("cast-cost requirements require a spell program owner"),
         "{error}"
     );
+}
+
+#[test]
+fn lavabrink_program_admits_affected_choice_and_recursive_source_conditions() {
+    use crate::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, GameCondition, PlayerRecipient,
+        ProgramRequiredInput, SpellEffectKind, TargetKind,
+    };
+
+    const BODY: &str = r#"(steps: [
+        (id: "upkeep_choice", kind: Choose(
+            choice: "doom_counter_choice", chooser: AffectedPlayer, optional: true,
+            branches: [
+                (branch_id: "add_doom", presentation: Fallback, cost: None,
+                    requirement: GameCondition(ObjectMatches(
+                        object: Source, filter: (kind: AnyPermanent),
+                    )),
+                    body: (steps: [(id: "add_doom_counter", kind: Perform(PutCounters(
+                        counter: Doom, count: 1, subject: Source,
+                    )))], yields: [])),
+                (branch_id: "remove_doom", presentation: Fallback, cost: None,
+                    requirement: GameCondition(AllOf([
+                        ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
+                        SourceCounterCount(counter: Doom, min: Some(1)),
+                    ])),
+                    body: (steps: [(id: "remove_doom_counter", kind: Perform(RemoveCounters(
+                        counter: Doom, count: 1, subject: Source,
+                    )))], yields: [])),
+            ],
+            otherwise: (steps: [], yields: []),
+        )),
+        (id: "threshold", kind: If(
+            condition: AllOf([
+                ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
+                AnyOf([
+                    SourceCounterCount(counter: Doom, min: Some(3)),
+                    SourceCounterCount(counter: Doom, min: Some(4)),
+                ]),
+            ]),
+            yes: (steps: [
+                (id: "sacrifice_source", bind: ["sacrificed"], kind: Perform(
+                    Sacrifice(subject: Source),
+                )),
+                (id: "create_reflexive_damage", input: Some("sacrificed"), kind: Perform(
+                    CreateReflexiveTrigger(
+                        when: Some(Sacrificed(object: Source)),
+                        ability: (
+                            ability_id: "reflexive_damage", presentation: Fallback,
+                            effect: [DamageAll(amount: 6, players: All,
+                                kind: (kind: Creature))],
+                            targeting: None, intervening_if: None,
+                        ),
+                    ),
+                )),
+            ], yields: []),
+            no: (steps: [], yields: []),
+        )),
+    ], yields: [])"#;
+
+    let _: crate::CardProgram = ron::from_str(&format!("(body: {BODY})"))
+        .expect("the complete Floodgates Program fixture parses before admission");
+    let definition = |trigger: &str, body: &str| {
+        format!(
+            r#"(id: "lavabrink_program_admission_fixture",
+                name: "Lavabrink Program Admission Fixture",
+                face_id: "lavabrink_program_admission_fixture", types: ["Artifact"],
+                triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger}, effect: [],
+                    program: Some((body: {body})), modal: None, targeting: None,
+                    may: false, intervening_if: None, triggers_only_once: false,
+                    max_triggers_per_turn: None,
+                )])"#
+        )
+    };
+    let upkeep_definition = definition("AtBeginningOfUpkeep(player: AnyPlayer)", BODY);
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&upkeep_definition], &[])
+        .expect("an upkeep trigger supplies the affected player and admits the complete shape");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "lavabrink_program_admission_fixture".into(),
+        face_id: crate::CardFaceId::new("lavabrink_program_admission_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact upkeep ability owns its compiled Program");
+    assert_eq!(
+        compiled.required_inputs,
+        vec![ProgramRequiredInput::TriggerAffectedPlayer],
+        "the chooser is bound to the captured upkeep player before instruction zero"
+    );
+
+    let [choose, threshold] = compiled.body.steps.as_slice() else {
+        panic!("the upkeep choice precedes one source-threshold If");
+    };
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("the upkeep player makes the add/remove/decline choice");
+    };
+    assert_eq!(*chooser, PlayerRecipient::AffectedPlayer);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    let [add, remove] = branches.as_slice() else {
+        panic!("the choice offers one add branch and one remove branch");
+    };
+    assert!(matches!(
+        &add.requirement,
+        CompiledChooseRequirement::GameCondition(GameCondition::ObjectMatches {
+            object: crate::primitives::ConditionObjectRef::Source,
+            filter,
+        }) if filter.kind == TargetKind::AnyPermanent
+    ));
+    assert!(matches!(
+        &remove.requirement,
+        CompiledChooseRequirement::GameCondition(GameCondition::AllOf(conditions))
+            if conditions.len() == 2
+                && conditions.iter().any(|condition| matches!(
+                    condition,
+                    GameCondition::SourceCounterCount {
+                        counter: crate::primitives::CounterKind::Doom,
+                        min: Some(1),
+                        max: None,
+                    }
+                ))
+                && conditions.iter().any(|condition| matches!(
+                    condition,
+                    GameCondition::ObjectMatches {
+                        object: crate::primitives::ConditionObjectRef::Source,
+                        filter,
+                    } if filter.kind == TargetKind::AnyPermanent
+                ))
+    ));
+    assert_eq!(
+        add.fallback_label(),
+        "Put a doom counter on this permanent."
+    );
+    assert_eq!(
+        remove.fallback_label(),
+        "Remove a doom counter from this permanent.",
+        "fixed source-counter removal needs a useful public branch label"
+    );
+    assert!(matches!(
+        remove.body.steps.as_slice(),
+        [step]
+            if matches!(
+                &step.kind,
+                CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::RemoveCounters {
+                        counter: crate::primitives::CounterKind::Doom,
+                        count: 1,
+                        subject: crate::primitives::EffectSubject::Source,
+                    })
+            )
+    ));
+
+    let CompiledInstructionKind::If { condition, yes, no } = &threshold.kind else {
+        panic!("the post-choice threshold remains an ordered Program If");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Game(GameCondition::AllOf(conditions))
+            if conditions.len() == 2
+                && conditions.iter().any(|condition| matches!(
+                    condition,
+                    GameCondition::AnyOf(branches)
+                        if branches.len() == 2
+                            && branches.iter().all(|branch| matches!(
+                                branch,
+                                GameCondition::SourceCounterCount {
+                                    counter: crate::primitives::CounterKind::Doom,
+                                    min: Some(3 | 4),
+                                    max: None,
+                                }
+                            ))
+                ))
+    ));
+    assert!(no.steps.is_empty());
+    assert!(matches!(
+        yes.steps.as_slice(),
+        [sacrifice, reflexive]
+            if sacrifice.outputs.len() == 1
+                && compiled.slot(sacrifice.outputs[0]).is_some_and(|slot|
+                    slot.result_type == crate::primitives::ResultType::CardResultCohort {
+                        action: crate::primitives::CardResultAction::Sacrifice,
+                        who: PlayerRecipient::Controller,
+                        cardinality: crate::primitives::Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    }
+                )
+                && reflexive.input == Some(sacrifice.outputs[0])
+    ));
+    let CompiledInstructionKind::Perform(reflexive_effect) = &yes.steps[1].kind else {
+        unreachable!("the immediate receipt consumer is a reflexive trigger");
+    };
+    assert!(matches!(
+        reflexive_effect.as_ref(),
+        SpellEffectKind::CreateReflexiveTrigger {
+            when: Some(crate::primitives::ResolutionReceiptCondition::Sacrificed {
+                object: crate::primitives::ConditionObjectRef::Source,
+            }),
+            ability,
+        } if matches!(
+            ability.effect.as_slice(),
+            [SpellEffectKind::DamageAll {
+                amount: crate::primitives::Amount::Fixed(6),
+                players: crate::primitives::MassPlayerSet::All,
+                kind,
+            }] if kind.kind == TargetKind::Creature
+        )
+    ));
+
+    let non_upkeep = definition("WhenSelfEntersBattlefield", BODY);
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&non_upkeep], &[])
+        .expect_err("the AffectedPlayer chooser needs a trigger that captures that player")
+        .to_string();
+    assert!(
+        error
+            .contains("requires TriggerAffectedPlayer, but its trigger does not supply that input"),
+        "the precise producer/consumer mismatch is reported: {error}"
+    );
+
+    let cross_object = BODY.replace(
+        "ObjectMatches(object: Source, filter: (kind: AnyPermanent))",
+        "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: AnyPermanent))",
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(
+            &[&definition(
+                "AtBeginningOfUpkeep(player: AnyPlayer)",
+                &cross_object
+            )],
+            &[],
+        )
+        .is_err(),
+        "the Floodgates source predicate cannot become a chosen or cross-object condition"
+    );
+
+    let unbounded_source_counter = BODY.replace(
+        "SourceCounterCount(counter: Doom, min: Some(1))",
+        "SourceCounterCount(counter: Doom)",
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(
+            &[&definition(
+                "AtBeginningOfUpkeep(player: AnyPlayer)",
+                &unbounded_source_counter,
+            )],
+            &[],
+        )
+        .is_err(),
+        "recursive source-count predicates retain the ordinary bounded-count contract"
+    );
+
+    let empty_nested_condition = BODY.replace(
+        "AnyOf([\n                    SourceCounterCount(counter: Doom, min: Some(3)),\n                    SourceCounterCount(counter: Doom, min: Some(4)),\n                ])",
+        "AnyOf([])",
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(
+            &[&definition(
+                "AtBeginningOfUpkeep(player: AnyPlayer)",
+                &empty_nested_condition,
+            )],
+            &[],
+        )
+        .is_err(),
+        "recursive AllOf/AnyOf source predicates still require nonempty bounded composition"
+    );
+
+    let compile_ability_body = |body: &str| {
+        let program: crate::CardProgram = ron::from_str(&format!("(body: {body})"))
+            .expect("counter-removal Program fixture parses");
+        crate::primitives::CompiledProgram::compile(
+            owner.clone(),
+            crate::primitives::EffectContext::Ability,
+            &program,
+        )
+    };
+    for (label, effect) in [
+        (
+            "zero count",
+            "RemoveCounters(counter: Doom, count: 0, subject: Source)",
+        ),
+        (
+            "non-source subject",
+            "RemoveCounters(counter: Doom, count: 1, subject: Chosen((kind: AnyPermanent)))",
+        ),
+    ] {
+        let body = format!("(steps: [(id: \"remove\", kind: Perform({effect}))], yields: [])");
+        assert!(
+            compile_ability_body(&body).is_err(),
+            "fixed-positive Source RemoveCounters rejects {label}"
+        );
+    }
+
+    let spell = format!(
+        r#"(id: "lavabrink_program_spell_fixture",
+            name: "Lavabrink Program Spell Fixture",
+            face_id: "lavabrink_program_spell_fixture", mana_cost: "{{0}}",
+            types: ["Instant"], spell_program: Some((body: {BODY})))"#
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&spell], &[]).is_err(),
+        "captured upkeep-player and live source predicates remain ability-only"
+    );
+}
+
+#[test]
+fn program_source_counter_removal_branch_fallback_is_readable() {
+    use crate::primitives::{
+        CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction,
+        CompiledInstructionKind, CounterKind, EffectSubject, ResolutionCost, SpellEffectKind,
+    };
+
+    let branch = CompiledChooseBranch {
+        branch_id: crate::ChoiceId::new("remove_doom").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        cost: ResolutionCost::None,
+        requirement: CompiledChooseRequirement::Always,
+        body: CompiledBlock {
+            steps: vec![CompiledInstruction {
+                instruction_address: 0,
+                id: "remove_doom_counter".into(),
+                outputs: vec![],
+                input: None,
+                kind: CompiledInstructionKind::Perform(Box::new(SpellEffectKind::RemoveCounters {
+                    counter: CounterKind::Doom,
+                    count: 1,
+                    subject: EffectSubject::Source,
+                })),
+            }],
+            yields: vec![],
+        },
+    };
+
+    assert_eq!(
+        branch.fallback_label(),
+        "Remove a doom counter from this permanent."
+    );
+}
+
+#[test]
+fn program_source_sacrifice_receipt_is_typed_immediate_and_unambiguous() {
+    use crate::primitives::{CompiledInstructionKind, CompiledProgram, EffectContext};
+
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "source_sacrifice_receipt_fixture".into(),
+        face_id: crate::CardFaceId::new("source_sacrifice_receipt_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compile = |body: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("sacrifice receipt fixture parses");
+        CompiledProgram::compile(owner.clone(), EffectContext::Ability, &program)
+    };
+    let reflexive = r#"(id: "reflexive", input: Some("sacrificed"), kind: Perform(
+        CreateReflexiveTrigger(
+            when: Some(Sacrificed(object: Source)),
+            ability: (
+                ability_id: "reflexive_damage", presentation: Fallback,
+                effect: [DamageAll(amount: 6, players: All,
+                    kind: (kind: Creature))],
+                targeting: None, intervening_if: None,
+            ),
+        ),
+    ))"#;
+    let direct_source_sacrifice = format!(
+        r#"(steps: [
+            (id: "sacrifice", bind: ["sacrificed"], kind: Perform(
+                Sacrifice(subject: Source),
+            )),
+            {reflexive},
+        ], yields: [])"#
+    );
+    let compiled = compile(&direct_source_sacrifice)
+        .expect("a reflexive child consumes its immediately preceding source sacrifice result");
+    let [sacrifice, child] = compiled.body.steps.as_slice() else {
+        panic!("the source sacrifice directly precedes its reflexive child");
+    };
+    assert!(matches!(
+        &sacrifice.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Sacrifice {
+                subject: crate::primitives::EffectSubject::Source,
+            })
+    ));
+    let result = compiled
+        .slot(sacrifice.outputs[0])
+        .expect("the committed sacrifice exposes its own typed result");
+    assert_eq!(
+        result.result_type,
+        crate::primitives::ResultType::CardResultCohort {
+            action: crate::primitives::CardResultAction::Sacrifice,
+            who: crate::primitives::PlayerRecipient::Controller,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        }
+    );
+    assert_eq!(child.input, Some(sacrifice.outputs[0]));
+
+    let wrong_type = direct_source_sacrifice.replace(
+        r#"(id: "sacrifice", bind: ["sacrificed"], kind: Perform(
+                Sacrifice(subject: Source),
+            ))"#,
+        r#"(id: "sacrifice", bind: ["sacrificed"], kind: Perform(
+                Draw(who: Controller, count: 1),
+            ))"#,
+    );
+    assert!(
+        compile(&wrong_type).is_err(),
+        "a DrawReceipt cannot authorize the Sacrificed(Source) child"
+    );
+
+    let unrelated_object = direct_source_sacrifice.replace(
+        "Sacrificed(object: Source)",
+        "Sacrificed(object: PreviousEffectObject)",
+    );
+    assert!(
+        compile(&unrelated_object).is_err(),
+        "the receipt predicate must name the exact sacrificed source"
+    );
+
+    let non_immediate = direct_source_sacrifice.replace(
+        &format!("{reflexive},"),
+        &format!(
+            r#"(id: "unrelated", kind: Perform(GainLife(amount: 1))),
+            {reflexive},"#
+        ),
+    );
+    assert!(
+        compile(&non_immediate).is_err(),
+        "an unrelated instruction cannot separate the receipt from its consumer"
+    );
+
+    let branch_ambiguous = format!(
+        r#"(steps: [
+            (id: "choose_sacrifice", bind: ["sacrificed"], kind: Choose(
+                choice: "sacrifice_choice", chooser: Controller, optional: false,
+                branches: [
+                    (branch_id: "first", presentation: Fallback, cost: None,
+                        requirement: Always,
+                        body: (steps: [(id: "sacrifice_first", bind: ["first_result"],
+                            kind: Perform(Sacrifice(subject: Source)))],
+                            yields: ["first_result"])),
+                    (branch_id: "second", presentation: Fallback, cost: None,
+                        requirement: Always,
+                        body: (steps: [(id: "sacrifice_second", bind: ["second_result"],
+                            kind: Perform(Sacrifice(subject: Source)))],
+                            yields: ["second_result"])),
+                ],
+                otherwise: (steps: [(id: "sacrifice_otherwise", bind: ["otherwise_result"],
+                    kind: Perform(Sacrifice(subject: Source)))],
+                    yields: ["otherwise_result"]),
+            )),
+            {reflexive},
+        ], yields: [])"#
+    );
+    assert!(
+        compile(&branch_ambiguous).is_err(),
+        "a joined Choose output is not an explicit immediate Sacrifice(Source) result"
+    );
+
+    let resultless_reflexive = direct_source_sacrifice.replace("input: Some(\"sacrificed\"), ", "");
+    assert!(
+        compile(&resultless_reflexive).is_err(),
+        "Sacrificed(Source) cannot read ambient prior-effect state"
+    );
+
+    let direct_damage = r#"(steps: [(id: "damage_all", kind: Perform(DamageAll(
+        amount: 6, players: All, kind: (kind: Creature),
+    )))], yields: [])"#;
+    assert!(
+        compile(direct_damage).is_err(),
+        "the specialized reflexive child does not admit a direct Program DamageAll leaf"
+    );
+}
+
+#[test]
+fn source_sacrifice_reflexive_damage_accepts_any_positive_fixed_all_creature_amount() {
+    let compile = |amount: &str, players: &str, kind: &str| {
+        let body = format!(
+            r#"(steps: [
+                (id: "sacrifice", bind: ["sacrificed"], kind: Perform(
+                    Sacrifice(subject: Source),
+                )),
+                (id: "reflexive", input: Some("sacrificed"), kind: Perform(
+                    CreateReflexiveTrigger(
+                        when: Some(Sacrificed(object: Source)),
+                        ability: (
+                            ability_id: "reflexive_damage", presentation: Fallback,
+                            effect: [DamageAll(amount: {amount}, players: {players},
+                                kind: {kind})],
+                            targeting: None, intervening_if: None,
+                        ),
+                    ),
+                )),
+            ], yields: [])"#
+        );
+        let _: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).unwrap_or_else(|error| {
+                panic!("the source-sacrifice reflexive CardProgram fixture parses: {error}")
+            });
+        ability_program_fixture("source_sacrifice_damage_amount_fixture", &body)
+    };
+
+    compile("5", "All", "(kind: Creature)")
+        .expect("the bounded reflexive family accepts a different positive fixed amount");
+
+    for (label, amount, players, kind) in [
+        ("zero", "0", "All", "(kind: Creature)"),
+        ("cast-time X", "X", "All", "(kind: Creature)"),
+        (
+            "variable amount",
+            "Conditional(condition: ControllerLibraryEmpty, when_true: 5, otherwise: 4)",
+            "All",
+            "(kind: Creature)",
+        ),
+        ("non-creature filter", "5", "All", "(kind: AnyPermanent)"),
+        (
+            "restricted player recipient",
+            "5",
+            "Controller",
+            "(kind: Creature)",
+        ),
+    ] {
+        assert!(
+            compile(amount, players, kind).is_err(),
+            "Sacrificed(Source) reflexive DamageAll remains closed to {label}"
+        );
+    }
 }

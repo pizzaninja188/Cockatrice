@@ -71,6 +71,66 @@ fn select_branch(branch: u32) -> RuledCommand {
     command
 }
 
+fn select_branch_for_prompt(prompt_id: u64, branch: u32) -> RuledCommand {
+    let mut command = select_branch(branch);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = command.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id;
+    command
+}
+
+fn pass_priority_round_with_batch(
+    engine: &mut GameEngine,
+) -> tricerules_proto::ruled::v1::RuledEventBatch {
+    answer_simultaneous_entry_order_in_engine_order(engine);
+    answer_trigger_order_in_engine_order(engine);
+    let remaining_passes = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count()
+        .checked_sub(engine.state.passes_since_stack_change as usize)
+        .expect("consistent priority pass count");
+    let mut resolution_batch = None;
+    for _ in 0..remaining_passes {
+        let actor = engine.state.priority_player_id();
+        resolution_batch = Some(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .expect("each surviving priority holder passes"),
+        );
+    }
+    answer_simultaneous_entry_order_in_engine_order(engine);
+    resolution_batch.expect("the final pass produces the resolution batch")
+}
+
+fn prime_upkeep_prompt_and_decline(engine: &mut GameEngine, source: u32, player: i32) -> u64 {
+    start_upkeep(engine, player);
+    let batch = pass_priority_round_with_batch(engine);
+    let choice = find_resolution_choice(&batch)
+        .expect("the current upkeep player receives the optional choice");
+    assert_eq!(choice.deciding_player_id, player);
+    assert_ne!(choice.resolution_prompt_id, 0);
+    let prompt_id = choice.resolution_prompt_id;
+    let mut decline = submit_resolution_decision(ResolutionChoiceDecision::Decline);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = decline.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = prompt_id;
+    engine
+        .apply_scenario_command(player, &decline)
+        .expect("the upkeep player declines the optional choice");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Doom),
+        2
+    );
+    prompt_id
+}
+
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine.apply_scenario_command(actor, command).is_err());
@@ -173,6 +233,100 @@ fn lavabrink_floodgates_has_its_complete_single_face() {
 }
 
 #[test]
+fn lavabrink_floodgates_upkeep_trigger_owns_the_typed_program() {
+    let registry = tricerules_cards::registry::global();
+    let card = registry
+        .get(FLOODGATES)
+        .expect("exact Lavabrink Floodgates card is registered");
+    let face = card.primary_face();
+    let ability = face
+        .triggered_abilities
+        .first()
+        .expect("upkeep trigger has one exact ability owner");
+    let owner = tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+        card_id: FLOODGATES.into(),
+        face_id: face.face_id.clone(),
+        ability_path: vec![ability.ability_id.clone()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact registered upkeep ability has a compiled Program");
+    assert_eq!(
+        program.required_inputs,
+        vec![tricerules_cards::primitives::ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+
+    let [choice, threshold] = program.body.steps.as_slice() else {
+        panic!("the admitted upkeep Program has a choice followed by a threshold");
+    };
+    let tricerules_cards::primitives::CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        ..
+    } = &choice.kind
+    else {
+        panic!("the upkeep player chooses whether to add, remove, or decline");
+    };
+    assert_eq!(*chooser, PlayerRecipient::AffectedPlayer);
+    assert!(*optional);
+    let [add, remove] = branches.as_slice() else {
+        panic!("the exact card has separate add and remove branches");
+    };
+    assert_eq!(
+        add.fallback_label(),
+        "Put a doom counter on this permanent."
+    );
+    assert_eq!(
+        remove.fallback_label(),
+        "Remove a doom counter from this permanent."
+    );
+
+    let tricerules_cards::primitives::CompiledInstructionKind::If { yes, no, .. } = &threshold.kind
+    else {
+        panic!("the threshold check follows the upkeep player's choice");
+    };
+    assert!(no.steps.is_empty());
+    let [sacrifice, reflexive] = yes.steps.as_slice() else {
+        panic!("threshold resolution sacrifices the source before creating the reflexive child");
+    };
+    assert!(matches!(
+        program
+            .slot(sacrifice.outputs[0])
+            .map(|slot| &slot.result_type),
+        Some(tricerules_cards::primitives::ResultType::CardResultCohort {
+            action: tricerules_cards::primitives::CardResultAction::Sacrifice,
+            who: PlayerRecipient::Controller,
+            cardinality: tricerules_cards::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        })
+    ));
+    assert_eq!(reflexive.input, Some(sacrifice.outputs[0]));
+    let tricerules_cards::primitives::CompiledInstructionKind::Perform(effect) = &reflexive.kind
+    else {
+        panic!("the immediately bound sacrifice result feeds the reflexive child");
+    };
+    assert!(matches!(
+        effect.as_ref(),
+        SpellEffectKind::CreateReflexiveTrigger {
+            when: Some(ResolutionReceiptCondition::Sacrificed {
+                object: ConditionObjectRef::Source,
+            }),
+            ability,
+        } if matches!(
+            ability.effect.as_slice(),
+            [SpellEffectKind::DamageAll {
+                amount: Amount::Fixed(6),
+                players: MassPlayerSet::All,
+                kind,
+            }] if kind.kind == TargetKind::Creature
+        )
+    ));
+}
+
+#[test]
 fn lavabrink_floodgates_uses_the_upkeep_players_choice_and_rejects_invalid_answers() {
     let (mut engine, source) = setup(&[0, 1, 2]);
     set_counters(&mut engine, source, CounterKind::Doom, 3);
@@ -226,6 +380,184 @@ fn lavabrink_floodgates_uses_the_upkeep_players_choice_and_rejects_invalid_answe
         .find(|object| object.object_id == source)
         .expect("Floodgates remains visible on the battlefield");
     assert_eq!(floodgates.counters_annotation, "2 doom counter(s)");
+}
+
+#[test]
+fn lavabrink_floodgates_missing_captured_upkeep_player_fails_before_program_instruction_zero() {
+    let (mut engine, source) = setup(&[0, 1, 2]);
+    set_counters(&mut engine, source, CounterKind::Doom, 3);
+    start_upkeep(&mut engine, 2);
+    engine
+        .state
+        .stack
+        .last_mut()
+        .expect("the current upkeep trigger is on the stack")
+        .trigger_context
+        .affected_player = None;
+
+    let live_players = engine.state.players.iter().filter(|p| !p.has_lost).count();
+    for _ in 0..live_players - 1 {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("priority passes before the missing-input boundary");
+    }
+    let actor = engine.state.priority_player_id();
+    let before = engine.diagnostic_snapshot().unwrap();
+    let error = engine
+        .apply_scenario_command(actor, &pass())
+        .expect_err("the required captured actor is checked before the first Program choice");
+    assert!(error
+        .to_string()
+        .contains("resolution program is missing its captured affected player"));
+    assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Doom),
+        3
+    );
+}
+
+#[test]
+fn lavabrink_floodgates_delegates_before_resolution_when_upkeep_player_has_conceded() {
+    let (mut engine, source) = setup(&[0, 1, 2, 3]);
+    set_counters(&mut engine, source, CounterKind::Doom, 2);
+    let p0_old_prompt_id = prime_upkeep_prompt_and_decline(&mut engine, source, 0);
+    let p1_old_prompt_id = prime_upkeep_prompt_and_decline(&mut engine, source, 1);
+    let creatures = [
+        add_damage_test_creature(&mut engine, 0),
+        add_damage_test_creature(&mut engine, 1),
+        add_damage_test_creature(&mut engine, 3),
+    ];
+    start_upkeep(&mut engine, 2);
+
+    engine.apply_scenario_command(2, &concede()).unwrap();
+    let resolution_batch = pass_priority_round_with_batch(&mut engine);
+    assert_eq!(
+        resolution_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::ResolutionChoiceRequired(_))))
+            .count(),
+        1,
+        "the resolution publishes exactly one initial delegate offer"
+    );
+    assert!(resolution_batch.events.iter().all(|event| match &event.ev {
+        Some(Ev::ResolutionChoiceRequired(choice)) => choice.deciding_player_id != 2,
+        _ => true,
+    }));
+    let selector = find_resolution_choice(&resolution_batch)
+        .expect("the upkeep trigger should offer a delegated choice");
+    assert_ne!(selector.resolution_prompt_id, 0);
+    assert_eq!(
+        selector.deciding_player_id, 0,
+        "the ability controller delegates when the captured upkeep player left before resolution"
+    );
+    assert_eq!(
+        selector
+            .resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "P1 makes the choice", true),
+            (1, "P3 makes the choice", true)
+        ]
+    );
+    let delegate_prompt_id = selector.resolution_prompt_id;
+    assert_ne!(delegate_prompt_id, p0_old_prompt_id);
+    let snapshot = engine
+        .diagnostic_snapshot()
+        .expect("pending choice snapshot");
+    let stage =
+        &snapshot["state"]["pending_resolution"]["continuation"]["value"]["choose"]["stage"];
+    assert_eq!(stage["variant"], "ChoosingDelegate");
+    assert_eq!(stage["value"]["candidates"], serde_json::json!([1, 3]));
+
+    reject(
+        &mut engine,
+        1,
+        &select_branch_for_prompt(delegate_prompt_id, 0),
+    );
+    reject(
+        &mut engine,
+        0,
+        &select_branch_for_prompt(p0_old_prompt_id, 0),
+    );
+    let delegated_menu_batch = engine
+        .apply_scenario_command(0, &select_branch_for_prompt(delegate_prompt_id, 0))
+        .expect("the controller assigns the choice to surviving player 1");
+    let delegated_menu = find_resolution_choice(&delegated_menu_batch)
+        .expect("the selected delegate receives the original resolution menu");
+    assert_eq!(delegated_menu.deciding_player_id, 1);
+    assert_ne!(delegated_menu.resolution_prompt_id, 0);
+    assert_ne!(delegated_menu.resolution_prompt_id, p1_old_prompt_id);
+    assert_ne!(
+        (selector.deciding_player_id, selector.resolution_prompt_id),
+        (
+            delegated_menu.deciding_player_id,
+            delegated_menu.resolution_prompt_id
+        )
+    );
+    assert_eq!(
+        delegated_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true), (1, true)]
+    );
+    let original_menu_prompt_id = delegated_menu.resolution_prompt_id;
+
+    reject(
+        &mut engine,
+        0,
+        &select_branch_for_prompt(original_menu_prompt_id, 0),
+    );
+    reject(
+        &mut engine,
+        0,
+        &select_branch_for_prompt(delegate_prompt_id, 0),
+    );
+    reject(
+        &mut engine,
+        1,
+        &select_branch_for_prompt(p1_old_prompt_id, 0),
+    );
+    let chosen_add = engine
+        .apply_scenario_command(1, &select_branch_for_prompt(original_menu_prompt_id, 0))
+        .expect("the delegated upkeep player adds a doom counter");
+    assert!(!chosen_add
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Doom),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(
+        engine.state.stack[0].controller, 0,
+        "the reflexive trigger is a separate child controlled by the source controller"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+
+    resolve_all_players_pass(&mut engine);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    for creature in creatures {
+        assert_eq!(
+            engine.state.objects[&creature].damage, 6,
+            "the delegated parent creates and resolves one six-damage child"
+        );
+    }
 }
 
 #[test]
@@ -288,6 +620,82 @@ fn lavabrink_floodgates_add_to_threshold_sacrifices_and_deals_six_to_all_creatur
         life_totals,
         "the reflexive ability damages creatures, not players"
     );
+}
+
+#[test]
+fn lavabrink_floodgates_doubling_seasons_resume_to_threshold_and_one_reflexive_trigger() {
+    let (mut engine, source) = setup(&[0, 1, 2]);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    set_counters(&mut engine, source, CounterKind::Doom, 0);
+    let creatures = [
+        add_damage_test_creature(&mut engine, 0),
+        add_damage_test_creature(&mut engine, 1),
+        add_damage_test_creature(&mut engine, 2),
+    ];
+
+    start_upkeep(&mut engine, 2);
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        2
+    );
+    engine
+        .apply_scenario_command(2, &select_branch(0))
+        .expect("the upkeep player chooses to add a doom counter");
+
+    let mut replacement_prompts = 0;
+    while let Some(pending) = engine.state.pending_resolution.as_ref() {
+        if pending.presentation.choice_kind != ChoiceKind::ReplacementEffect {
+            break;
+        }
+        replacement_prompts += 1;
+        assert!(replacement_prompts <= 2, "replacement effects do not loop");
+        assert_eq!(pending.deciding_player, 0);
+        let candidates = pending.presentation.candidates.clone();
+        assert!(!candidates.is_empty());
+        let valid = submit_resolution_choice(vec![candidates[0]]);
+        if replacement_prompts == 1 {
+            assert_eq!(candidates.len(), 2);
+            let snapshot = engine.diagnostic_snapshot().unwrap();
+            assert!(
+                snapshot["state"]["pending_resolution"]["continuation"]["variant"]
+                    == "CounterReplacement"
+            );
+            assert!(
+                snapshot["state"]["pending_resolution"]["continuation"]["value"]["stack"]
+                    ["program"]
+                    .is_object()
+            );
+            reject(&mut engine, 1, &valid);
+            let invalid = (0..=candidates.len() as u32)
+                .find(|candidate| !candidates.contains(candidate))
+                .expect("a third choice id is not a offered replacement");
+            reject(&mut engine, 0, &submit_resolution_choice(vec![invalid]));
+        }
+        engine
+            .apply_scenario_command(0, &valid)
+            .expect("the source controller chooses one offered counter replacement");
+    }
+    assert!(replacement_prompts >= 1);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the Program completes the threshold sacrifice and stages one separate reflexive trigger"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+
+    resolve_all_players_pass(&mut engine);
+    for creature in creatures {
+        assert_eq!(engine.state.objects[&creature].damage, 6);
+    }
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]
@@ -494,44 +902,112 @@ fn lavabrink_floodgates_old_upkeep_trigger_cannot_affect_a_new_source_generation
 fn lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player_concedes() {
     let (mut engine, source) = setup(&[0, 1, 2, 3]);
     set_counters(&mut engine, source, CounterKind::Doom, 2);
+    let p0_old_prompt_id = prime_upkeep_prompt_and_decline(&mut engine, source, 0);
+    let p1_old_prompt_id = prime_upkeep_prompt_and_decline(&mut engine, source, 1);
     start_upkeep(&mut engine, 2);
-    pass_priority_round(&mut engine);
-    assert_eq!(
-        engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .unwrap()
-            .deciding_player,
-        2
-    );
+    let original_menu_batch = pass_priority_round_with_batch(&mut engine);
+    let original_menu = find_resolution_choice(&original_menu_batch)
+        .expect("the live upkeep player receives the original menu");
+    assert_eq!(original_menu.deciding_player_id, 2);
+    assert_ne!(original_menu.resolution_prompt_id, 0);
+    let original_prompt_id = original_menu.resolution_prompt_id;
 
-    engine.apply_scenario_command(2, &concede()).unwrap();
-    let pending = engine.state.pending_resolution.as_ref().unwrap();
+    let delegate_batch = engine
+        .apply_scenario_command(2, &concede())
+        .expect("the current chooser can concede while its Program is parked");
+    let selector = find_resolution_choice(&delegate_batch)
+        .expect("the ability controller receives the delegate selector");
+    assert_ne!(selector.resolution_prompt_id, 0);
+    assert_ne!(selector.resolution_prompt_id, p0_old_prompt_id);
+    assert_ne!(
+        (original_menu.deciding_player_id, original_prompt_id),
+        (selector.deciding_player_id, selector.resolution_prompt_id)
+    );
     assert_eq!(
-        pending.deciding_player, 0,
+        selector.deciding_player_id, 0,
         "the ability controller chooses a delegate"
     );
-    let ResolutionContinuation::AuthoredBranch { branch, .. } = &pending.continuation else {
-        panic!("upkeep branch remains parked while its chooser is replaced");
-    };
-    let PendingResolutionBranchStage::ChoosingDelegate { candidates } = &branch.stage else {
-        panic!("the controller receives the 800.4g delegate selection");
-    };
-    assert_eq!(candidates, &[Some(1), Some(3)]);
-
-    engine.apply_scenario_command(0, &select_branch(0)).unwrap();
     assert_eq!(
-        engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .unwrap()
-            .deciding_player,
-        1
+        selector
+            .resolution_branches
+            .iter()
+            .map(|branch| (
+                branch.branch_index,
+                branch.label.as_str(),
+                branch.selectable
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "P1 makes the choice", true),
+            (1, "P3 makes the choice", true)
+        ]
     );
-    engine.apply_scenario_command(1, &select_branch(0)).unwrap();
+    let snapshot = engine
+        .diagnostic_snapshot()
+        .expect("pending choice snapshot");
+    let stage =
+        &snapshot["state"]["pending_resolution"]["continuation"]["value"]["choose"]["stage"];
+    assert_eq!(stage["variant"], "ChoosingDelegate");
+    assert_eq!(stage["value"]["candidates"], serde_json::json!([1, 3]));
+
+    let delegate_prompt_id = selector.resolution_prompt_id;
+    reject(
+        &mut engine,
+        1,
+        &select_branch_for_prompt(delegate_prompt_id, 0),
+    );
+    reject(
+        &mut engine,
+        0,
+        &select_branch_for_prompt(p0_old_prompt_id, 0),
+    );
+    let delegated_menu_batch = engine
+        .apply_scenario_command(0, &select_branch_for_prompt(delegate_prompt_id, 0))
+        .expect("the controller assigns the choice to surviving player 1");
+    let delegated_menu = find_resolution_choice(&delegated_menu_batch)
+        .expect("the selected delegate receives the original resolution menu");
+    assert_eq!(delegated_menu.deciding_player_id, 1);
+    assert_ne!(delegated_menu.resolution_prompt_id, 0);
+    assert_ne!(delegated_menu.resolution_prompt_id, p1_old_prompt_id);
+    assert_ne!(
+        (selector.deciding_player_id, selector.resolution_prompt_id),
+        (
+            delegated_menu.deciding_player_id,
+            delegated_menu.resolution_prompt_id
+        )
+    );
+    assert_eq!(
+        delegated_menu
+            .resolution_branches
+            .iter()
+            .map(|branch| (branch.branch_index, branch.selectable))
+            .collect::<Vec<_>>(),
+        vec![(0, true), (1, true)]
+    );
+    let original_menu_prompt_id = delegated_menu.resolution_prompt_id;
+    reject(
+        &mut engine,
+        0,
+        &select_branch_for_prompt(original_menu_prompt_id, 0),
+    );
+    reject(
+        &mut engine,
+        1,
+        &select_branch_for_prompt(p1_old_prompt_id, 0),
+    );
+    let chosen_add = engine
+        .apply_scenario_command(1, &select_branch_for_prompt(original_menu_prompt_id, 0))
+        .expect("the delegated upkeep player adds a doom counter");
+    assert!(!chosen_add
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(
+        engine.state.stack[0].controller, 0,
+        "the reflexive child remains controlled by the source controller"
+    );
     resolve_all_players_pass(&mut engine);
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_resolution.is_none());

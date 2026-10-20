@@ -16,9 +16,11 @@
       "end_line": 2,
       "typed_paths": [
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0",
-        "/faces/0/triggered_abilities/0/effect/1",
-        "/faces/0/triggered_abilities/0/effect/2"
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/If",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/If/yes/steps/0/kind/Perform/Sacrifice",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/If/yes/steps/1/kind/Perform/CreateReflexiveTrigger/ability"
       ]
     }
   ],
@@ -29,12 +31,28 @@
       "covers": "exact card identity, complete single face, mana cost, ability line mapping, upkeep trigger identity, and public Doom label"
     },
     {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_upkeep_trigger_owns_the_typed_program",
+      "covers": "compiled owner requires the captured upkeep player; typed optional add/remove choices, source sacrifice cohort, immediate explicit reflexive input, and exact six-to-creature child"
+    },
+    {
       "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_uses_the_upkeep_players_choice_and_rejects_invalid_answers",
-      "covers": "opponent upkeep actor and chooser, external third counter without immediate sacrifice, rejected wrong-player and invalid branch atomicity, removal below threshold, and public counter annotation"
+      "covers": "captured upkeep actor and chooser, external third counter without immediate sacrifice, rejected wrong-player and invalid branch atomicity, removal below threshold, and public counter annotation"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_missing_captured_upkeep_player_fails_before_program_instruction_zero",
+      "covers": "missing required trigger actor fails before the optional choice or any counter/source mutation and leaves the complete diagnostic state unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_delegates_before_resolution_when_upkeep_player_has_conceded",
+      "covers": "pre-resolution departure delegates the initial free choice with fresh per-player prompt identity, rejects wrong actors and same-actor stale answers atomically, and completes source sacrifice plus one six-damage child"
     },
     {
       "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_add_to_threshold_sacrifices_and_deals_six_to_all_creatures",
       "covers": "threshold sacrifice, replacement destination to exile, six damage to all current creatures across players, and unchanged player life"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_doubling_seasons_resume_to_threshold_and_one_reflexive_trigger",
+      "covers": "two Doubling Season replacement effects with one ordering choice resume the same Program, reach the source threshold from zero, commit one sacrifice, and resolve one separate six-damage child"
     },
     {
       "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_add_remove_and_decline_check_the_threshold_afterward",
@@ -58,7 +76,7 @@
     },
     {
       "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player_concedes",
-      "covers": "800.4g delegated choice with a four-player departure and completed threshold sacrifice"
+      "covers": "parked-choice departure delegates with fresh per-player prompt identity, rejects wrong and same-actor stale answers atomically, and completes the threshold sacrifice and reflexive child"
     },
     {
       "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_logged_upkeep_branch_replays_to_the_same_state",

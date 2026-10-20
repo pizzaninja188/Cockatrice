@@ -178,7 +178,8 @@ its own targeting groups and group indices. Do not add a face-level `spell_progr
 
 The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
-is `Controller`, with `SourceController` also admitted for ability programs. Its branches must be
+is `Controller`, with `SourceController` also admitted for ability Programs and captured
+`AffectedPlayer` for triggered ability Programs that supply the required input. Its branches must be
 either all free or all paid; supported costs are `None`, fixed
 nonempty `Mana` without X, fixed nonempty `Waterbend` without X, the fixed one-card
 `PutHandCardOnLibraryBottom` cost on a `Controller`-chosen spell branch, the one-card
@@ -213,8 +214,9 @@ plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
 accepted targetless forms, are described below. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
-`AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
-not have that trigger input. Ability programs admit `Discard(EachOpponent, Exact(1))` as a combined
+`AffectedPlayer` for a draw/discard recipient or as a `Choose` chooser when their trigger supplies
+that captured event-time player. Activated programs do not have that trigger input. Ability
+programs admit `Discard(EachOpponent, Exact(1))` as a combined
 opponent cohort and the narrow `Discard(EachPlayer, Exact(1))` shape used by Fanatic of the
 Harrowing; neither has a fixed aggregate maximum. For an `EachPlayer` result, only an unfiltered
 controller `DiscardCount` with `min: Some(1)` and `max: None` is admitted, so the condition tests
@@ -276,6 +278,15 @@ cannot be transferred to a delegate. If the payer leaves, `Otherwise` can run on
 player's owning resolution survives. In the admitted `Controller`-chosen Blight shape, the payer
 also controls the triggered stack object: departure removes it under CR 800.4a, without entering
 either the paid body or `Otherwise`. A cost-payment choice is never delegated (CR 800.4f).
+
+An ability-program `Choose` may use `AffectedPlayer` only when its triggering ability captures that
+player. Registry validation requires `TriggerAffectedPlayer`; a missing value fails before
+instruction zero. The captured actor remains the chooser unless that player has left before the
+ability resolves or while its choice is parked. The engine then delegates only the pending decision
+and publishes a fresh prompt for the selected live player (CR 800.4g). Resolution prompt IDs are
+scoped to each deciding player, so stale-answer checks compare the submitting actor with that
+actor's prompt ID. Delegation does not change the ability controller or any compiled cost payer.
+
 For an ability `Choose` Blight payment,
 counter replacements finish before the cost transaction commits. CR 614.16 governs when an
 earlier replacement makes an effect-created-counter replacement apply; the affected permanent's
@@ -284,12 +295,12 @@ controller chooses applicable replacements one at a time, repeating the check af
 state-based actions are checked (CR 704.4).
 The ordinary `CreateTokens(..., who: SourceController)` leaf instead chooses its recipient when the
 effect resolves, so a later source control change can make that recipient differ from the earlier
-chooser. Ability Programs also admit fixed-positive `PutCounters` and resultless
-`RemoveAllCounters` leaves on `Source` for any validated counter kind. Replicating Ring and
-Lavabrink Floodgates use source-counter placement and threshold checks; Replicating Ring and
-Lightning Coils use removal of all counters of one kind. `EffectsApplicable` is still admitted only
-on an ability `Choose` branch whose complete
-body is one resultless, fixed positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine
+chooser. Ability Programs also admit fixed-positive `PutCounters` and `RemoveCounters` on `Source`
+as ordinary effects, plus the existing resultless `RemoveAllCounters` shape, for validated counter
+kinds. Replicating Ring and Lavabrink Floodgates use source-counter placement and threshold checks;
+Replicating Ring and Lightning Coils use removal of all counters of one kind. `EffectsApplicable`
+is still admitted only on an ability `Choose` branch whose complete body is one resultless,
+fixed-positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine
 checks whether that exact source incarnation can receive the counters both when the menu is offered
 and when a branch answer is validated. A mandatory choice with exactly one live cost-free branch
 enters it automatically and logs the selection; optional choices and paid branches still receive
@@ -319,12 +330,16 @@ recursive; other graveyard owners and `DistinctCardTypes` are outside this progr
 top-level Program `If` may also test `Void`, which is sampled when that instruction resolves before
 the selected branch begins; a later draw-replacement suspension does not reevaluate the condition
 (CR 608.2c, 608.2h). `Void` is not admitted inside `AllOf`/`AnyOf`, as a `Choose` requirement, or
-as the predicate for a conditional top-of-library search. Ability Programs may directly test
-`SourceCounterCount` in an `If` at any nesting depth; the exact source counter total is read when
-that instruction resolves. This condition remains unsupported inside `AllOf`/`AnyOf`, as a `Choose`
-requirement, as a conditional top-of-library search predicate, and in spell Programs. Replicating
-Ring uses it after its counter-placement step; counter replacement choices finish and resume that
-same Program before the threshold branch (CR 608.2c, 608.2h, 616.1e-f, 122.2). The graveyard test
+as the predicate for a conditional top-of-library search. Ability Programs may use the closed
+source-condition family in `If` at any nesting depth and in `Choose` requirements:
+`SourceCounterCount` with ordinary bounds, and live `ObjectMatches(Source, AnyPermanent)`.
+`AllOf` and `AnyOf` recursively combine these leaves using the ordinary nonempty and bounds
+validation. Counter lookup keeps its existing source/LKI behavior; `ObjectMatches` separately
+requires the exact source to be a live permanent. These source conditions remain unsupported in
+spell Programs, conditional-search predicates, event conditions, and cross-object matching. Replicating
+Ring and Lavabrink Floodgates use this family after preceding instructions; counter-replacement
+choices finish and resume the same Program before a following threshold check (CR 608.2c, 608.2h,
+616.1e-f, 122.2, 400.7). The graveyard test
 also runs when its instruction resolves, after preceding steps, so Dawnhand Eulogist checks its
 graveyard after milling and HYDRA Troopers checks before either its token creation or fallback mill
 (CR 608.2c, 608.2h, 701.17a-b). `LoseLife` is resultless for a fixed amount applied to `EachOpponent`, or for a fixed
@@ -362,13 +377,20 @@ the existing Destroy operation used by Abrade and Ancient Grudge; no other Destr
 subject, DestroyPreventingRegeneration, or spell-Program form is admitted. A source that has left
 uses last-known information where applicable (CR 608.2h, 608.2m), while a returned card is a new
 object (CR 400.7).
-Two additional leaves are restricted to ability-owned Programs and are resultless: `Sacrifice` may
-use only `subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
+Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
+`subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.
-Neither leaf accepts an input or binds or yields a result. Command Bridge uses source sacrifice in
-`Otherwise`; Gravelgill Scoundrel applies the source combat restriction only after its tap-payment
-branch is paid. These exact shapes do not admit other sacrifice subjects, restriction scopes, or
-restriction fields.
+Source sacrifice remains resultless for existing uses such as Command Bridge. When bound, the
+ability Program exposes the existing `CardResultCohort` type with action `Sacrifice`, recipient
+`Controller`, and cardinality 0..1. Its only admitted consumer is an explicit input to the immediately
+following `CreateReflexiveTrigger(when: Some(Sacrificed(Source)))`; the producer must be a direct
+`Perform(Sacrifice(Source))` in the same block. Wrong-type, non-immediate, or branch-ambiguous inputs
+are rejected. Runtime checks committed Battlefield movement for the exact source ObjectId and
+generation and the instructed controller. An empty cohort creates no reflexive trigger; a successful
+sacrifice remains successful if a replacement changes its destination (CR 701.21a, 400.7). The
+existing `sacrificed_objects` receipt remains available to the normal resolver. Gravelgill Scoundrel
+applies the source combat restriction only after its tap-payment branch is paid. These exact shapes
+do not admit other sacrifice subjects, restriction scopes, or restriction fields.
 `Scry` is a resultless Program leaf with a fixed literal count. A fixed count of zero is accepted in
 Programs only; legacy effect lists retain their positive-count rule. The resolving card's controller
 makes the normal library partition choice: zero does nothing (CR 701.22b), an empty library completes
@@ -429,8 +451,13 @@ paid branch, with each instruction retaining its own recipient choice and trigge
 reflexive child contains one fixed-amount `DamageTarget` with a valid Program target filter, or the
 existing `Tap` of a chosen opposing creature (Icewrought Sentry). Sparktongue Dragon uses fixed 3
 damage with `AnyTarget`; other fixed amounts and ordinary filters use the same targeting contract.
-The inner ability cannot add a separate `when`, targeting definition, or intervening condition,
-and a spell Program cannot create a reflexive child without a captured permanent source.
+One additional exact child is admitted for `when: Some(Sacrificed(Source))`: its explicit input must
+be the immediately preceding bound `Sacrifice(Source)` result, and its ordinary effect list contains
+one fixed-positive `DamageAll` for all players with the exact default Creature filter. Lavabrink
+Floodgates uses six damage. This reuses ordinary damage handling and does not admit a direct Program
+`DamageAll` leaf. The inner ability cannot add a separate `when`, targeting definition, or
+intervening condition, and a spell Program cannot create a reflexive child without a captured
+permanent source (CR 603.12a, 120.4b, 616.1e-f).
 Program `SearchLibrary` has bounded forms. The retained form uses fixed selection bounds and
 `KeepInLibrary`, and produces a typed `FoundLibraryCohort`. Direct resultless `TopOfLibrary` and
 `Hand` forms use the controller's fixed `Library`, count one, shuffle, no slots, selection
@@ -475,11 +502,12 @@ must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, controller
 `GraveyardAggregate(CardCount)`, controller-filtered `BattlefieldAggregate(Count)`, the exact
 controller-Creature `BattlefieldAggregate(MaximumPower)` form with a positive `min`, no `max`,
-default remaining filter fields, and no observed-object exclusion, plus an ability-only direct
-`SourceCounterCount` condition at any nesting depth. This counter condition does not join the shared
-composite, `Choose` requirement, or conditional-search condition whitelist. `AllOf` and `AnyOf`
-recursively combine the other admitted non-`Void` predicates. The direct `Void` form is a separate
-global turn-history predicate. Other contexts and leaf operations fail registration.
+default remaining filter fields, and no observed-object exclusion, plus the ability-only source
+condition family described above. That source family also applies in `Choose` requirements; it does
+not extend to spell Programs, conditional-search predicates, event conditions, or cross-object
+matching. `AllOf` and `AnyOf` recursively combine only admitted leaves with ordinary nonempty and
+bounds validation. The direct `Void` form remains a separate global turn-history predicate.
+Other contexts and leaf operations fail registration.
 
 Use `Choose` for a resolution-time branch whose cost and body belong together. Give the node a
 program-unique `choice` ID, give each branch a stable ID local to that choice, and put the branch
@@ -522,9 +550,12 @@ role `Spell`, `CreateTokenCopies(Chosen(...))` with role `Source`, and
 accepted in authored programs. A copied permanent source requires exactly one target (`min: 1`,
 `max: 1`).
 
-Ability programs use the ability context. A triggered program may use `AffectedPlayer` only when its
-trigger supplies that event-time player; registry validation checks this captured input. Activated
-programs have no trigger input and cannot use `AffectedPlayer`. Effect-created activated or triggered
+Ability programs use the ability context. A triggered program may use `AffectedPlayer` for a
+draw/discard recipient or as a `Choose` chooser only when its trigger supplies that event-time
+player; registry validation requires the captured input before instruction zero. Activated programs
+have no trigger input and cannot use `AffectedPlayer`. If the captured chooser has left, the pending
+decision delegates with a fresh per-deciding-player prompt ID; this does not change the ability
+controller or a compiled payer. Effect-created activated or triggered
 abilities cannot own authored programs (including modal program bodies) except for the Koya child
 shape specified above. Do not author targetful activated abilities with `ChosenOpponent` target
 groups from Hand or Graveyard: the opponent-choice activation path is
