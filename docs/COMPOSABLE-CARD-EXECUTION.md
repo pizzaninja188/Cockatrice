@@ -17,6 +17,14 @@ generator pair for Long Lake Nuisance and Patient Instructor. The
 owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
 Resolution prompt IDs are scoped to the deciding player for both legacy and Program choices; answer
 validation checks the actor and that actor's prompt identity. This does not widen accepted syntax.
+
+Card-specific update (2026-10-21): The Final Days and Sold Out now use typed spell-face Programs.
+Sold Out uses the narrow Subject-bound singleton-Creature Exile and target-damage-history profile;
+its [review map](../tricerules/tricerules-cards/authoring/review-maps/sold_out.json) records the
+source-line mapping and semantic evidence for that owner. Trade Route Envoy is the only intentionally
+excluded legacy card in this migration census. These owner ports do not claim that broader legacy
+execution retirement or the composable-card migration is complete.
+
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
 `Paid`, `Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` follows an accepted, committed payment;

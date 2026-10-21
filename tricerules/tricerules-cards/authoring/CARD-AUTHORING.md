@@ -717,6 +717,25 @@ spell_program: Some((body: (steps: [
 targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [])])),
 ```
 
+The current target-history profile is Face-only: only a nonmodal spell-face `ProgramOwnerId::Face`
+may use it. Modal spell `FaceMode` Programs are unsupported because `ChosenTarget` history reads the
+flattened stack `targets`, while mode-local targets live in `chosen_modes`; they fail the Program
+condition allowlist with diagnostic prefix `If condition uses context outside`. For a face-owned
+spell, the profile is intentionally specialized to a condition that reads the cast-time target after
+a chosen-Creature Exile:
+`If(ObjectWasDealtDamageThisTurn(ChosenTarget(0, 0)))` is admitted only with one required singleton
+Creature group 0, exactly one unlinked `Exile(Chosen(Creature))` bound as its `Subject`, and the
+condition after that Exile. The existing stack target record supplies the original ObjectId and
+zone-change generation, so this profile adds no mutable capture state and does not re-resolve by
+ObjectId after the zone change. Other condition shapes, target indices/groups, optional or
+multi-target schemas, linked Exile, and mismatched or missing bindings remain unsupported.
+`Shredder's Technique` and `Calamitous Tide` are real
+spell-Program analogues for binding a chosen Subject to a target group; neither broadens this
+history-condition profile. Sold Out is the current use of the history query, so keep this admission
+narrow until another card has a reviewed mechanics case. Its direct `CreateTokens` rider retains the
+ordinary token-operation admission. See the [Sold Out review map](review-maps/sold_out.json) for the
+source-line mapping and semantic evidence references.
+
 `bind` names an operation's typed result. `input: Some("name")` consumes an earlier in-scope
 result: untap requires a permanent selection; library-top placement requires an ordered hand
 selection. There is no implicit "previous instruction" input. Bindings cannot be shadowed or

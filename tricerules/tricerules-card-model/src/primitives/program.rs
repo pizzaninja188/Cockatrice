@@ -589,6 +589,7 @@ impl CompiledProgram {
         }
         validate_targeted_player_damage_pairs(&compiled)?;
         let schema = TargetSchema::compile_program(&compiled, targeting)?;
+        validate_spell_target_damage_history_profile(&compiled, &schema, targeting)?;
         validate_target_card_result_groups(&compiled, &schema)?;
         compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
         validate_terminal_linked_play_profile(&compiled)?;
@@ -695,6 +696,156 @@ fn spell_hand_discard_target_group(
         ));
     }
     Ok(reference.target_group_index)
+}
+
+fn spell_exile_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+) -> Result<(u32, u32), String> {
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "spell_program Exile instruction '{instruction_id}' requires one explicit Subject target binding"
+        ));
+    };
+    if reference.role != ProgramTargetRole::Subject || matches.next().is_some() {
+        return Err(format!(
+            "spell_program Exile instruction '{instruction_id}' requires exactly one explicit Subject target binding"
+        ));
+    }
+    let targeting = targeting
+        .ok_or_else(|| "spell_program Exile requires an authored target group".to_string())?;
+    let group = targeting
+        .groups
+        .get(reference.target_group_index as usize)
+        .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
+    Ok((reference.target_group_index, group.max))
+}
+
+fn is_spell_target_damage_history_condition(condition: &GameCondition) -> bool {
+    matches!(
+        condition,
+        GameCondition::ObjectWasDealtDamageThisTurn {
+            object: super::ConditionObjectRef::ChosenTarget {
+                group_index: 0,
+                target_index: 0,
+            }
+        }
+    )
+}
+
+fn is_exact_creature_target_filter(filter: &TargetFilter) -> bool {
+    filter
+        == &TargetFilter {
+            kind: TargetKind::Creature,
+            ..TargetFilter::default()
+        }
+}
+
+fn validate_spell_target_damage_history_profile(
+    program: &CompiledProgram,
+    schema: &TargetSchema<'_, '_>,
+    targeting: Option<&TargetingDef>,
+) -> Result<(), String> {
+    let mut history_if_addresses = Vec::new();
+    collect_spell_target_damage_history_if_addresses(&program.body, &mut history_if_addresses);
+    if history_if_addresses.is_empty() {
+        return Ok(());
+    }
+
+    let invalid_profile = || {
+        "spell_program target damage history requires a prior Subject-bound Exile of the required singleton Creature group 0".to_string()
+    };
+    if program.context != EffectContext::Spell || !matches!(&program.owner, ProgramOwnerId::Face(_))
+    {
+        return Err(invalid_profile());
+    }
+    let Some(targeting) = targeting else {
+        return Err(invalid_profile());
+    };
+    let ([target_group], [schema_group]) = (targeting.groups.as_slice(), schema.groups.as_slice())
+    else {
+        return Err(invalid_profile());
+    };
+    if target_group.chooser != super::TargetChooser::Controller
+        || target_group.min != 1
+        || target_group.max != 1
+        || !target_group.effect_indices.is_empty()
+        || !target_group.distinct_from.is_empty()
+        || target_group.same_graveyard
+        || target_group.cast_cost_expansion.is_some()
+        || schema_group.chooser != super::TargetChooser::Controller
+        || schema_group.min != 1
+        || schema_group.max != 1
+        || !matches!(
+            schema_group.bindings.as_slice(),
+            [binding]
+                if matches!(
+                    binding.role,
+                    super::TargetRole::Filtered(filter)
+                        if is_exact_creature_target_filter(filter)
+                )
+        )
+    {
+        return Err(invalid_profile());
+    }
+
+    let [target_binding] = program.target_bindings.as_slice() else {
+        return Err(invalid_profile());
+    };
+    if target_binding.target_group_index != 0 || target_binding.role_index != 0 {
+        return Err(invalid_profile());
+    }
+    let bound_exile = matches!(
+        find_effect_by_address(&program.body, target_binding.instruction_address),
+        Some(SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(filter),
+            linked_exile_id: None,
+        }) if is_exact_creature_target_filter(filter)
+    );
+    if !bound_exile
+        || history_if_addresses
+            .iter()
+            .any(|address| *address <= target_binding.instruction_address)
+    {
+        return Err(invalid_profile());
+    }
+    Ok(())
+}
+
+fn collect_spell_target_damage_history_if_addresses(
+    block: &CompiledBlock,
+    addresses: &mut Vec<u32>,
+) {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            CompiledInstructionKind::If { condition, yes, no } => {
+                if matches!(
+                    condition.as_ref(),
+                    CompiledProgramCondition::Game(condition)
+                        if is_spell_target_damage_history_condition(condition)
+                ) {
+                    addresses.push(instruction.instruction_address);
+                }
+                collect_spell_target_damage_history_if_addresses(yes, addresses);
+                collect_spell_target_damage_history_if_addresses(no, addresses);
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    collect_spell_target_damage_history_if_addresses(&branch.body, addresses);
+                }
+                collect_spell_target_damage_history_if_addresses(otherwise, addresses);
+            }
+            CompiledInstructionKind::Perform(_) | CompiledInstructionKind::ImportCastPayment => {}
+        }
+    }
 }
 
 fn ability_graveyard_exile_target_group(
@@ -823,6 +974,13 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
         | (
             SpellEffectKind::Destroy {
                 subject: EffectSubject::Chosen(_),
+            },
+            ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::Exile {
+                subject: EffectSubject::Chosen(_),
+                linked_exile_id: None,
             },
             ProgramTargetRole::Subject,
         )
@@ -1198,6 +1356,18 @@ impl Compiler<'_> {
                                 &instruction.id,
                                 &self.target_references,
                             )?),
+                            SpellEffectKind::Exile {
+                                subject: EffectSubject::Chosen(_),
+                                linked_exile_id: None,
+                            } => {
+                                let (group_index, group_max) = spell_exile_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
                             SpellEffectKind::ChooseHandCards { .. } => {
                                 Some(spell_hand_discard_target_group(
                                     &instruction.id,
@@ -1364,6 +1534,18 @@ impl Compiler<'_> {
                     {
                         // Preserve Impossible Inferno's existing Delirium check without
                         // admitting other DistinctCardTypes profiles to authored Programs.
+                        condition.validate_live().map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?;
+                        CompiledProgramCondition::Game(condition.as_ref().clone())
+                    } else if self.context == EffectContext::Spell
+                        && matches!(&self.owner, ProgramOwnerId::Face(_))
+                        && is_spell_target_damage_history_condition(condition)
+                    {
+                        // Only a spell face uses the flattened stack target record read by this
+                        // history query; modal mode targets are stored in chosen_modes instead.
+                        // The final compiled face schema binds this to one prior Subject-bound
+                        // Creature Exile; unsupported target/history shapes remain rejected.
                         condition.validate_live().map_err(|reason| {
                             format!("If instruction '{}': {reason}", instruction.id)
                         })?;
@@ -3027,6 +3209,22 @@ fn validate_and_result_types(
         } if context == EffectContext::Ability && *count > 0 => {
             effect.validate(context)?;
             counter.validate()?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(filter),
+            linked_exile_id: None,
+        } if context == EffectContext::Spell => {
+            if target_group_index != Some(0)
+                || target_group_max != Some(1)
+                || !is_exact_creature_target_filter(filter)
+            {
+                return Err(
+                    "spell_program Exile requires its singleton Creature target group 0".into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Exile target")?;
             Ok(Vec::new())
         }
         SpellEffectKind::Exile {

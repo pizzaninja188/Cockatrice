@@ -1,7 +1,7 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
-use tricerules_core::Zone;
+use tricerules_core::{EngineDeck, Zone};
 
 fn published_ability_mana_cost(
     engine: &mut GameEngine,
@@ -307,6 +307,389 @@ fn sold_out_uses_the_chosen_targets_pre_exile_damage_identity() {
 
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     assert_eq!(battlefield_token_oids(&engine, 0, "clue").len(), 1);
+}
+
+#[test]
+fn sold_out_exiles_an_undamaged_target_without_creating_a_clue() {
+    let decks = Some(vec![
+        deck_with("swamp", &["sold_out"]),
+        deck_with("forest", &["giant_spider"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
+    ensure_in_hand(&mut engine, 0, "sold_out");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let sold_out = hand_index_for_card(&engine, 0, "sold_out");
+    engine
+        .apply_scenario_command(0, &cast_spell(sold_out, target_object(target)))
+        .expect("cast Sold Out at an undamaged creature");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert!(battlefield_token_oids(&engine, 0, "clue").is_empty());
+}
+
+#[test]
+fn sold_out_does_not_use_damage_from_a_prior_incarnation_of_the_same_object_id() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let decks = Some(vec![
+        deck_with("swamp", &["sold_out", "shock"]),
+        deck_with("forest", &["giant_spider"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
+    ensure_in_hand(&mut engine, 0, "shock");
+    ensure_in_hand(&mut engine, 0, "sold_out");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let shock = hand_index_for_card(&engine, 0, "shock");
+    engine
+        .apply_scenario_command(0, &cast_spell(shock, target_object(target)))
+        .expect("damage the first incarnation");
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.objects[&target].damage, 2);
+    let old_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+
+    engine.enable_dev_commands();
+    for zone in [DevZone::Graveyard, DevZone::Battlefield] {
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::DevCommand(DevCommand {
+                        target_player_id: 1,
+                        dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                            card_name: "Giant Spider".into(),
+                            zone: zone as i32,
+                            ready: false,
+                        })),
+                    })),
+                },
+            )
+            .expect("move the same physical card through a zone change");
+    }
+    assert_eq!(
+        battlefield_object_for_card(&engine, 1, "giant_spider"),
+        target
+    );
+    assert!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0)
+            > old_generation
+    );
+    assert_eq!(engine.state.objects[&target].damage, 0);
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let sold_out = hand_index_for_card(&engine, 0, "sold_out");
+    engine
+        .apply_scenario_command(0, &cast_spell(sold_out, target_object(target)))
+        .expect("cast Sold Out at the returned incarnation");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert!(battlefield_token_oids(&engine, 0, "clue").is_empty());
+}
+
+#[test]
+fn sold_out_fizzles_without_a_clue_when_its_only_target_becomes_illegal() {
+    let decks = Some(vec![
+        deck_with("swamp", &["sold_out", "shock"]),
+        deck_with("swamp", &["murder", "giant_spider"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
+    ensure_in_hand(&mut engine, 0, "shock");
+    ensure_in_hand(&mut engine, 0, "sold_out");
+    ensure_in_hand(&mut engine, 1, "murder");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let shock = hand_index_for_card(&engine, 0, "shock");
+    engine
+        .apply_scenario_command(0, &cast_spell(shock, target_object(target)))
+        .expect("damage the target first");
+    resolve_entire_stack_two_player(&mut engine);
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let sold_out = hand_index_for_card(&engine, 0, "sold_out");
+    engine
+        .apply_scenario_command(0, &cast_spell(sold_out, target_object(target)))
+        .expect("cast Sold Out");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority so the opponent can respond");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            b: 2,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let murder = hand_index_for_card(&engine, 1, "murder");
+    engine
+        .apply_scenario_command(1, &cast_spell(murder, target_object(target)))
+        .expect("remove the sole target in response");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
+    assert!(battlefield_token_oids(&engine, 0, "clue").is_empty());
+}
+
+#[test]
+fn sold_out_finishes_its_clue_rider_before_the_commander_903_9a_choice() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: vec!["swamp".into(); 12]
+                .into_iter()
+                .chain(["shock".into(), "sold_out".into()])
+                .collect(),
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: vec!["forest".into(); 12],
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        158_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("commander engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 1,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Kami of the Crescent Moon".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("move the declared commander onto the battlefield");
+    ensure_in_hand(&mut engine, 0, "shock");
+    ensure_in_hand(&mut engine, 0, "sold_out");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let shock = hand_index_for_card(&engine, 0, "shock");
+    engine
+        .apply_scenario_command(0, &cast_spell(shock, target_object(target)))
+        .expect("damage the commander before Sold Out");
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.objects[&target].damage, 2);
+
+    let sold_out = hand_index_for_card(&engine, 0, "sold_out");
+    engine
+        .apply_scenario_command(0, &cast_spell(sold_out, target_object(target)))
+        .expect("cast Sold Out at the damaged commander");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority after casting Sold Out");
+    let resolved = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve the whole spell before checking state-based actions");
+
+    // CR 903.9a's command-zone choice is offered after the whole spell finishes resolving.
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(battlefield_token_oids(&engine, 0, "clue").len(), 1);
+    let commander_choice = find_resolution_choice(&resolved)
+        .expect("the commander owner receives the post-resolution choice");
+    assert_eq!(commander_choice.deciding_player_id, 1);
+    assert!(commander_choice.prompt_text.contains("command zone"));
+    assert!(engine.state.pending_resolution.is_some());
+}
+
+#[test]
+fn sold_out_serialized_cast_and_priority_commands_replay_the_same_batches_and_state() {
+    use prost::Message;
+
+    fn fresh() -> (GameEngine, u32) {
+        let decks = Some(vec![
+            deck_with("swamp", &["sold_out", "shock"]),
+            deck_with("forest", &["giant_spider"]),
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            158_008,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        advance_to_main1_from_game_start(&mut engine);
+        let target = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
+        ensure_in_hand(&mut engine, 0, "shock");
+        ensure_in_hand(&mut engine, 0, "sold_out");
+        // Fixture setup is applied identically to the recording and replay
+        // engines; the log below contains only accepted player commands.
+        give_mana(
+            &mut engine,
+            0,
+            ManaGift {
+                r: 1,
+                b: 1,
+                c: 3,
+                ..Default::default()
+            },
+        );
+        (engine, target)
+    }
+    fn send(
+        engine: &mut GameEngine,
+        log: &mut Vec<(i32, Vec<u8>, Vec<u8>)>,
+        player: i32,
+        command: RuledCommand,
+    ) {
+        let command_bytes = command.encode_to_vec();
+        let batch_bytes = engine
+            .apply_scenario_command(player, &command)
+            .expect("accepted Sold Out cast or priority command")
+            .encode_to_vec();
+        log.push((player, command_bytes, batch_bytes));
+    }
+    fn resolve_stack(engine: &mut GameEngine, log: &mut Vec<(i32, Vec<u8>, Vec<u8>)>) {
+        while !engine.state.stack.is_empty() {
+            let actor = engine.state.priority_player_id();
+            send(engine, log, actor, pass());
+        }
+    }
+
+    let (mut engine, target) = fresh();
+    let mut log = Vec::new();
+    let shock = hand_index_for_card(&engine, 0, "shock");
+    send(
+        &mut engine,
+        &mut log,
+        0,
+        cast_spell(shock, target_object(target)),
+    );
+    resolve_stack(&mut engine, &mut log);
+    let sold_out = hand_index_for_card(&engine, 0, "sold_out");
+    send(
+        &mut engine,
+        &mut log,
+        0,
+        cast_spell(sold_out, target_object(target)),
+    );
+    resolve_stack(&mut engine, &mut log);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(battlefield_token_oids(&engine, 0, "clue").len(), 1);
+
+    let (mut replay, replay_target) = fresh();
+    assert_eq!(replay_target, target);
+    for (player, command_bytes, expected_batch) in &log {
+        let command = RuledCommand::decode(command_bytes.as_slice())
+            .expect("serialized accepted command decodes");
+        let actual_batch = replay
+            .apply_scenario_command(*player, &command)
+            .expect("replay accepted command")
+            .encode_to_vec();
+        assert_eq!(actual_batch, *expected_batch);
+    }
+    assert_eq!(
+        replay
+            .diagnostic_snapshot()
+            .expect("serialize replay diagnostic state"),
+        engine
+            .diagnostic_snapshot()
+            .expect("serialize recorded diagnostic state")
+    );
+    assert_eq!(replay.state.command_index, engine.state.command_index);
 }
 
 #[test]

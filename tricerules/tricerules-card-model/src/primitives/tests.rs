@@ -372,6 +372,280 @@ fn registry_compiles_authored_targeted_spell_siblings_in_instruction_order() {
     ));
 }
 
+fn spell_target_damage_history_fixture(
+    target_effect: &str,
+    condition: &str,
+    binding: &str,
+    targeting: &str,
+    rider: &str,
+    exile_first: bool,
+) -> String {
+    let bindings = if binding.is_empty() {
+        String::new()
+    } else {
+        format!("{binding},")
+    };
+    let target = format!("(id: \"target\", kind: Perform({target_effect}))");
+    let condition = format!(
+        r#"(id: "damage_check", kind: If(condition: {condition},
+            yes: (steps: [(id: "rider", kind: Perform({rider}))], yields: []),
+            no: (steps: [], yields: [])))"#
+    );
+    let steps = if exile_first {
+        format!("{target}, {condition}")
+    } else {
+        format!("{condition}, {target}")
+    };
+    format!(
+        r#"(
+            id: "spell_target_history_fixture", name: "Spell Target History Fixture",
+            face_id: "spell_target_history_fixture", types: ["Instant"], spell_effect: [],
+            spell_program: Some((body: (steps: [{steps}], yields: []), target_bindings: [{bindings}])),
+            targeting: {targeting}
+        )"#
+    )
+}
+
+fn modal_spell_target_damage_history_fixture() -> String {
+    r#"(
+        id: "modal_spell_target_history_fixture", name: "Modal Spell Target History Fixture",
+        face_id: "modal_spell_target_history_fixture", types: ["Instant"], spell_effect: [],
+        modal_spell: Some((min_modes: 1, max_modes: 1, modes: [(
+            mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None, effects: [],
+            program: Some((body: (steps: [
+                (id: "target", kind: Perform(Exile(subject: Chosen((kind: Creature))))),
+                (id: "damage_check", kind: If(
+                    condition: ObjectWasDealtDamageThisTurn(
+                        object: ChosenTarget(group_index: 0, target_index: 0)),
+                    yes: (steps: [(id: "rider", kind: Perform(CreateTokens(
+                        token: "clue", count: 1, who: Controller,
+                        tapped: false, sacrifice_timing: None)))], yields: []),
+                    no: (steps: [], yields: [])
+                )),
+            ], yields: []), target_bindings: [
+                (instruction_id: "target", role: Subject, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(
+                min: 1, max: 1, prompt: "Choose target creature", effect_indices: []
+            )]))
+        )]))
+    )"#
+    .to_string()
+}
+
+fn compile_spell_target_history_fixture(ron: &str) -> Result<crate::CardRegistry, String> {
+    const CLUE: &str = r#"(id: "clue", name: "Clue", face_id: "clue", types: ["Artifact"] )"#;
+    const FOOD: &str = r#"(id: "food", name: "Food", face_id: "food", types: ["Artifact"] )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[ron], &[CLUE, FOOD])
+        .map_err(|error| error.to_string())
+}
+
+#[test]
+fn spell_program_compiles_a_subject_bound_creature_exile_target_history_profile() {
+    let ron = spell_target_damage_history_fixture(
+        "Exile(subject: Chosen((kind: Creature)))",
+        "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))",
+        "(instruction_id: \"target\", role: Subject, target_group_index: 0)",
+        "Some((groups: [(min: 1, max: 1, prompt: \"Choose target creature\", effect_indices: [])]))",
+        "CreateTokens(token: \"clue\", count: 1, who: Controller, tapped: false, sacrifice_timing: None)",
+        true,
+    );
+    let registry = compile_spell_target_history_fixture(&ron)
+        .expect("the Subject-bound Creature Exile and damage-history profile compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "spell_target_history_fixture",
+        crate::CardFaceId::new("spell_target_history_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the complete spell face owns its compiled Program");
+    assert_eq!(program.body.steps.len(), 2);
+    assert_eq!(program.target_bindings.len(), 1);
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+    assert_eq!(program.target_bindings[0].role_index, 0);
+    assert!(matches!(
+        &program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Exile {
+                subject: crate::primitives::EffectSubject::Chosen(filter),
+                linked_exile_id: None,
+            } if filter.kind == crate::primitives::TargetKind::Creature)
+    ));
+    assert!(matches!(
+        &program.body.steps[1].kind,
+        crate::primitives::CompiledInstructionKind::If { condition, .. }
+            if matches!(condition.as_ref(), crate::primitives::CompiledProgramCondition::Game(
+                crate::primitives::GameCondition::ObjectWasDealtDamageThisTurn {
+                    object: crate::primitives::ConditionObjectRef::ChosenTarget {
+                        group_index: 0, target_index: 0,
+                    }
+                }
+            ))
+    ));
+}
+
+#[test]
+fn modal_spell_program_target_history_rejects_unsupported_mode_local_context() {
+    let ron = modal_spell_target_damage_history_fixture();
+    let error = compile_spell_target_history_fixture(&ron)
+        .expect_err("mode-local targets are outside the face-owned history profile");
+    let diagnostic = error.to_string();
+    assert!(
+        diagnostic.contains("If condition uses context outside"),
+        "modal target-history use must receive the Program unsupported-context diagnostic: {diagnostic}"
+    );
+}
+
+#[test]
+fn spell_program_target_history_profile_accepts_a_non_clue_token_rider_and_count() {
+    let ron = spell_target_damage_history_fixture(
+        "Exile(subject: Chosen((kind: Creature)))",
+        "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))",
+        "(instruction_id: \"target\", role: Subject, target_group_index: 0)",
+        "Some((groups: [(min: 1, max: 1, prompt: \"Choose target creature\", effect_indices: [])]))",
+        "CreateTokens(token: \"food\", count: 2, who: Controller, tapped: false, sacrifice_timing: None)",
+        true,
+    );
+    let registry = compile_spell_target_history_fixture(&ron)
+        .expect("the target-history profile composes with an ordinary two-Food rider");
+    let owner = crate::ProgramOwnerId::face(
+        "spell_target_history_fixture",
+        crate::CardFaceId::new("spell_target_history_fixture").unwrap(),
+    );
+    let program = registry.compiled_program_for_owner(&owner).unwrap();
+    assert!(matches!(
+        &program.body.steps[1].kind,
+        crate::primitives::CompiledInstructionKind::If { yes, .. }
+            if matches!(
+                &yes.steps[0].kind,
+                crate::primitives::CompiledInstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokens {
+                        token, count: crate::primitives::Amount::Fixed(2), ..
+                    } if token == "food")
+            )
+    ));
+}
+
+#[test]
+fn spell_program_target_damage_history_requires_the_bound_singleton_creature_exile() {
+    let condition =
+        "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))";
+    let subject_binding = "(instruction_id: \"target\", role: Subject, target_group_index: 0)";
+    let singleton =
+        "Some((groups: [(min: 1, max: 1, prompt: \"Choose target creature\", effect_indices: [])]))";
+    let clue =
+        "CreateTokens(token: \"clue\", count: 1, who: Controller, tapped: false, sacrifice_timing: None)";
+    let cases = [
+        spell_target_damage_history_fixture(
+            "Destroy(subject: Chosen((kind: Creature)))",
+            condition,
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            "",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            "(instruction_id: \"target\", role: Target, target_group_index: 0)",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: AnyPermanent)))",
+            condition,
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            subject_binding,
+            "Some((groups: [(min: 1, max: 2, prompt: \"Choose target creatures\", effect_indices: [])]))",
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            subject_binding,
+            "Some((groups: [(min: 0, max: 1, prompt: \"Choose a target creature\", effect_indices: [])]))",
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 1))",
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 1, target_index: 0))",
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            "AllOf([ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))])",
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            subject_binding,
+            singleton,
+            clue,
+            false,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)), linked_exile_id: \"other\")",
+            condition,
+            subject_binding,
+            singleton,
+            clue,
+            true,
+        ),
+    ];
+    for ron in cases {
+        assert!(
+            compile_spell_target_history_fixture(&ron).is_err(),
+            "unsupported target-history profile unexpectedly compiled: {ron}"
+        );
+    }
+}
+
+#[test]
+fn spell_program_target_history_condition_without_authored_target_group_is_rejected() {
+    let ron = spell_target_damage_history_fixture(
+        "Destroy(subject: Chosen((kind: Creature)))",
+        "ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))",
+        "(instruction_id: \"target\", role: Subject, target_group_index: 0)",
+        "None",
+        "CreateTokens(token: \"clue\", count: 1, who: Controller, tapped: false, sacrifice_timing: None)",
+        true,
+    );
+    assert!(compile_spell_target_history_fixture(&ron).is_err());
+}
+
 #[test]
 fn registry_compiles_resultless_return_all_to_owners_hand_program_leaf() {
     let ron = r#"(

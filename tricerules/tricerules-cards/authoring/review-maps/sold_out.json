@@ -1,0 +1,85 @@
+{
+  "format_version": 1,
+  "oracle_id": "6a69d4b1-72dd-4599-a16d-32299de5b0b9",
+  "spans": [
+    {
+      "face_id": "sold_out",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/targeting/groups/0",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Exile",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Exile/subject/Chosen/kind",
+        "/faces/0/spell_program/body/steps/1/kind/If",
+        "/faces/0/spell_program/body/steps/1/kind/If/condition/ObjectWasDealtDamageThisTurn",
+        "/faces/0/spell_program/body/steps/1/kind/If/condition/ObjectWasDealtDamageThisTurn/object/ChosenTarget",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0/kind/Perform/CreateTokens"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "ProgramTargetRole::Subject",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Exile"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Exile/subject/Chosen/kind"
+    },
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If"
+    },
+    {
+      "symbol": "GameCondition::ObjectWasDealtDamageThisTurn",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/condition/ObjectWasDealtDamageThisTurn"
+    },
+    {
+      "symbol": "ConditionObjectRef::ChosenTarget",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/condition/ObjectWasDealtDamageThisTurn/object/ChosenTarget"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0/kind/Perform/CreateTokens"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_158_predicates::sold_out_uses_the_chosen_targets_pre_exile_damage_identity",
+      "covers": "damaged chosen Creature is exiled and creates the direct Clue token using its cast-time target identity"
+    },
+    {
+      "test": "scenario issue_158_predicates::sold_out_exiles_an_undamaged_target_without_creating_a_clue",
+      "covers": "undamaged chosen Creature is exiled with no Clue"
+    },
+    {
+      "test": "scenario issue_158_predicates::sold_out_does_not_use_damage_from_a_prior_incarnation_of_the_same_object_id",
+      "covers": "leave-and-return preserves the physical ObjectId but the new zone-change generation does not inherit old damage history"
+    },
+    {
+      "test": "scenario issue_158_predicates::sold_out_fizzles_without_a_clue_when_its_only_target_becomes_illegal",
+      "covers": "an illegal sole target makes the spell fizzle and creates no Clue"
+    },
+    {
+      "test": "scenario issue_158_predicates::sold_out_finishes_its_clue_rider_before_the_commander_903_9a_choice",
+      "covers": "the complete spell creates its Clue and finishes before the post-resolution Commander choice under CR 903.9a"
+    },
+    {
+      "test": "scenario issue_158_predicates::sold_out_serialized_cast_and_priority_commands_replay_the_same_batches_and_state",
+      "covers": "serialized accepted cast and priority commands replay to byte-identical event batches and the same complete diagnostic state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
