@@ -27,6 +27,7 @@
 #include "game/server_counter.h"
 #include "game/server_game.h"
 #include "game/server_player.h"
+#include "server_abstractuserinterface.h"
 #include "server_response_containers.h"
 #include "server_room.h"
 #include "server_test_helpers.h"
@@ -41,6 +42,7 @@
 #include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
+#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
@@ -50,6 +52,46 @@
 #include <memory>
 
 RNG_Abstract *rng = nullptr; // required by other server code
+
+namespace
+{
+class CapturingTestUserInterface final : public Server_AbstractUserInterface
+{
+public:
+    explicit CapturingTestUserInterface(Server *server) : Server_AbstractUserInterface(server)
+    {
+    }
+
+    int getLastCommandTime() const override
+    {
+        return 0;
+    }
+
+    bool addSaidMessageSize(int) override
+    {
+        return true;
+    }
+
+    void sendProtocolItem(const Response &) override
+    {
+    }
+
+    void sendProtocolItem(const SessionEvent &) override
+    {
+    }
+
+    void sendProtocolItem(const GameEventContainer &item) override
+    {
+        gameEvents.append(item);
+    }
+
+    void sendProtocolItem(const RoomEvent &) override
+    {
+    }
+
+    QList<GameEventContainer> gameEvents;
+};
+} // namespace
 
 TEST(RuledServerDiagnostics, CorrelatesAuthenticatedActorAndRejectedEngineRequestWithoutLeakingSnapshot)
 {
@@ -182,6 +224,8 @@ protected:
     Server_Player *p2 = nullptr;
     ServerInfo_User userA;
     ServerInfo_User userB;
+    std::unique_ptr<CapturingTestUserInterface> p1Capture;
+    std::unique_ptr<CapturingTestUserInterface> p2Capture;
 
     // Test-facing projection of the synchronizer's batch result.
     struct BatchOutcome
@@ -243,6 +287,12 @@ protected:
 
     void TearDown() override
     {
+        if (p1) {
+            p1->setUserInterface(nullptr);
+        }
+        if (p2) {
+            p2->setUserInterface(nullptr);
+        }
         delete game;
         delete room;
     }
@@ -712,6 +762,20 @@ protected:
         auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
         exile->insertCard(card, 0, 0); // public piles render newest first
         return card;
+    }
+
+    static const Event_MoveCard *lastMoveCard(const CapturingTestUserInterface &capture)
+    {
+        for (int containerIndex = capture.gameEvents.size() - 1; containerIndex >= 0; --containerIndex) {
+            const auto &container = capture.gameEvents.at(containerIndex);
+            for (int eventIndex = container.event_list_size() - 1; eventIndex >= 0; --eventIndex) {
+                const auto &event = container.event_list(eventIndex);
+                if (event.HasExtension(Event_MoveCard::ext)) {
+                    return &event.GetExtension(Event_MoveCard::ext);
+                }
+            }
+        }
+        return nullptr;
     }
 
     static Server_Card *addCardToGraveyard(Server_Player *p, const QString &name)
@@ -3571,10 +3635,17 @@ TEST_F(RuledBatchTest, GraveyardSpellCastTransactionCommitsWithTheReservedPhysic
 
 TEST_F(RuledBatchTest, CancelSpellCastRestoresExactExileCardAndPileOrder)
 {
-    seedCardCatalog({"Lightning Bolt", "Giant Growth"});
+    seedCardCatalog({"Lightning Bolt"});
     Server_Card *oldest = addCardToExile(p1, "Lightning Bolt");
-    Server_Card *middle = addCardToExile(p1, "Giant Growth");
+    Server_Card *middle = addCardToExile(p1, "Lightning Bolt");
     Server_Card *newest = addCardToExile(p1, "Lightning Bolt");
+    middle->setFaceDown(true);
+    const int originalPhysicalCardId = middle->getId();
+
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
 
     ruled::v1::IpcResponse seed;
     seed.set_ok(true);
@@ -3601,11 +3672,23 @@ TEST_F(RuledBatchTest, CancelSpellCastRestoresExactExileCardAndPileOrder)
     pending->mutable_announcement()->CopyFrom(*announcement);
     applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
     ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+    const Event_MoveCard *beginMove = lastMoveCard(*p2Capture);
+    ASSERT_NE(beginMove, nullptr);
+    EXPECT_EQ(beginMove->card_name(), "Lightning Bolt")
+        << "the accepted cast proposal has publicly disclosed the face-down exile card";
+    EXPECT_FALSE(beginMove->face_down());
 
     ruled::v1::RuledCommand cancel;
     cancel.mutable_cancel_spell_cast()->set_transaction_id(62u);
     ruled::v1::IpcResponse canceled;
     canceled.set_ok(true);
+    auto *cancelView = canceled.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Cancel = buildPerPlayerView(p1, {}, {});
+    p1Cancel.add_exile_object_ids(501u);
+    p1Cancel.add_exile_object_ids(502u);
+    p1Cancel.add_exile_object_ids(503u);
+    *cancelView->add_per_player() = p1Cancel;
+    *cancelView->add_per_player() = buildPerPlayerView(p2, {}, {});
     applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, canceled);
 
     EXPECT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards(), originalExile);
@@ -3613,6 +3696,27 @@ TEST_F(RuledBatchTest, CancelSpellCastRestoresExactExileCardAndPileOrder)
     EXPECT_TRUE(originalExile.contains(middle));
     EXPECT_TRUE(originalExile.contains(newest));
     EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+    EXPECT_TRUE(middle->getFaceDown()) << "cancel restores the original physical face-down presentation";
+    EXPECT_NE(middle->getId(), originalPhysicalCardId)
+        << "returning a publicly shown card face down re-identifies it within the hidden destination";
+
+    const Event_MoveCard *cancelMove = lastMoveCard(*p2Capture);
+    ASSERT_NE(cancelMove, nullptr);
+    EXPECT_EQ(cancelMove->start_zone(), ZoneNames::STACK);
+    EXPECT_EQ(cancelMove->target_zone(), ZoneNames::EXILE);
+    EXPECT_EQ(cancelMove->card_name(), "Lightning Bolt");
+    EXPECT_TRUE(cancelMove->face_down()) << "the recipient wire restores the face-down state";
+    EXPECT_EQ(cancelMove->card_id(), originalPhysicalCardId)
+        << "the event identifies the public Stack incarnation being returned";
+    EXPECT_EQ(cancelMove->new_card_id(), middle->getId())
+        << "the destination-scoped ID in the recipient event matches the restored physical card";
+    EXPECT_NE(cancelMove->new_card_id(), cancelMove->card_id())
+        << "the hidden destination gets a fresh ID after the public Stack incarnation";
+    EXPECT_TRUE(callBatchApply(canceled).zoneViewApplied);
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 502u), middle)
+        << "the exact engine Exile object remains bound to the same physical card after re-identification";
+    EXPECT_EQ(bindingFor(p1).exileEngineOidToServerCardId.value(502u), middle->getId())
+        << "the post-cancel ZoneView retains the exact OID-to-card binding among same-name copies";
 }
 
 TEST_F(RuledBatchTest, StaticEmblemSnapshotReconcilesPresentationOnlyTableTokens)

@@ -36,29 +36,36 @@
       ability_id: "activated_02",
       presentation: OracleLines([4]),
       costs: [Mana("{G}"), Tap],
-      effect: [ChooseResolutionBranch(
-        chooser: Controller,
-        optional: true,
-        selection: PlayerChoice,
-        branches: [(
-          branch_id: "play_linked_card",
-          // Oracle line 4 names the complete activation; reusing it here would repeat its costs and 10-power condition.
-          presentation: Fallback,
-          cost: None,
-          requirement: GameCondition(BattlefieldAggregate(
-            filter: (controllers: Controller, card_type: Some(Creature)),
-            aggregate: TotalPower,
-            min: Some(10),
-          )),
-          effects: [PlayLinkedExiledCard(
-            producer_ability_id: "hideaway",
-            linked_exile_id: "exiled_cards",
-            filter: None,
-            play_kind: Play,
-            return_source_to_owner_hand_if_cast: false,
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_linked_play", kind: Choose(
+          choice: "choose_linked_play",
+          chooser: Controller,
+          optional: true,
+          branches: [(
+            branch_id: "play_linked_card",
+            presentation: Fallback,
+            cost: None,
+            requirement: GameCondition(BattlefieldAggregate(
+              filter: (controllers: Controller, card_type: Some(Creature)),
+              aggregate: TotalPower,
+              min: Some(10),
+              max: None,
+              exclude_observed_object: false,
+            )),
+            body: (steps: [
+              (id: "play_selected_linked_card", kind: Perform(PlayLinkedExiledCard(
+                producer_ability_id: "hideaway",
+                linked_exile_id: "exiled_cards",
+                filter: None,
+                play_kind: Play,
+                return_source_to_owner_hand_if_cast: false,
+              ))),
+            ], yields: []),
           )],
-        )],
-      )],
+          otherwise: (steps: [], yields: []),
+        )),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

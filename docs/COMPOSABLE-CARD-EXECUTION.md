@@ -275,11 +275,16 @@ not a worked example in the rules text. A departed controller receives no token 
 source leave does not rebind the begun occurrence to a later source incarnation; only a choice with
 no current candidates completes with an empty result.
 This is a narrow owner-graveyard profile, not a new rule for other begun abilities. Nautiloid Ship's
-optional `ChooseLinkedExiledCard` return-to-controller-battlefield path remains unchanged;
-`PlayLinkedExiledCard` remains a separate legacy path for Hideaway play permissions. Neither is
-admitted by this mandatory Program profile. The choice uses existing linked-card and resolution-
-choice events, with no new wire, relay or client contract. Its card mechanics follow CR 400.7,
-603.2c, 603.5, 607.2a, 608.2d, 608.2m and 800.4a-b/g-h. The update adds no card admission.
+optional `ChooseLinkedExiledCard` return-to-controller-battlefield path remains unchanged.
+`PlayLinkedExiledCard` remains a separate legacy path for Hideaway play permissions, except for
+Mosswort Bridge `activated_02`'s exact terminal optional ability-Program profile: one root
+Controller `Choose`, one branch guarded by Controller-creature `TotalPower` of at least 10 with no
+maximum, and one resultless terminal `PlayLinkedExiledCard` leaf with `Play`, no filter, and no
+source return. Other optional linked-play variants and continuations remain excluded. The optional
+linked-play chooser-departure gap remains deferred. This existing-card Program owner migration uses
+existing linked-card and resolution-choice events, with no new wire, relay or client contract. Its
+card mechanics follow CR 400.7, 603.2c, 603.5, 607.2a, 608.2d, 608.2m and 800.4a-b/g-h; it adds no
+card admission.
 
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
 resultless `Perform(CounterTriggeringStackObjectUnlessPays(...))` Program leaf: 14 use fixed

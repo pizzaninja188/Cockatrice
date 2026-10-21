@@ -486,10 +486,18 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             card->setCardRef(pendingIt->sourceCardRef);
             CardToMove cardToMove;
             cardToMove.set_card_id(card->getId());
+            cardToMove.set_face_down(pendingIt->sourceFaceDown);
             GameEventStorage moveGes;
             const int targetX = sourceZone->hasCoords() ? pendingIt->sourceX : pendingIt->sourcePosition;
             if (ruledApplyMove(cmdPlayer, moveGes, stackZone, sourceZone, cardToMove, targetX, pendingIt->sourceY,
                                "cancelCast")) {
+                if (pendingIt->sourceZoneName == ZoneNames::EXILE) {
+                    // Returning the publicly shown Stack card face down gives it a new
+                    // destination-scoped server id. Rebind this exact engine Exile object
+                    // before its ZoneView is applied so duplicate names cannot steal it.
+                    playerBinding(pendingIt->sourcePlayerId).exileEngineOidToServerCardId.insert(
+                        pendingIt->reservedObjectId, card->getId());
+                }
                 moveGes.sendToGame(game);
             }
         }
@@ -636,6 +644,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         pending.sourcePosition = sourceZone->getCards().indexOf(card);
         pending.sourceX = card->getX();
         pending.sourceY = card->getY();
+        pending.sourceFaceDown = card->getFaceDown();
         pending.sourceCardRef = card->getCardRef();
         const int faceIndex = static_cast<int>(acceptedCast.face_index());
         pending.faceIndex = faceIndex;

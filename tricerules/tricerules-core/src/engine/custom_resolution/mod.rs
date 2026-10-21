@@ -2906,13 +2906,10 @@ impl GameEngine {
             .pending_linked_exile_play
             .take()
             .expect("linked play cohort checked above");
-        cohort.stack = ParkedStackResolution {
-            item,
-            resume_effect_index,
-            previous_result,
-            program: None,
-        };
-        self.advance_pending_linked_exile_play(cohort, ev)
+        cohort.stack.item = item;
+        cohort.stack.resume_effect_index = resume_effect_index;
+        cohort.stack.previous_result = previous_result;
+        self.advance_pending_linked_exile_play_through_stack(cohort, ev)
     }
 
     /// Resume a standard effect list or a finite authored program using the exact parked cursor.

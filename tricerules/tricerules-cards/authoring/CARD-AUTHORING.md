@@ -790,9 +790,17 @@ with an empty cohort. A later `CreateTokens(..., who: Controller)` instruction d
 token for the departed original controller (CR 800.4b). This is specialized to the existing Currency
 Converter return ability and does not widen other linked choices or general ability-departure
 behavior. Nautiloid Ship's optional `ChooseLinkedExiledCard` return-to-controller-battlefield path
-remains unchanged; `PlayLinkedExiledCard` is the separate legacy path for Hideaway play permissions.
-Neither path is admitted by this Program form, which also excludes optional linked choices and other
-destinations.
+remains unchanged. `PlayLinkedExiledCard` remains a separate legacy path for Hideaway play
+permissions, with one exact Program exception: Mosswort Bridge `activated_02` has a root body with
+one optional `Choose` by `Controller`, one branch requiring `GameCondition(BattlefieldAggregate)`
+over `Controller` creatures with `TotalPower` at least 10 and no maximum, and a branch body with
+exactly one terminal resultless `PlayLinkedExiledCard` configured for `Play`, no filter, and no
+source return to its owner's hand if cast. The aggregate filter must have its default exclusion
+fields. The Program has no root tail or yields, no alternate or nested branch, no trailing branch
+instruction or yields, and no target binding, bind, input, or yield. This optional non-cost choice
+uses `DelegateNonCostChoice`; it does not use Mimic Vat's optional-cost departure policy. Other
+optional linked choices, linked-play configurations, and destinations remain excluded. The terminal
+shape is required because linked-play completion closes the Program frame instead of resuming it.
 
 `Mill` may bind a typed `CardResultCohort`. In a spell or triggered-ability program, `ChooseCard`
 accepts two exact source shapes: `WholeCurrentGraveyard`, which searches the controller's current

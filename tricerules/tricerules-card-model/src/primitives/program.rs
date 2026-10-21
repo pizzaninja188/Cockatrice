@@ -484,6 +484,7 @@ struct Compiler<'a> {
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     allow_trigger_object_linked_exile: bool,
     allow_mimic_vat_linked_exile_receipt: bool,
+    allow_mosswort_linked_play: bool,
     next_instruction_address: u32,
 }
 
@@ -590,6 +591,7 @@ impl CompiledProgram {
         let schema = TargetSchema::compile_program(&compiled, targeting)?;
         validate_target_card_result_groups(&compiled, &schema)?;
         compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
+        validate_terminal_linked_play_profile(&compiled)?;
         Ok(compiled)
     }
 
@@ -608,6 +610,7 @@ impl CompiledProgram {
             return Err("program body must contain at least one instruction".into());
         }
         let target_projection = owner.target_projection();
+        let allow_mosswort_linked_play = is_mosswort_bridge_activated_02(&owner);
         let mut compiler = Compiler {
             owner: owner.clone(),
             context,
@@ -633,6 +636,7 @@ impl CompiledProgram {
             required_inputs: std::collections::BTreeSet::new(),
             allow_trigger_object_linked_exile: false,
             allow_mimic_vat_linked_exile_receipt: false,
+            allow_mosswort_linked_play,
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -1229,6 +1233,7 @@ impl Compiler<'_> {
                         target_group_max,
                         self.allow_trigger_object_linked_exile,
                         self.allow_mimic_vat_linked_exile_receipt,
+                        self.allow_mosswort_linked_play,
                     )?;
                     if self.allow_trigger_object_linked_exile
                         && matches!(
@@ -2440,6 +2445,7 @@ fn validate_and_result_types(
     target_group_max: Option<u32>,
     allow_trigger_object_linked_exile: bool,
     allow_mimic_vat_linked_exile_receipt: bool,
+    allow_mosswort_linked_play: bool,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::MoveGraveyardCards {
@@ -3069,6 +3075,24 @@ fn validate_and_result_types(
             "ChooseLinkedExiledCard in a resolution program requires a mandatory ability-owned OwnerGraveyard choice"
                 .into(),
         ),
+        SpellEffectKind::PlayLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            filter: None,
+            play_kind: super::LinkedExiledCardPlayKind::Play,
+            return_source_to_owner_hand_if_cast: false,
+        } if context == EffectContext::Ability
+            && allow_mosswort_linked_play
+            && producer_ability_id.as_str() == "hideaway"
+            && linked_exile_id.as_str() == "exiled_cards" =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::PlayLinkedExiledCard { .. } => Err(
+            "PlayLinkedExiledCard in a resolution program requires the exact Mosswort Bridge activated_02 Play profile"
+                .into(),
+        ),
         SpellEffectKind::Sacrifice {
             subject: EffectSubject::Source,
         } if context == EffectContext::Ability => {
@@ -3685,6 +3709,143 @@ fn exact_mimic_vat_imprint_receipt_body(owner: &ProgramOwnerId, body: &AuthoredB
     exact_exile && exact_consumer
 }
 
+fn is_mosswort_bridge_activated_02(owner: &ProgramOwnerId) -> bool {
+    matches!(
+        owner,
+        ProgramOwnerId::Ability(definition)
+            if definition.card_id == "mosswort_bridge"
+                && definition.face_id.as_str() == "mosswort_bridge"
+                && definition.ability_path.len() == 1
+                && definition.ability_path[0].as_str() == "activated_02"
+    )
+}
+
+fn validate_terminal_linked_play_profile(program: &CompiledProgram) -> Result<(), String> {
+    if !compiled_block_contains_linked_play(&program.body) {
+        return Ok(());
+    }
+
+    let invalid = || {
+        "PlayLinkedExiledCard in a resolution program requires the exact terminal Mosswort Bridge activated_02 Choose profile"
+            .to_string()
+    };
+    if !is_mosswort_bridge_activated_02(&program.owner)
+        || program.context != EffectContext::Ability
+        || !program.required_inputs.is_empty()
+        || !program.target_bindings.is_empty()
+        || !program.group_inputs.is_empty()
+        || !program.slots.is_empty()
+        || !program.body.yields.is_empty()
+    {
+        return Err(invalid());
+    }
+
+    let [choose] = program.body.steps.as_slice() else {
+        return Err(invalid());
+    };
+    if choose.input.is_some() || !choose.outputs.is_empty() {
+        return Err(invalid());
+    }
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        return Err(invalid());
+    };
+    if *chooser != PlayerRecipient::Controller
+        || !*optional
+        || *otherwise
+            != (CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            })
+        || branches.len() != 1
+    {
+        return Err(invalid());
+    }
+
+    let branch = &branches[0];
+    if branch.cost != ResolutionCost::None
+        || branch.presentation != AbilityPresentation::Fallback
+        || !is_exact_mosswort_total_power_condition(&branch.requirement)
+        || !branch.body.yields.is_empty()
+        || branch.body.steps.len() != 1
+    {
+        return Err(invalid());
+    }
+    let play = &branch.body.steps[0];
+    if play.input.is_some() || !play.outputs.is_empty() {
+        return Err(invalid());
+    }
+    if !matches!(
+        &play.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::PlayLinkedExiledCard {
+                    producer_ability_id,
+                    linked_exile_id,
+                    filter: None,
+                    play_kind: super::LinkedExiledCardPlayKind::Play,
+                    return_source_to_owner_hand_if_cast: false,
+                } if producer_ability_id.as_str() == "hideaway"
+                    && linked_exile_id.as_str() == "exiled_cards"
+            )
+    ) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn compiled_block_contains_linked_play(block: &CompiledBlock) -> bool {
+    block
+        .steps
+        .iter()
+        .any(|instruction| match &instruction.kind {
+            CompiledInstructionKind::Perform(effect) => {
+                matches!(
+                    effect.as_ref(),
+                    SpellEffectKind::PlayLinkedExiledCard { .. }
+                )
+            }
+            CompiledInstructionKind::If { yes, no, .. } => {
+                compiled_block_contains_linked_play(yes) || compiled_block_contains_linked_play(no)
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| compiled_block_contains_linked_play(&branch.body))
+                    || compiled_block_contains_linked_play(otherwise)
+            }
+            CompiledInstructionKind::ImportCastPayment => false,
+        })
+}
+
+fn is_exact_mosswort_total_power_condition(requirement: &CompiledChooseRequirement) -> bool {
+    matches!(
+        requirement,
+        CompiledChooseRequirement::GameCondition(condition)
+            if matches!(
+                condition,
+                GameCondition::BattlefieldAggregate {
+                    filter,
+                    aggregate: super::BattlefieldAggregate::TotalPower,
+                    min: Some(10),
+                    max: None,
+                    exclude_observed_object: false,
+                } if validate_program_total_power_filter(filter).is_ok()
+            )
+    )
+}
+
 fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
     match condition {
         GameCondition::ControllerLibraryEmpty => {}
@@ -3709,6 +3870,13 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
             max: None,
             exclude_observed_object: false,
         } => validate_program_maximum_power_filter(filter, *min)?,
+        GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate: super::BattlefieldAggregate::TotalPower,
+            min: Some(10),
+            max: None,
+            exclude_observed_object: false,
+        } => validate_program_total_power_filter(filter)?,
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
             for branch in branches {
                 validate_program_condition(branch)?;
@@ -3759,7 +3927,8 @@ const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(
     "If condition uses context outside controller hand, library, CardCount graveyard, or ",
     "Controller battlefield Count state supported by spell_program; ProgramIf also admits ",
     "only positive-min Controller Creature MaximumPower without max, extra filter fields, ",
-    "or observed-object exclusion, and the exact Controller four-type Delirium profile",
+    "or observed-object exclusion, exact Controller Creature TotalPower min 10, and the ",
+    "exact Controller four-type Delirium profile",
 );
 
 fn validate_program_maximum_power_filter(
@@ -3776,6 +3945,27 @@ fn validate_program_maximum_power_filter(
         || filter.name.is_some()
         || !filter.required_subtypes.is_empty()
         || filter.exclude_source
+    {
+        return Err(PROGRAM_CONDITION_UNSUPPORTED.into());
+    }
+    Ok(())
+}
+
+fn validate_program_total_power_filter(
+    filter: &super::BattlefieldPermanentFilter,
+) -> Result<(), String> {
+    if filter
+        != &(super::BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Creature),
+            color: None,
+            name: None,
+            required_subtypes: Vec::new(),
+            exclude_source: false,
+        })
     {
         return Err(PROGRAM_CONDITION_UNSUPPORTED.into());
     }

@@ -817,7 +817,7 @@ impl GameEngine {
             _ => {
                 return Err(EngineError::Illegal(
                     "different-name graveyard-return continuation missing",
-                ))
+                ));
             }
         };
         let controller = stack.item.controller;
@@ -998,7 +998,7 @@ impl GameEngine {
             _ => {
                 return Err(EngineError::Illegal(
                     "linked-Exile-choice continuation missing",
-                ))
+                ));
             }
         };
         let controller = stack.item.controller;
@@ -1006,26 +1006,38 @@ impl GameEngine {
             self.is_mandatory_program_linked_owner_graveyard_choice(&stack, &key, action);
         let mut events = Vec::new();
         let Some(&object_id) = chosen.first() else {
+            let mut matched_linked_play = false;
             if matches!(action, PendingLinkedExileAction::Play { .. }) {
-                if let Some(cohort) = self
-                    .state
-                    .pending_linked_exile_play
-                    .as_mut()
-                    .filter(|cohort| cohort.stack.item.id == stack.item.id && cohort.key == key)
+                if let Some(cohort) =
+                    self.state
+                        .pending_linked_exile_play
+                        .as_mut()
+                        .filter(|cohort| {
+                            cohort.stack.item.id == stack.item.id
+                                && cohort.stack.item.source_zone_change
+                                    == stack.item.source_zone_change
+                                && cohort.key == key
+                        })
                 {
                     // Declining the next-card prompt ends this occurrence. The persistent linked
                     // record remains available to later trigger occurrences.
                     cohort.remaining.clear();
+                    matched_linked_play = true;
                 }
             }
             events.push(ev_log(format!(
                 "P{controller} declines the linked Exile choice."
             )));
-            return self.complete_parked_stack_with_previous(
-                stack,
-                crate::state::EffectResult::default(),
-                events,
-            );
+            let previous_result = crate::state::EffectResult::default();
+            if matched_linked_play && stack.program.is_some() {
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                );
+            }
+            return self.complete_parked_stack_with_previous(stack, previous_result, events);
         };
         let expected_generation = generations
             .iter()
@@ -1455,7 +1467,7 @@ self.state.pending_resolution = Some(PendingResolution {
                             _ => {
                                 return Err(EngineError::Illegal(
                                     "searched card destination unavailable",
-                                ))
+                                ));
                             }
                         };
                         ev.push(ev_log(format!(

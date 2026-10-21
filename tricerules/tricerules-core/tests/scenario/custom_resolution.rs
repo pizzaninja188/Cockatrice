@@ -4423,6 +4423,21 @@ fn program_choose_departed_controller_selects_delegate_then_runs_survivor_tail_o
     let original_menu = find_resolution_choice(&delegated)
         .expect("P2 receives P0's original branch menu exactly once");
     assert_eq!(original_menu.deciding_player_id, 2);
+    let delegated_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the original Program choice remains parked for its live delegate");
+    assert_eq!(delegated_pending.deciding_player, 2);
+    let tricerules_core::state::ResolutionContinuation::ProgramChoose { stack, .. } =
+        &delegated_pending.continuation
+    else {
+        panic!("the delegated prompt retains the original Program continuation");
+    };
+    assert_eq!(
+        stack.item.controller, 0,
+        "the effect controller remains P0 while P2 is the live decision maker"
+    );
     assert_ne!(original_menu.resolution_prompt_id, 0);
     assert_eq!(
         original_menu

@@ -72,6 +72,7 @@ private:
         int sourcePosition = -1;
         int sourceX = -1;
         int sourceY = 0;
+        bool sourceFaceDown = false;
         CardRef sourceCardRef;
         int faceIndex = 0;
         QVector<quint32> targetOids;

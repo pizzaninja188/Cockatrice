@@ -24,22 +24,42 @@
       "face_id": "mosswort_bridge",
       "start_line": 4,
       "end_line": 4,
-      "typed_paths": ["/faces/0/activated_abilities/1"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose/chooser",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose/branches/0/requirement",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/PlayLinkedExiledCard",
+        "/faces/0/activated_abilities/1/program/body/steps/0/kind/Choose/otherwise"
+      ]
     }
   ],
   "tokens": [],
   "semantic_fixtures": [
     {
       "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_and_smugglers_buggy_register_their_exact_rules_shapes",
-      "covers": "Exact Mosswort card identity, tapped entry, Hideaway 4, green mana ability, resolution branch, signed creature-power threshold, and linked play permission."
+      "covers": "Exact Mosswort card identity, tapped entry, Hideaway 4, green mana ability, and activated_02's exact optional root Controller Choose, Controller-creature TotalPower minimum 10 condition, sole branch, and terminal resultless Play-linked-exile leaf."
     },
     {
       "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_checks_power_when_its_ability_resolves_then_plays_the_linked_land",
-      "covers": "Threshold changes from eight to ten before resolution; the selected linked Forest is played during resolution and consumes the controller's land play."
+      "covers": "Threshold changes from eight to ten before resolution; the linked Forest is selected with exact nonzero prompts, played during resolution, and consumes the controller's land play. The exact Mosswort root emits one StackResolved event without moving or revealing the physical Bridge. A same-seed serialized replay of accepted commands produces identical serialized events and final state; replay of the consumed PlayLand command is rejected atomically."
     },
     {
       "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_does_not_offer_the_linked_card_below_ten_power",
-      "covers": "Four 2/2 creatures fail the ten-power branch and do not expose the linked exile choice."
+      "covers": "Four 2/2 creatures fail the Controller-creature TotalPower minimum-10 branch and do not expose the linked exile choice."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_optional_branch_decline_keeps_the_linked_card_hidden",
+      "covers": "The optional non-cost choice is declined with its exact live prompt; the linked card remains hidden and unchanged."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_linked_choice_decline_clears_occurrence_before_second_bridge_play",
+      "covers": "Declining the direct linked-card prompt clears the exact pending Play occurrence while preserving both hidden linked records; the exact first Bridge root emits one StackResolved event without moving or revealing its physical source. A second Bridge offers only its own linked land and plays it with the live prompt and generation-bound PlayLand command."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_linked_cast_survives_source_bounce_and_cancelled_proposal",
+        "covers": "A live-target Lightning Bolt cast remains associated with the original linked ObjectId and generation after Mosswort Bridge leaves. Accepted Begin reveals the linked face-down Exile source once; CancelSpellCast restores its original hidden generation and reoffers the same live choice without retiring the root. Stale prompt replay fails atomically; retry Commit emits no duplicate reveal, spends no colored mana, and emits one StackResolved for the exact root without moving or revealing the physical Bridge. Lethal damage moves the Bear by state-based action."
     }
   ],
   "complete_definition_review_confirmed": true

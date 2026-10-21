@@ -71,10 +71,8 @@ pub(crate) fn reveal_cards(
         .collect()
 }
 
-/// Capture the public identity receipt for CR 406.3a without publishing it yet. Spell-cast
-/// reservations can still be canceled before payment commits, so their caller retains this
-/// snapshot and emits it only if the cast succeeds; land plays publish it at their accepted
-/// announcement boundary.
+/// Build the public identity receipt for CR 406.3a. Callers emit it after validating the accepted
+/// action: spell casts at `BeginSpellCast`, and land plays at their accepted announcement.
 pub(super) fn face_down_exile_reveal_events(
     state: &GameState,
     registry: &CardRegistry,

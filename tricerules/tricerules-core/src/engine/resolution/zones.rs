@@ -3470,11 +3470,32 @@ impl GameEngine {
 
     /// Continue a linked play occurrence after a card's play/cast transaction or an explicit
     /// decline. The cohort is a snapshot for this resolving occurrence; linked records remain
-    /// available to later trigger occurrences.
+    /// available to later trigger occurrences. Exceptional observer/departure cleanup retains
+    /// the legacy resolution finalizer.
     pub(in crate::engine) fn advance_pending_linked_exile_play(
+        &mut self,
+        cohort: crate::state::PendingLinkedExilePlay,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, false)
+    }
+
+    /// Finish a normal linked-play root continuation through its complete parked-stack cursor.
+    /// This preserves authored Program retirement while observer/departure callers continue to
+    /// use the legacy resolution finalizer above.
+    pub(in crate::engine) fn advance_pending_linked_exile_play_through_stack(
+        &mut self,
+        cohort: crate::state::PendingLinkedExilePlay,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, true)
+    }
+
+    fn advance_pending_linked_exile_play_with_finalizer(
         &mut self,
         mut cohort: crate::state::PendingLinkedExilePlay,
         mut events: Vec<rv1::RuledEvent>,
+        complete_parked_stack: bool,
     ) -> Result<RuledEventBatch, EngineError> {
         cohort.in_flight = None;
         let chooser = cohort.stack.item.controller;
@@ -3614,12 +3635,17 @@ impl GameEngine {
         if cohort.any_cast_committed && cohort.return_source_to_owner_hand_if_cast {
             self.return_linked_cast_source_to_owner_hand(&cohort.stack.item, &mut events)?;
         }
-        self.complete_parked_resolution_with_previous(
-            cohort.stack.item,
-            cohort.stack.resume_effect_index,
-            cohort.stack.previous_result,
-            events,
-        )
+        if complete_parked_stack {
+            let previous_result = cohort.stack.previous_result.clone();
+            self.complete_parked_stack_with_previous(cohort.stack, previous_result, events)
+        } else {
+            self.complete_parked_resolution_with_previous(
+                cohort.stack.item,
+                cohort.stack.resume_effect_index,
+                cohort.stack.previous_result,
+                events,
+            )
+        }
     }
 }
 

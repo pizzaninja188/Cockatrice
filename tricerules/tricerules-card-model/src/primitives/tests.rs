@@ -7544,6 +7544,454 @@ fn program_if_accepts_controller_creature_maximum_power_conditions() {
 }
 
 #[test]
+fn program_choose_accepts_exact_controller_creature_total_power_ten_condition() {
+    use crate::primitives::{
+        ChooseDeparturePolicy, CompiledChooseRequirement, CompiledInstructionKind,
+        RelativePlayerSet,
+    };
+
+    let condition = r#"BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: TotalPower, min: Some(10), max: None,
+        exclude_observed_object: false,
+    )"#;
+    let body = mosswort_total_power_choose_body(condition);
+    let program = ability_program_fixture("mosswort_condition_compiler_fixture", &body)
+        .expect("the exact Mosswort TotalPower condition compiles");
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("the condition fixture retains one Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        departure_policy,
+        branches,
+        ..
+    } = &instruction.kind
+    else {
+        panic!("the condition fixture retains a compiled Choose");
+    };
+    assert_eq!(
+        *departure_policy,
+        ChooseDeparturePolicy::DelegateNonCostChoice,
+        "Mosswort's optional effect branch is a non-cost choice"
+    );
+    let [branch] = branches.as_slice() else {
+        panic!("the condition fixture has one branch");
+    };
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::GameCondition(crate::primitives::GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate: crate::primitives::BattlefieldAggregate::TotalPower,
+            min: Some(10),
+            max: None,
+            exclude_observed_object: false,
+        }) if filter.controllers == RelativePlayerSet::Controller
+            && filter.card_type == Some(crate::primitives::CardTypeFilter::Creature)
+            && filter.required_supertypes.is_empty()
+            && filter.token.is_none()
+            && filter.any_of.is_none()
+            && filter.color.is_none()
+            && filter.name.is_none()
+            && filter.required_subtypes.is_empty()
+            && !filter.exclude_source
+    ));
+}
+
+fn mosswort_total_power_choose_body(condition: &str) -> String {
+    format!(
+        r#"(steps: [(id: "choose_linked_play", kind: Choose(
+            choice: "choose_linked_play", chooser: Controller, optional: true,
+            branches: [(branch_id: "play_linked_card", presentation: Fallback, cost: None,
+                requirement: GameCondition({condition}),
+                body: (steps: [], yields: []))],
+            otherwise: (steps: [], yields: []),
+        ))], yields: [])"#
+    )
+}
+
+#[test]
+fn program_choose_rejects_nonexact_controller_creature_total_power_conditions() {
+    let base = r#"BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: TotalPower, min: Some(10), max: None,
+        exclude_observed_object: false,
+    )"#;
+    let cases = [
+        (
+            "opponent cohort",
+            base.replace("controllers: Controller", "controllers: Opponents"),
+        ),
+        (
+            "noncreature filter",
+            base.replace("Some(Creature)", "Some(Land)"),
+        ),
+        ("wrong threshold", base.replace("Some(10)", "Some(9)")),
+        ("maximum bound", base.replace("max: None", "max: Some(20)")),
+        (
+            "supertype filter",
+            base.replace(
+                "card_type: Some(Creature)",
+                "card_type: Some(Creature), required_supertypes: [\"Legendary\"]",
+            ),
+        ),
+        (
+            "token filter",
+            base.replace(
+                "card_type: Some(Creature)",
+                "card_type: Some(Creature), token: Some(true)",
+            ),
+        ),
+        (
+            "name filter",
+            base.replace(
+                "card_type: Some(Creature)",
+                "card_type: Some(Creature), name: Some(\"Elf\")",
+            ),
+        ),
+        (
+            "subtype filter",
+            base.replace(
+                "card_type: Some(Creature)",
+                "card_type: Some(Creature), required_subtypes: [\"Elf\"]",
+            ),
+        ),
+        (
+            "source exclusion",
+            base.replace(
+                "card_type: Some(Creature)",
+                "card_type: Some(Creature), exclude_source: true",
+            ),
+        ),
+        (
+            "observed-object exclusion",
+            base.replace(
+                "exclude_observed_object: false",
+                "exclude_observed_object: true",
+            ),
+        ),
+    ];
+
+    for (label, condition) in cases {
+        let body = mosswort_total_power_choose_body(&condition);
+        assert!(
+            ability_program_fixture("mosswort_condition_compiler_fixture", &body).is_err(),
+            "the Program compiler must reject the {label} TotalPower shape"
+        );
+    }
+}
+
+const MOSSWORT_LINKED_PLAY_BODY: &str = r#"(steps: [(id: "choose_linked_play", kind: Choose(
+    choice: "choose_linked_play", chooser: Controller, optional: true,
+    branches: [(branch_id: "play_linked_card", presentation: Fallback, cost: None,
+        requirement: GameCondition(BattlefieldAggregate(
+            filter: (controllers: Controller, card_type: Some(Creature)),
+            aggregate: TotalPower, min: Some(10), max: None,
+            exclude_observed_object: false,
+        )),
+        body: (steps: [(id: "play_selected_linked_card", kind: Perform(
+            PlayLinkedExiledCard(
+                producer_ability_id: "hideaway",
+                linked_exile_id: "exiled_cards",
+                filter: None,
+                play_kind: Play,
+                return_source_to_owner_hand_if_cast: false,
+            ),
+        ))], yields: []))],
+    otherwise: (steps: [], yields: []),
+))], yields: [])"#;
+
+fn mosswort_terminal_program_owner() -> crate::ProgramOwnerId {
+    crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "mosswort_bridge".into(),
+        face_id: crate::CardFaceId::new("mosswort_bridge").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_02").unwrap()],
+    })
+}
+
+fn parse_mosswort_terminal_program(text: &str) -> Result<crate::CardProgram, String> {
+    ron::from_str(text).map_err(|error| error.to_string())
+}
+
+fn compile_mosswort_terminal_program(
+    body: &str,
+    owner: crate::ProgramOwnerId,
+    context: crate::primitives::EffectContext,
+) -> Result<crate::primitives::CompiledProgram, String> {
+    let program = parse_mosswort_terminal_program(&format!("(body: {body})"))?;
+    crate::primitives::CompiledProgram::compile(owner, context, &program)
+}
+
+fn mosswort_terminal_play_step(body: &str) -> &str {
+    let start = body
+        .find("body: (steps: [")
+        .expect("fixture has a branch body")
+        + "body: (steps: [".len();
+    let end = body[start..]
+        .find("], yields: [])")
+        .expect("fixture has a branch body yield list")
+        + start;
+    &body[start..end]
+}
+
+fn replace_mosswort_fixture_last(text: &str, needle: &str, replacement: &str) -> String {
+    let index = text
+        .rfind(needle)
+        .expect("fixture contains the requested final mutation point");
+    format!(
+        "{}{}{}",
+        &text[..index],
+        replacement,
+        &text[index + needle.len()..]
+    )
+}
+
+#[test]
+fn mosswort_activated_program_accepts_exact_terminal_linked_play() {
+    use crate::primitives::{ChooseDeparturePolicy, CompiledInstructionKind, EffectContext};
+
+    let compiled = compile_mosswort_terminal_program(
+        MOSSWORT_LINKED_PLAY_BODY,
+        mosswort_terminal_program_owner(),
+        EffectContext::Ability,
+    )
+    .unwrap_or_else(|error| panic!("Mosswort's exact terminal Program should compile: {error}"));
+
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("Mosswort's Program contains one root Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        departure_policy,
+        branches,
+        ..
+    } = &choose.kind
+    else {
+        panic!("Mosswort's root instruction is Choose");
+    };
+    assert_eq!(
+        *departure_policy,
+        ChooseDeparturePolicy::DelegateNonCostChoice
+    );
+    let [branch] = branches.as_slice() else {
+        panic!("Mosswort's Choose has exactly one branch");
+    };
+    assert!(matches!(
+        branch.body.steps.as_slice(),
+        [instruction]
+            if instruction.input.is_none()
+                && instruction.outputs.is_empty()
+                && matches!(
+                    &instruction.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(
+                            effect.as_ref(),
+                            crate::primitives::SpellEffectKind::PlayLinkedExiledCard {
+                                producer_ability_id,
+                                linked_exile_id,
+                                filter: None,
+                                play_kind: crate::primitives::LinkedExiledCardPlayKind::Play,
+                                return_source_to_owner_hand_if_cast: false,
+                            } if producer_ability_id.as_str() == "hideaway"
+                                && linked_exile_id.as_str() == "exiled_cards"
+                        )
+                )
+    ));
+}
+
+#[test]
+fn mosswort_terminal_linked_play_profile_rejects_near_misses() {
+    use crate::primitives::EffectContext;
+
+    let branch_start = MOSSWORT_LINKED_PLAY_BODY
+        .find("branches: [")
+        .expect("fixture has one branch list")
+        + "branches: [".len();
+    let branch_end = MOSSWORT_LINKED_PLAY_BODY[branch_start..]
+        .find("],\n    otherwise:")
+        .expect("fixture has one Otherwise block")
+        + branch_start;
+    let original_branch = &MOSSWORT_LINKED_PLAY_BODY[branch_start..branch_end];
+    let second_branch = original_branch.replace("play_linked_card", "second_branch");
+    let multiple_branches = format!(
+        "{} , {}{}",
+        &MOSSWORT_LINKED_PLAY_BODY[..branch_end],
+        second_branch,
+        &MOSSWORT_LINKED_PLAY_BODY[branch_end..],
+    );
+    let terminal_play = mosswort_terminal_play_step(MOSSWORT_LINKED_PLAY_BODY);
+    let nested_if = MOSSWORT_LINKED_PLAY_BODY.replace(
+        &format!("body: (steps: [{terminal_play}], yields: [])"),
+        &format!(
+            "body: (steps: [(id: \"nested_if\", kind: If(condition: Void, yes: (steps: [{terminal_play}], yields: []), no: (steps: [], yields: [])))], yields: [])"
+        ),
+    );
+    let nested_choose = MOSSWORT_LINKED_PLAY_BODY.replace(
+        &format!("body: (steps: [{terminal_play}], yields: [])"),
+        &format!(
+            "body: (steps: [(id: \"nested_choose\", kind: Choose(choice: \"nested_choice\", chooser: Controller, optional: true, branches: [(branch_id: \"nested_branch\", presentation: Fallback, cost: None, body: (steps: [{terminal_play}], yields: []))], otherwise: (steps: [], yields: [])))], yields: [])"
+        ),
+    );
+    let branch_yield =
+        MOSSWORT_LINKED_PLAY_BODY.replace("))], yields: []))],", "))], yields: [\"missing\"]))],");
+    let root_yield = replace_mosswort_fixture_last(
+        MOSSWORT_LINKED_PLAY_BODY,
+        "))], yields: [])",
+        "))], yields: [\"missing\"])",
+    );
+    let filtered_linked_play = MOSSWORT_LINKED_PLAY_BODY
+        .replace("filter: None,", "filter: Some((card_type: Some(Land))),");
+
+    let cases = [
+        (
+            "wrong aggregate",
+            MOSSWORT_LINKED_PLAY_BODY.replace("aggregate: TotalPower", "aggregate: MaximumPower"),
+        ),
+        (
+            "wrong threshold",
+            MOSSWORT_LINKED_PLAY_BODY.replace("min: Some(10)", "min: Some(9)"),
+        ),
+        (
+            "wrong cohort",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "controllers: Controller",
+                "controllers: Opponents",
+            ),
+        ),
+        (
+            "noncreature filter",
+            MOSSWORT_LINKED_PLAY_BODY.replace("Some(Creature)", "Some(Land)"),
+        ),
+        (
+            "bounded aggregate",
+            MOSSWORT_LINKED_PLAY_BODY.replace("max: None", "max: Some(20)"),
+        ),
+        (
+            "nonoptional choice",
+            MOSSWORT_LINKED_PLAY_BODY.replace("optional: true", "optional: false"),
+        ),
+        (
+            "paid branch",
+            MOSSWORT_LINKED_PLAY_BODY.replace("cost: None", "cost: DiscardCard(filter: None)"),
+        ),
+        (
+            "wrong producer ability",
+            MOSSWORT_LINKED_PLAY_BODY.replace("producer_ability_id: \"hideaway\"", "producer_ability_id: \"other\""),
+        ),
+        (
+            "wrong linked-exile id",
+            MOSSWORT_LINKED_PLAY_BODY.replace("linked_exile_id: \"exiled_cards\"", "linked_exile_id: \"other\""),
+        ),
+        (
+            "cast instead of Play",
+            MOSSWORT_LINKED_PLAY_BODY.replace("play_kind: Play", "play_kind: Cast"),
+        ),
+        (
+            "source return on cast",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "return_source_to_owner_hand_if_cast: false",
+                "return_source_to_owner_hand_if_cast: true",
+            ),
+        ),
+        (
+            "nonempty Otherwise",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "otherwise: (steps: [], yields: [])",
+                "otherwise: (steps: [(id: \"otherwise_tail\", kind: Perform(GainLife(amount: 1)))], yields: [])",
+            ),
+        ),
+        (
+            "branch tail",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "))], yields: []))],",
+                ")), (id: \"branch_tail\", kind: Perform(GainLife(amount: 1)))], yields: []))],",
+            ),
+        ),
+        (
+            "root tail",
+            replace_mosswort_fixture_last(
+                MOSSWORT_LINKED_PLAY_BODY,
+                "))], yields: [])",
+                ")), (id: \"root_tail\", kind: Perform(GainLife(amount: 1)))], yields: [])",
+            ),
+        ),
+        ("nested If", nested_if),
+        ("nested Choose", nested_choose),
+        ("branch yield", branch_yield),
+        ("root yield", root_yield),
+        ("filtered linked play", filtered_linked_play),
+        ("multiple branches", multiple_branches),
+        (
+            "result binding",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "id: \"choose_linked_play\", kind:",
+                "id: \"choose_linked_play\", bind: [\"unused\"], kind:",
+            ),
+        ),
+        (
+            "result input",
+            MOSSWORT_LINKED_PLAY_BODY.replace(
+                "id: \"choose_linked_play\", kind:",
+                "id: \"choose_linked_play\", input: Some(\"missing\"), kind:",
+            ),
+        ),
+    ];
+
+    for (label, body) in cases {
+        assert_ne!(
+            body, MOSSWORT_LINKED_PLAY_BODY,
+            "fixture mutation for {label}"
+        );
+        parse_mosswort_terminal_program(&format!("(body: {body})")).unwrap_or_else(|error| {
+            panic!("the {label} negative fixture must be valid RON: {error}")
+        });
+        let error = compile_mosswort_terminal_program(
+            &body,
+            mosswort_terminal_program_owner(),
+            EffectContext::Ability,
+        )
+        .expect_err("near-miss linked-Play profile must be rejected");
+        if label == "root tail" || label == "branch tail" {
+            assert!(
+                error.contains("exact terminal Mosswort Bridge activated_02 Choose profile"),
+                "{label} case should fail at the terminal-profile guard, got: {error}"
+            );
+        }
+    }
+
+    let target_bound = format!(
+        "(body: {MOSSWORT_LINKED_PLAY_BODY}, target_bindings: [(instruction_id: \"choose_linked_play\", role: Target, target_group_index: 0)])"
+    );
+    let program = parse_mosswort_terminal_program(&target_bound)
+        .expect("the target-bound negative fixture must be valid RON");
+    assert!(
+        crate::primitives::CompiledProgram::compile(
+            mosswort_terminal_program_owner(),
+            EffectContext::Ability,
+            &program,
+        )
+        .is_err(),
+        "nonempty target bindings are outside the terminal profile"
+    );
+
+    let wrong_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "other_card".into(),
+        face_id: crate::CardFaceId::new("other_card").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_02").unwrap()],
+    });
+    assert!(compile_mosswort_terminal_program(
+        MOSSWORT_LINKED_PLAY_BODY,
+        wrong_owner,
+        EffectContext::Ability,
+    )
+    .is_err());
+    assert!(compile_mosswort_terminal_program(
+        MOSSWORT_LINKED_PLAY_BODY,
+        mosswort_terminal_program_owner(),
+        EffectContext::Spell,
+    )
+    .is_err());
+}
+
+#[test]
 fn program_if_rejects_unsupported_maximum_power_shapes() {
     let cases = [
         (

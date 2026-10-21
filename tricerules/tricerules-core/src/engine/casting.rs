@@ -229,7 +229,6 @@ pub(in crate::engine) struct PreparedSpellCast {
 pub(in crate::engine) struct PendingSpellCastInternal {
     pub(in crate::engine) prepared: PreparedSpellCast,
     original_object: GameObject,
-    face_down_exile_reveal_events: Vec<rv1::RuledEvent>,
     restored_permissions: Vec<(usize, ActiveExilePlayPermission)>,
     restored_discard_successors: Vec<((ObjectId, u64), u64)>,
     proposal_triggers: Vec<super::triggers::CollectedTrigger>,
@@ -450,9 +449,9 @@ impl GameEngine {
             .map(|(key, value)| (*key, *value))
             .collect();
         let locked_total_cost = prepared.payment.total_cost_label()?;
-        // Capture the original Exile identity before reserving the card on the Stack. Publication
-        // waits for a successful payment commit so CancelSpellCast restores both the hidden card
-        // and its privacy.
+        // Capture the public identity receipt before reserving the card on the Stack. A face-down
+        // exiled card turns face up just before its accepted cast announcement (CR 406.3a / 601.2a);
+        // cancellation restores the original object snapshot but does not erase public knowledge.
         let face_down_exile_reveal_events = super::reveals::face_down_exile_reveal_events(
             &self.state,
             self.registry,
@@ -460,6 +459,8 @@ impl GameEngine {
             "casting a card from exile",
         )
         .unwrap_or_default();
+        let reveals_face_down_exile = !face_down_exile_reveal_events.is_empty();
+        let face_index = prepared.idx;
 
         // Everything fallible above is validation. This is the CR 601.2a reservation edge.
         super::resolution::move_object_to_zone(
@@ -469,6 +470,16 @@ impl GameEngine {
             Zone::Stack,
             None,
         )?;
+        if reveals_face_down_exile {
+            let object = self
+                .state
+                .objects
+                .get_mut(&oid)
+                .expect("the accepted cast retains its reserved physical object");
+            debug_assert_eq!(object.zone, Zone::Stack);
+            object.face_down = false;
+            object.face_up_index = face_index;
+        }
         if let Some(snapshot) = cast_departure {
             let event = self.finish_single_zone_event(snapshot, oid);
             proposal_triggers.extend(self.collect_event_triggers(&[event]));
@@ -491,13 +502,14 @@ impl GameEngine {
         self.pending_spell_cast_internal = Some(PendingSpellCastInternal {
             prepared,
             original_object: object,
-            face_down_exile_reveal_events,
             restored_permissions,
             restored_discard_successors,
             proposal_triggers,
             crime_events,
         });
-        Ok(RuledEventBatch::default())
+        let mut batch = RuledEventBatch::default();
+        batch.events.extend(face_down_exile_reveal_events);
+        Ok(batch)
     }
 
     pub(super) fn commit_spell_cast(
@@ -1518,7 +1530,7 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::CastSpell,
     ) -> Result<RuledEventBatch, EngineError> {
-        self.begin_spell_cast(
+        let mut begin_batch = self.begin_spell_cast(
             player,
             &rv1::BeginSpellCast {
                 announcement: Some(announcement_from_cast(command)),
@@ -1544,7 +1556,12 @@ impl GameEngine {
             restricted_mana: command.restricted_mana.clone(),
         };
         match self.commit_spell_cast(player, &commit) {
-            Ok(batch) => Ok(batch),
+            Ok(batch) => {
+                // This compatibility command combines Begin and Commit into one response. Keep
+                // the accepted announcement's public reveal receipt before stack publication.
+                begin_batch.events.extend(batch.events);
+                Ok(begin_batch)
+            }
             Err(error) => {
                 // The obsolete atomic fixture shape cannot leave an interactive transaction open.
                 // Roll its proposal back so rejected legacy scenario commands retain the same
@@ -1607,18 +1624,6 @@ impl GameEngine {
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
         let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
-        if !pending.face_down_exile_reveal_events.is_empty() {
-            let object = self
-                .state
-                .objects
-                .get_mut(&oid)
-                .expect("a committed spell retains its reserved physical object");
-            debug_assert_eq!(object.zone, Zone::Stack);
-            // The successful cast's stack event and triggers must see the printed face. A
-            // face-down Morph/Disguise permanent entered by another effect never uses this path.
-            object.face_down = false;
-            object.face_up_index = face_index;
-        }
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
@@ -1736,9 +1741,6 @@ impl GameEngine {
 
         let cast_card_id = card_id.clone();
         let mut batch = RuledEventBatch::default();
-        batch
-            .events
-            .extend(pending.face_down_exile_reveal_events.iter().cloned());
         let x_line = if has_x {
             format!(" (X={chosen_x})")
         } else {
