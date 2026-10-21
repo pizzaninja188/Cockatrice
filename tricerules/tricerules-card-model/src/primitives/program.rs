@@ -21,7 +21,10 @@ use super::{
     SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
     ZoneCardFilter,
 };
-use crate::{choice_fallback, AbilityPresentation, ChoiceId, ModeId, ProgramOwnerId};
+use crate::{
+    choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
+    ProgramOwnerId,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -300,6 +303,13 @@ pub enum ResultType {
         linked_exile_id: crate::AbilityLinkId,
         cardinality: Cardinality,
     },
+    /// Exact new linked-exile TriggerObject member from Mimic Vat's `imprint` occurrence.
+    /// `None` is a meaningful attempted-exile receipt: the paired return instruction still runs.
+    TriggerObjectLinkedExileReceipt {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+        cardinality: Cardinality,
+    },
     /// Card-action facts tied to the producer's exact target-group binding, such as chosen
     /// Destroy or targeted-player Discard. Runtime values reuse CardResultCohort.
     TargetCardResultCohort {
@@ -374,9 +384,18 @@ pub enum CompiledInstructionKind {
         choice: ChoiceId,
         chooser: PlayerRecipient,
         optional: bool,
+        departure_policy: ChooseDeparturePolicy,
         branches: Vec<CompiledChooseBranch>,
         otherwise: CompiledBlock,
     },
+}
+
+/// Compiled CR 800.4 departure behavior for one parked Program choice. Ordinary choices retain
+/// the existing delegate flow; supported optional action-cost choices fall through unpaid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChooseDeparturePolicy {
+    DelegateNonCostChoice,
+    OptionalCostFallsThrough,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -453,6 +472,7 @@ pub struct CompiledProgram {
 }
 
 struct Compiler<'a> {
+    owner: ProgramOwnerId,
     context: EffectContext,
     targeting: Option<&'a TargetingDef>,
     target_references: Vec<ProgramTargetReference>,
@@ -463,6 +483,7 @@ struct Compiler<'a> {
     choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     allow_trigger_object_linked_exile: bool,
+    allow_mimic_vat_linked_exile_receipt: bool,
     next_instruction_address: u32,
 }
 
@@ -588,6 +609,7 @@ impl CompiledProgram {
         }
         let target_projection = owner.target_projection();
         let mut compiler = Compiler {
+            owner: owner.clone(),
             context,
             targeting,
             target_references: program.target_bindings.clone(),
@@ -610,6 +632,7 @@ impl CompiledProgram {
             choice_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
             allow_trigger_object_linked_exile: false,
+            allow_mimic_vat_linked_exile_receipt: false,
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -1205,6 +1228,7 @@ impl Compiler<'_> {
                         target_group_index,
                         target_group_max,
                         self.allow_trigger_object_linked_exile,
+                        self.allow_mimic_vat_linked_exile_receipt,
                     )?;
                     if self.allow_trigger_object_linked_exile
                         && matches!(
@@ -1476,6 +1500,7 @@ impl Compiler<'_> {
                     let mut has_paid_branch = false;
                     let mut compiled_branches = Vec::with_capacity(branches.len());
                     let mut joined_types: Option<Vec<ResultType>> = None;
+                    let mut optional_cost_falls_through = false;
                     for branch in branches {
                         branch.branch_id.validate().map_err(|reason| {
                             format!("Choose instruction '{}' branch: {reason}", instruction.id)
@@ -1663,8 +1688,11 @@ impl Compiler<'_> {
                                 CompiledChooseRequirement::CastCostReceipt(condition.clone())
                             }
                             ResolutionBranchRequirement::EffectsApplicable => {
+                                let mimic_vat_receipt_body =
+                                    exact_mimic_vat_imprint_receipt_body(&self.owner, &branch.body);
                                 let exact_linked_exile_body =
-                                    exact_trigger_object_linked_exile_body(&branch.body);
+                                    exact_trigger_object_linked_exile_body(&branch.body)
+                                        || mimic_vat_receipt_body;
                                 let exact_linked_exile_profile = exact_linked_exile_body
                                     && *chooser == PlayerRecipient::Controller
                                     && *optional
@@ -1677,9 +1705,12 @@ impl Compiler<'_> {
                                         && !exact_linked_exile_profile)
                                 {
                                     return Err(format!(
-                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction; alternatively, the exact optional Controller linked-Exile TriggerObject branch is supported",
+                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction, the exact optional Controller linked-Exile TriggerObject branch, or the exact Mimic Vat imprint linked-exile receipt flow",
                                         instruction.id
                                     ));
+                                }
+                                if exact_linked_exile_profile && mimic_vat_receipt_body {
+                                    optional_cost_falls_through = true;
                                 }
                                 if exact_linked_exile_profile {
                                     CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
@@ -1691,12 +1722,22 @@ impl Compiler<'_> {
 
                         let previous_linked_exile_permission =
                             self.allow_trigger_object_linked_exile;
+                        let previous_mimic_receipt_permission =
+                            self.allow_mimic_vat_linked_exile_receipt;
                         self.allow_trigger_object_linked_exile = matches!(
                             &requirement,
                             CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
                         );
+                        self.allow_mimic_vat_linked_exile_receipt =
+                            exact_mimic_vat_imprint_receipt_body(&self.owner, &branch.body)
+                                && matches!(
+                                    &requirement,
+                                    CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
+                                );
                         let compiled_body = self.compile_block(&branch.body, &names);
                         self.allow_trigger_object_linked_exile = previous_linked_exile_permission;
+                        self.allow_mimic_vat_linked_exile_receipt =
+                            previous_mimic_receipt_permission;
                         let (body, body_types) = compiled_body?;
                         joined_types = Some(match joined_types {
                             None => body_types,
@@ -1732,6 +1773,11 @@ impl Compiler<'_> {
                             choice: choice.clone(),
                             chooser: *chooser,
                             optional: *optional,
+                            departure_policy: if optional_cost_falls_through {
+                                ChooseDeparturePolicy::OptionalCostFallsThrough
+                            } else {
+                                ChooseDeparturePolicy::DelegateNonCostChoice
+                            },
                             branches: compiled_branches,
                             otherwise,
                         },
@@ -2076,6 +2122,7 @@ fn compile_input(
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
+        EffectOp::ReturnOtherLinkedExiledCards { .. } => Some("TriggerObjectLinkedExileReceipt"),
         EffectOp::CreateReflexiveTrigger { .. }
             if is_source_sacrifice_reflexive_consumer(effect) =>
         {
@@ -2119,6 +2166,21 @@ fn compile_input(
                 EffectOp::MoveCohortPartition { .. } => {
                     matches!(actual.result_type, ResultType::CardPartition)
                 }
+                EffectOp::ReturnOtherLinkedExiledCards {
+                    producer_ability_id,
+                    linked_exile_id,
+                } => matches!(
+                    &actual.result_type,
+                    ResultType::TriggerObjectLinkedExileReceipt {
+                        producer_ability_id: receipt_producer,
+                        linked_exile_id: receipt_link,
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    } if receipt_producer == producer_ability_id
+                        && receipt_link == linked_exile_id
+                ),
                 EffectOp::CreateReflexiveTrigger { .. }
                     if is_source_sacrifice_reflexive_consumer(effect) =>
                 {
@@ -2377,6 +2439,7 @@ fn validate_and_result_types(
     target_group_index: Option<u32>,
     target_group_max: Option<u32>,
     allow_trigger_object_linked_exile: bool,
+    allow_mimic_vat_linked_exile_receipt: bool,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::MoveGraveyardCards {
@@ -2952,11 +3015,39 @@ fn validate_and_result_types(
         }
         SpellEffectKind::Exile {
             subject: EffectSubject::TriggerObject,
+            linked_exile_id: Some(linked_exile_id),
+        } if context == EffectContext::Ability
+            && allow_trigger_object_linked_exile
+            && allow_mimic_vat_linked_exile_receipt =>
+        {
+            effect.validate(context)?;
+            Ok(vec![ResultType::TriggerObjectLinkedExileReceipt {
+                producer_ability_id: AbilityId::new("imprint")
+                    .expect("the compiled Mimic Vat ability ID is canonical"),
+                linked_exile_id: linked_exile_id.clone(),
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
+        }
+        SpellEffectKind::Exile {
+            subject: EffectSubject::TriggerObject,
             linked_exile_id: Some(_),
         } if context == EffectContext::Ability && allow_trigger_object_linked_exile => {
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
+            if context == EffectContext::Ability
+                && allow_mimic_vat_linked_exile_receipt =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ReturnOtherLinkedExiledCards { .. } => Err(
+            "ReturnOtherLinkedExiledCards in a resolution program requires the immediately preceding Mimic Vat imprint receipt".into(),
+        ),
         SpellEffectKind::ChooseLinkedExiledCard {
             producer_ability_id,
             linked_exile_id,
@@ -3544,6 +3635,54 @@ fn exact_trigger_object_linked_exile_body(body: &AuthoredBlock) -> bool {
             linked_exile_id: Some(_),
         }
     )
+}
+
+fn exact_mimic_vat_imprint_receipt_body(owner: &ProgramOwnerId, body: &AuthoredBlock) -> bool {
+    let exact_owner = matches!(
+        owner,
+        ProgramOwnerId::Ability(definition)
+            if definition.card_id == "mimic_vat"
+                && definition.face_id.as_str() == "mimic_vat"
+                && definition.ability_path.len() == 1
+                && definition.ability_path[0].as_str() == "imprint"
+    );
+    if !exact_owner || !body.yields.is_empty() {
+        return false;
+    }
+    let [exile_instruction, return_instruction] = body.steps.as_slice() else {
+        return false;
+    };
+    if exile_instruction.bind.len() != 1
+        || exile_instruction.input.is_some()
+        || !return_instruction.bind.is_empty()
+        || return_instruction.input.as_deref() != Some(exile_instruction.bind[0].as_str())
+    {
+        return false;
+    }
+    let exact_exile = matches!(
+        &exile_instruction.kind,
+        InstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::Exile {
+                    subject: EffectSubject::TriggerObject,
+                    linked_exile_id: Some(linked_exile_id),
+                } if linked_exile_id.as_str() == "imprinted_card"
+            )
+    );
+    let exact_consumer = matches!(
+        &return_instruction.kind,
+        InstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::ReturnOtherLinkedExiledCards {
+                    producer_ability_id,
+                    linked_exile_id,
+                } if producer_ability_id.as_str() == "imprint"
+                    && linked_exile_id.as_str() == "imprinted_card"
+            )
+    );
+    exact_exile && exact_consumer
 }
 
 fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {

@@ -78,6 +78,7 @@ fn assert_optional_basic_land_to_top(
         optional,
         branches,
         otherwise,
+        ..
     } = &choose_instruction.kind
     else {
         panic!("issue #284 top-level instruction is Choose");

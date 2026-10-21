@@ -74,6 +74,7 @@ fn issue_110_search_and_look_cards_use_the_shared_primitives() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choice_step.kind
     else {
         panic!("Tempest Hawk's trigger compiles to a structural Choose");
@@ -224,6 +225,7 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choice_step.kind
     else {
         panic!("Embermouth's outer may-choice is a structural Choose");

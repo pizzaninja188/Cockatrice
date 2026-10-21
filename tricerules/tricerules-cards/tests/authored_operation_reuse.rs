@@ -615,6 +615,7 @@ fn authored_crypt_lurker_uses_optional_creature_sacrifice_or_discard_program() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choose.kind
     else {
         panic!("Crypt Lurker's trigger uses its compiled Program Choose");
@@ -687,6 +688,7 @@ fn assert_single_sacrifice_choose<'a>(
         optional,
         branches,
         otherwise,
+        ..
     } = &step.kind
     else {
         panic!("the triggered ability uses Program Choose");
@@ -737,6 +739,7 @@ fn assert_single_tap_choose<'a>(
         optional,
         branches,
         otherwise,
+        ..
     } = &step.kind
     else {
         panic!("the triggered ability uses Program Choose");

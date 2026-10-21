@@ -1,5 +1,6 @@
 // Oracle/rulings checked 2026-10-10 against the pinned Scryfall snapshot and WotC LCI Release Notes.
 // CR 111.12, 118.12, 400.7e, 603.5-603.7, 607.2a, and 707.2 govern the imprint and token copy.
+// CR 800.4f governs a departed controller's unpaid optional imprint cost.
 (
   id: "mimic_vat",
   name: "Mimic Vat",
@@ -13,27 +14,33 @@
       controller: AnyPlayer,
       filter: (permanent_type: Some(Creature), token: Some(false)),
     ),
-    effect: [ChooseResolutionBranch(
-      chooser: Controller,
-      optional: true,
-      selection: PlayerChoice,
-      branches: [(
-        branch_id: "imprint_creature",
-        presentation: OracleLines([1]),
-        cost: None,
-        requirement: EffectsApplicable,
-        effects: [
-          Exile(
-            subject: TriggerObject,
-            linked_exile_id: Some("imprinted_card"),
-          ),
-          ReturnOtherLinkedExiledCards(
-            producer_ability_id: "imprint",
-            linked_exile_id: "imprinted_card",
-          ),
-        ],
-      )],
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_imprint", bind: [], input: None, kind: Choose(
+        choice: "imprint_creature",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "imprint",
+          presentation: OracleLines([1]),
+          cost: None,
+          requirement: EffectsApplicable,
+          body: (steps: [
+            (id: "exile_event", bind: ["imprint_receipt"], input: None,
+              kind: Perform(Exile(
+                subject: TriggerObject,
+                linked_exile_id: Some("imprinted_card"),
+              ))),
+            (id: "return_previous", bind: [], input: Some("imprint_receipt"),
+              kind: Perform(ReturnOtherLinkedExiledCards(
+                producer_ability_id: "imprint",
+                linked_exile_id: "imprinted_card",
+              )))
+          ], yields: []),
+        )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
   activated_abilities: [(
     ability_id: "create_copy",

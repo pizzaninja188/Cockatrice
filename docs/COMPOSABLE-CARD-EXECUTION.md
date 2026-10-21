@@ -118,7 +118,8 @@ membership. This source family remains unsupported in spell Programs and conditi
 predicates; event-bound leaves and cross-object matching remain closed. Ability Programs admit fixed-positive `PutCounters` and
 `RemoveCounters` on `Source` as ordinary effects, plus the existing resultless `RemoveAllCounters`
 shape. `EffectsApplicable` currently supports only its existing complete fixed-positive
-`PlusOnePlusOne` source-counter branch and Currency Converter's linked-Exile branch below.
+`PlusOnePlusOne` source-counter branch, Currency Converter's linked-Exile branch, and the exact
+Mimic Vat imprint receipt flow below.
 
 There is one additional closed `EffectsApplicable` profile for Currency Converter's first discard
 trigger owner: an ability-only optional Controller choice with one free branch, one resultless
@@ -130,6 +131,24 @@ Exile branch is applicable. This profile does not admit another subject or desti
 Exile, extra operation, result binding/yield, cost, extra branch, mandatory choice, or spell Program.
 `draw_then_discard` and the later `return_linked_card` consumer remain separate owners. Model and
 scenario coverage is recorded in the Currency Converter review map.
+
+The 2026-10-21 Mimic Vat increment moves only the `imprint` trigger into an ability-owned Program.
+Its second closed `EffectsApplicable` profile is one optional Controller choice with a single free
+branch: exile the exact captured `TriggerObject` under the `imprinted_card` link, then immediately
+feed its typed 0..1 receipt to `ReturnOtherLinkedExiledCards` for the same ability and link. The
+receipt names the newly linked event incarnation, so the return operation skips only that member
+and returns every prior linked card to its owner. A missing receipt does not suppress the paired
+return instruction, and neither the receipt nor its consumer is available outside this exact owner,
+branch and adjacency. Its empty `Otherwise` keeps decline from replacing the current imprint.
+
+The optional-choice departure policy is compiled with Mimic Vat's exact receipt profile. If its
+Controller has left before the offer or while the prompt is open, the optional action cost remains
+unpaid and the empty `Otherwise` completes without a replacement chooser (CR 800.4f). Currency
+Converter's one-leaf optional Exile has no `If you do` follow-up, so it retains the ordinary non-cost
+delegation flow. Other Program choices also keep the existing CR 800.4g behavior. Receipt binding,
+stale-event rejection, prior-link preservation, source/event-owner departure, and deterministic
+accepted-command replay are covered by the Mimic Vat review map; the activated `create_copy` ability
+remains on its existing definition path.
 
 Ring's upkeep Program places one Night counter, checks the threshold after replacement choices
 resume the same cursor, removes only Night at eight, and creates eight named Replicated Ring tokens.

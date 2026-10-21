@@ -61,6 +61,7 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
         optional,
         branches,
         otherwise,
+        ..
     } = &instruction.kind
     else {
         panic!("Solemn ETB-search trigger compiles as Choose");
@@ -143,6 +144,7 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
         optional,
         branches,
         otherwise,
+        ..
     } = &instruction.kind
     else {
         panic!("Solemn death trigger compiles as Choose");

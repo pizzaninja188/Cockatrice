@@ -1380,6 +1380,7 @@ pub(crate) struct PendingProgramChoose {
     pub occurrence: ProgramChooseOccurrence,
     pub original_chooser: PlayerId,
     pub optional: bool,
+    pub departure_policy: tricerules_card_model::primitives::ChooseDeparturePolicy,
     pub delegate_selected: bool,
     pub stage: PendingProgramChooseStage,
 }
@@ -1417,6 +1418,9 @@ pub(crate) enum ProgramValue {
     /// Exact generation-bound tokens created by one copy operation, retained with the
     /// TokenCreationBatch provenance required by the shared Haste and delayed-exile consumers.
     TokenCopyBatch(Vec<TriggerObjectRef>),
+    /// The exact new current linked-Exile member produced by a typed Exile instruction.
+    /// `None` is a proven attempted Exile with no current linked object.
+    TriggerObjectLinkedExileReceipt(Option<TriggerObjectRef>),
 }
 
 /// Physical card identity frozen for a typed resolution-program library cohort.

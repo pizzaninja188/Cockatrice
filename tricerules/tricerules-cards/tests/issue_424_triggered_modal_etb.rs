@@ -423,6 +423,7 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
         optional,
         branches,
         otherwise,
+        ..
     } = &choice.kind
     else {
         panic!("mode 02 compiles to a resultless Choose instruction");
@@ -624,6 +625,7 @@ fn issue_424_butcher_modes_bind_the_rat_token_another_sacrifice_and_team_menace(
         optional,
         branches,
         otherwise,
+        ..
     } = &choice.kind
     else {
         panic!("the sacrifice mode compiles as Choose")

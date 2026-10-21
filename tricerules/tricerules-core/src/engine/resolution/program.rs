@@ -13,10 +13,11 @@ use crate::state::{
     ProgramRunState, ProgramValue,
 };
 use tricerules_card_model::primitives::{
-    CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstructionKind,
-    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, HandCardAction,
-    HandCardChooser, HandChoiceVisibility, ProgramRequiredInput, ResolutionCost, ResultSlotId,
-    ResultType, SpellEffectKind, TargetFilter, TargetKind,
+    ChooseDeparturePolicy, CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement,
+    CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
+    CompiledProgramResultCondition, HandCardAction, HandCardChooser, HandChoiceVisibility,
+    ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType, SpellEffectKind, TargetFilter,
+    TargetKind,
 };
 
 #[cfg(test)]
@@ -795,7 +796,9 @@ impl GameEngine {
                     ))?;
             #[cfg(test)]
             trip_program_failpoint(ProgramFailpoint::DomainCommitted)?;
-            capture_program_outputs(
+            capture_program_outputs_for_stack(
+                self,
+                top,
                 active_compiled,
                 &mut program_state,
                 &outputs,
@@ -996,6 +999,7 @@ impl GameEngine {
                     choice,
                     chooser,
                     optional,
+                    departure_policy,
                     branches,
                     otherwise,
                     ..
@@ -1054,6 +1058,22 @@ impl GameEngine {
                         .state
                         .player_idx(chooser_player)
                         .is_some_and(|idx| !self.state.players[idx].has_lost);
+                    if *departure_policy == ChooseDeparturePolicy::OptionalCostFallsThrough
+                        && !choose_controller_live
+                    {
+                        program_state.frames[frame_index].next_instruction += 1;
+                        let mut child_path = path;
+                        child_path.push(ProgramPathStep {
+                            instruction_index: instruction_index as u32,
+                            arm: ProgramArm::ChooseOtherwise,
+                        });
+                        program_state.frames.push(ProgramFrame {
+                            path: child_path,
+                            next_instruction: 0,
+                            yield_to: instruction.outputs.clone(),
+                        });
+                        continue;
+                    }
                     let live_branches = branches
                         .iter()
                         .enumerate()
@@ -1237,6 +1257,7 @@ impl GameEngine {
                                 occurrence,
                                 original_chooser: chooser_player,
                                 optional: *optional,
+                                departure_policy: *departure_policy,
                                 delegate_selected,
                                 stage: choose_stage,
                             },
@@ -1284,6 +1305,10 @@ impl GameEngine {
                                     crate::state::ProducedObjectProvenance::TokenCreationBatch,
                                 );
                             }
+                            ProgramValue::TriggerObjectLinkedExileReceipt(Some(object)) => {
+                                previous.produced_objects.push(*object);
+                            }
+                            ProgramValue::TriggerObjectLinkedExileReceipt(None) => {}
                             value @ (ProgramValue::FoundLibraryCohort(_)
                             | ProgramValue::RevealedLibraryCohort(_)
                             | ProgramValue::CardPartition(_)) => {
@@ -1402,7 +1427,14 @@ impl GameEngine {
                     }
                     #[cfg(test)]
                     trip_program_failpoint(ProgramFailpoint::DomainCommitted)?;
-                    capture_program_outputs(compiled, &mut program_state, &outputs, &result)?;
+                    capture_program_outputs_for_stack(
+                        self,
+                        top,
+                        compiled,
+                        &mut program_state,
+                        &outputs,
+                        &result,
+                    )?;
                     program_state.in_flight = None;
                     program_state.in_flight_produced_object_provenance = None;
                     #[cfg(test)]
@@ -1950,7 +1982,29 @@ fn block_at_path<'a>(
     Ok(block)
 }
 
+#[cfg(test)]
 fn capture_program_outputs(
+    compiled: &CompiledProgram,
+    run: &mut ProgramRunState,
+    outputs: &[ResultSlotId],
+    result: &EffectResult,
+) -> Result<(), EngineError> {
+    capture_program_outputs_inner(None, compiled, run, outputs, result)
+}
+
+fn capture_program_outputs_for_stack(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    compiled: &CompiledProgram,
+    run: &mut ProgramRunState,
+    outputs: &[ResultSlotId],
+    result: &EffectResult,
+) -> Result<(), EngineError> {
+    capture_program_outputs_inner(Some((engine, top)), compiled, run, outputs, result)
+}
+
+fn capture_program_outputs_inner(
+    stack_context: Option<(&crate::engine::GameEngine, &StackItem)>,
     compiled: &CompiledProgram,
     run: &mut ProgramRunState,
     outputs: &[ResultSlotId],
@@ -2033,6 +2087,57 @@ fn capture_program_outputs(
                     ));
                 }
                 ProgramValue::TokenCopyBatch(result.produced_objects.clone())
+            }
+            ResultType::TriggerObjectLinkedExileReceipt {
+                producer_ability_id,
+                linked_exile_id,
+                ..
+            } => {
+                let (engine, top) = stack_context.ok_or(EngineError::ProgramInvariant(
+                    "linked-Exile receipt capture lacks its exact stack occurrence",
+                ))?;
+                if result.produced_objects.len() > 1 {
+                    return Err(EngineError::ProgramInvariant(
+                        "linked-Exile receipt exceeded its compiled cardinality",
+                    ));
+                }
+                let key = super::zones::linked_exile_key(
+                    engine,
+                    top,
+                    linked_exile_id.clone(),
+                    producer_ability_id.clone(),
+                )
+                .map_err(|_| {
+                    EngineError::ProgramInvariant(
+                        "linked-Exile receipt could not resolve its exact ability occurrence",
+                    )
+                })?;
+                let receipt = result.produced_objects.first().copied().filter(|receipt| {
+                    engine
+                        .state
+                        .linked_exile_records
+                        .get(&key)
+                        .is_some_and(|records| {
+                            records.iter().any(|record| {
+                                record.object_id == receipt.object_id
+                                    && record.zone_change_generation
+                                        == receipt.zone_change_generation
+                            })
+                        })
+                        && engine
+                            .state
+                            .objects
+                            .get(&receipt.object_id)
+                            .is_some_and(|object| object.zone == Zone::Exile)
+                        && engine
+                            .state
+                            .zone_change_generation
+                            .get(&receipt.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == receipt.zone_change_generation
+                });
+                ProgramValue::TriggerObjectLinkedExileReceipt(receipt)
             }
         };
         let destination =

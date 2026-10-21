@@ -43,6 +43,7 @@ fn choose_branches<'a>(
         optional: actual_optional,
         branches,
         otherwise,
+        ..
     } = &instruction.kind
     else {
         panic!("the owner instruction is a compiled Choose");

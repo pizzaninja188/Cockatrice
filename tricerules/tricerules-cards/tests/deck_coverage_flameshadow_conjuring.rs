@@ -52,6 +52,7 @@ fn flameshadow_conjuring_is_registered_as_a_complete_card() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choose.kind
     else {
         panic!("the triggered program starts with Choose");

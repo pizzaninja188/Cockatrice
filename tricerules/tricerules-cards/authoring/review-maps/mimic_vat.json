@@ -9,7 +9,13 @@
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/requirement",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Exile",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ReturnOtherLinkedExiledCards",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise"
       ]
     },
     {
@@ -34,16 +40,24 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverCreatureDies/filter/permanent_type"
     },
     {
-      "symbol": "SpellEffectKind::ChooseResolutionBranch",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "PlayerRecipient::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/chooser"
+    },
+    {
+      "symbol": "ResolutionBranchRequirement::EffectsApplicable",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/requirement"
     },
     {
       "symbol": "SpellEffectKind::Exile",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Exile"
     },
     {
       "symbol": "SpellEffectKind::ReturnOtherLinkedExiledCards",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ReturnOtherLinkedExiledCards"
     },
     {
       "symbol": "TokenCopySource::LinkedExile",
@@ -77,16 +91,36 @@
       "covers": "The controller may exile a nontoken creature card that died under either player's control, and a successful new imprint returns the prior linked card."
     },
     {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_receipt_excludes_only_the_new_current_link_member",
+      "covers": "The typed Exile receipt excludes the exact newly linked event object from ReturnOther while the previous linked card returns to its owner."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_event_card_owner_concedes_stale_accept_does_not_consume_the_prior_link",
+      "covers": "Event-card-owner concession invalidates stale accept on the unchanged live chooser prompt; decline remains actionable and preserves the prior link."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_source_owner_departure_keeps_the_suspended_choice",
+      "covers": "The source owner's departure does not invalidate the live controller's suspended imprint choice or rebind its exact event."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_accepted_command_replay_preserves_receipt_and_link",
+      "covers": "Replaying the accepted exact prompt ID produces identical state and event receipt, returns the old link, and keeps the new event card linked."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_departed_controller_does_not_delegate_optional_cost",
+      "covers": "A departed controller's optional imprint cost is unpaid under CR 800.4f; the event stays in its graveyard and the prior link stays in Exile without a delegate prompt."
+    },
+    {
       "test": "scenario deck_coverage_mimic_vat::queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves",
       "covers": "An activation queued while Savannah Lions is linked copies the Grizzly Bears linked before resolution, even after Mimic Vat leaves the battlefield."
     },
     {
-      "test": "scenario deck_coverage_mimic_vat::declining_a_new_imprint_preserves_the_previous_linked_card",
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_optional_cost_decline_preserves_the_previous_link",
       "covers": "Declining a later imprint leaves the currently linked card in Exile and the new event card in its graveyard."
     },
     {
-      "test": "scenario deck_coverage_mimic_vat::a_departed_death_event_card_cannot_be_imprinted_when_its_trigger_resolves",
-      "covers": "A death trigger cannot substitute a later zone incarnation after the exact event card leaves its graveyard."
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_unavailable_event_does_not_take_or_return_the_link",
+      "covers": "A death trigger cannot substitute a later zone incarnation after the exact event card leaves its graveyard; the prior linked card stays exiled."
     },
     {
       "test": "scenario deck_coverage_mimic_vat::commander_death_triggers_vat_before_its_state_based_move_to_command",

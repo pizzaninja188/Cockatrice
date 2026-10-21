@@ -403,6 +403,7 @@ fn arcane_denial_compiles_delayed_01_under_its_exact_face_owner() {
         optional,
         branches,
         otherwise,
+        ..
     } = &instruction.kind
     else {
         panic!("delayed_01 starts by choosing the target's draw count");

@@ -66,6 +66,7 @@ fn combustible_gearhulk_registers_its_exact_identity_and_etb_choice() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choice.kind
     else {
         panic!("the triggered Program asks its target opponent to choose a branch");

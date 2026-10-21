@@ -3,7 +3,8 @@ use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::registry;
 use tricerules_cards::{
-    ContinuousEffectKind, EffectDuration, Keyword, PermanentTypeFilter, TypeLineAddition,
+    ContinuousEffectKind, ControllerReference, EffectDuration, Keyword, PermanentTypeFilter,
+    TypeLineAddition,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -65,6 +66,42 @@ fn engine_with_vat_and_opponent_cards(seed: u64, opponent_cards: &[&str]) -> (Ga
         .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     let vat = move_ready_to_battlefield(&mut engine, 0, MIMIC_VAT);
+    (engine, vat)
+}
+
+fn engine_with_three_player_vat(seed: u64, vat_owner: usize, controller: i32) -> (GameEngine, u32) {
+    let decks = Some(vec![
+        deck_with("island", &[MIMIC_VAT, "grizzly_bears", "savannah_lions"]),
+        deck_with("plains", &[MIMIC_VAT, "grizzly_bears", "savannah_lions"]),
+        deck_with("forest", &[MIMIC_VAT, "grizzly_bears", "savannah_lions"]),
+    ]);
+    let mut engine = GameEngine::new(registry::global(), seed, &[0, 1, 2], 20, decks, true)
+        .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    let vat = move_ready_to_battlefield(&mut engine, vat_owner, MIMIC_VAT);
+    let owner = engine.state.objects[&vat].owner;
+    if owner != controller {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(vat),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(controller),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: engine.state.command_index,
+        });
+        engine.state.players[vat_owner]
+            .battlefield
+            .retain(|object_id| *object_id != vat);
+        let controller_index = engine
+            .state
+            .player_idx(controller)
+            .expect("the controller is a game player");
+        engine.state.players[controller_index].battlefield.push(vat);
+        engine.state.objects.get_mut(&vat).unwrap().controller = controller;
+    }
     (engine, vat)
 }
 
@@ -136,8 +173,9 @@ fn pending_imprint_source_and_event(engine: &GameEngine) -> (u32, u32) {
         .pending_resolution
         .as_ref()
         .expect("the imprint trigger awaits its resolution branch");
-    let ResolutionContinuation::AuthoredBranch { stack, .. } = &pending.continuation else {
-        panic!("Mimic Vat's imprint trigger uses its authored resolution branch");
+    let stack = match &pending.continuation {
+        ResolutionContinuation::ProgramChoose { stack, .. } => stack,
+        _ => panic!("Mimic Vat's imprint trigger uses its compiled resolution Program"),
     };
     (
         stack
@@ -158,9 +196,7 @@ fn advance_until_imprint_choice(engine: &mut GameEngine) {
         if engine.state.pending_resolution.is_some() {
             return;
         }
-        answer_simultaneous_entry_order_in_engine_order(engine);
-        answer_trigger_order_in_engine_order(engine);
-        pass_both_players(engine);
+        pass_priority_round(engine);
     }
     panic!("Mimic Vat's imprint trigger must reach its resolution branch");
 }
@@ -193,6 +229,17 @@ fn resolve_imprint_choice(
         )
         .expect("answer Mimic Vat's resolution branch");
     (source, event_object)
+}
+
+fn imprint_choice_command(prompt_id: u64, decision: ResolutionChoiceDecision) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: prompt_id,
+            decision: decision as i32,
+            selected_branch_index: 0,
+            ..Default::default()
+        })),
+    }
 }
 
 fn move_card_to_zone(
@@ -331,6 +378,18 @@ fn mimic_vat_is_registered_with_the_expected_oracle_identity() {
 
     assert_eq!(card.id, MIMIC_VAT);
     assert_eq!(card.name, "Mimic Vat");
+    let imprint_owner =
+        tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+            card_id: MIMIC_VAT.into(),
+            face_id: tricerules_cards::CardFaceId::new(MIMIC_VAT).unwrap(),
+            ability_path: vec![tricerules_cards::AbilityId::new("imprint").unwrap()],
+        });
+    assert!(
+        registry::global()
+            .compiled_program_for_owner(&imprint_owner)
+            .is_some(),
+        "Mimic Vat's imprint trigger must be owned by its compiled resolution Program"
+    );
 }
 
 #[test]
@@ -359,6 +418,229 @@ fn mimic_vat_imprints_nontoken_deaths_from_any_player_and_replaces_the_previous_
         })
         .expect("the current linked card is copied");
     assert!(engine.effective_has_keyword(token, tricerules_cards::Keyword::Haste));
+}
+
+#[test]
+fn mimic_vat_program_receipt_excludes_only_the_new_current_link_member() {
+    let (mut engine, _) = engine_with_three_player_vat(2_026_102_101, 0, 0);
+    let previous = kill_creature(&mut engine, 2, "grizzly_bears", 2);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&previous].owner, 2);
+
+    let event = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Graveyard);
+    assert!(engine.state.players[2].graveyard.contains(&previous));
+    assert_eq!(engine.state.objects[&event].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&event].owner, 1);
+}
+
+#[test]
+fn mimic_vat_program_event_card_owner_concedes_stale_accept_does_not_consume_the_prior_link() {
+    let (mut engine, _) = engine_with_three_player_vat(2_026_102_102, 0, 0);
+    let previous = kill_creature(&mut engine, 2, "grizzly_bears", 2);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    let event = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    advance_until_imprint_choice(&mut engine);
+    let prompt_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the controller has the optional imprint choice")
+        .resolution_prompt_id
+        .get();
+    assert_ne!(prompt_id, 0);
+
+    engine
+        .apply_command(1, &concede())
+        .expect("the event-card owner concedes while the controller's prompt remains open");
+    assert!(engine.state.players[1].has_lost);
+    assert!(!engine.state.players[2].has_lost);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get(),
+        prompt_id,
+        "the live chooser keeps the same actionable prompt"
+    );
+
+    assert!(
+        engine
+            .apply_command(
+                0,
+                &imprint_choice_command(prompt_id, ResolutionChoiceDecision::SelectBranch)
+            )
+            .is_err(),
+        "a departed event card cannot be rebound by a stale accept"
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get(),
+        prompt_id
+    );
+    assert!(!engine.state.objects.contains_key(&event));
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    assert!(engine.state.players[2].exile.contains(&previous));
+
+    engine
+        .apply_command(
+            0,
+            &imprint_choice_command(prompt_id, ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline remains valid on the same live prompt");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    assert!(engine.state.players[2].exile.contains(&previous));
+    assert!(!engine.state.players[2].has_lost);
+}
+
+#[test]
+fn mimic_vat_program_source_owner_departure_keeps_the_suspended_choice() {
+    let (mut engine, vat) = engine_with_three_player_vat(2_026_102_103, 2, 0);
+    let previous = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+
+    let event = kill_creature(&mut engine, 0, "grizzly_bears", 2);
+    advance_until_imprint_choice(&mut engine);
+    assert_eq!(pending_imprint_source_and_event(&engine), (vat, event));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+
+    engine
+        .apply_command(2, &concede())
+        .expect("the physical source owner leaves while the live controller's choice is open");
+    assert!(engine.state.players[2].has_lost);
+    assert!(!engine.state.objects.contains_key(&vat));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+
+    assert_eq!(engine.state.objects[&event].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Graveyard);
+    assert!(engine.state.players[1].graveyard.contains(&previous));
+}
+
+#[test]
+fn mimic_vat_program_accepted_command_replay_preserves_receipt_and_link() {
+    let prepare = || {
+        let (mut engine, _) = engine_with_three_player_vat(2_026_102_105, 0, 0);
+        let previous = kill_creature(&mut engine, 2, "grizzly_bears", 2);
+        resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+        let event = kill_creature(&mut engine, 1, "savannah_lions", 1);
+        advance_until_imprint_choice(&mut engine);
+        (engine, previous, event)
+    };
+    let (mut original, previous, event) = prepare();
+    let (mut replay, replay_previous, replay_event) = prepare();
+    assert_eq!((previous, event), (replay_previous, replay_event));
+    assert_eq!(
+        original.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap(),
+        "the deterministic setup reaches the same exact pending choice"
+    );
+    let prompt_id = original
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    assert_ne!(prompt_id, 0);
+    assert_eq!(
+        replay
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get(),
+        prompt_id
+    );
+
+    let command = imprint_choice_command(prompt_id, ResolutionChoiceDecision::SelectBranch);
+    let original_batch = original
+        .apply_command(0, &command)
+        .expect("accept the exact recorded engine prompt");
+    let replay_batch = replay
+        .apply_command(0, &command)
+        .expect("replay the accepted command with the same prompt ID");
+
+    assert_eq!(original_batch, replay_batch);
+    assert_eq!(
+        original.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap()
+    );
+    assert_eq!(original.state.objects[&previous].zone, Zone::Graveyard);
+    assert_eq!(original.state.objects[&event].zone, Zone::Exile);
+    assert_eq!(replay.state.objects[&previous].zone, Zone::Graveyard);
+    assert_eq!(replay.state.objects[&event].zone, Zone::Exile);
+}
+
+#[test]
+fn mimic_vat_program_departed_controller_does_not_delegate_optional_cost() {
+    let (mut engine, _) = engine_with_three_player_vat(2_026_102_104, 2, 0);
+    let previous = kill_creature(&mut engine, 2, "grizzly_bears", 2);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    let event = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    advance_until_imprint_choice(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+
+    engine
+        .apply_command(0, &concede())
+        .expect("the optional-cost chooser leaves during the choice");
+
+    assert!(engine.state.players[0].has_lost);
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "CR 800.4f takes Otherwise for an unpaid optional cost without a delegate prompt"
+    );
+    assert_eq!(engine.state.objects[&event].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    assert!(engine.state.players[2].exile.contains(&previous));
 }
 
 #[test]
@@ -413,7 +695,7 @@ fn queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves() {
 }
 
 #[test]
-fn declining_a_new_imprint_preserves_the_previous_linked_card() {
+fn mimic_vat_program_optional_cost_decline_preserves_the_previous_link() {
     let (mut engine, _) = engine_with_vat(2_026_101_003);
     let first = kill_creature(&mut engine, 1, "savannah_lions", 1);
     resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -426,20 +708,25 @@ fn declining_a_new_imprint_preserves_the_previous_linked_card() {
 }
 
 #[test]
-fn a_departed_death_event_card_cannot_be_imprinted_when_its_trigger_resolves() {
+fn mimic_vat_program_unavailable_event_does_not_take_or_return_the_link() {
     let (mut engine, _) = engine_with_vat(2_026_101_004);
-    let first = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    let previous = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+
+    let event = kill_creature(&mut engine, 0, "grizzly_bears", 2);
     assert_eq!(
-        engine.state.objects[&first].zone,
+        engine.state.objects[&event].zone,
         Zone::Graveyard,
         "the event card is in its graveyard while the trigger waits"
     );
     let actor = engine.state.priority_player_id();
-    move_card_to_zone(&mut engine, actor, 1, "Savannah Lions", DevZone::Hand);
+    move_card_to_zone(&mut engine, actor, 0, "Grizzly Bears", DevZone::Hand);
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.pending_resolution.is_none());
-    assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
-    assert!(!engine.state.players[0].exile.contains(&first));
+    assert_eq!(engine.state.objects[&event].zone, Zone::Hand);
+    assert_eq!(engine.state.objects[&previous].zone, Zone::Exile);
+    assert!(engine.state.players[1].exile.contains(&previous));
 }
 
 #[test]

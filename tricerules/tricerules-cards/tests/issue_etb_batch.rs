@@ -144,6 +144,7 @@ fn issue_etb_batch_maps_definitions() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choice_step.kind
     else {
         panic!("Fierce Empath search is a structural Choose");

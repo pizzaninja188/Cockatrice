@@ -5868,6 +5868,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
         optional,
         branches,
         otherwise,
+        ..
     } = &choice.kind
     else {
         panic!("the search decision must remain a structural Choose");
@@ -6993,6 +6994,7 @@ fn program_choose_raw_ron_compiles_nested_paid_and_otherwise_blocks() {
         optional,
         branches,
         otherwise,
+        ..
     } = &instruction.kind
     else {
         panic!("authored Choose compiles to the typed Choose instruction")
@@ -12221,6 +12223,7 @@ fn program_choose_admits_optional_filtered_discard_for_ability_controller() {
         optional,
         branches,
         otherwise,
+        ..
     } = &choose.kind
     else {
         panic!("Crypt Lurker's effect is a typed Choose");
@@ -12604,8 +12607,8 @@ fn endure_program_constituent_contracts_fail_independently_before_admission() {
 #[test]
 fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice() {
     use crate::primitives::{
-        CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram, EffectContext,
-        PlayerRecipient, ProgramRequiredInput, SpellEffectKind,
+        ChooseDeparturePolicy, CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram,
+        EffectContext, PlayerRecipient, ProgramRequiredInput, SpellEffectKind,
     };
 
     let body = r#"(steps: [(id: "choose_to_exile", kind: Choose(
@@ -12641,6 +12644,7 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
     let CompiledInstructionKind::Choose {
         chooser,
         optional,
+        departure_policy,
         branches,
         otherwise,
         ..
@@ -12650,6 +12654,10 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
     };
     assert_eq!(*chooser, PlayerRecipient::Controller);
     assert!(*optional);
+    assert_eq!(
+        *departure_policy,
+        ChooseDeparturePolicy::DelegateNonCostChoice
+    );
     assert!(otherwise.steps.is_empty());
     assert!(otherwise.yields.is_empty());
     let [branch] = branches.as_slice() else {
@@ -12662,17 +12670,18 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
     assert!(matches!(
         branch.body.steps.as_slice(),
         [step]
-            if matches!(
-                &step.kind,
-                CompiledInstructionKind::Perform(effect)
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::Exile {
-                            subject: crate::primitives::EffectSubject::TriggerObject,
-                            linked_exile_id: Some(link),
-                        } if link.as_str() == "exiled_cards"
-                    )
-            )
+            if step.outputs.is_empty()
+                && matches!(
+                    &step.kind,
+                    CompiledInstructionKind::Perform(effect)
+                        if matches!(
+                            effect.as_ref(),
+                            SpellEffectKind::Exile {
+                                subject: crate::primitives::EffectSubject::TriggerObject,
+                                linked_exile_id: Some(link),
+                            } if link.as_str() == "exiled_cards"
+                        )
+                )
     ));
 
     for (label, invalid_body) in [
@@ -12748,6 +12757,165 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
     assert!(
         compile(body, EffectContext::Spell).is_err(),
         "the linked-Exile applicability guard remains ability-only"
+    );
+}
+
+#[test]
+fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
+    use crate::primitives::{
+        ChooseDeparturePolicy, CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram,
+        EffectContext, ProgramRequiredInput, ResultType,
+    };
+
+    const BODY: &str = r#"(steps: [(id: "choose_imprint", kind: Choose(
+        choice: "imprint_creature", chooser: Controller, optional: true,
+        branches: [(branch_id: "imprint", presentation: Fallback, cost: None,
+            requirement: EffectsApplicable, body: (steps: [
+                (id: "exile_event", bind: ["imprint_receipt"], kind: Perform(Exile(
+                    subject: TriggerObject, linked_exile_id: Some("imprinted_card"),
+                ))),
+                (id: "return_previous", input: Some("imprint_receipt"),
+                    kind: Perform(ReturnOtherLinkedExiledCards(
+                        producer_ability_id: "imprint", linked_exile_id: "imprinted_card",
+                    )))
+            ], yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let program: crate::CardProgram =
+        ron::from_str(&format!("(body: {BODY})")).expect("Mimic Vat Program fixture parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "mimic_vat".into(),
+        face_id: crate::CardFaceId::new("mimic_vat").unwrap(),
+        ability_path: vec![crate::AbilityId::new("imprint").unwrap()],
+    });
+
+    let compile = |owner| CompiledProgram::compile(owner, EffectContext::Ability, &program);
+    let compiled = compile(owner.clone()).unwrap_or_else(|error| {
+        panic!("Mimic Vat's exact linked-Exile receipt flow was rejected: {error}")
+    });
+    assert_eq!(
+        compiled.required_inputs,
+        vec![ProgramRequiredInput::TriggerLinkedExileObject]
+    );
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("Mimic Vat's imprint Program has one optional choice");
+    };
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        departure_policy,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("Mimic Vat's imprint Program compiles its optional choice");
+    };
+    assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
+    assert!(*optional);
+    assert_eq!(
+        *departure_policy,
+        ChooseDeparturePolicy::OptionalCostFallsThrough
+    );
+    assert!(otherwise.steps.is_empty());
+    assert!(otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Mimic Vat has one linked-Exile branch");
+    };
+    assert_eq!(
+        branch.requirement,
+        CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
+    );
+    let [exile, return_other] = branch.body.steps.as_slice() else {
+        panic!("the accepted branch contains the exact Exile and return pair");
+    };
+    let [receipt_slot] = exile.outputs.as_slice() else {
+        panic!("the Mimic Vat Exile binds its receipt");
+    };
+    assert_eq!(
+        compiled.slot(*receipt_slot).unwrap().result_type,
+        ResultType::TriggerObjectLinkedExileReceipt {
+            producer_ability_id: crate::AbilityId::new("imprint").unwrap(),
+            linked_exile_id: crate::AbilityLinkId::new("imprinted_card").unwrap(),
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        }
+    );
+    assert_eq!(return_other.input, Some(*receipt_slot));
+
+    for (label, invalid_body) in [
+        (
+            "missing receipt input",
+            BODY.replace("input: Some(\"imprint_receipt\")", "input: None"),
+        ),
+        (
+            "crossed linked-exile owner",
+            BODY.replace("producer_ability_id: \"imprint\"", "producer_ability_id: \"other\""),
+        ),
+        (
+            "crossed linked-exile ID",
+            BODY.replace(
+                "linked_exile_id: \"imprinted_card\"",
+                "linked_exile_id: \"other_link\"",
+            ),
+        ),
+        (
+            "non-TriggerObject producer",
+            BODY.replace("subject: TriggerObject", "subject: Source"),
+        ),
+        (
+            "intervening instruction",
+            BODY.replace(
+                "(id: \"return_previous\", input:",
+                "(id: \"intervening\", kind: Perform(GainLife(amount: 1))),\n                (id: \"return_previous\", input:",
+            ),
+        ),
+        (
+            "branch result escape",
+            BODY.replace("], yields: []))],", "], yields: [\"imprint_receipt\"]))],"),
+        ),
+        (
+            "extra receipt use",
+            BODY.replace(
+                "                    )))\n            ], yields: []))],",
+                "                    ))),\n                (id: \"return_again\", input: Some(\"imprint_receipt\"),\n                    kind: Perform(ReturnOtherLinkedExiledCards(\n                        producer_ability_id: \"imprint\", linked_exile_id: \"imprinted_card\",\n                    )))\n            ], yields: []))],",
+            ),
+        ),
+        (
+            "nonempty Otherwise",
+            BODY.replace(
+                "otherwise: (steps: [], yields: [])",
+                "otherwise: (steps: [(id: \"other\", kind: Perform(GainLife(amount: 1)))], yields: [])",
+            ),
+        ),
+    ] {
+        assert_ne!(invalid_body, BODY, "{label} fixture changes the valid profile");
+        let invalid: crate::CardProgram = ron::from_str(&format!("(body: {invalid_body})"))
+            .unwrap_or_else(|error| panic!("{label} fixture parses: {error}"));
+        assert!(
+            compile(owner.clone()).is_ok(),
+            "the base Mimic Vat profile remains valid for {label}"
+        );
+        let invalid_compiled = crate::primitives::CompiledProgram::compile(
+            owner.clone(),
+            EffectContext::Ability,
+            &invalid,
+        );
+        assert!(
+            invalid_compiled.is_err(),
+            "unsupported Mimic Vat receipt profile was accepted: {label}"
+        );
+    }
+    let other_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "other_card".into(),
+        face_id: crate::CardFaceId::new("other_card").unwrap(),
+        ability_path: vec![crate::AbilityId::new("imprint").unwrap()],
+    });
+    assert!(
+        compile(other_owner).is_err(),
+        "the specialized receipt cannot be claimed by another program owner"
     );
 }
 

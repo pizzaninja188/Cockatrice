@@ -2826,6 +2826,17 @@ impl GameEngine {
             .state
             .player_idx(pending.deciding_player)
             .is_some_and(|index| !self.state.players[index].has_lost);
+        if choose.departure_policy
+            == tricerules_card_model::primitives::ChooseDeparturePolicy::OptionalCostFallsThrough
+            && !original_chooser_live
+        {
+            let completed = self.complete_program_choose_otherwise(
+                pending,
+                "The departed chooser's optional cost is unpaid; Otherwise resolves.".into(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
         if matches!(
             choose.stage,
             PendingProgramChooseStage::PayingGraveyardCardCost { .. }
