@@ -44,11 +44,30 @@ fn advance_to_turn_instance(engine: &mut GameEngine, target: u64) {
     }
 }
 
-fn put_in_graveyard(engine: &mut GameEngine, card_id: &str) {
+fn put_in_graveyard(engine: &mut GameEngine, card_id: &str) -> u32 {
     let object_id = inject_card_into_hand(engine, 0, card_id);
     engine.state.players[0].hand.retain(|&oid| oid != object_id);
     engine.state.players[0].graveyard.push(object_id);
     engine.state.objects.get_mut(&object_id).expect("card").zone = Zone::Graveyard;
+    object_id
+}
+
+fn dev_move_card(engine: &mut GameEngine, target_player_id: i32, card_name: &str, zone: DevZone) {
+    engine
+        .apply_scenario_command(
+            engine.state.priority_player_id(),
+            &rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::DevCommand(DevCommand {
+                    target_player_id,
+                    dev: Some(Dev::MoveCard(DevMoveCard {
+                        card_name: card_name.to_owned(),
+                        zone: zone as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("move the named card with a dev command");
 }
 
 #[test]
@@ -322,7 +341,7 @@ fn permission_groups_granted_on_successive_turns_expire_independently() {
 }
 
 #[test]
-fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() {
+fn impossible_inferno_checks_delirium_after_the_graveyard_grows_and_grants_permission() {
     let decks = Some(vec![
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
@@ -340,7 +359,7 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
     put_in_graveyard(&mut engine, "mountain");
     put_in_graveyard(&mut engine, "grizzly_bears");
     put_in_graveyard(&mut engine, "lightning_bolt");
-    put_in_graveyard(&mut engine, "divination");
+    let fourth_type = inject_card_into_hand(&mut engine, 0, "divination");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let top = inject_library_card(&mut engine, 0, "forest");
     engine.state.players[0].library.retain(|&oid| oid != top);
@@ -351,6 +370,7 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
         .iter()
         .position(|&oid| oid == inferno)
         .expect("Inferno slot");
+    engine.enable_dev_commands();
     give_mana(
         &mut engine,
         0,
@@ -364,6 +384,9 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
     engine
         .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Impossible Inferno");
+    assert_eq!(engine.state.objects[&fourth_type].zone, Zone::Hand);
+    dev_move_card(&mut engine, 0, "Divination", DevZone::Graveyard);
+    assert_eq!(engine.state.objects[&fourth_type].zone, Zone::Graveyard);
     resolve_entire_stack_two_player(&mut engine);
 
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -377,7 +400,7 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
 }
 
 #[test]
-fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
+fn impossible_inferno_rechecks_delirium_after_the_graveyard_shrinks() {
     let decks = Some(vec![
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
@@ -392,6 +415,10 @@ fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
     )
     .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
+    put_in_graveyard(&mut engine, "mountain");
+    put_in_graveyard(&mut engine, "grizzly_bears");
+    put_in_graveyard(&mut engine, "lightning_bolt");
+    let fourth_type = put_in_graveyard(&mut engine, "divination");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let top = *engine.state.players[0]
         .library
@@ -403,6 +430,7 @@ fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
         .iter()
         .position(|&oid| oid == inferno)
         .expect("Inferno slot");
+    engine.enable_dev_commands();
     give_mana(
         &mut engine,
         0,
@@ -416,9 +444,114 @@ fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
     engine
         .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Impossible Inferno");
+    dev_move_card(&mut engine, 0, "Divination", DevZone::Exile);
+    assert_eq!(engine.state.objects[&fourth_type].zone, Zone::Exile);
     resolve_entire_stack_two_player(&mut engine);
 
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&top].zone, Zone::Library);
+    assert!(engine.state.active_exile_play_permissions.is_empty());
+}
+
+#[test]
+fn impossible_inferno_with_an_illegal_sole_target_does_not_exile_the_top_card() {
+    let decks = Some(vec![
+        vec!["mountain".to_string(); 20],
+        vec!["forest".to_string(); 20],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12309,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    put_in_graveyard(&mut engine, "mountain");
+    put_in_graveyard(&mut engine, "grizzly_bears");
+    put_in_graveyard(&mut engine, "lightning_bolt");
+    put_in_graveyard(&mut engine, "divination");
+    let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let top = *engine.state.players[0]
+        .library
+        .front()
+        .expect("library top");
+    let inferno = inject_card_into_hand(&mut engine, 0, "impossible_inferno");
+    let slot = engine.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == inferno)
+        .expect("Inferno slot");
+    engine.enable_dev_commands();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 4,
+            ..Default::default()
+        },
+    );
+
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
+        .expect("cast Impossible Inferno at its sole creature target");
+    dev_move_card(&mut engine, 1, "Grizzly Bears", DevZone::Hand);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Hand);
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&top].zone, Zone::Library);
+    assert!(engine.state.active_exile_play_permissions.is_empty());
+}
+
+#[test]
+fn impossible_inferno_with_delirium_and_an_empty_library_grants_no_permission() {
+    let decks = Some(vec![
+        vec!["forest".to_string(); 20],
+        vec!["island".to_string(); 20],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12310,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    for card in ["mountain", "grizzly_bears", "lightning_bolt", "divination"] {
+        put_in_graveyard(&mut engine, card);
+    }
+    let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let inferno = inject_card_into_hand(&mut engine, 0, "impossible_inferno");
+    let slot = engine.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == inferno)
+        .expect("Inferno slot");
+    engine.enable_dev_commands();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 4,
+            ..Default::default()
+        },
+    );
+
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
+        .expect("cast Impossible Inferno");
+    while !engine.state.players[0].library.is_empty() {
+        dev_move_card(&mut engine, 0, "Forest", DevZone::Exile);
+    }
+    assert!(engine.state.players[0].library.is_empty());
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
     assert!(engine.state.active_exile_play_permissions.is_empty());
 }

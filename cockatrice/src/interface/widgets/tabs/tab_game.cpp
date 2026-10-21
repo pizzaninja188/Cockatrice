@@ -2918,9 +2918,10 @@ void TabGame::onRuledExilePlayPermissionGroupsChanged()
             view->getZone()->getLogic()->clearContents();
             view->getZone()->initializeCards(cardList);
         } else {
-            // Writable reveal registration keeps this exact physical exile mirror clickable;
-            // ruled-mode CardItem guards still prohibit freeform dragging.
+            // Writable reveal keeps ruled clicks on the engine-authored cast path; the engine's
+            // permission group, not generic Exile updates, owns this view's membership.
             view = new ZoneViewWidget(scaffoldPlayer, exileZone, -1, true, true, cardList, false, false, false, true);
+            view->getZone()->removeFromViews();
             exilePlayPermissionViews.insert(group.groupId, view);
             scene->addItem(view);
             view->setPos(scene->cascadedZoneViewPos(QPointF(680, 80), view));

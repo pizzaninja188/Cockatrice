@@ -7068,6 +7068,142 @@ fn program_if_accepts_controller_card_count_graveyard_condition() {
 }
 
 #[test]
+fn program_if_accepts_controller_distinct_card_types_graveyard_condition() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "delirium", kind: If(
+                condition: GraveyardAggregate(
+                    owners: Controller, aggregate: DistinctCardTypes,
+                    filter: None, min: Some(4), max: None,
+                ),
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the exact Controller four-type graveyard ProgramIf is admitted");
+}
+
+#[test]
+fn program_if_rejects_other_distinct_card_types_graveyard_profiles() {
+    let exact = "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: None)";
+    let conditions = [
+        (
+            "other owner",
+            "GraveyardAggregate(owners: Opponents, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: None)".to_string(),
+        ),
+        (
+            "other threshold",
+            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(3), max: None)".to_string(),
+        ),
+        (
+            "upper bound",
+            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: Some(5))".to_string(),
+        ),
+        (
+            "extra filter",
+            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: Some((required_subtypes: [\"Elf\"])), min: Some(4), max: None)".to_string(),
+        ),
+        (
+            "composite wrapper",
+            format!("AllOf([{exact}, ControllerLibraryEmpty])"),
+        ),
+    ];
+
+    for (label, condition) in conditions {
+        let body = format!(
+            r#"(steps: [(id: "delirium", kind: If(
+                condition: {condition}, yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        let definition = program_fixture(&body);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+            "unsupported Delirium condition profile was admitted: {label}"
+        );
+    }
+
+    let ability_definition = ability_program_fixture(
+        "distinct_card_types_ability",
+        &format!(
+            r#"(steps: [(id: "delirium", kind: If(
+                condition: {exact}, yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        ),
+    );
+    assert!(
+        ability_definition.is_err(),
+        "the Delirium condition profile remains spell-only"
+    );
+}
+
+#[test]
+fn spell_program_accepts_resultless_controller_exile_permission_leaf() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "exile_top", kind: Perform(ExileTopWithPlayPermission(
+                player: Controller, count: 1, count_by_cast_cost: None,
+            ))),
+        ], yields: [])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the fixed one-card Controller permission leaf is admitted in a spell Program");
+}
+
+#[test]
+fn spell_program_rejects_other_exile_permission_leaf_profiles() {
+    let effects = [
+        (
+            "other player",
+            "ExileTopWithPlayPermission(player: EachOpponent, count: 1, count_by_cast_cost: None)",
+        ),
+        (
+            "other count",
+            "ExileTopWithPlayPermission(player: Controller, count: 2, count_by_cast_cost: None)",
+        ),
+    ];
+    for (label, effect) in effects {
+        let body = format!(r#"(steps: [(id: "exile_top", kind: Perform({effect}))], yields: [])"#);
+        let definition = program_fixture(&body);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+            "unsupported exile permission leaf profile was admitted: {label}"
+        );
+    }
+
+    let conditional_body = r#"(steps: [
+        (id: "exile_top", kind: Perform(ExileTopWithPlayPermission(
+            player: Controller, count: 1,
+            count_by_cast_cost: Some((condition: (group_id: "cast_cost_01",
+                option_id: "option_01", expected_selected: true),
+                if_selected: 2, otherwise: 1)),
+        ))),
+    ], yields: [])"#;
+    let conditional_definition = program_fixture(conditional_body).replace(
+        "types: [\"Instant\"],",
+        "types: [\"Instant\"], cast_cost_groups: [(group_id: \"cast_cost_01\", presentation: Fallback, options: [Mana(option_id: \"option_01\", presentation: Fallback, kind: AdditionalPayment, cost: \"{1}\")])],",
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&conditional_definition], &[]).is_err(),
+        "the Program leaf does not admit cast-cost-dependent counts"
+    );
+
+    let ability_definition = ability_program_fixture(
+        "exile_permission_ability",
+        r#"(steps: [(id: "exile_top", kind: Perform(ExileTopWithPlayPermission(
+            player: Controller, count: 1, count_by_cast_cost: None,
+        )))], yields: [])"#,
+    );
+    assert!(
+        ability_definition.is_err(),
+        "the exile play permission leaf remains spell-only in Programs"
+    );
+}
+
+#[test]
 fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
     let void_definition = program_fixture(
         r#"(steps: [

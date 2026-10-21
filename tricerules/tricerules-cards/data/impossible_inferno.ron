@@ -1,28 +1,37 @@
-// Oracle checked 2026-08-23. Delirium is checked as the second instruction resolves; normal
-// timing rules and costs still apply to the exiled card.
+// Oracle and rulings checked 2026-10-20. Delirium is sampled during resolution.
 (
   id: "impossible_inferno",
   name: "Impossible Inferno",
   face_id: "impossible_inferno",
   mana_cost: "{4}{R}",
   types: ["Instant"],
-  spell_effect: [
-    DamageTarget(amount: 6, target: (kind: Creature)),
-    ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "exile_the_top_card", presentation: OracleLines([2]),
-          cost: None,
-          requirement: GameCondition(GraveyardAggregate(
-            owners: Controller,
-            aggregate: DistinctCardTypes,
-            min: Some(4),
-          )),
-          effects: [ExileTopWithPlayPermission(player: Controller)],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "damage_target", bind: [], input: None,
+      kind: Perform(DamageTarget(amount: 6, target: (kind: Creature)))),
+    (id: "delirium", bind: [], input: None,
+      kind: If(
+        condition: GraveyardAggregate(
+          owners: Controller,
+          aggregate: DistinctCardTypes,
+          filter: None,
+          min: Some(4),
+          max: None,
         ),
-        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
-      ],
-    ),
-  ],
+        yes: (steps: [
+          (id: "exile_top", bind: [], input: None,
+            kind: Perform(ExileTopWithPlayPermission(
+              player: Controller,
+              count: 1,
+              count_by_cast_cost: None,
+            ))),
+        ], yields: []),
+        no: (steps: [], yields: []),
+      )),
+  ], yields: []), target_bindings: [
+    (instruction_id: "damage_target", role: Target, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature", effect_indices: []),
+  ])),
 )

@@ -767,6 +767,23 @@ operable. The legacy flat `ChooseResolutionBranch` form of
 this graveyard-exile cost is retired; the typed Program `Choose` form is its supported authored
 shape.
 
+Impossible Inferno's existing face owner now uses a spell Program: target-bound 6 damage to a
+Creature, followed by a direct `If` for `Controller` `DistinctCardTypes` in the graveyard with
+`min: Some(4)`, no maximum, and no filter. This is a narrow spell-only compiler profile; the
+existing Controller `CardCount` profile remains valid. If the condition is true, its yes arm runs
+one resultless `ExileTopWithPlayPermission(Controller, count: 1, no cast-cost conditional)`; the
+no arm is empty. The existing operation handles the face-up Exile move and generation-bound play
+permission through the controller's next turn, while the card still uses normal play costs and
+timing. An empty library creates no permission. Damage resolves before the condition, with no
+state-based actions between instructions (CR 608.2c, 608.2h, 704.4); an illegal sole target
+prevents the spell from resolving (CR 608.2b). The scenarios cover both changes to the four-type
+threshold between casting and resolution, damage in both outcomes, an illegal sole target, and an
+empty library. The [review map](../tricerules/tricerules-cards/authoring/review-maps/impossible_inferno.json)
+links the exact typed paths and actual-card evidence. This ports an already registered definition;
+it changes no whole-card admission, runtime primitive, protobuf, Servatrice, or Qt contract.
+Burning Curiosity and Clockwork Percussionist remain other consumers of the same permission
+operation.
+
 Pilot selection and implementation remain separate. Freeze representative existing and later-consumer
 examples before coding. Brainstorm and Faithless Looting exercise sequential draw/hand actions; Gifts
 Ungiven exercises interdependent private/public choices; Eerie Ultimatum exercises selection followed by
@@ -809,11 +826,13 @@ This design governs resolution ordering, choices, targets, replacements, simulta
 identity and private information. Oracle and current official Comprehensive Rules govern every migrated
 operation/card. No rules simplifications or new card admissions are authorized by this design.
 
-Sources checked on 2026-10-12, with Heated Argument added 2026-10-19: the [official rules page](https://magic.wizards.com/en/rules) links the
+Sources checked on 2026-10-12, with Heated Argument added 2026-10-19 and Impossible Inferno added
+2026-10-20: the [official rules page](https://magic.wizards.com/en/rules) links the
 [Comprehensive Rules effective 2026-09-25](https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.pdf).
 The independent Luna MAX rules reviewer fetched that PDF and the following Wizards card-text/ruling
 references. They establish architectural constraints; they do not replace exact-identity preflight
-and card-specific evidence when the pilot is selected.
+and card-specific evidence when the pilot is selected. Impossible Inferno's exact Scryfall card and
+rulings record is linked separately below.
 
 | Source | Constraint on the contract |
 |---|---|
@@ -822,6 +841,7 @@ and card-specific evidence when the pilot is selected.
 | [Gifts Ungiven: Double Masters 2022 release notes](https://magic.wizards.com/en/news/feature/double-masters-2022-release-notes-2022-06-24) | Targeted opponent, up-to-four distinct names, public found cohort and opponent's subsequent two-card choice are distinct facts; finding one or two forces those cards into the chosen cohort |
 | [Eerie Ultimatum: Tarkir Dragonstorm release notes](https://magic.wizards.com/en/news/feature/tarkir-dragonstorm-release-notes) | Choose the different-name cohort at resolution and return it simultaneously; an entering Aura cannot enchant another member of that same entering cohort |
 | [Heated Argument: Secrets of Strixhaven release notes](https://magic.wizards.com/en/news/feature/secrets-of-strixhaven-release-notes) | Six target damage, an optional graveyard exile, and the conditional two damage follow the printed order; an illegal sole target prevents the whole spell from resolving |
+| [Impossible Inferno: Scryfall Oracle record](https://scryfall.com/card/dsk/140/impossible-inferno) and [rulings](https://api.scryfall.com/cards/a35248f9-4a4e-4758-a4c1-0e0c83e3fd75/rulings) | Deal 6 damage first, then check Delirium during resolution; the exiled card still requires its normal costs and timing |
 
 Relevant CR constraints from that version:
 
@@ -846,10 +866,16 @@ Relevant CR constraints from that version:
   the instant into its owner's graveyard as the final resolution step. A declared Commander exiled
   as the payment remains eligible for its separate CR 903.9a choice after the spell finishes; SBAs
   do not interrupt resolution.
+- **115.1a, 601.2c, 608.2b-c/h, 207.2c, 704.4, 400.7, 406.3, 305.1-3:** Impossible Inferno's
+  creature target is fixed when cast and must remain legal for the spell to resolve; its direct
+  Delirium check sees the controller's graveyard when that instruction is reached after damage.
+  SBAs wait until resolution ends. The exiled card is a new face-up object, and its play permission
+  preserves ordinary cost, timing and land-play rules.
 - **104.3a, 800.4g, 514.1-3:** concession/player departure and cleanup are independent rules surfaces
   that must survive parked resolution; cleanup/ordinary SBAs are not inserted between instructions.
 
 The interaction checklist is covered by the ownership/identity, completion/timing, rejection/player,
-privacy, component and verification sections above. Specific pilot Oracle identities, every applicable
-card ruling, exact CR application to that patch, executable evidence and visible acceptance remain
-required in the implementation step. No runtime MTG-compliance claim is made for unimplemented types.
+privacy, component and verification sections above. The Impossible Inferno source, ruling, CR
+application and actual-card scenarios are linked from its review map. Other cards still need their
+own exact Oracle identities, applicable rulings, CR analysis and executable evidence. This migration
+keeps ruled behavior engine-authoritative and leaves Freeform gating unchanged.

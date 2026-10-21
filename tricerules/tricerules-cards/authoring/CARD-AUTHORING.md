@@ -212,7 +212,14 @@ draw operation still applies normal draw limits when it resolves. Common targetl
 and `GainLife`,
 plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
-accepted targetless forms, are described below. Spell-face and modal-spell
+accepted targetless forms, are described below. A spell Program also admits the resultless
+`ExileTopWithPlayPermission` leaf only as `player: Controller`, `count: 1`, and
+`count_by_cast_cost: None`. It uses the existing permission operation, keeps ordinary costs and
+timing for playing the exiled card, and creates no permission when the library is empty. Impossible
+Inferno uses this profile in its Delirium arm; its exact source mapping and executed fixtures are in
+the [review map](review-maps/impossible_inferno.json). Burning Curiosity and Clockwork
+Percussionist remain effect-list consumers of the same operation. Other Program recipients,
+counts, cast-cost conditionals, and ability contexts remain unsupported. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`. Triggered ability programs may also use
 `AffectedPlayer` for a draw/discard recipient or as a `Choose` chooser when their trigger supplies
 that captured event-time player. For `Draw`, ability programs also admit
@@ -347,7 +354,11 @@ Commander, its owner makes the CR 903.9b Command-zone-or-Hand choice before move
 search continuation completes.
 `If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
 validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
-recursive; other graveyard owners and `DistinctCardTypes` are outside this program subset. A direct
+recursive for admitted leaves. The only `DistinctCardTypes` exception is a direct `If` condition in
+a spell Program with `owners: Controller`, `filter: None`, `min: Some(4)`, and `max: None`; this
+preserves Impossible Inferno's exact Delirium profile. Other graveyard owners and aggregate
+profiles remain unsupported, and the exception cannot be wrapped in `AllOf` or `AnyOf` or used by
+an ability Program. The existing Controller `CardCount` condition remains valid. A direct
 top-level Program `If` may also test `Void`, which is sampled when that instruction resolves before
 the selected branch begins; a later draw-replacement suspension does not reevaluate the condition
 (CR 608.2c, 608.2h). `Void` is not admitted inside `AllOf`/`AnyOf`, as a `Choose` requirement, or

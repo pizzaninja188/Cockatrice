@@ -1,0 +1,79 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa7c8092-94da-4147-aa90-0a951d2a8be8",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "impossible_inferno",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/targeting/groups/0",
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/DamageTarget",
+        "/faces/0/spell_program/target_bindings/0"
+      ]
+    },
+    {
+      "face_id": "impossible_inferno",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/1/kind/If",
+        "/faces/0/spell_program/body/steps/1/kind/If/condition/GraveyardAggregate",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0/kind/Perform/ExileTopWithPlayPermission"
+      ]
+    }
+  ],
+  "tokens": [],
+  "primitive_references": [
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/DamageTarget"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/condition/GraveyardAggregate"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileTopWithPlayPermission",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0/kind/Perform/ExileTopWithPlayPermission"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_123_exile_play::impossible_inferno_checks_delirium_after_the_graveyard_grows_and_grants_permission",
+      "covers": "the four-type threshold is reached after casting; damage resolves and the exact library top receives the existing play permission"
+    },
+    {
+      "test": "scenario issue_123_exile_play::impossible_inferno_rechecks_delirium_after_the_graveyard_shrinks",
+      "covers": "the four-type threshold falls below four after casting; damage resolves, the library top stays put, and no permission is created"
+    },
+    {
+      "test": "scenario issue_123_exile_play::impossible_inferno_with_an_illegal_sole_target_does_not_exile_the_top_card",
+      "covers": "the only target becomes illegal after casting, so the spell does not resolve or create a play permission"
+    },
+    {
+      "test": "scenario issue_123_exile_play::impossible_inferno_with_delirium_and_an_empty_library_grants_no_permission",
+      "covers": "Delirium is true at resolution with an empty library; damage resolves but there is no card or play permission"
+    },
+    {
+      "test": "mechanic_registry::issue_123_exile_play::impossible_inferno_uses_the_exact_targeted_delirium_program",
+      "covers": "the registered face compiles the exact damage, target binding, direct Delirium condition, and one-card permission leaf"
+    }
+  ]
+}

@@ -1330,6 +1330,15 @@ impl Compiler<'_> {
                             format!("If instruction '{}': {reason}", instruction.id)
                         })?;
                         CompiledProgramCondition::Game(condition.as_ref().clone())
+                    } else if self.context == EffectContext::Spell
+                        && is_exact_delirium_program_condition(condition)
+                    {
+                        // Preserve Impossible Inferno's existing Delirium check without
+                        // admitting other DistinctCardTypes profiles to authored Programs.
+                        condition.validate_live().map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?;
+                        CompiledProgramCondition::Game(condition.as_ref().clone())
                     } else {
                         compile_program_condition(
                             &ProgramCondition::Game(condition.as_ref().clone()),
@@ -2733,6 +2742,17 @@ fn validate_and_result_types(
             validate_program_controller(*who, "ShuffleLibrary recipient")?;
             Ok(Vec::new())
         }
+        SpellEffectKind::ExileTopWithPlayPermission {
+            player: PlayerRecipient::Controller,
+            count: 1,
+            count_by_cast_cost: None,
+        } if context == EffectContext::Spell => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ExileTopWithPlayPermission { .. } => Err(
+            "ExileTopWithPlayPermission in a resolution program supports only one Controller card without a cast-cost conditional on a spell".into(),
+        ),
         SpellEffectKind::ChooseCard {
             filter,
             destination,
@@ -3560,6 +3580,19 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
     condition.validate_live()
 }
 
+fn is_exact_delirium_program_condition(condition: &GameCondition) -> bool {
+    matches!(
+        condition,
+        GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate: super::GraveyardAggregate::DistinctCardTypes,
+            filter: None,
+            min: Some(4),
+            max: None,
+        }
+    )
+}
+
 /// Ability Programs may inspect only a live source permanent and its own bounded counter total.
 /// Restricting every composite leaf to this family keeps these conditions independent of target,
 /// event, and prior-result context.
@@ -3587,7 +3620,7 @@ const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(
     "If condition uses context outside controller hand, library, CardCount graveyard, or ",
     "Controller battlefield Count state supported by spell_program; ProgramIf also admits ",
     "only positive-min Controller Creature MaximumPower without max, extra filter fields, ",
-    "or observed-object exclusion",
+    "or observed-object exclusion, and the exact Controller four-type Delirium profile",
 );
 
 fn validate_program_maximum_power_filter(
