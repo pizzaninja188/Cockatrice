@@ -231,8 +231,7 @@ mod tests {
                     "Artifact",
                     format!(
                         r#"triggered_abilities: [(ability_id: "entry", presentation: Fallback,
-                    trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true, branches: [
-                    (branch_id: "grant", presentation: Fallback, cost: None, effects: [{source_grant}])])])]"#
+                    trigger: WhenSelfEntersBattlefield, effect: [{source_grant}])]"#
                     ),
                 ),
                 ("Instant", format!("modal_spell: {modes}")),
@@ -2552,9 +2551,7 @@ mod tests {
             );
         }
         let nested = r#"(id: "batch_maker", name: "Batch Maker", face_id: "batch_maker", types: ["Sorcery"],
-            spell_effect: [ChooseResolutionBranch(optional: true, branches: [(branch_id: "create",
-                presentation: Fallback, cost: None,
-                effects: [CreateTokenBatch(tokens: ["soldier_w_1_1", "unknown_batch_token"])])])])"#;
+            spell_effect: [CreateTokenBatch(tokens: ["soldier_w_1_1", "unknown_batch_token"])])"#;
         let error =
             CardRegistry::from_chunks_and_tokens(&[nested], EMBEDDED_TOKEN_CHUNKS).unwrap_err();
         assert!(
@@ -2598,92 +2595,6 @@ mod tests {
             wrongly_accepted.is_empty(),
             "accepted invalid modal token IDs: {wrongly_accepted:?}"
         );
-    }
-
-    #[test]
-    fn resolution_branch_requirements_reject_unsupported_and_ambiguous_shapes() {
-        let unsupported = r#"(
-            id: "unsupported_requirement",
-            name: "Unsupported Requirement",
-            face_id: "unsupported_requirement",
-            mana_cost: "{W}",
-            types: ["Sorcery"],
-            spell_effect: [ChooseResolutionBranch(
-                optional: true,
-                branches: [(
-                    branch_id: "draw",
-                    presentation: Fallback,
-                    cost: None,
-                    requirement: EffectsApplicable,
-                    effects: [Draw(count: 1)],
-                )],
-            )],
-        )"#;
-        let err = super::from_chunks(&[unsupported]).unwrap_err();
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { ref reason, .. }
-                if reason.contains("EffectsApplicable requires a supported")
-        ));
-
-        let multiple_choosers = r#"(
-            id: "multiple_choosers",
-            name: "Multiple Choosers",
-            face_id: "multiple_choosers",
-            mana_cost: "{W}",
-            types: ["Sorcery"],
-            spell_effect: [ChooseResolutionBranch(
-                chooser: EachPlayer,
-                optional: true,
-                branches: [(
-                    branch_id: "gain_life",
-                    presentation: Fallback,
-                    cost: None,
-                    effects: [GainLife(amount: 1)],
-                )],
-            )],
-        )"#;
-        let err = super::from_chunks(&[multiple_choosers]).unwrap_err();
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { ref reason, .. }
-                if reason.contains("exactly one deciding player")
-        ));
-
-        let missing_fallback = r#"(
-            id: "missing_fallback",
-            name: "Missing Fallback",
-            face_id: "missing_fallback",
-            mana_cost: "{1}{W}",
-            types: ["Creature", "Human"],
-            power: 1,
-            toughness: 1,
-            triggered_abilities: [(
-                ability_id: "triggered_01",
-                presentation: Fallback,
-                trigger: WhenSelfEntersBattlefield,
-                effect: [ChooseResolutionBranch(
-                    optional: false,
-                    branches: [(
-                        branch_id: "put_a_counter_on_this",
-                        presentation: Fallback,
-                        cost: None,
-                        requirement: EffectsApplicable,
-                        effects: [PutCounters(
-                            counter: PlusOnePlusOne,
-                            count: 1,
-                            subject: Source,
-                        )],
-                    )],
-                )],
-            )],
-        )"#;
-        let err = super::from_chunks(&[missing_fallback]).unwrap_err();
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { ref reason, .. }
-                if reason.contains("unconditional costless fallback")
-        ));
     }
 
     #[test]
@@ -4227,7 +4138,6 @@ mod tests {
             "cast_conditions: [CastSnapshot(index: 0)], spell_effect: [GainLife(amount: 2)]",
             "cast_conditions: [CreatureDeathsThisTurn(min: None, max: None)], spell_effect: [GainLife(amount: 2)]",
             "cast_conditions: [ActivePlayer(players: Controller)], modal_spell: (min_modes: 1, max_modes: 1, modes: [(mode_id: \"mode_01\", presentation: Fallback, effects: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))])])",
-            "spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(branch_id: \"bonus\", presentation: Fallback, cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]), (branch_id: \"fallback_branch\", presentation: Fallback, cost: None, requirement: Always, effects: [])])]",
         ] {
             let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Instant\"], {fields})");
             assert!(matches!(super::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");

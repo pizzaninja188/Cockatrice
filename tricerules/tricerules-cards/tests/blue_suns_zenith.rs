@@ -75,7 +75,6 @@ fn source_shuffle_is_spell_only_including_wrapped_effects() {
     for wrapped in [
         "ShuffleResolvingSpellIntoOwnersLibrary".to_string(),
         "MayBehold(choice_id:\"behold\",hand_filter:(required_subtypes:[\"Elf\"]),permanent_filter:(kind:Creature,controller:You),if_beheld:[ShuffleResolvingSpellIntoOwnersLibrary])".to_string(),
-        "ChooseResolutionBranch(selection:FirstApplicable,branches:[(branch_id:\"branch\",presentation:Fallback,cost:None,effects:[ShuffleResolvingSpellIntoOwnersLibrary])])".to_string(),
     ] {
         assert!(probe(&format!("spell_effect:[{wrapped}]")).is_ok(), "valid spell wrapper: {wrapped}: {:?}", probe(&format!("spell_effect:[{wrapped}]")).err());
         for fields in [

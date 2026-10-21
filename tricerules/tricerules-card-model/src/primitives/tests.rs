@@ -2967,75 +2967,6 @@ fn linked_choice_program_result_joins_only_the_same_producer_and_link() {
 }
 
 #[test]
-fn return_other_linked_exiled_cards_requires_its_exact_imprint_producer_and_receipt() {
-    let definition = |producer: &str, link: &str, previous: &str| {
-        format!(
-            r#"(
-                id: "mimic_fixture",
-                name: "Mimic Fixture",
-                face_id: "mimic_fixture",
-                types: ["Artifact"],
-                triggered_abilities: [(
-                    ability_id: "imprint",
-                    presentation: Fallback,
-                    trigger: WheneverCreatureDies(
-                        controller: AnyPlayer,
-                        filter: (permanent_type: Some(Creature), token: Some(false)),
-                    ),
-                    effect: [ChooseResolutionBranch(
-                        chooser: Controller,
-                        optional: true,
-                        selection: PlayerChoice,
-                        branches: [(
-                            branch_id: "imprint_creature",
-                            presentation: Fallback,
-                            cost: None,
-                            requirement: EffectsApplicable,
-                            effects: [{previous}, ReturnOtherLinkedExiledCards(
-                                producer_ability_id: "{producer}",
-                                linked_exile_id: "{link}",
-                            )],
-                        )],
-                    )],
-                )],
-            )"#
-        )
-    };
-
-    let valid = definition(
-        "imprint",
-        "imprinted_card",
-        "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
-    );
-    crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
-        .expect("the exact adjacent linked Exile can preserve the new imprint");
-
-    for (producer, link, previous) in [
-        (
-            "missing_producer",
-            "imprinted_card",
-            "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
-        ),
-        (
-            "imprint",
-            "other_card",
-            "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
-        ),
-        (
-            "imprint",
-            "imprinted_card",
-            "Exile(subject: TriggerObject, linked_exile_id: None)",
-        ),
-    ] {
-        let invalid = definition(producer, link, previous);
-        assert!(
-            crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err(),
-            "invalid return linkage must fail closed: {invalid}"
-        );
-    }
-}
-
-#[test]
 fn duplicant_targeted_linked_exile_pair_is_exact_and_fail_closed() {
     let valid = r#"(
         id: "duplicant",
@@ -3390,7 +3321,7 @@ fn issue_169_tap_trigger_cardinalities_are_typed() {
 }
 
 #[test]
-fn triggered_mana_output_detection_follows_resolution_choices() {
+fn triggered_mana_output_detection_follows_supported_nested_effects() {
     let direct: super::SpellEffectKind =
         ron::from_str("AddMana(amount: (g: 1), retention: EndOfStep)").unwrap();
     assert!(direct.could_add_mana_to_pool());
@@ -3400,12 +3331,6 @@ fn triggered_mana_output_detection_follows_resolution_choices() {
     )
     .unwrap();
     assert!(conditional.could_add_mana_to_pool());
-
-    let branch: super::SpellEffectKind = ron::from_str(
-        "ChooseResolutionBranch(optional: false, branches: [(branch_id: \"add_mana\", presentation: Fallback, cost: None, effects: [AddMana(amount: (g: 1), retention: EndOfStep)])])",
-    )
-    .unwrap();
-    assert!(branch.could_add_mana_to_pool());
 
     let unrelated: super::SpellEffectKind = ron::from_str("GainLife(amount: 1)").unwrap();
     assert!(!unrelated.could_add_mana_to_pool());
@@ -3491,31 +3416,14 @@ fn arena_opponent_chooser_ability() -> ActivatedAbilityDef {
     .expect("Arena's authored activation shape parses")
 }
 
-fn mirrorworks_event_object_copy_branch() -> SpellEffectKind {
-    SpellEffectKind::ChooseResolutionBranch {
-        chooser: PlayerRecipient::Controller,
-        optional: true,
-        selection: ResolutionBranchSelection::PlayerChoice,
-        branches: vec![ResolutionBranchDef {
-            branch_id: crate::ChoiceId::new("pay_to_copy").unwrap(),
-            presentation: AbilityPresentation::Fallback,
-            runtime_fallback: None,
-            cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
-            requirement: ResolutionBranchRequirement::Always,
-            effects: vec![SpellEffectKind::CreateTokenCopies {
-                count: Amount::Fixed(1),
-                source: TokenCopySource::TriggerObject,
-            }],
-        }],
-        otherwise: vec![],
-    }
-}
-
 #[test]
-fn trigger_object_copy_is_nested_trigger_context_scoped() {
-    let branch = mirrorworks_event_object_copy_branch();
-    assert!(branch.uses_trigger_object_reference());
-    assert!(branch
+fn trigger_object_copy_is_trigger_context_scoped() {
+    let effect = SpellEffectKind::CreateTokenCopies {
+        count: Amount::Fixed(1),
+        source: TokenCopySource::TriggerObject,
+    };
+    assert!(effect.uses_trigger_object_reference());
+    assert!(effect
         .validate(EffectContext::Spell)
         .unwrap_err()
         .contains("trigger object"));
@@ -3524,7 +3432,7 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
         ability_id: AbilityId::new("triggered_01").unwrap(),
         presentation: AbilityPresentation::Fallback,
         trigger: TriggerCondition::WhenSelfEntersBattlefield,
-        effect: vec![branch.clone()],
+        effect: vec![effect.clone()],
         program: None,
         modal: None,
         targeting: None,
@@ -3545,7 +3453,7 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
         source_zone: Default::default(),
         costs: vec![AbilityCost::Tap],
         cost_modifiers: vec![],
-        effect: vec![branch.clone()],
+        effect: vec![effect.clone()],
         program: None,
         targeting: None,
         timing: Default::default(),
@@ -3574,7 +3482,7 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
     let reflexive = ReflexiveTriggeredAbilityDef {
         ability_id: AbilityId::new("reflexive_01").unwrap(),
         presentation: AbilityPresentation::Fallback,
-        effect: vec![branch],
+        effect: vec![effect],
         targeting: None,
         intervening_if: None,
     };
@@ -4378,80 +4286,6 @@ fn game_condition_any_of_rejects_malformed_and_invalid_branches() {
 }
 
 #[test]
-fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
-    let conditional = ResolutionBranchDef {
-        branch_id: crate::ChoiceId::new("branch_01").unwrap(),
-        presentation: crate::AbilityPresentation::Fallback,
-        runtime_fallback: None,
-        cost: ResolutionCost::None,
-        requirement: ResolutionBranchRequirement::GameCondition(
-            GameCondition::CreatureDeathsThisTurn {
-                min: Some(1),
-                max: None,
-            },
-        ),
-        effects: vec![SpellEffectKind::Draw {
-            who: PlayerRecipient::Controller,
-            count: Amount::Fixed(1),
-        }],
-    };
-    let fallback = ResolutionBranchDef {
-        branch_id: crate::ChoiceId::new("branch_02").unwrap(),
-        presentation: crate::AbilityPresentation::Fallback,
-        runtime_fallback: None,
-        cost: ResolutionCost::None,
-        requirement: ResolutionBranchRequirement::Always,
-        effects: vec![SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1),
-        }],
-    };
-    let automatic = |optional, chooser, branches| SpellEffectKind::ChooseResolutionBranch {
-        chooser,
-        optional,
-        selection: ResolutionBranchSelection::FirstApplicable,
-        branches,
-        otherwise: Vec::new(),
-    };
-
-    assert!(automatic(
-        false,
-        PlayerRecipient::Controller,
-        vec![conditional.clone(), fallback.clone()],
-    )
-    .validate(EffectContext::Ability)
-    .is_ok());
-    assert!(automatic(
-        true,
-        PlayerRecipient::Controller,
-        vec![conditional.clone(), fallback.clone()],
-    )
-    .validate(EffectContext::Ability)
-    .is_err());
-    assert!(automatic(
-        false,
-        PlayerRecipient::SourceController,
-        vec![conditional.clone(), fallback.clone()],
-    )
-    .validate(EffectContext::Ability)
-    .is_err());
-    assert!(automatic(
-        false,
-        PlayerRecipient::Controller,
-        vec![conditional.clone()],
-    )
-    .validate(EffectContext::Ability)
-    .is_err());
-
-    let mut costed = conditional;
-    costed.cost = ResolutionCost::DiscardCard { filter: None };
-    assert!(
-        automatic(false, PlayerRecipient::Controller, vec![costed, fallback],)
-            .validate(EffectContext::Ability)
-            .is_err()
-    );
-}
-
-#[test]
 fn resolution_cost_supports_exact_graveyard_exile_payment() {
     let _: ResolutionCost = ron::from_str(r#"ExileGraveyardCard(filter: None)"#)
         .expect("parse an unrestricted graveyard-exile resolution cost");
@@ -4468,7 +4302,7 @@ fn resolution_cost_supports_exact_hand_card_bottom_payment() {
 }
 
 #[test]
-fn issue_241_pay_or_otherwise_supports_exact_delayed_objects() {
+fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
     let effects: Vec<SpellEffectKind> = ron::from_str(
         r#"[
           Exile(subject: Chosen((kind: Creature))),
@@ -4478,20 +4312,7 @@ fn issue_241_pay_or_otherwise_supports_exact_delayed_objects() {
               ability_id: "delayed_01",
               presentation: Fallback,
               trigger: AtBeginningOfNextEndStep,
-              effect: [ChooseResolutionBranch(
-                optional: true,
-                branches: [(
-                  branch_id: "pay",
-                  presentation: Fallback,
-                  cost: Mana("{3}{B}"),
-                  effects: [],
-                )],
-                otherwise: [ReturnTriggeredCard(
-                  reference: ExactTriggerObject,
-                  from: [Exile],
-                  controller: Owner,
-                )],
-              )],
+            effect: [Draw(count: 1)],
             ),
           ),
         ]"#,
@@ -4505,25 +4326,6 @@ fn issue_241_pay_or_otherwise_supports_exact_delayed_objects() {
     }
     SpellEffectKind::validate_list(&effects)
         .expect("Exile publishes one exact object for the following delayed trigger");
-}
-
-#[test]
-fn issue_241_otherwise_requires_an_optional_resolution_choice() {
-    let effect: SpellEffectKind = ron::from_str(
-        r#"ChooseResolutionBranch(
-          optional: false,
-          branches: [(
-            branch_id: "pay",
-            presentation: Fallback,
-            cost: Mana("{1}"),
-            effects: [],
-          )],
-          otherwise: [GainLife(amount: 1)],
-        )"#,
-    )
-    .expect("otherwise is typed authoring vocabulary");
-
-    assert!(effect.validate(EffectContext::Ability).is_err());
 }
 
 #[test]
@@ -4548,21 +4350,6 @@ fn delayed_trigger_player_capture_requires_the_immediately_preceding_counter() {
 
     let unrelated: super::SpellEffectKind = ron::from_str("Draw(count: 1)").unwrap();
     assert!(super::SpellEffectKind::validate_list(&[unrelated, delayed]).is_err());
-}
-
-#[test]
-fn nested_resolution_branch_rejects_unknown_target_controller_group() {
-    let card = r#"(
-      id: "test", name: "Test", face_id: "test", types: ["Instant"],
-      spell_effect: [
-        DamageTarget(amount: 1, target: (kind: Creature)),
-        ChooseResolutionBranch(optional: true, branches: [(
-          branch_id: "branch_01", presentation: Fallback, cost: None,
-          effects: [DamagePlayer(amount: 1, who: ControllerOfTargetGroup(group_index: 1))],
-        )]),
-      ],
-    )"#;
-    assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_err());
 }
 
 #[test]
@@ -4977,23 +4764,6 @@ fn source_counter_scaled_mana_effect() -> SpellEffectKind {
     }
 }
 
-fn source_counter_scaled_mana_branch(effect: SpellEffectKind) -> SpellEffectKind {
-    SpellEffectKind::ChooseResolutionBranch {
-        chooser: PlayerRecipient::Controller,
-        optional: false,
-        selection: ResolutionBranchSelection::FirstApplicable,
-        branches: vec![ResolutionBranchDef {
-            branch_id: crate::ChoiceId::new("continue").unwrap(),
-            presentation: crate::AbilityPresentation::Fallback,
-            runtime_fallback: None,
-            cost: ResolutionCost::None,
-            requirement: ResolutionBranchRequirement::Always,
-            effects: vec![effect],
-        }],
-        otherwise: vec![],
-    }
-}
-
 fn opponent_land_mana_effect() -> SpellEffectKind {
     SpellEffectKind::ProduceManaFromOpponentLands { options: vec![] }
 }
@@ -5028,9 +4798,12 @@ fn opponent_land_mana_is_restricted_to_the_tap_activated_ability_shape() {
     assert!(extra_cost.validate_shape().is_err());
 
     let mut nested = ability.clone();
-    nested.effect = vec![source_counter_scaled_mana_branch(
-        opponent_land_mana_effect(),
-    )];
+    nested.effect = vec![SpellEffectKind::Conditional {
+        condition: GameCondition::ActivePlayer {
+            players: RelativePlayerSet::Controller,
+        },
+        effect: Box::new(opponent_land_mana_effect()),
+    }];
     assert!(nested.validate_shape().is_err());
 
     let triggered = TriggeredAbilityDef {
@@ -5110,9 +4883,12 @@ fn source_counter_scaled_mana_rejects_nested_activated_effects() {
         source_zone: AbilitySourceZone::Battlefield,
         costs: vec![AbilityCost::Tap],
         cost_modifiers: vec![],
-        effect: vec![source_counter_scaled_mana_branch(
-            source_counter_scaled_mana_effect(),
-        )],
+        effect: vec![SpellEffectKind::Conditional {
+            condition: GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Controller,
+            },
+            effect: Box::new(source_counter_scaled_mana_effect()),
+        }],
         program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
@@ -5132,9 +4908,7 @@ fn source_counter_scaled_mana_rejects_triggered_and_reflexive_appearances() {
         ability_id: crate::AbilityId::new("triggered_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         trigger: TriggerCondition::WhenSelfEntersBattlefield,
-        effect: vec![source_counter_scaled_mana_branch(
-            source_counter_scaled_mana_effect(),
-        )],
+        effect: vec![source_counter_scaled_mana_effect()],
         program: None,
         modal: None,
         targeting: None,
@@ -5976,6 +5750,57 @@ fn program_fixture(body: &str) -> String {
             mana_cost: "{{0}}", types: ["Instant"],
             spell_program: Some((body: {body})))"#
     )
+}
+
+#[test]
+fn legacy_flat_resolution_branch_ron_is_rejected() {
+    let legacy = r#"ChooseResolutionBranch(
+        chooser: Controller,
+        optional: false,
+        selection: FirstApplicable,
+        branches: [(
+            branch_id: "branch_01",
+            presentation: Fallback,
+            cost: None,
+            requirement: Always,
+            effects: [GainLife(amount: 1)],
+        )],
+        otherwise: [],
+    )"#;
+
+    assert!(
+        ron::from_str::<super::SpellEffectKind>(legacy).is_err(),
+        "the retired flat branch syntax must no longer deserialize"
+    );
+}
+
+#[test]
+fn typed_program_choose_remains_admitted_after_flat_branch_retirement() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "choose_draw", kind: Choose(
+                choice: "choose_draw", chooser: Controller, optional: false,
+                branches: [(
+                    branch_id: "draw", presentation: Fallback,
+                    cost: None, requirement: Always,
+                    body: (steps: [
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+                    ], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the typed Program Choose boundary remains supported");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    assert!(
+        registry.compiled_program_for_owner(&owner).is_some(),
+        "the exact Program Choose owner compiles"
+    );
 }
 
 fn ability_program_fixture(
@@ -11175,7 +11000,7 @@ fn legacy_flat_activated_ward_requires_an_authored_program() {
 }
 
 #[test]
-fn legacy_ward_nested_choice_modal_and_grant_owners_require_programs() {
+fn legacy_ward_modal_and_grant_owners_require_programs() {
     const WARD: &str = "CounterTriggeringStackObjectUnlessPays(cost: Mana(\"{2}\"))";
 
     fn triggered_card(resolution: &str) -> String {
@@ -11199,26 +11024,6 @@ fn legacy_ward_nested_choice_modal_and_grant_owners_require_programs() {
             "{owner_shape} must reach the retired-Ward admission boundary, got {error}"
         );
     }
-
-    // This legacy branch was otherwise valid before Ward Program migration. Its nested
-    // GameCondition requirement must not hide the Ward leaf from owner validation.
-    let choose = triggered_card(&format!(
-        r#"effect: [ChooseResolutionBranch(
-            chooser: Controller,
-            optional: true,
-            selection: PlayerChoice,
-            branches: [(
-                branch_id: "ward_if_storied",
-                presentation: Fallback,
-                cost: None,
-                requirement: GameCondition(HasEnduringStory(players: Controller)),
-                effects: [{WARD}],
-            )],
-            otherwise: [],
-        )], program: None, modal: None, targeting: None, may: false,
-        intervening_if: None, triggers_only_once: false, max_triggers_per_turn: None"#
-    ));
-    assert_retired(&choose, "conditional Choose branch");
 
     let modal = triggered_card(&format!(
         r#"effect: [], program: None,
@@ -11265,59 +11070,6 @@ fn legacy_ward_nested_choice_modal_and_grant_owners_require_programs() {
                 effect_indices: [0])])) )"#
     );
     assert_retired(&dynamic_grant, "resolving-created trigger grant");
-}
-
-#[test]
-fn legacy_resolution_branch_discard_cost_requires_an_authored_program() {
-    fn definition(effect: &str) -> String {
-        format!(
-            r#"(id: "legacy_discard_branch_fixture", name: "Legacy Discard Branch Fixture",
-                face_id: "legacy_discard_branch_fixture", types: ["Creature"], power: 2, toughness: 2,
-                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
-                    trigger: WhenSelfEntersBattlefield, effect: [{effect}], program: None,
-                    modal: None, targeting: None, may: false, intervening_if: None,
-                    triggers_only_once: false, max_triggers_per_turn: None)])"#
-        )
-    }
-
-    const CHOOSE: &str = r#"ChooseResolutionBranch(
-        chooser: Controller, optional: true, selection: PlayerChoice,
-        branches: [(branch_id: "discard_creature", presentation: Fallback,
-            cost: DiscardCard(filter: Some(Creature)), effects: [Draw(who: Controller, count: 1)])],
-        otherwise: [])"#;
-
-    let outer_free_choice = format!(
-        r#"ChooseResolutionBranch(
-            chooser: Controller, optional: false, selection: PlayerChoice,
-            branches: [(branch_id: "outer_free_branch", presentation: Fallback,
-                cost: None,
-                effects: [GrantTriggeredAbility(subject: Source, ability: (
-                    ability_id: "nested_costed_choice", presentation: Fallback,
-                    trigger: WhenSelfEntersBattlefield, effect: [{CHOOSE}],
-                    program: None, modal: None, targeting: None, may: false,
-                    intervening_if: None, triggers_only_once: false,
-                    max_triggers_per_turn: None,
-                ))])], otherwise: [])"#
-    );
-
-    for (label, effect) in [
-        ("direct", CHOOSE.to_string()),
-        (
-            "nested below a supported free legacy choice and granted trigger",
-            outer_free_choice,
-        ),
-    ] {
-        let ron = definition(&effect);
-        let error = crate::CardRegistry::from_chunks_and_tokens(&[&ron], &[])
-            .expect_err("legacy filtered-discard Choose branches are retired");
-        assert!(
-            error
-                .to_string()
-                .to_lowercase()
-                .contains("authored program"),
-            "the {label} legacy discard cost is rejected at the authored Program boundary: {error}"
-        );
-    }
 }
 
 #[test]
@@ -11428,15 +11180,12 @@ fn resolving_created_ability_owners_reject_programs_including_nested_modal_modes
     let nested_reflexive_program = format!(
         r#"(id: "unowned_reflexive_grant", name: "Unowned Reflexive Grant",
             face_id: "unowned_reflexive_grant", mana_cost: "{{0}}", types: ["Instant"],
-            spell_effect: [ChooseResolutionBranch(optional: false, branches: [(
-                branch_id: "create", presentation: Fallback, cost: None,
-                effects: [CreateReflexiveTrigger(ability: (
-                    ability_id: "reflexive", presentation: Fallback,
-                    effect: [GrantTriggeredAbility(subject: Source,
-                        ability: (ability_id: "granted", presentation: Fallback,
-                            trigger: WhenSelfDies, effect: [], program: {program},
-                            modal: None, targeting: None))], targeting: None))],
-            )])])"#
+            spell_effect: [CreateReflexiveTrigger(ability: (
+                ability_id: "reflexive", presentation: Fallback,
+                effect: [GrantTriggeredAbility(subject: Source,
+                    ability: (ability_id: "granted", presentation: Fallback,
+                        trigger: WhenSelfDies, effect: [], program: {program},
+                        modal: None, targeting: None))], targeting: None))])"#
     );
 
     for definition in [
@@ -12097,39 +11846,6 @@ fn program_choose_rejects_unsupported_admission_shapes() {
 }
 
 #[test]
-fn registry_rejects_the_retired_card_result_count_branch_requirement() {
-    let card = r#"(
-        id: "retired_card_result_count_requirement",
-        name: "Retired Card Result Count Requirement",
-        face_id: "retired_card_result_count_requirement",
-        types: ["Sorcery"],
-        spell_effect: [ChooseResolutionBranch(
-            selection: FirstApplicable,
-            branches: [(
-                branch_id: "paid_discard",
-                presentation: Fallback,
-                cost: None,
-                requirement: CardResultCount(
-                    filter: (source: Payment, action: Discard, players: Controller, card_type: None),
-                    min: Some(1),
-                ),
-                effects: [],
-            )],
-        )],
-    )"#;
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
-        .expect_err("the retired branch requirement must fail during RON deserialization");
-    assert!(
-        matches!(
-            &error,
-            crate::registry::RegistryError::Ron(error)
-                if error.to_string().contains("CardResultCount")
-        ),
-        "expected an unknown retired variant during parse, got {error:?}"
-    );
-}
-
-#[test]
 fn program_choose_admits_controller_spell_hand_bottom_cost() {
     let body = r#"(steps: [
             (id: "choose", bind: [], input: None, kind: Choose(
@@ -12197,24 +11913,6 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
         "the hand-bottom cost does not admit SourceController as a spell chooser"
     );
 
-    let legacy_effect: SpellEffectKind = ron::from_str(
-        r#"ChooseResolutionBranch(optional: true, branches: [(
-            branch_id: "bottom",
-            presentation: Fallback,
-            cost: PutHandCardOnLibraryBottom,
-            requirement: Always,
-            effects: [Draw(who: Controller, count: 1)],
-        )], otherwise: [])"#,
-    )
-    .expect("legacy Choose syntax remains readable for an explicit rejection diagnostic");
-    let legacy_error = legacy_effect
-        .validate(crate::primitives::EffectContext::Spell)
-        .expect_err("flat legacy resolution branches no longer admit hand-bottom costs");
-    assert!(
-        legacy_error.contains("typed Program Choose"),
-        "the rejection identifies the supported authored contract: {legacy_error}"
-    );
-
     let ability_program: crate::CardProgram =
         ron::from_str(&format!("(body: {body})")).expect("ability fixture parses");
     let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
@@ -12231,32 +11929,6 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
     assert!(
         ability_error.contains("does not support resolution cost"),
         "the failure is from the hand-bottom cost admission rule: {ability_error}"
-    );
-}
-
-#[test]
-fn flat_spell_graveyard_exile_cost_requires_a_typed_program_choose_branch() {
-    let card = r#"(
-        id: "flat_graveyard_exile_fixture",
-        name: "Flat Graveyard Exile Fixture",
-        face_id: "flat_graveyard_exile_fixture",
-        mana_cost: "{0}",
-        types: ["Instant"],
-        spell_effect: [ChooseResolutionBranch(optional: true, branches: [(
-            branch_id: "exile_and_draw",
-            presentation: Fallback,
-            cost: ExileGraveyardCard(filter: None),
-            requirement: Always,
-            effects: [Draw(who: Controller, count: 1)],
-        )], otherwise: [])],
-    )"#;
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
-        .expect_err("flat spell graveyard-exile costs require a typed Program Choose branch");
-    assert!(
-        error
-            .to_string()
-            .contains("graveyard-exile costs require a typed Program Choose branch"),
-        "the rejection names the supported graveyard-exile contract: {error}"
     );
 }
 
@@ -13228,20 +12900,6 @@ fn program_sacrifice_rejects_any_of_branch_exclusions_but_keeps_supported_filter
                 && diagnostic.contains("excluded_objects"),
             "the typed Program rejection identifies the unsupported branch exclusion: {error}"
         );
-
-        let legacy: crate::primitives::SpellEffectKind = ron::from_str(&format!(
-            r#"ChooseResolutionBranch(optional: true, branches: [(
-                branch_id: "pay_sacrifice", presentation: Fallback,
-                cost: {cost}, requirement: Always,
-                effects: [Draw(who: Controller, count: 1)],
-            )], otherwise: [])"#
-        ))
-        .expect("the matching legacy branch syntax remains readable");
-        legacy
-            .validate(crate::primitives::EffectContext::Ability)
-            .unwrap_or_else(|error| {
-                panic!("legacy sacrifice filters retain their existing contract: {error}")
-            });
     }
 
     for (card_suffix, exclusion) in [("source", "Source"), ("attached_object", "AttachedObject")] {

@@ -398,9 +398,6 @@ pub(super) fn execute_effect(
         SpellEffectKind::SiegeDefeat => zones::siege_defeat(cx)?,
         effect @ SpellEffectKind::None => misc::none(cx, effect)?,
         effect @ SpellEffectKind::AuraAttach { .. } => misc::aura_attach(cx, effect)?,
-        effect @ SpellEffectKind::ChooseResolutionBranch { .. } => {
-            choices::choose_resolution_branch(cx, effect)?
-        }
         effect @ SpellEffectKind::ChoosePermanents { .. } => {
             choices::choose_permanents(cx, effect)?
         }

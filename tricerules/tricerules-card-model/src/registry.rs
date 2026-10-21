@@ -3,10 +3,9 @@ use crate::primitives::{
     program_effect_target_roles, AbilityCost, ActivatedCostModifier, AdditionalCost, Amount,
     BattlefieldAggregate, CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
-    ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput,
-    ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
-    TriggerCondition, ZoneCardFilter,
+    ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput, SpecialActionAffected,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetSchema,
+    TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::PresentationFaceMetadata;
@@ -646,19 +645,6 @@ fn visit_scoped_grant_effect(
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             visit_scoped_grant_effect(effect, visit)?
         }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for nested in branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .chain(otherwise)
-            {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
         SpellEffectKind::MayBehold { if_beheld, .. } => {
             for nested in if_beheld {
                 visit_scoped_grant_effect(nested, visit)?;
@@ -812,16 +798,6 @@ fn validate_scoped_grant_payment_effects(
             SpellEffectKind::MayBehold { if_beheld, .. } => {
                 validate_scoped_grant_payment_effects(if_beheld, allowed)?
             }
-            SpellEffectKind::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    validate_scoped_grant_payment_effects(&branch.effects, allowed)?;
-                }
-                validate_scoped_grant_payment_effects(otherwise, allowed)?;
-            }
             SpellEffectKind::ApplyPermanentModifier {
                 modifier:
                     crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
@@ -866,15 +842,6 @@ fn validate_scoped_granted_activation(ability: &crate::ActivatedAbilityDef) -> R
                     conditional: Some(conditional),
                     ..
                 } => validate_scoped_grant_condition(&conditional.condition)?,
-                SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
-                    for branch in branches {
-                        if let ResolutionBranchRequirement::GameCondition(condition) =
-                            &branch.requirement
-                        {
-                            validate_scoped_grant_condition(condition)?;
-                        }
-                    }
-                }
                 _ => {}
             }
             if matches!(
@@ -1092,25 +1059,6 @@ fn validate_effect_cast_cost_conditions(
             }
             Ok(())
         }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for branch in branches {
-                if let ResolutionBranchRequirement::CastCostReceipt(condition) = &branch.requirement
-                {
-                    validate_cast_cost_condition(groups, condition)?;
-                }
-                for nested in &branch.effects {
-                    validate_effect_cast_cost_conditions(groups, nested)?;
-                }
-            }
-            for nested in otherwise {
-                validate_effect_cast_cost_conditions(groups, nested)?;
-            }
-            Ok(())
-        }
         _ => Ok(()),
     }
 }
@@ -1123,21 +1071,6 @@ fn validate_effect_payment_results(
     if let Some(filter) = amount.and_then(Amount::card_result_filter) {
         if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
             return Err("Payment card result requires a compatible card cost".into());
-        }
-    }
-    if let SpellEffectKind::ChooseResolutionBranch {
-        branches,
-        otherwise,
-        ..
-    } = effect
-    {
-        for branch in branches {
-            for nested in &branch.effects {
-                validate_effect_payment_results(allowed, nested)?;
-            }
-        }
-        for nested in otherwise {
-            validate_effect_payment_results(allowed, nested)?;
         }
     }
     Ok(())
@@ -2327,16 +2260,6 @@ fn validate_nested_effect_metadata_with_delayed_child_program(
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
         }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for branch in branches {
-                validate_effect_list_metadata(&branch.effects)?;
-            }
-            validate_effect_list_metadata(otherwise)
-        }
         _ => Ok(()),
     }
 }
@@ -2593,18 +2516,6 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
         SpellEffectKind::Conditional { effect, .. }
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             collect_linked_exile_uses(effect, uses)
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for effect in branches.iter().flat_map(|branch| &branch.effects) {
-                collect_linked_exile_uses(effect, uses);
-            }
-            for effect in otherwise {
-                collect_linked_exile_uses(effect, uses);
-            }
         }
         SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
             for effect in &ability.effect {
@@ -3371,17 +3282,6 @@ fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             effect_returns_source_transformed(effect)
         }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .any(effect_returns_source_transformed)
-                || otherwise.iter().any(effect_returns_source_transformed)
-        }
         SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
             ability.effect.iter().any(effect_returns_source_transformed)
         }
@@ -3493,16 +3393,6 @@ fn validate_retained_exile_cohorts(
             }
             SpellEffectKind::MayBehold { if_beheld, .. } => {
                 validate_retained_exile_cohorts(if_beheld, false)?
-            }
-            SpellEffectKind::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    validate_retained_exile_cohorts(&branch.effects, false)?;
-                }
-                validate_retained_exile_cohorts(otherwise, false)?;
             }
             _ => {}
         }

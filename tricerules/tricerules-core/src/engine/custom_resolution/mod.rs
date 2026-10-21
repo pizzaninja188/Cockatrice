@@ -10,8 +10,10 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    counter_stack_object, counter_stack_object_ref, move_object_to_zone, permanent_moved_event,
-    permanent_moved_event_with_library_position, sacrifice_permanent, ResolutionEffect,
+    counter_stack_object, counter_stack_object_ref, move_object_to_zone,
+    optional_triggered_ability_branch, permanent_moved_event,
+    permanent_moved_event_with_library_position, resolution_branch_is_selectable,
+    sacrifice_permanent, ResolutionEffect,
 };
 use super::targeting::{
     artifact_exchange_player, capture_stack_target, compute_spell_targets_with_program,
@@ -1560,19 +1562,38 @@ impl GameEngine {
             .and_then(|presentation| presentation.primary.clone());
         let resume_index = match decision {
             rv1::ResolutionChoiceDecision::SelectBranch => {
-                if stack
-                    .item
-                    .triggered_ability
-                    .as_ref()
-                    .is_some_and(|ability| {
-                        super::resolution::direct_draw_effect_is_selectable(
-                            self,
-                            &stack.item,
-                            &stack.previous_result,
-                            &ability.effect,
-                        ) == Some(false)
-                    })
-                {
+                let ability = stack.item.triggered_ability.as_ref().or_else(|| {
+                    self.registry
+                        .get(&stack.item.card_id)
+                        .and_then(|definition| definition.face(stack.item.face_index))
+                        .and_then(|face| {
+                            face.triggered_abilities
+                                .get(stack.item.ability_index.unwrap_or(0))
+                        })
+                });
+                if let Some(branch) = ability.and_then(optional_triggered_ability_branch) {
+                    if !resolution_branch_is_selectable(
+                        self,
+                        &stack.item,
+                        &stack.previous_result,
+                        pending.deciding_player,
+                        stack.item.controller,
+                        &branch,
+                        true,
+                    ) {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "the optional effect is no longer applicable",
+                        ));
+                    }
+                } else if ability.is_some_and(|ability| {
+                    super::resolution::direct_draw_effect_is_selectable(
+                        self,
+                        &stack.item,
+                        &stack.previous_result,
+                        &ability.effect,
+                    ) == Some(false)
+                }) {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
                         "the optional draw is no longer legal under the current draw limit",
@@ -3006,5 +3027,127 @@ mod card_name_set_tests {
             &mut disjoint,
             ["Water".to_owned(), "Earth".to_owned()]
         ));
+    }
+}
+
+#[cfg(test)]
+mod resolution_payment_actor_tests {
+    use super::*;
+
+    #[test]
+    fn issue_169_resolution_tap_payment_uses_decider_not_stack_controller() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            169_021,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+
+        let sentry = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&sentry).unwrap().card_id = "icewrought_sentry".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            sentry,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+
+        let payer_creature = engine.state.players[1].hand[0];
+        engine
+            .state
+            .objects
+            .get_mut(&payer_creature)
+            .unwrap()
+            .card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            payer_creature,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .unwrap();
+
+        let mut item = engine.observer_return_item(sentry, 0);
+        item.id = engine.state.next_object_id;
+        item.card_id = "grizzly_bears".into();
+        item.ability_text = None;
+        item.source_permanent_id = Some(sentry);
+        item.source_owner = Some(0);
+        item.source_zone_change = engine.state.zone_change_generation[&sentry];
+        let stack_item_id = item.id;
+        let mut stack = ParkedStackResolution::new(item.clone());
+        stack.resume_effect_index = Some(1);
+        engine.state.stack.push(item);
+
+        let cost = ResolutionCost::TapPermanents {
+            count: 1,
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            exclude_source: false,
+        };
+        let candidate_generation = engine.state.zone_change_generation[&payer_creature];
+        let pending = PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player: 1,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack_item_id,
+                candidates: vec![payer_creature],
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt: "P1 chooses a creature to tap.".into(),
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::AuthoredBranch {
+                stack,
+                branch: PendingResolutionBranch {
+                    optional: false,
+                    chooser: PlayerRecipient::TargetedPlayer {
+                        group_index: 0,
+                        kind: TargetKind::OpponentPlayer,
+                    },
+                    original_chooser: 1,
+                    branches: vec![tricerules_card_model::primitives::ResolutionBranchDef {
+                        branch_id: tricerules_card_model::ChoiceId::new("tap_a_creature").unwrap(),
+                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                        runtime_fallback: None,
+                        cost,
+                        requirement:
+                            tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
+                        effects: Vec::new(),
+                    }],
+                    stage: PendingResolutionBranchStage::PayingObjects {
+                        selected_branch: 0,
+                        candidate_generations: vec![(payer_creature, candidate_generation)],
+                    },
+                },
+            },
+        };
+
+        assert_eq!(engine.state.stack.last().unwrap().controller, 0);
+        let completed = engine
+            .finish_resolution_branch_object(pending, &[payer_creature])
+            .expect("P1 pays the parked resolution branch controlled by P0");
+
+        assert!(engine.state.objects[&payer_creature].tapped);
+        assert!(completed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P1 taps Grizzly Bears."
+        )));
+        assert_eq!(engine.characteristics(sentry).unwrap().power, Some(2));
+        assert!(engine.state.pending_triggers.is_empty());
+        assert!(engine.state.staged_trigger_groups.is_empty());
+        assert!(engine.state.stack.is_empty());
     }
 }

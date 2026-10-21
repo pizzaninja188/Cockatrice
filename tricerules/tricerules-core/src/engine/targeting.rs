@@ -1843,7 +1843,6 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::Discover { .. }
         | SpellEffectKind::Cascade { .. }
-        | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::ChoosePermanents { .. }
         | SpellEffectKind::ChooseAndSacrifice { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }

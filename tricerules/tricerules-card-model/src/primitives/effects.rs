@@ -784,15 +784,6 @@ pub enum ResolutionReceiptCondition {
     Sacrificed { object: ConditionObjectRef },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum ResolutionBranchSelection {
-    /// Present every live branch to the deciding player through the existing choice contract.
-    #[default]
-    PlayerChoice,
-    /// Resolve the first live branch in authored order without publishing a player choice.
-    FirstApplicable,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastCostConditionalAmount {
     pub condition: CastCostReceiptCondition,
@@ -1092,20 +1083,6 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
         quantity: DiscardQuantity,
-    },
-    /// Present engine-authored branches as an in-resolution choice. The chosen branch's single
-    /// cost is validated and paid atomically, then its effects run in authored order.
-    ChooseResolutionBranch {
-        #[serde(default)]
-        chooser: PlayerRecipient,
-        #[serde(default)]
-        optional: bool,
-        #[serde(default)]
-        selection: ResolutionBranchSelection,
-        branches: Vec<ResolutionBranchDef>,
-        /// Effects performed when an optional choice is declined or has no applicable branch.
-        #[serde(default)]
-        otherwise: Vec<SpellEffectKind>,
     },
     /// Choose a bounded set of battlefield permanents during resolution without targeting.
     /// The result is engine-private and may be consumed by the immediately following effect.
@@ -3129,22 +3106,6 @@ impl SpellEffectKind {
     }
 
     pub(crate) fn uses_trigger_object_reference(&self) -> bool {
-        if let Self::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } = self
-        {
-            if branches.iter().any(|branch| {
-                branch
-                    .effects
-                    .iter()
-                    .any(Self::uses_trigger_object_reference)
-            }) || otherwise.iter().any(Self::uses_trigger_object_reference)
-            {
-                return true;
-            }
-        }
         matches!(
             self,
             SpellEffectKind::PutCounterSnapshot {
@@ -3246,24 +3207,6 @@ impl SpellEffectKind {
     }
 
     pub(crate) fn uses_trigger_object_mana_value_graveyard_filter(&self) -> bool {
-        if let Self::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } = self
-        {
-            if branches.iter().any(|branch| {
-                branch
-                    .effects
-                    .iter()
-                    .any(Self::uses_trigger_object_mana_value_graveyard_filter)
-            }) || otherwise
-                .iter()
-                .any(Self::uses_trigger_object_mana_value_graveyard_filter)
-            {
-                return true;
-            }
-        }
         matches!(
             self,
             Self::MoveGraveyardCards {
@@ -3318,18 +3261,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => {
                 if_beheld.iter().any(Self::uses_triggering_attacking_player)
             }
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::uses_triggering_attacking_player)
-                }) || otherwise.iter().any(Self::uses_triggering_attacking_player)
-            }
             _ => false,
         }
     }
@@ -3340,10 +3271,6 @@ impl SpellEffectKind {
             self,
             Self::DamagePlayer { who: Attacker, .. }
                 | Self::Discard { who: Attacker, .. }
-                | Self::ChooseResolutionBranch {
-                    chooser: Attacker,
-                    ..
-                }
                 | Self::ChoosePermanents {
                     chooser: Attacker,
                     ..
@@ -3382,18 +3309,6 @@ impl SpellEffectKind {
             }
             Self::MayBehold { if_beheld, .. } => {
                 if_beheld.iter().any(Self::contains_legacy_ward_payment)
-            }
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::contains_legacy_ward_payment)
-                }) || otherwise.iter().any(Self::contains_legacy_ward_payment)
             }
             _ => false,
         }
@@ -3563,12 +3478,6 @@ impl SpellEffectKind {
             SpellEffectKind::MoveGraveyardCards { filter, .. } => {
                 vec![TargetRole::GraveyardCard(filter)]
             }
-            SpellEffectKind::ChooseResolutionBranch {
-                chooser: PlayerRecipient::TargetedPlayer { kind, .. },
-                ..
-            } => mass_player_target(*kind)
-                .map(|target| vec![TargetRole::Filtered(target)])
-                .unwrap_or_default(),
             SpellEffectKind::ChooseCohortPartition { chooser, .. } => match chooser {
                 PlayerRecipient::TargetedPlayer { kind, .. } => mass_player_target(*kind)
                     .map(|target| vec![TargetRole::Filtered(target)])
@@ -3598,7 +3507,6 @@ impl SpellEffectKind {
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
-            | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::RevealCohort
             | SpellEffectKind::MoveCohortPartition { .. }
             | SpellEffectKind::ShuffleLibrary { .. }
@@ -3719,20 +3627,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
                 .any(Self::contains_source_counter_scaled_mana),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::contains_source_counter_scaled_mana)
-                }) || otherwise
-                    .iter()
-                    .any(Self::contains_source_counter_scaled_mana)
-            }
             _ => false,
         }
     }
@@ -3748,20 +3642,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
                 .any(Self::contains_opponent_land_mana_output),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::contains_opponent_land_mana_output)
-                }) || otherwise
-                    .iter()
-                    .any(Self::contains_opponent_land_mana_output)
-            }
             Self::CreateReflexiveTrigger { ability, .. } => ability
                 .effect
                 .iter()
@@ -3795,20 +3675,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
                 .any(Self::contains_unscoped_exile_observed_objects),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::contains_unscoped_exile_observed_objects)
-                }) || otherwise
-                    .iter()
-                    .any(Self::contains_unscoped_exile_observed_objects)
-            }
             // The CreateDelayedTrigger validator owns validation of its nested ability, including
             // the one approved cohort consumer. Do not walk into that nested ability here.
             Self::CreateDelayedTrigger { .. } => false,
@@ -3843,20 +3709,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
                 .any(Self::contains_storage_counter_split_mana),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::contains_storage_counter_split_mana)
-                }) || otherwise
-                    .iter()
-                    .any(Self::contains_storage_counter_split_mana)
-            }
             Self::CreateReflexiveTrigger { ability, .. } => ability
                 .effect
                 .iter()
@@ -3892,16 +3744,6 @@ impl SpellEffectKind {
                 effect.could_add_mana_to_pool()
             }
             Self::MayBehold { if_beheld, .. } => if_beheld.iter().any(Self::could_add_mana_to_pool),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches
-                    .iter()
-                    .any(|branch| branch.effects.iter().any(Self::could_add_mana_to_pool))
-                    || otherwise.iter().any(Self::could_add_mana_to_pool)
-            }
             _ => false,
         }
     }
@@ -3938,25 +3780,6 @@ impl SpellEffectKind {
                 scale: Some(scale), ..
             } => {
                 scale.validate_cast_snapshot_references(count)?;
-            }
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    if let ResolutionBranchRequirement::GameCondition(condition) =
-                        &branch.requirement
-                    {
-                        condition.validate_cast_snapshot_reference(count)?;
-                    }
-                    for effect in &branch.effects {
-                        effect.validate_cast_snapshot_references(count)?;
-                    }
-                }
-                for effect in otherwise {
-                    effect.validate_cast_snapshot_references(count)?;
-                }
             }
             Self::Conditional { condition, effect } => {
                 condition.validate_cast_snapshot_reference(count)?;
@@ -4242,14 +4065,6 @@ impl SpellEffectKind {
             }
         }
 
-        if effects
-            .iter()
-            .filter(|effect| matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }))
-            .count()
-            > 1
-        {
-            return Err("an effect list may contain at most one resolution branch choice".into());
-        }
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
         // an effect that declares an object target (Reanimate: `MoveGraveyardCards`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
@@ -4646,9 +4461,6 @@ impl SpellEffectKind {
             } | Self::Discard {
                 who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
-            } | Self::ChooseResolutionBranch {
-                chooser: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
-                ..
             } | Self::ChoosePermanents {
                 chooser: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
@@ -4692,17 +4504,6 @@ impl SpellEffectKind {
             if mass_player_target(kind).is_none() {
                 return Err("targeted mass scope requires AnyPlayer or OpponentPlayer".into());
             }
-        }
-        if matches!(
-            self,
-            Self::ChooseResolutionBranch {
-                chooser: PlayerRecipient::TargetedPlayer { kind, .. },
-                ..
-            } if mass_player_target(*kind).is_none()
-        ) {
-            return Err(
-                "targeted resolution branch chooser requires AnyPlayer or OpponentPlayer".into(),
-            );
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
@@ -5475,211 +5276,13 @@ impl SpellEffectKind {
                     return Err("MayBehold requires at least one success effect".into());
                 }
                 for effect in if_beheld {
-                    if effect.needs_target()
-                        || matches!(
-                            effect,
-                            SpellEffectKind::MayBehold { .. }
-                                | SpellEffectKind::ChooseResolutionBranch { .. }
-                        )
+                    if effect.needs_target() || matches!(effect, SpellEffectKind::MayBehold { .. })
                     {
                         return Err(
                             "MayBehold success effects must be untargeted and non-nested".into(),
                         );
                     }
                     effect.validate(context)?;
-                }
-            }
-            SpellEffectKind::ChooseResolutionBranch {
-                chooser,
-                optional,
-                selection,
-                branches,
-                otherwise,
-            } => {
-                if branches.is_empty() {
-                    return Err("resolution choice requires at least one branch".into());
-                }
-                if !otherwise.is_empty() && !optional {
-                    return Err(
-                        "resolution choice otherwise effects require an optional choice".into(),
-                    );
-                }
-                if matches!(
-                    chooser,
-                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
-                ) {
-                    return Err("resolution choice requires exactly one deciding player".into());
-                }
-                let mut branch_ids = std::collections::HashSet::new();
-                for (branch_index, branch) in branches.iter().enumerate() {
-                    branch.branch_id.validate()?;
-                    branch.presentation.validate()?;
-                    if !branch_ids.insert(branch.branch_id.as_str()) {
-                        return Err(format!(
-                            "duplicate resolution branch id '{}'",
-                            branch.branch_id
-                        ));
-                    }
-                    let is_first_applicable_noop_fallback = *selection
-                        == ResolutionBranchSelection::FirstApplicable
-                        && branch_index + 1 == branches.len()
-                        && matches!(branch.requirement, ResolutionBranchRequirement::Always)
-                        && branch.cost == ResolutionCost::None;
-                    // Paying a real cost can be the entire successful branch (Command Bridge,
-                    // Transguild Promenade); it needs no fabricated follow-up effect.
-                    let is_cost_only_branch = branch.cost != ResolutionCost::None;
-                    if branch.effects.is_empty()
-                        && !is_first_applicable_noop_fallback
-                        && !is_cost_only_branch
-                    {
-                        return Err(
-                            "resolution choice branches require an effect or payment".into()
-                        );
-                    }
-                    match &branch.cost {
-                        ResolutionCost::Blight { count } => {
-                            if *count == 0 {
-                                return Err("blight cost requires a positive count".into());
-                            }
-                        }
-                        ResolutionCost::None => {}
-                        ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
-                            if cost.pips.is_empty()
-                                || cost
-                                    .pips
-                                    .iter()
-                                    .any(|pip| matches!(pip, crate::ManaSymbol::X))
-                            {
-                                return Err(
-                                    "resolution mana cost must be nonempty and cannot contain X"
-                                        .into(),
-                                );
-                            }
-                        }
-                        ResolutionCost::DiscardCard { .. } => {
-                            return Err(
-                                "DiscardCard costs in flat ChooseResolutionBranch require an authored Program Choose branch".into(),
-                            );
-                        }
-                        ResolutionCost::PutHandCardOnLibraryBottom => {
-                            return Err(
-                                "hand-bottom costs require a typed Program Choose branch".into()
-                            );
-                        }
-                        ResolutionCost::ExileGraveyardCard { .. } => {
-                            return Err(
-                                "graveyard-exile costs require a typed Program Choose branch"
-                                    .into(),
-                            );
-                        }
-                        ResolutionCost::SacrificePermanent {
-                            filter,
-                            source_only,
-                        } => {
-                            validate_resolution_sacrifice_cost(filter, *source_only)?;
-                        }
-                        ResolutionCost::TapPermanents { count, filter, .. } => {
-                            if *count == 0 {
-                                return Err("resolution tap cost requires a positive count".into());
-                            }
-                            filter.validate_target_constraints()?;
-                            if !filter.all_terminal_filters_match(|leaf| {
-                                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                                    && leaf.controller == TargetController::You
-                            }) {
-                                return Err(
-                                    "resolution tap cost must select permanents you control".into(),
-                                );
-                            }
-                        }
-                    }
-                    if let ResolutionBranchRequirement::GameCondition(condition) =
-                        &branch.requirement
-                    {
-                        condition.validate_without_self_entry_spell()?;
-                    }
-                    for effect in &branch.effects {
-                        if effect.needs_target() {
-                            return Err(
-                                "resolution branch effects cannot target directly; create a reflexive trigger instead"
-                                    .into(),
-                            );
-                        }
-                        if matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }) {
-                            return Err("nested resolution branch choices are not supported".into());
-                        }
-                        effect.validate(context)?;
-                    }
-                    if matches!(
-                        branch.requirement,
-                        ResolutionBranchRequirement::EffectsApplicable
-                    ) && !branch.effects.iter().any(|effect| {
-                        matches!(effect, SpellEffectKind::PutCounters { .. })
-                            || matches!(
-                                effect,
-                                SpellEffectKind::Exile {
-                                    subject: EffectSubject::TriggerObject,
-                                    ..
-                                }
-                            )
-                    }) {
-                        return Err(
-                            "EffectsApplicable requires a supported applicability-sensitive effect"
-                                .into(),
-                        );
-                    }
-                    SpellEffectKind::validate_list(&branch.effects)?;
-                }
-                for effect in otherwise {
-                    if effect.needs_target() {
-                        return Err(
-                            "resolution choice otherwise effects cannot target directly; create a reflexive trigger instead"
-                                .into(),
-                        );
-                    }
-                    if matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }) {
-                        return Err("nested resolution branch choices are not supported".into());
-                    }
-                    effect.validate(context)?;
-                }
-                SpellEffectKind::validate_list(otherwise)?;
-                if !optional
-                    && branches.iter().any(|branch| {
-                        !matches!(branch.requirement, ResolutionBranchRequirement::Always)
-                    })
-                    && !branches.iter().any(|branch| {
-                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
-                            && branch.cost == ResolutionCost::None
-                    })
-                {
-                    return Err(
-                        "mandatory condition-gated resolution choice requires an unconditional costless fallback"
-                            .into(),
-                    );
-                }
-                if *selection == ResolutionBranchSelection::FirstApplicable {
-                    if *optional || *chooser != PlayerRecipient::Controller {
-                        return Err(
-                            "FirstApplicable resolution branches must be mandatory and controller-relative"
-                                .into(),
-                        );
-                    }
-                    if branches
-                        .iter()
-                        .any(|branch| branch.cost != ResolutionCost::None)
-                    {
-                        return Err("FirstApplicable resolution branches must be costless".into());
-                    }
-                    if !branches.last().is_some_and(|branch| {
-                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
-                    }) || branches[..branches.len() - 1].iter().any(|branch| {
-                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
-                    }) {
-                        return Err(
-                            "FirstApplicable resolution branches require exactly one final unconditional fallback"
-                                .into(),
-                        );
-                    }
                 }
             }
             SpellEffectKind::CreateReflexiveTrigger { when, ability } => {
@@ -6755,16 +6358,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => {
                 if_beheld.iter().any(Self::requires_attack_trigger)
             }
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches
-                    .iter()
-                    .any(|branch| branch.effects.iter().any(Self::requires_attack_trigger))
-                    || otherwise.iter().any(Self::requires_attack_trigger)
-            }
             _ => false,
         }
     }
@@ -6778,20 +6371,6 @@ impl SpellEffectKind {
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
                 .any(Self::requires_unblocked_opponent_attack_group),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    branch
-                        .effects
-                        .iter()
-                        .any(Self::requires_unblocked_opponent_attack_group)
-                }) || otherwise
-                    .iter()
-                    .any(Self::requires_unblocked_opponent_attack_group)
-            }
             _ => false,
         }
     }
@@ -6832,24 +6411,6 @@ impl SpellEffectKind {
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.requires_triggering_spell_context(),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches.iter().any(|branch| {
-                    matches!(
-                        &branch.requirement,
-                        ResolutionBranchRequirement::GameCondition(condition)
-                            if condition.requires_triggering_spell_context()
-                    ) || branch
-                        .effects
-                        .iter()
-                        .any(Self::requires_triggering_spell_context)
-                }) || otherwise
-                    .iter()
-                    .any(Self::requires_triggering_spell_context)
-            }
             Self::Conditional { condition, effect } => {
                 condition.requires_triggering_spell_context()
                     || effect.requires_triggering_spell_context()
@@ -6878,16 +6439,6 @@ impl SpellEffectKind {
             }
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
-                .flat_map(Self::referenced_token_ids)
-                .collect(),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .chain(otherwise)
                 .flat_map(Self::referenced_token_ids)
                 .collect(),
             Self::CreateReflexiveTrigger { ability, .. } => ability
@@ -6944,16 +6495,6 @@ impl SpellEffectKind {
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount().is_some_and(Amount::requires_source_counters),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches
-                    .iter()
-                    .any(|branch| branch.effects.iter().any(Self::requires_source_counters))
-                    || otherwise.iter().any(Self::requires_source_counters)
-            }
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
                 effect.requires_source_counters()
             }
@@ -7005,16 +6546,6 @@ impl SpellEffectKind {
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount().is_some_and(Amount::uses_trigger_event_count),
-            Self::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches
-                    .iter()
-                    .any(|branch| branch.effects.iter().any(Self::uses_trigger_event_count))
-                    || otherwise.iter().any(Self::uses_trigger_event_count)
-            }
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
                 effect.uses_trigger_event_count()
             }

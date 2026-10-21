@@ -18,8 +18,8 @@ use crate::primitives::{
     AbilityCost, ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
     CastCostOptionDef, CastCostOptionRef, CastCostReceiptCondition, Color, CountExpression,
     CounterKind, EffectContext, EntersWithCountersAffected, Evasion, GameCondition, Keyword,
-    PermanentTypeFilter, PowerComparison, ProtectionQuality, ResolutionCost, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
+    PermanentTypeFilter, PowerComparison, ProtectionQuality, SpellCostModifier, SpellEffectKind,
+    StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
 };
 use crate::{AbilityId, AbilityPresentation, CardFaceId, CardProgram, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
@@ -1766,23 +1766,6 @@ fn push_effect_mana_colors(collected: &mut Vec<Color>, effect: &SpellEffectKind)
             alternative_cost, ..
         } => push_mana_cost_colors(collected, alternative_cost),
         SpellEffectKind::CastMadness { cost } => push_mana_cost_colors(collected, cost),
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for branch in branches {
-                if let ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) = &branch.cost {
-                    push_mana_cost_colors(collected, cost);
-                }
-                for effect in &branch.effects {
-                    push_effect_mana_colors(collected, effect);
-                }
-            }
-            for effect in otherwise {
-                push_effect_mana_colors(collected, effect);
-            }
-        }
         _ => {}
     }
 }

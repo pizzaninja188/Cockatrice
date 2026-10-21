@@ -3556,26 +3556,22 @@ mod tests {
         .unwrap();
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         move_to_battlefield(&mut engine, 0, "hill_giant");
-        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
-            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true,
-                branches: [(branch_id: "sacrifice_this", presentation: Fallback, cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
-        let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &registry
-            .get("test")
-            .unwrap()
-            .primary_face()
-            .triggered_abilities[0]
-            .effect[0]
-        else {
-            panic!("branch")
+        let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
+            filter: tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                controller: tricerules_card_model::primitives::TargetController::You,
+                ..Default::default()
+            },
+            source_only: true,
         };
         assert_eq!(
-            engine.resolution_cost_candidates(0, source, 0, &branches[0].cost),
+            engine.resolution_cost_candidates(0, source, 0, &cost),
             vec![source]
         );
         engine.state.zone_change_generation.insert(source, 1);
         assert!(
             engine
-                .resolution_cost_candidates(0, source, 0, &branches[0].cost)
+                .resolution_cost_candidates(0, source, 0, &cost)
                 .is_empty(),
             "a returned source is a different object"
         );
@@ -3597,20 +3593,19 @@ mod tests {
         .unwrap();
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let other = move_to_battlefield(&mut engine, 0, "hill_giant");
-        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
-            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true,
-                branches: [(branch_id: "sacrifice_another", presentation: Fallback, cost: SacrificePermanent(filter: (kind: Creature, controller: You, excluded_objects: [Source]), source_only: false), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
-        let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &registry
-            .get("test")
-            .unwrap()
-            .primary_face()
-            .triggered_abilities[0]
-            .effect[0]
-        else {
-            panic!("branch")
+        let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
+            filter: tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                controller: tricerules_card_model::primitives::TargetController::You,
+                excluded_objects: vec![
+                    tricerules_card_model::primitives::TargetObjectExclusion::Source,
+                ],
+                ..Default::default()
+            },
+            source_only: false,
         };
         assert_eq!(
-            engine.resolution_cost_candidates(0, source, 0, &branches[0].cost),
+            engine.resolution_cost_candidates(0, source, 0, &cost),
             vec![other],
             "another creature excludes the resolving source incarnation"
         );

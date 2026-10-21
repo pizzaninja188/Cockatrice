@@ -314,11 +314,50 @@ fn scoped_children_validate_all_supported_payment_amount_fields() {
 }
 
 #[test]
+fn scoped_grants_reject_retired_resolution_branch_ron_as_unknown_variant() {
+    let retired = "ChooseResolutionBranch(optional: true, branches: [(branch_id: \"branch_01\", presentation: Fallback, cost: None, requirement: GameCondition(CastOrigin(origin: Hand)), effects: [Draw(count: 1)])])";
+    let ron = card("(kind: AnyPermanent)", &child_with_effect(retired));
+    let error = match CardRegistry::from_chunks_and_tokens(&[&ron], &[]) {
+        Err(error) => error.to_string(),
+        Ok(_) => panic!("expected retired child effect to reject"),
+    };
+    assert!(error.contains("Unexpected variant named"), "{error}");
+    assert!(error.contains("ChooseResolutionBranch"), "{error}");
+}
+
+#[test]
+fn scoped_child_program_keeps_its_exact_owner_and_rejects_cast_origin_if() {
+    let child = r#"(
+        ability_id: "activated_01", presentation: Fallback, costs: [], effect: [],
+        program: Some((body: (steps: [
+            (id: "if_cast_origin", kind: If(
+                condition: CastOrigin(origin: Hand),
+                yes: (steps: [(id: "draw", kind: Perform(Draw(count: 1)))], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: []))),
+    )"#;
+    let ron = card("(kind: AnyPermanent)", child);
+    let error = match CardRegistry::from_chunks_and_tokens(&[&ron], &[]) {
+        Err(RegistryError::InvalidCard { reason, .. }) => reason,
+        other => panic!("expected the scoped child's Program If to reject CastOrigin: {other:?}"),
+    };
+    assert!(
+        error.contains("If condition uses context outside"),
+        "{error}"
+    );
+    assert!(error.contains("static grant ability path"), "{error}");
+    assert!(
+        error.contains("static_01") && error.contains("activated_01"),
+        "{error}"
+    );
+}
+
+#[test]
 fn scoped_children_cannot_read_face_cast_origin_through_inline_conditions() {
     for effect in [
         "Conditional(condition: CastOrigin(origin: Hand), effect: Draw(count: 1))",
         "Draw(count: Conditional(condition: CastOrigin(origin: Hand), when_true: 1, otherwise: 0))",
-        "ChooseResolutionBranch(optional: true, branches: [(branch_id: \"branch_01\", presentation: Fallback, cost: None, requirement: GameCondition(CastOrigin(origin: Hand)), effects: [Draw(count: 1)])])",
         "GrantTriggeredAbility(subject: Source, ability: (ability_id: \"nested_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, intervening_if: CastOrigin(origin: Hand), effect: [Draw(count: 1)]))",
         "CreateReflexiveTrigger(ability: (ability_id: \"nested_01\", presentation: Fallback, intervening_if: CastOrigin(origin: Hand), effect: [Draw(count: 1)]))",
     ] {

@@ -1,13 +1,19 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-20): target design with a bounded authored-owner implementation increment,
-cross-component resolution-prompt identity, exact compiled owner identities, immutable ability
-binding, and mandatory retirement of the `DrawDiscard` compatibility family. The runner supports
+Status (2026-10-21): the `DrawDiscard` compatibility family and flat `ChooseResolutionBranch`
+grammar/runtime are retired. After the Trade Route Envoy port, flat-variant validation/traversal,
+selection/dispatch, and expansion paths were removed. The shared internal
+`EffectOutcome::RestartResolutionBranch` remains for MayBehold's no-candidate path; typed Program
+`Choose` and shared cost, requirement, and branch-selection helpers remain. The broader composable-card execution
+migration remains incomplete: receipt composition, library-return transactions, Mosswort Bridge
+departure handling, and the separate optional-trigger continuation departure fix remain open.
+The target design also established cross-component resolution-prompt identity, exact compiled owner
+identities, and immutable ability binding. The runner supports
 targetless program operations and four targetful role signatures on spell faces, modal modes,
 activated abilities and triggered abilities. The original migration census was 41 existing card
 identities, 42 `DrawDiscard` bodies and three additional modal siblings: 45 compiled owners, not 45
 card admissions. All 45 owners now use authored programs, and the migration added no card
-admissions. The old variant, source lowerer, and draw-after continuation are removed; registry
+admissions. The `DrawDiscard` variant, source lowerer, and draw-after continuation are removed; registry
 admission rejects old `DrawDiscard` RON and requires every sibling to be authored when a modal
 container uses programs. Typed discard outcomes and replacement/entry/payment continuations retain
 the owning frame. Authored-owner conversions include Calamitous Tide's face, Agna Qel'a's
@@ -25,9 +31,14 @@ source-line mapping and semantic evidence for that owner. Trade Route Envoy's en
 a mandatory controller `Choose` with a live countered-creature draw branch and a +1/+1-counter
 `Otherwise`; its [review map](../tricerules/tricerules-cards/authoring/review-maps/trade_route_envoy.json)
 records the full printed line and semantic fixtures. The narrow compiler admission leaves generic
-Program `If` unchanged, and production core, protocol, and clients are unchanged. Trade Route Envoy
-was outside the original `DrawDiscard` migration census. These owner ports do not claim that broader
-legacy execution retirement or the composable-card migration is complete.
+Program `If` unchanged; the Envoy definition port reused existing production core operations and
+added no protocol/client changes. The subsequent flat-branch retirement removed engine model/runtime paths without changing
+the protobuf, relay, or client contract. Trade Route Envoy
+was outside the original `DrawDiscard` migration census. Following this port, the flat
+`ChooseResolutionBranch` schema/runtime was retired; typed Program `Choose` and shared branch/cost
+helpers remain. This does not complete the broader migration: receipt composition, library-return
+transactions, Mosswort Bridge departure handling, and optional-trigger continuation departure
+semantics remain open.
 
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
@@ -50,13 +61,14 @@ Chaos Spewer may pay `{2}` or blights 2. Payment, Blight creature selection and 
 replacement choices suspend the same program cursor, which resumes its following instruction
 once. The exact admitted syntax and fail-closed limits are in the
 [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs).
-This ports only those two definitions: legacy flat branch resolution remains live for other
-supported costs and owners.
+At the 2026-10-15 checkpoint, only those two definitions had been ported; other supported costs and
+owners still used legacy flat branch resolution. That remaining flat form was retired after the
+subsequent Trade Route Envoy port on 2026-10-21.
 The following five 2026-10-15 Choose ports reuse that runner without runtime changes: Ant-Man's
 Army's mandatory Food-or-Treasure choice, Consecrated Sphinx's optional free Draw 2, Mentor of the
 Meek's optional `{1}`-for-Draw 1, Mind's Eye's optional `{1}`-for-Draw 1, and only Solemn
-Simulacrum's `triggered_02` death-draw owner. Solemn's `triggered_01` ETB basic-land search remains
-on its existing legacy branch; the tranche adds no card admissions.
+Simulacrum's `triggered_02` death-draw owner. At that checkpoint, Solemn's `triggered_01` ETB
+basic-land search remained on its existing legacy branch; the tranche added no card admissions.
 The 2026-10-15 Wash Out port uses an all-free color `Choose` and the resultless
 `ReturnAllToOwnersHand` program leaf. Mass and single-card owner-hand returns share the Commander
 replacement handler, which parks the exact resolving operation through APNAP ordering and
@@ -529,9 +541,10 @@ conditions do not remove target requirements at announcement or change all-targe
   implicitly. A structural instruction may bind its selected block's explicit `yields` through a typed
   join. Every reachable arm, including decline/otherwise, must yield the same field types; cardinality
   is the union of the arms' possible cardinalities. No implicit absent/zero value is supplied. An arm
-  without exports has no outer result, and direct cross-arm reads always reject. Existing flat branch
-  output-to-`PreviousEffect` flows must lower through explicit joins or be rewritten into the relevant
-  branch. Preserve Divert Disaster's semantic paid-result dependency through its typed slot; the
+  without exports has no outer result, and direct cross-arm reads always reject. During migration,
+  flat-branch output-to-`PreviousEffect` flows had to lower through explicit joins or move into the
+  corresponding Program branch; the flat branch form is now retired. Preserve Divert Disaster's
+  semantic paid-result dependency through its typed slot; the
   `CounterUnlessPaid` receipt condition and unused `PreviousResultReceipt` wrapper are retired.
 - A runtime-empty cohort is a valid value with count zero. It is distinct from an absent binding,
   declined optional action, failed payment, or an operation still waiting to commit. Those distinctions
@@ -766,10 +779,12 @@ player-set discard; spell, optional and alternative-cost departure behavior is u
 The bounded 2026-10-19 Crypt Lurker increment moves its ETB owner to a resultless ability Program.
 An optional `Controller`-chosen `Choose` offers one creature-sacrifice branch and one
 `DiscardCard(filter: Some(Creature))` branch; either paid branch draws one card. This filtered
-resolution cost is admitted only on an optional `Controller`-chosen ability branch. The legacy flat
-`ChooseResolutionBranch` `DiscardCard` form is rejected during card validation and has no runtime
-`HandCards` dispatch, while other legacy branch costs remain live. `ResolutionCost::DiscardCard` and
-the shared physical-candidate and cost transactions remain in use for the separate Ward
+resolution cost is admitted only on an optional `Controller`-chosen ability branch. At the
+2026-10-19 Crypt Lurker checkpoint, the flat `ChooseResolutionBranch` `DiscardCard` form was rejected
+during card validation and had no runtime `HandCards` dispatch, while other flat branch costs were
+still supported. The entire flat branch schema/runtime was retired on 2026-10-21 after the Trade
+Route Envoy port. `ResolutionCost::DiscardCard` and the shared physical-candidate and cost
+transactions remain in use for the separate Ward
 `CounterTriggeringStackObjectUnlessPays` Program leaf with `filter: None`.
 
 Crypt Lurker's pinned Oracle line authorizes one of the two actions and draws one card if either is

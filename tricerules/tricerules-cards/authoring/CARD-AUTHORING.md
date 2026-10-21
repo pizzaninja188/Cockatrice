@@ -193,8 +193,9 @@ hand-bottom cost is not admitted for ability programs. A Program
 sacrifice filter requires every terminal leaf to select a `Creature` or `AnyPermanent` controlled
 by `You`; `source_only: true` remains bound to the exact source and cannot use exclusions. With
 `source_only: false`, flat filter-level `excluded_objects` remains supported, but exclusions on
-`any_of` branches are rejected by typed Programs. The legacy flat `ChooseResolutionBranch` form
-rejects `DiscardCard` costs and directs authors to the typed Program shape. A Program tap-cost
+`any_of` branches are rejected by typed Programs. The flat `ChooseResolutionBranch` syntax is
+retired in full and rejected during deserialization; author resolution-time branches with typed
+Program `Choose` instead. A Program tap-cost
 filter must be flat, select a `Creature` or `AnyPermanent`
 controlled by `You`, and cannot use `any_of` or filter-level `excluded_objects`. The cost-level
 `exclude_source: true` instead omits the exact source incarnation (ObjectId plus zone-change
@@ -1296,19 +1297,8 @@ cast_cost_expansion: Some((
 all_modes_cast_cost: Some((group_id: "teamwork", option_id: "teamwork_4")),
 ```
 
-Resolution branch:
-
-```ron
-ChooseResolutionBranch(
-  optional: true,
-  branches: [(
-    branch_id: "sacrifice_a_land",
-    presentation: OracleLines([2]),
-    cost: SacrificePermanent(filter: (kind: AnyPermanent, permanent_types: [Land])),
-    effects: [Draw(count: 1)],
-  )],
-)
-```
+Resolution-time branches use typed Program `Choose` steps, with each branch's `presentation`
+mapped to the printed line. See [Finite authored programs](#finite-authored-programs).
 
 If line 2 describes only the parent ability and would be misleading as the branch label, use
 `Fallback` with a comment explaining the deliberate split.

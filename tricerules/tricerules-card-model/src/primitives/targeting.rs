@@ -199,25 +199,9 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     if !within_group.insert(effect_index) {
                         return Err("target group references an effect more than once".into());
                     }
-                    let bound_effect = effects
+                    effects
                         .get(effect_index)
                         .ok_or_else(|| "target group references an unknown effect".to_string())?;
-                    if let SpellEffectKind::ChooseResolutionBranch {
-                        chooser:
-                            super::PlayerRecipient::TargetedPlayer {
-                                group_index: chooser_group,
-                                ..
-                            },
-                        ..
-                    } = bound_effect
-                    {
-                        if *chooser_group as usize != group_index {
-                            return Err(
-                                "targeted resolution branch chooser must reference its bound target group"
-                                    .into(),
-                            );
-                        }
-                    }
                     let effect_roles = roles
                         .get(effect_index)
                         .ok_or_else(|| "target group references an unknown effect".to_string())?;
@@ -302,46 +286,6 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             effect_role_counts,
         };
         schema.validate_chosen_target_power_references(effects)?;
-        for (effect_index, effect) in effects.iter().enumerate() {
-            let SpellEffectKind::ChooseResolutionBranch {
-                chooser: super::PlayerRecipient::TargetedPlayer { group_index, kind },
-                ..
-            } = effect
-            else {
-                continue;
-            };
-            if !matches!(kind, TargetKind::AnyPlayer | TargetKind::OpponentPlayer) {
-                return Err(
-                    "targeted resolution branch chooser requires AnyPlayer or OpponentPlayer"
-                        .into(),
-                );
-            }
-            if targeting.is_none() {
-                return Err(
-                    "targeted resolution branch chooser requires an authored target group".into(),
-                );
-            }
-            let Some(group) = schema.groups.get(*group_index as usize) else {
-                return Err(
-                    "targeted resolution branch chooser references an absent target group".into(),
-                );
-            };
-            if group.min != 1
-                || group.max != 1
-                || !group.bindings.iter().any(|binding| {
-                    binding.effect_index == effect_index
-                        && matches!(binding.role, TargetRole::Filtered(filter) if filter.is_player())
-                })
-                || group.bindings.iter().any(|binding| {
-                    !matches!(binding.role, TargetRole::Filtered(filter) if filter.is_player())
-                })
-            {
-                return Err(
-                    "targeted resolution branch chooser requires exactly one player target group"
-                        .into(),
-                );
-            }
-        }
         for (effect_index, effect) in effects.iter().enumerate() {
             if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
                 let pair = schema.artifact_exchange_groups(effect_index);
@@ -800,20 +744,6 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 | SpellEffectKind::ConditionalCastCost { effect, .. } => {
                     collect_effect_references(effect, references);
                 }
-                SpellEffectKind::ChooseResolutionBranch {
-                    branches,
-                    otherwise,
-                    ..
-                } => {
-                    for branch in branches {
-                        for nested in &branch.effects {
-                            collect_effect_references(nested, references);
-                        }
-                    }
-                    for nested in otherwise {
-                        collect_effect_references(nested, references);
-                    }
-                }
                 // A reflexive trigger owns a separate target schema compiled with its definition.
                 // It must bind its own target-powered amount there, not to this effect list.
                 SpellEffectKind::CreateReflexiveTrigger { .. } => {}
@@ -918,25 +848,8 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 groups.push(group_index);
             }
 
-            match effect {
-                SpellEffectKind::ChooseResolutionBranch {
-                    branches,
-                    otherwise,
-                    ..
-                } => {
-                    for branch in branches {
-                        for nested in &branch.effects {
-                            collect_referenced_groups(nested, groups);
-                        }
-                    }
-                    for nested in otherwise {
-                        collect_referenced_groups(nested, groups);
-                    }
-                }
-                SpellEffectKind::Conditional { effect, .. } => {
-                    collect_referenced_groups(effect, groups);
-                }
-                _ => {}
+            if let SpellEffectKind::Conditional { effect, .. } = effect {
+                collect_referenced_groups(effect, groups);
             }
         }
 
@@ -2447,47 +2360,6 @@ mod tests {
             .validate(super::super::EffectContext::Spell)
             .is_err());
         assert!(TargetSchema::compile(&wrong, Some(&group(1, 1))).is_err());
-    }
-
-    #[test]
-    fn targeted_resolution_branch_chooser_requires_its_singleton_player_target_group() {
-        let effects: Vec<SpellEffectKind> = ron::from_str(
-            "[ChooseResolutionBranch(chooser:TargetedPlayer(group_index:0,kind:OpponentPlayer),optional:true,branches:[])]",
-        )
-        .expect("targeted branch chooser parses");
-        let group = |min, max| TargetingDef {
-            groups: vec![TargetGroupDef {
-                chooser: TargetChooser::Controller,
-                min,
-                max,
-                prompt: "Choose target opponent".into(),
-                effect_indices: vec![0],
-                distinct_from: Vec::new(),
-                same_graveyard: false,
-                cast_cost_expansion: None,
-            }],
-        };
-
-        let valid_group = group(1, 1);
-        let schema = TargetSchema::compile(&effects, Some(&valid_group))
-            .expect("targeted opponent selects the resolution branch");
-        assert_eq!(schema.groups[0].bindings.len(), 1);
-        assert!(!schema.groups[0].bindings[0].role.targets_an_object());
-        assert!(TargetSchema::compile(&effects, None).is_err());
-        assert!(TargetSchema::compile(&effects, Some(&group(0, 1))).is_err());
-        assert!(TargetSchema::compile(&effects, Some(&group(1, 2))).is_err());
-
-        let mismatched_reference: Vec<SpellEffectKind> = ron::from_str(
-            "[ChooseResolutionBranch(chooser:TargetedPlayer(group_index:1,kind:OpponentPlayer),optional:true,branches:[])]",
-        )
-        .expect("mismatched chooser group parses for validation");
-        assert!(TargetSchema::compile(&mismatched_reference, Some(&group(1, 1))).is_err());
-
-        let invalid_kind: Vec<SpellEffectKind> = ron::from_str(
-            "[ChooseResolutionBranch(chooser:TargetedPlayer(group_index:0,kind:Creature),optional:true,branches:[])]",
-        )
-        .expect("invalid player-target kind parses for validation");
-        assert!(TargetSchema::compile(&invalid_kind, Some(&group(1, 1))).is_err());
     }
 
     #[test]

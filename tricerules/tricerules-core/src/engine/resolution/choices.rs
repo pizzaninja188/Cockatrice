@@ -15,8 +15,8 @@ use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
 use tricerules_card_model::primitives::{
     Amount, PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
+    ResolutionBranchRequirement, ResolutionCost, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 pub(super) fn move_one_counter_between_targets(
@@ -255,95 +255,6 @@ pub(in crate::engine) fn permanent_choice_prompt(
         format!("Choose {min} {plural}{controller}.")
     } else {
         format!("Choose {min}–{max} {plural}{controller}.")
-    }
-}
-
-pub(super) fn choose_resolution_branch(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ChooseResolutionBranch {
-        chooser,
-        optional,
-        selection,
-        branches,
-        otherwise: _,
-    } = effect
-    else {
-        unreachable!();
-    };
-    let recipients = super::player_recipients(cx, chooser);
-    let [deciding_player] = recipients.as_slice() else {
-        return Err(EngineError::Illegal(
-            "resolution choice requires exactly one deciding player",
-        ));
-    };
-    let legal = branches
-        .iter()
-        .enumerate()
-        .filter(|(_, branch)| {
-            resolution_branch_is_selectable(
-                cx.engine,
-                cx.top,
-                cx.previous_effect_result,
-                *deciding_player,
-                *deciding_player,
-                branch,
-                selection == ResolutionBranchSelection::PlayerChoice,
-            )
-        })
-        .collect::<Vec<_>>();
-    if selection == ResolutionBranchSelection::FirstApplicable {
-        let Some((branch_index, branch)) = legal.first() else {
-            let chooser_live = cx
-                .engine
-                .state
-                .player_idx(*deciding_player)
-                .is_some_and(|index| !cx.engine.state.players[index].has_lost);
-            if !chooser_live {
-                cx.events.push(ev_log(
-                    "No cost-free resolution branch remains for the departed chooser.".into(),
-                ));
-                return Ok(EffectOutcome::RestartResolutionBranch(None));
-            }
-            return Err(EngineError::Illegal(
-                "automatic resolution branch has no applicable fallback",
-            ));
-        };
-        cx.events.push(ev_log(format!(
-            "P{} resolves: {}.",
-            deciding_player,
-            branch.fallback_label()
-        )));
-        return Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)));
-    }
-    match (optional, legal.as_slice()) {
-        (false, []) => {
-            cx.events.push(ev_log(format!(
-                "P{} has no legal resolution branch.",
-                deciding_player
-            )));
-            Ok(EffectOutcome::RestartResolutionBranch(None))
-        }
-        // A mandatory branch may auto-resolve only when it has nothing left to pay. A costed
-        // branch still needs its payment (and, for object costs, the printed permanent choice),
-        // so it parks through the shared branch-payment path instead of skipping the cost.
-        (false, [(branch_index, branch)]) if branch.cost == ResolutionCost::None => {
-            cx.events.push(ev_log(format!(
-                "P{} chooses: {}.",
-                deciding_player,
-                branch.fallback_label()
-            )));
-            Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)))
-        }
-        (true, []) => {
-            cx.events.push(ev_log(format!(
-                "P{} declines the optional resolution choice.",
-                deciding_player
-            )));
-            Ok(EffectOutcome::RestartResolutionBranch(None))
-        }
-        _ => park_resolution_branches_for(cx, chooser, optional, branches),
     }
 }
 

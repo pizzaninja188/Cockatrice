@@ -87,7 +87,6 @@ fn caster_complement_refuses_every_non_draw_recipient_slot() {
     for data in [
         format!("DamagePlayer(amount:1,who:{recipient})"),
         format!("Discard(quantity:Exact(1),who:{recipient})"),
-        format!("ChooseResolutionBranch(branches:[],chooser:{recipient})"),
         format!("ChoosePermanents(filter:(kind:Creature),min:0,max:1,chooser:{recipient})"),
         format!("LoseLife(amount:Fixed(1),who:{recipient})"),
         format!("ExileTopWithPlayPermission(player:{recipient})"),
@@ -133,16 +132,38 @@ fn caster_complement_requires_its_own_cast_trigger_context() {
 }
 
 #[test]
-fn caster_complement_context_validation_descends_wrappers_and_modal_modes() {
+fn caster_complement_context_validation_descends_wrappers_programs_and_modal_modes() {
     let draw = "Draw(count:1,who:EachOtherPlayerThanAffectedPlayer)";
-    for effect in [
-        format!("Conditional(condition:ActivePlayer(players:All),effect:{draw})"),
-        format!("ChooseResolutionBranch(selection:FirstApplicable,branches:[(branch_id:\"branch\",presentation:Fallback,cost:None,effects:[{draw}])])"),
-    ] {
-        for trigger in ["WheneverPlayerCastsSpell(caster:AnyPlayer)","WhenSelfDies"] {
+    for effect in [format!(
+        "Conditional(condition:ActivePlayer(players:All),effect:{draw})"
+    )] {
+        for trigger in ["WheneverPlayerCastsSpell(caster:AnyPlayer)", "WhenSelfDies"] {
             let result=probe(&format!("triggered_abilities:[(ability_id:\"trigger\",presentation:Fallback,trigger:{trigger},effect:[{effect}])]"));
-            assert_eq!(result.is_ok(),trigger.starts_with("WheneverPlayerCastsSpell"),"{trigger}: {effect}");
+            assert_eq!(
+                result.is_ok(),
+                trigger.starts_with("WheneverPlayerCastsSpell"),
+                "{trigger}: {effect}"
+            );
         }
+    }
+    // The retired one-branch FirstApplicable wrapper had no predicate, cost, or player choice;
+    // a direct Program Perform preserves its unconditional draw without inventing a Choose prompt.
+    let program = format!("Some((body:(steps:[(id:\"draw\",kind:Perform({draw}))],yields:[])))");
+    for trigger in [
+        "WheneverPlayerCastsSpell(caster:AnyPlayer)",
+        "WhenSelfEntersBattlefield",
+        "WhenSelfDies",
+    ] {
+        let body = format!(
+            "triggered_abilities:[(ability_id:\"trigger\",presentation:Fallback,trigger:{trigger},program:{program})]"
+        );
+        let result = probe(&body);
+        assert_eq!(
+            result.is_ok(),
+            trigger.starts_with("WheneverPlayerCastsSpell"),
+            "{body}: {:?}",
+            result.err()
+        );
     }
     for trigger in ["WheneverPlayerCastsSpell(caster:AnyPlayer)", "WhenSelfDies"] {
         let body=format!("triggered_abilities:[(ability_id:\"trigger\",presentation:Fallback,trigger:{trigger},modal:Some((min_modes:1,max_modes:1,modes:[(mode_id:\"mode\",presentation:Fallback,effects:[{draw}])])))]");

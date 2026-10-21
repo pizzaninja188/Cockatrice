@@ -5667,30 +5667,28 @@ mod cast_snapshot_tests {
     }
 
     #[test]
-    fn issue_173_parked_modal_branch_keeps_snapshot_while_live_conditions_change() {
+    fn issue_173_parked_program_preserves_cast_snapshot_after_live_change() {
         let mut e = engine(&format!(
             r#"
             cast_conditions: [{FAERIE}],
-            modal_spell: (min_modes: 1, max_modes: 1, modes: [(mode_id: "mode_01", presentation: Fallback, effects: [
-                Scry(count: 1),
-                ChooseResolutionBranch(selection: FirstApplicable, branches: [
-                    (branch_id: "snapshot", presentation: Fallback, cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]),
-                    (branch_id: "fallback_branch", presentation: Fallback, cost: None, requirement: Always, effects: [GainLife(amount: 1)]),
-                ]),
-                GainLife(amount: Conditional(condition: {FAERIE}, when_true: 8, otherwise: 2)),
-            ])]),
+            spell_program: Some((body: (steps: [
+                (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 1))),
+                (id: "cast_snapshot_gate", bind: [], input: None, kind: If(
+                    condition: CastSnapshot(index: 0),
+                    yes: (steps: [(id: "snapshot_bonus", bind: [], input: None, kind: Perform(GainLife(amount: 4)))], yields: []),
+                    no: (steps: [(id: "fallback_bonus", bind: [], input: None, kind: Perform(GainLife(amount: 1)))], yields: []),
+                )),
+                (id: "live_condition", bind: [], input: None, kind: If(
+                    condition: {FAERIE},
+                    yes: (steps: [(id: "live_bonus", bind: [], input: None, kind: Perform(GainLife(amount: 8)))], yields: []),
+                    no: (steps: [(id: "live_fallback", bind: [], input: None, kind: Perform(GainLife(amount: 2)))], yields: []),
+                )),
+            ], yields: []))),
         "#
         ));
         let faerie = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
-        let mut cast = command(&e, spell);
-        let Some(rv1::ruled_command::Cmd::CastSpell(cs)) = cast.cmd.as_mut() else {
-            unreachable!()
-        };
-        cs.selected_modes = vec![rv1::SelectedSpellMode {
-            mode_index: 0,
-            targets: vec![],
-        }];
+        let cast = command(&e, spell);
         e.state.players[0].mana_pool.black = 1;
         e.apply_scenario_command(0, &cast).unwrap();
         resolve(&mut e);

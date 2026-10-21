@@ -14,7 +14,8 @@ use super::targeting::{
 };
 use super::*;
 use tricerules_card_model::primitives::{
-    ManaRetention, ResolutionBranchRequirement, ResultType, TargetRole, TargetingDef,
+    ManaRetention, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionCost, ResultType,
+    TargetRole, TargetingDef, TriggeredAbilityDef,
 };
 use tricerules_card_model::{AbilityPresentation, ChoiceId};
 
@@ -32,6 +33,29 @@ pub(in crate::engine) use choices::{
 pub(in crate::engine) use choices::{
     current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,
 };
+
+pub(super) fn optional_triggered_ability_branch(
+    ability: &TriggeredAbilityDef,
+) -> Option<ResolutionBranchDef> {
+    if !ability.may
+        || ability.program.is_some()
+        || ability.modal.is_some()
+        || target_schema_with_program(&ability.effect, ability.targeting.as_ref(), None)
+            .has_targets()
+    {
+        return None;
+    }
+
+    Some(ResolutionBranchDef {
+        branch_id: ChoiceId::new("apply_optional_effect").expect("static resolution branch id"),
+        presentation: AbilityPresentation::Fallback,
+        runtime_fallback: Some("Apply optional effect".into()),
+        cost: ResolutionCost::None,
+        requirement: ResolutionBranchRequirement::EffectsApplicable,
+        effects: ability.effect.clone(),
+    })
+}
+
 mod amass;
 mod battlefield_returns;
 mod blight;
@@ -1660,66 +1684,42 @@ impl GameEngine {
                 self.finish_deferred_stack_exit(&top, DeferredStackExit::Resolved, events)?;
                 return Ok(ResolutionProgress::Completed);
             }
-            let prompt = format!("{spell_label}: apply the optional effect?");
-            let apply_label = "Apply the optional effect".to_string();
-            self.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
+            return Ok(self.park_optional_triggered_ability_choice(top, &spell_label, events));
+        }
 
-                deciding_player: top.controller,
-                presentation: PendingResolutionPresentation {
-                    source_object_id: top.id,
-                    candidates: Vec::new(),
-                    min: 0,
-                    max: 1,
-                    ordered: false,
-                    prompt: prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                    unique_names: false,
-                },
-                continuation: ResolutionContinuation::OptionalTriggeredAbility {
-                    stack: ParkedStackResolution::new(top),
-                },
+        // Untargeted, nonmodal legacy "you may" abilities have no target-choice boundary to
+        // carry their optional decision. Route them through the same public Apply/Decline
+        // continuation, after CR 603.4/608.2b and the existing targeted-may route. Typed Programs
+        // keep their own choice semantics and must never receive this legacy gate.
+        if top.is_triggered && compiled_program_owners.is_none() {
+            let ability = top.triggered_ability.as_ref().or_else(|| {
+                self.registry
+                    .get(&card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face.triggered_abilities.get(top.ability_index.unwrap_or(0)))
             });
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                    rv1::ResolutionChoiceRequired {
-                        resolution_prompt_id: 0,
-                        deciding_player_id: self
-                            .state
-                            .pending_resolution
-                            .as_ref()
-                            .expect("optional trigger choice was parked")
-                            .deciding_player,
-                        source_object_id: self
-                            .state
-                            .pending_resolution
-                            .as_ref()
-                            .expect("optional trigger choice was parked")
-                            .presentation
-                            .source_object_id,
-                        prompt_text: prompt.clone(),
-                        choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
-                        min: 0,
-                        max: 1,
-                        resolution_branches: vec![rv1::ResolutionBranchOption {
-                            branch_index: 0,
-                            label: apply_label.clone(),
-                            cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                            cost_text: String::new(),
-                            selectable: true,
-                            search_zones: Vec::new(),
-                            presentation: Some(rv1::PresentationRef {
-                                fallback_text: apply_label,
-                                ..Default::default()
-                            }),
-                        }],
-                        ..Default::default()
-                    },
-                )),
-            });
-            events.push(ev_log(prompt));
-            return Ok(ResolutionProgress::Parked);
+            if let Some(branch) = ability.and_then(optional_triggered_ability_branch) {
+                if !resolution_branch_is_selectable(
+                    self,
+                    &top,
+                    &crate::state::EffectResult::default(),
+                    top.controller,
+                    top.controller,
+                    &branch,
+                    true,
+                ) {
+                    events.push(ev_log(format!(
+                        "P{} declines the optional resolution choice.",
+                        top.controller
+                    )));
+                    self.finish_deferred_stack_exit(&top, DeferredStackExit::Resolved, events)?;
+                    events.push(ev_log(format!("{spell_label} resolves.")));
+                    seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
+                    return Ok(ResolutionProgress::Completed);
+                }
+
+                return Ok(self.park_optional_triggered_ability_choice(top, &spell_label, events));
+            }
         }
 
         if let Some(owners) = compiled_program_owners {
@@ -1727,6 +1727,73 @@ impl GameEngine {
             return self.run_program_with_previous(&top, program, EffectResult::default(), events);
         }
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
+    }
+
+    fn park_optional_triggered_ability_choice(
+        &mut self,
+        top: StackItem,
+        spell_label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> ResolutionProgress {
+        let prompt = format!("{spell_label}: apply the optional effect?");
+        let apply_label = "Apply the optional effect".to_string();
+        self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player: top.controller,
+            presentation: PendingResolutionPresentation {
+                source_object_id: top.id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::OptionalTriggeredAbility {
+                stack: ParkedStackResolution::new(top),
+            },
+        });
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
+                    deciding_player_id: self
+                        .state
+                        .pending_resolution
+                        .as_ref()
+                        .expect("optional trigger choice was parked")
+                        .deciding_player,
+                    source_object_id: self
+                        .state
+                        .pending_resolution
+                        .as_ref()
+                        .expect("optional trigger choice was parked")
+                        .presentation
+                        .source_object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 0,
+                    max: 1,
+                    resolution_branches: vec![rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: apply_label.clone(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: true,
+                        search_zones: Vec::new(),
+                        presentation: Some(rv1::PresentationRef {
+                            fallback_text: apply_label,
+                            ..Default::default()
+                        }),
+                    }],
+                    ..Default::default()
+                },
+            )),
+        });
+        events.push(ev_log(prompt));
+        ResolutionProgress::Parked
     }
 
     /// Complete a stack exit deferred until the data-driven effect list finishes. This keeps an
@@ -1885,38 +1952,7 @@ impl GameEngine {
                 top.triggered_ability
                     .as_ref()
                     .or_else(|| face.and_then(|f| f.triggered_abilities.get(ability_index)))
-                    .map(|ability| {
-                        let program = top
-                            .ability_program_owner()
-                            .and_then(|owner| self.registry.compiled_program_for_owner(&owner));
-                        if ability.may
-                            && !target_schema_with_program(
-                                &ability.effect,
-                                ability.targeting.as_ref(),
-                                program,
-                            )
-                            .has_targets()
-                            && ability.modal.is_none()
-                        {
-                            vec![SpellEffectKind::ChooseResolutionBranch {
-                                chooser: PlayerRecipient::Controller,
-                                optional: true,
-                                selection: Default::default(),
-                                branches: vec![ResolutionBranchDef {
-                                    branch_id: ChoiceId::new("apply_optional_effect")
-                                        .expect("static resolution branch id"),
-                                    presentation: AbilityPresentation::Fallback,
-                                    runtime_fallback: Some("Apply optional effect".into()),
-                                    cost: ResolutionCost::None,
-                                    requirement: ResolutionBranchRequirement::EffectsApplicable,
-                                    effects: ability.effect.clone(),
-                                }],
-                                otherwise: Vec::new(),
-                            }]
-                        } else {
-                            ability.effect.clone()
-                        }
-                    })
+                    .map(|ability| ability.effect.clone())
             } else {
                 top.activated_ability
                     .as_ref()
@@ -2093,44 +2129,6 @@ impl GameEngine {
                             },
                             _ => continue,
                         };
-                    }
-                }
-                if let SpellEffectKind::ChooseResolutionBranch {
-                    branches,
-                    otherwise,
-                    ..
-                } = &entry.effect
-                {
-                    if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
-                    {
-                        if let Some(branch_index) = choice {
-                            if let Some(branch) = branches.get(*branch_index) {
-                                // Branch effects do not acquire new targets during resolution.
-                                // They inherit the enclosing instruction's generation-bound target
-                                // context so recipients such as ControllerOfTargetGroup can resolve
-                                // against the target that was chosen when the spell was cast.
-                                expanded.extend(branch.effects.iter().cloned().map(|effect| {
-                                    ResolutionEffect {
-                                        effect,
-                                        targets: entry.targets.clone(),
-                                        target_damage: entry.target_damage.clone(),
-                                        target_group_indices: entry.target_group_indices.clone(),
-                                        role_group_indices: Vec::new(),
-                                    }
-                                }));
-                            }
-                        } else {
-                            expanded.extend(otherwise.iter().cloned().map(|effect| {
-                                ResolutionEffect {
-                                    effect,
-                                    targets: entry.targets.clone(),
-                                    target_damage: entry.target_damage.clone(),
-                                    target_group_indices: entry.target_group_indices.clone(),
-                                    role_group_indices: Vec::new(),
-                                }
-                            }));
-                        }
-                        continue;
                     }
                 }
                 if let SpellEffectKind::MayBehold { if_beheld, .. } = &entry.effect {
@@ -10262,7 +10260,7 @@ mod attached_subject_tests {
         let registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
             r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
             r#"(id: "lesson_fixture", name: "Lesson fixture", face_id: "lesson_fixture", mana_cost: "{U}", types: ["Sorcery", "Lesson"])"#,
-            r#"(id: "accumulate_fixture", name: "Accumulate fixture", face_id: "accumulate_fixture", mana_cost: "{U}", types: ["Sorcery", "Lesson"], spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(branch_id: "branch_01", presentation: Fallback, cost: None, requirement: GameCondition(GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((required_subtypes: ["Lesson"])), min: Some(3))), effects: [LookChooseToHand(count: 3, min: 3, max: 3, reveal: false, bottom_order: Chosen)]), (branch_id: "branch_02", presentation: Fallback, cost: None, requirement: Always, effects: [LookChooseToHand(count: 3, min: 1, max: 1, reveal: false, bottom_order: Chosen)])])])"#,
+            r#"(id: "accumulate_fixture", name: "Accumulate fixture", face_id: "accumulate_fixture", mana_cost: "{U}", types: ["Sorcery", "Lesson"], spell_program: Some((body: (steps: [(id: "lesson_threshold", bind: [], input: None, kind: If(condition: GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((required_subtypes: ["Lesson"])), min: Some(3), max: None), yes: (steps: [(id: "take_three", bind: [], input: None, kind: Perform(LookChooseToHand(count: 3, min: 3, max: 3, reveal: false, bottom_order: Chosen)))], yields: []), no: (steps: [(id: "take_one", bind: [], input: None, kind: Perform(LookChooseToHand(count: 3, min: 1, max: 1, reveal: false, bottom_order: Chosen)))], yields: [])))], yields: []))))"#,
         ], &[]).unwrap()));
         for (lessons, owner) in [(2, 0), (3, 0), (3, 1)] {
             for size in 0..=3 {
@@ -10319,10 +10317,21 @@ mod attached_subject_tests {
                 } else {
                     size.min(1)
                 };
-                let (effects, label) = engine.build_resolution_effects(&item);
+                let owners = engine
+                    .compiled_resolution_program_owners(&item)
+                    .expect("inspect Accumulate fixture Program owners")
+                    .expect("the fixture uses an authored Program");
+                let program = engine
+                    .begin_program_run(&item, owners)
+                    .expect("start the Accumulate fixture Program");
                 engine
-                    .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
-                    .unwrap();
+                    .run_program_with_previous(
+                        &item,
+                        program,
+                        EffectResult::default(),
+                        &mut Vec::new(),
+                    )
+                    .expect("run the ordered graveyard threshold into a single library operation");
                 if size == 0 {
                     assert!(engine.state.pending_resolution.is_none());
                     assert!(engine.state.players[0].library.is_empty());
@@ -12824,709 +12833,19 @@ mod attached_subject_tests {
         );
     }
 
-    #[test]
-    fn optional_resolution_branch_runs_otherwise_when_no_branch_is_applicable() {
-        let mut engine = GameEngine::new_with_default_decks(
-            tricerules_cards::registry::global(),
-            241_099,
-            &[0, 1],
-            20,
-        )
-        .unwrap();
-        engine.state.opening = None;
-        engine.state.turn_step = TurnStep::Main1;
-        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-        let item = quantity_item(
-            source,
-            vec![SpellEffectKind::ChooseResolutionBranch {
-                chooser: PlayerRecipient::Controller,
-                optional: true,
-                selection: tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
-                branches: vec![ResolutionBranchDef {
-                    branch_id: tricerules_card_model::ChoiceId::new("unavailable").unwrap(),
-                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement:
-                        tricerules_card_model::primitives::ResolutionBranchRequirement::GameCondition(
-                            GameCondition::CreatureDeathsThisTurn {
-                                min: Some(1),
-                                max: None,
-                            },
-                        ),
-                    effects: vec![SpellEffectKind::GainLife {
-                        amount: Amount::Fixed(99),
-                    }],
-                }],
-                otherwise: vec![SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(3),
-                }],
-            }],
-        );
-        let before = engine.state.players[0].life;
-        let (effects, label) = engine.build_resolution_effects(&item);
-        engine
-            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
-            .unwrap();
-        assert_eq!(engine.state.players[0].life, before + 3);
-    }
-
-    mod departed_chooser_cost_tests {
-        use super::*;
-
-        fn branch(branch_id: &str, cost: ResolutionCost, life: u32) -> ResolutionBranchDef {
-            ResolutionBranchDef {
-                branch_id: tricerules_card_model::ChoiceId::new(branch_id).unwrap(),
-                presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                runtime_fallback: None,
-                cost,
-                requirement: tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
-                effects: vec![SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(life),
-                }],
-            }
-        }
-
-        fn engine_with_pending_choice(branches: Vec<ResolutionBranchDef>) -> GameEngine {
-            engine_with_pending_choice_before_offer(branches, |_| ()).0
-        }
-
-        fn engine_with_pending_choice_before_offer<T>(
-            branches: Vec<ResolutionBranchDef>,
-            setup_before_offer: impl FnOnce(&mut GameEngine) -> T,
-        ) -> (GameEngine, T, Vec<rv1::RuledEvent>) {
-            let mut engine = GameEngine::new_with_default_decks(
-                tricerules_cards::registry::global(),
-                800_401,
-                &[0, 1],
-                20,
-            )
-            .unwrap();
-            engine.state.players.push(PlayerState::new(2, 20));
-            engine.state.opening = None;
-            engine.state.turn_step = TurnStep::Main1;
-            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-            let setup_value = setup_before_offer(&mut engine);
-            let mut item = quantity_item(
-                source,
-                vec![
-                    SpellEffectKind::ChooseResolutionBranch {
-                        chooser: PlayerRecipient::AffectedPlayer,
-                        optional: false,
-                        selection:
-                            tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
-                        branches,
-                        otherwise: vec![SpellEffectKind::GainLife {
-                            amount: Amount::Fixed(4),
-                        }],
-                    },
-                    SpellEffectKind::GainLife {
-                        amount: Amount::Fixed(2),
-                    },
-                ],
-            );
-            item.trigger_context.affected_player = Some(1);
-            let (effects, label) = engine.build_resolution_effects(&item);
-            let mut initial_offer_events = Vec::new();
-            engine
-                .run_effect_list(&item, &label, effects, 0, &mut initial_offer_events)
-                .unwrap();
-            assert_eq!(
-                engine
-                    .state
-                    .pending_resolution
-                    .as_ref()
-                    .unwrap()
-                    .deciding_player,
-                1
-            );
-            (engine, setup_value, initial_offer_events)
-        }
-
-        fn depart_original_chooser(engine: &mut GameEngine) -> Vec<rv1::RuledEvent> {
-            engine.state.players[1].has_lost = true;
-            let mut events = Vec::new();
-            engine
-                .refresh_authored_branch_departure(&mut events)
-                .unwrap();
-            events
-        }
-
-        #[test]
-        fn controller_is_a_fallback_replacement_when_no_other_opponent_survives() {
-            let mut engine = GameEngine::new_with_default_decks(
-                tricerules_cards::registry::global(),
-                800_403,
-                &[0, 1],
-                20,
-            )
-            .unwrap();
-            engine.state.players.push(PlayerState::new(2, 20));
-            engine.state.players[1].has_lost = true;
-            engine.state.players[2].has_lost = true;
-
-            assert_eq!(
-                resolution_choice_delegate_candidates(&engine.state, 0, 1),
-                [0],
-                "CR 800.4g falls back to another living player, including the object controller"
-            );
-        }
-
-        #[test]
-        fn replacement_chooser_cannot_select_a_costed_branch_or_pay_its_cost() {
-            let mut engine = engine_with_pending_choice(vec![
-                branch(
-                    "costed",
-                    ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
-                    10,
-                ),
-                branch("free", ResolutionCost::None, 1),
-            ]);
-
-            let events = depart_original_chooser(&mut engine);
-            let choice = events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
-                    _ => None,
-                })
-                .expect("replacement chooser prompt");
-            assert_eq!(choice.deciding_player_id, 2);
-            assert_eq!(
-                choice
-                    .resolution_branches
-                    .iter()
-                    .map(|branch| branch.branch_index)
-                    .collect::<Vec<_>>(),
-                [1],
-                "a replacement chooser only receives cost-free branches"
-            );
-
-            let before = format!("{:?}", engine.state);
-            assert!(engine
-                .submit_resolution_choice(
-                    2,
-                    &rv1::SubmitResolutionChoice {
-                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
-                        selected_branch_index: 0,
-                        ..Default::default()
-                    },
-                )
-                .is_err());
-            assert_eq!(format!("{:?}", engine.state), before);
-
-            engine
-                .submit_resolution_choice(
-                    2,
-                    &rv1::SubmitResolutionChoice {
-                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
-                        selected_branch_index: 1,
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            assert!(engine.state.pending_resolution.is_none());
-            assert_eq!(engine.state.players[0].life, 23);
-            assert_eq!(engine.state.players[2].life, 20);
-        }
-
-        #[test]
-        fn no_cost_free_branch_runs_the_authored_otherwise_and_tail() {
-            let mut engine = engine_with_pending_choice(vec![branch(
-                "costed",
-                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
-                10,
-            )]);
-
-            let events = depart_original_chooser(&mut engine);
-            assert!(
-                engine.state.pending_resolution.is_none(),
-                "there is no replacement-choice prompt when all branches require the departed player's payment"
-            );
-            assert!(events.iter().all(|event| !matches!(
-                event.ev,
-                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
-            )));
-            assert_eq!(engine.state.players[0].life, 26);
-            assert_eq!(engine.state.players[2].life, 20);
-        }
-
-        fn select_pending_branch(engine: &mut GameEngine) {
-            engine
-                .submit_resolution_choice(
-                    1,
-                    &rv1::SubmitResolutionChoice {
-                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
-                        selected_branch_index: 0,
-                        ..Default::default()
-                    },
-                )
-                .expect("the live chooser selects the costed branch");
-        }
-
-        #[test]
-        fn restored_cached_mana_payment_offer_refreshes_readiness_from_current_pool() {
-            let mut engine = engine_with_pending_choice(vec![branch(
-                "costed_mana",
-                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
-                10,
-            )]);
-            let initial = engine
-                .submit_resolution_choice(
-                    1,
-                    &rv1::SubmitResolutionChoice {
-                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
-                        selected_branch_index: 0,
-                        ..Default::default()
-                    },
-                )
-                .expect("the live chooser selects the costed branch");
-            let mut initial_events = initial.events;
-            engine
-                .publish_resolution_prompt_ids(&mut initial_events)
-                .expect("the initial payment offer is published");
-            let initial_offer = initial_events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
-                        Some(choice.clone())
-                    }
-                    _ => None,
-                })
-                .expect("the selected branch waits for its {1} payment");
-            assert_eq!(
-                initial_offer.choice_kind,
-                rv1::ChoiceKind::ManaPayment as i32
-            );
-            assert!(!initial_offer.payment_currently_legal);
-            assert_eq!(initial_offer.generic_mana_cost, 1);
-
-            // An observer can temporarily own this pending resolution. Mana may change before
-            // the saved payment offer is restored, so its cached readiness bit is stale.
-            let suspended_resolution = engine.state.pending_resolution.take();
-            engine.state.players[1].mana_pool.colorless = 1;
-            let mut restored_events = Vec::new();
-            assert!(engine
-                .restore_suspended_observer_resolution(
-                    suspended_resolution,
-                    None,
-                    &mut restored_events,
-                )
-                .expect("the saved payment is restored"));
-
-            let restored_offer = restored_events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
-                        Some(choice.clone())
-                    }
-                    _ => None,
-                })
-                .expect("the cached ManaPayment projection is republished");
-            assert!(
-                restored_offer.payment_currently_legal,
-                "restored readiness comes from the current authoritative mana pool"
-            );
-            assert_eq!(
-                restored_offer.generic_mana_cost,
-                initial_offer.generic_mana_cost
-            );
-            assert_eq!(restored_offer.mana_cost, initial_offer.mana_cost);
-            assert_eq!(
-                restored_offer.deciding_player_id,
-                initial_offer.deciding_player_id
-            );
-            assert_eq!(
-                restored_offer.source_object_id,
-                initial_offer.source_object_id
-            );
-
-            engine
-                .publish_resolution_prompt_ids(&mut restored_events)
-                .expect("the fresh restored payment offer is published");
-            let published_offer = restored_events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
-                    _ => None,
-                })
-                .expect("the restored payment keeps an actionable prompt");
-            assert_ne!(
-                published_offer.resolution_prompt_id,
-                initial_offer.resolution_prompt_id
-            );
-        }
-
-        #[test]
-        fn departing_chooser_abandons_an_unpaid_mana_branch_and_resumes_otherwise_and_tail() {
-            let mut engine = engine_with_pending_choice(vec![branch(
-                "costed_mana",
-                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
-                10,
-            )]);
-            select_pending_branch(&mut engine);
-            assert!(matches!(
-                engine
-                    .state
-                    .pending_resolution
-                    .as_ref()
-                    .unwrap()
-                    .continuation,
-                ResolutionContinuation::AuthoredBranch {
-                    branch: PendingResolutionBranch {
-                        stage: PendingResolutionBranchStage::PayingMana { .. },
-                        ..
-                    },
-                    ..
-                }
-            ));
-
-            let events = depart_original_chooser(&mut engine);
-
-            assert!(engine.state.pending_resolution.is_none());
-            assert!(events.iter().all(|event| !matches!(
-                event.ev,
-                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
-            )));
-            assert_eq!(engine.state.players[0].life, 26);
-            assert_eq!(engine.state.players[2].life, 20);
-        }
-
-        #[test]
-        fn departing_chooser_abandons_an_unpaid_object_branch_and_resumes_otherwise_and_tail() {
-            let (mut engine, payable, initial_offer_events) =
-                engine_with_pending_choice_before_offer(
-                    vec![branch(
-                        "costed_sacrifice",
-                        ResolutionCost::SacrificePermanent {
-                            filter: TargetFilter {
-                                kind: TargetKind::Creature,
-                                controller: TargetController::You,
-                                ..Default::default()
-                            },
-                            source_only: false,
-                        },
-                        10,
-                    )],
-                    |engine| add_battlefield_object(engine, 1, "grizzly_bears"),
-                );
-            let first_offer = initial_offer_events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
-                    _ => None,
-                })
-                .expect("initial offer presents the payable sacrifice branch");
-            assert_eq!(first_offer.deciding_player_id, 1);
-            assert_eq!(
-                first_offer
-                    .resolution_branches
-                    .iter()
-                    .map(|branch| branch.branch_index)
-                    .collect::<Vec<_>>(),
-                [0],
-                "the payer's creature makes the costed branch selectable on its first offer"
-            );
-            select_pending_branch(&mut engine);
-            assert_eq!(
-                engine
-                    .state
-                    .pending_resolution
-                    .as_ref()
-                    .unwrap()
-                    .presentation
-                    .candidates,
-                [payable]
-            );
-            assert!(matches!(
-                engine
-                    .state
-                    .pending_resolution
-                    .as_ref()
-                    .unwrap()
-                    .continuation,
-                ResolutionContinuation::AuthoredBranch {
-                    branch: PendingResolutionBranch {
-                        stage: PendingResolutionBranchStage::PayingObjects { .. },
-                        ..
-                    },
-                    ..
-                }
-            ));
-            let sacrifices_before = engine
-                .state
-                .turn_history
-                .current
-                .permanents_sacrificed
-                .len();
-
-            let events = depart_original_chooser(&mut engine);
-
-            assert!(engine.state.pending_resolution.is_none());
-            assert!(events.iter().all(|event| !matches!(
-                event.ev,
-                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
-            )));
-            assert_eq!(engine.state.objects[&payable].zone, Zone::Battlefield);
-            assert_eq!(
-                engine
-                    .state
-                    .turn_history
-                    .current
-                    .permanents_sacrificed
-                    .len(),
-                sacrifices_before
-            );
-            assert_eq!(engine.state.players[0].life, 26);
-            assert_eq!(engine.state.players[2].life, 20);
-        }
-
-        #[test]
-        fn first_applicable_skips_a_costed_branch_for_an_already_departed_chooser() {
-            let mut engine = GameEngine::new_with_default_decks(
-                tricerules_cards::registry::global(),
-                800_402,
-                &[0, 1],
-                20,
-            )
-            .unwrap();
-            engine.state.players.push(PlayerState::new(2, 20));
-            engine.state.opening = None;
-            engine.state.turn_step = TurnStep::Main1;
-            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-            let mut item = quantity_item(
-                source,
-                vec![
-                    SpellEffectKind::ChooseResolutionBranch {
-                        chooser: PlayerRecipient::AffectedPlayer,
-                        optional: false,
-                        selection:
-                            tricerules_card_model::primitives::ResolutionBranchSelection::FirstApplicable,
-                        branches: vec![branch(
-                            "costed",
-                            ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
-                            10,
-                        )],
-                        otherwise: vec![SpellEffectKind::GainLife {
-                            amount: Amount::Fixed(4),
-                        }],
-                    },
-                    SpellEffectKind::GainLife {
-                        amount: Amount::Fixed(2),
-                    },
-                ],
-            );
-            item.trigger_context.affected_player = Some(1);
-            engine.state.players[1].has_lost = true;
-            let (effects, label) = engine.build_resolution_effects(&item);
-
-            engine
-                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
-                .unwrap();
-
-            assert!(engine.state.pending_resolution.is_none());
-            assert_eq!(engine.state.players[0].life, 26);
-            assert_eq!(engine.state.players[2].life, 20);
-        }
-    }
-
-    fn payment_branch_fixture(
-        cost: ResolutionCost,
-    ) -> (GameEngine, Vec<ObjectId>, rv1::RuledEventBatch) {
-        let mut engine = GameEngine::new_with_default_decks(
-            tricerules_cards::registry::global(),
-            195_001,
-            &[0, 1],
-            20,
-        )
-        .unwrap();
-        engine.state.opening = None;
-        engine.state.turn_step = TurnStep::Main1;
-        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-        let first = add_battlefield_object(&mut engine, 0, "hill_giant");
-        let second = add_battlefield_object(&mut engine, 0, "hill_giant");
-        let chosen = match cost {
-            ResolutionCost::TapPermanents { .. } => vec![second, first],
-            _ => vec![first],
-        };
-        let item = quantity_item(
-            source,
-            vec![
-                SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection:
-                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_card_model::ChoiceId::new("payment").unwrap(),
-                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost,
-                        requirement:
-                            tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::GainLife {
-                            amount: Amount::Fixed(1),
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                },
-                SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(2),
-                },
-            ],
-        );
-        let (effects, label) = engine.build_resolution_effects(&item);
-        engine
-            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
-            .unwrap();
-        let batch = engine
-            .submit_resolution_choice(
-                0,
-                &rv1::SubmitResolutionChoice {
-                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
-                    selected_branch_index: 0,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        (engine, chosen, batch)
-    }
-
-    fn payment_branch_costs() -> Vec<ResolutionCost> {
-        vec![
-            ResolutionCost::SacrificePermanent {
-                filter: TargetFilter {
-                    kind: TargetKind::Creature,
-                    ..Default::default()
-                },
-                source_only: false,
-            },
-            ResolutionCost::TapPermanents {
-                count: 2,
-                filter: TargetFilter {
-                    kind: TargetKind::Creature,
-                    ..Default::default()
-                },
-                exclude_source: false,
-            },
-            ResolutionCost::Blight { count: 1 },
-        ]
-    }
-
-    #[test]
-    fn issue_195_resolution_payments_preserve_events_and_resume_once() {
-        for cost in payment_branch_costs() {
-            let (mut engine, chosen, choice_batch) = payment_branch_fixture(cost.clone());
-            let choice = choice_batch
-                .events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
-                    _ => None,
-                })
-                .unwrap();
-            assert_eq!(choice.deciding_player_id, 0);
-            assert_eq!(choice.min, 0);
-            assert_eq!(choice.max, chosen.len() as u32);
-            assert!(!choice.ordered);
-            assert_eq!(
-                choice.candidate_object_ids.len(),
-                choice.candidate_names.len()
-            );
-            assert_eq!(
-                choice.candidate_object_ids.len(),
-                choice.candidate_card_ids.len()
-            );
-            assert_eq!(choice.choice_kind, rv1::ChoiceKind::CostObjects as i32);
-            let generation = engine
-                .state
-                .zone_change_generation
-                .get(&chosen[0])
-                .copied()
-                .unwrap_or(0);
-            let batch = engine
-                .submit_resolution_choice(
-                    0,
-                    &rv1::SubmitResolutionChoice {
-                        chosen_object_ids: chosen.clone(),
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            assert_eq!(engine.state.players[0].life, 23, "{cost:?}");
-            assert!(engine.state.pending_resolution.is_none());
-            let logs = batch
-                .events
-                .iter()
-                .filter_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::Log(log)) => Some(log.text.as_str()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            match cost {
-                ResolutionCost::SacrificePermanent { .. } => {
-                    assert_eq!(engine.state.objects[&chosen[0]].zone, Zone::Graveyard);
-                    assert_eq!(
-                        engine.state.zone_change_generation[&chosen[0]],
-                        generation + 1
-                    );
-                    assert!(matches!(
-                        batch.events[0].ev,
-                        Some(rv1::ruled_event::Ev::PermanentMoved(_))
-                    ));
-                    assert_eq!(logs[0], "P0 sacrifices Hill Giant.");
-                    assert_eq!(
-                        engine
-                            .state
-                            .turn_history
-                            .current
-                            .permanents_sacrificed
-                            .len(),
-                        1
-                    );
-                }
-                ResolutionCost::TapPermanents { .. } => {
-                    assert!(chosen.iter().all(|oid| engine.state.objects[oid].tapped));
-                    assert_eq!(&logs[..2], &["P0 taps Hill Giant.", "P0 taps Hill Giant."]);
-                }
-                ResolutionCost::Blight { count } => {
-                    assert_eq!(
-                        engine.state.objects[&chosen[0]]
-                            .counter_count(CounterKind::MinusOneMinusOne),
-                        count
-                    );
-                    assert_eq!(logs[0], "P0 blights 1 using Hill Giant.");
-                }
-                _ => unreachable!(),
-            }
-            assert!(engine
-                .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
-                .is_err());
-            // An identical seeded fixture and accepted answer produce the same ordered wire events.
-            let (mut replay, replay_chosen, replay_choice) = payment_branch_fixture(cost);
-            assert_eq!(replay_choice, choice_batch);
-            let replay_batch = replay
-                .submit_resolution_choice(
-                    0,
-                    &rv1::SubmitResolutionChoice {
-                        chosen_object_ids: replay_chosen,
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            assert_eq!(replay_batch, batch);
-        }
-    }
-
-    #[test]
-    fn issue_195_resolution_sacrifice_keeps_delayed_death_observers() {
-        let (mut engine, chosen, _) = payment_branch_fixture(ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
-                kind: TargetKind::Creature,
-                ..Default::default()
-            },
-            source_only: false,
-        });
+    fn optional_triggered_item_with_effect(
+        engine: &mut GameEngine,
+        source: ObjectId,
+        effect: Vec<SpellEffectKind>,
+    ) -> StackItem {
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, generation);
+        item.card_id = "brambleguard_captain".into();
         let mut ability = engine
             .registry
             .get("brambleguard_captain")
@@ -13534,26 +12853,289 @@ mod attached_subject_tests {
             .primary_face()
             .triggered_abilities[0]
             .clone();
-        ability.trigger = TriggerCondition::WhenWatchedObjectDiesThisTurn;
-        ability.effect = vec![SpellEffectKind::GainLife {
-            amount: Amount::Fixed(5),
-        }];
+        ability.effect = effect;
+        ability.may = true;
+        ability.program = None;
+        ability.modal = None;
         ability.targeting = None;
-        ability.may = false;
-        let delayed = quantity_item(
-            chosen[0],
-            vec![SpellEffectKind::CreateDelayedTrigger {
-                subject: Some(EffectSubject::Source),
-                affected_player: None,
-                ability: Box::new(ability),
-            }],
+        item.triggered_ability = Some(ability);
+        item
+    }
+
+    fn resolution_choice_command(
+        prompt_id: u64,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    decision: decision as i32,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    #[test]
+    fn untargeted_optional_trigger_auto_declines_when_effects_are_unavailable() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            603_504,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let item = optional_triggered_item_with_effect(
+            &mut engine,
+            source,
+            vec![
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                },
+            ],
         );
-        let (effects, label) = engine.build_resolution_effects(&delayed);
-        engine
-            .run_effect_list(&delayed, &label, effects, 0, &mut Vec::new())
-            .unwrap();
-        assert_eq!(engine.state.active_event_observers.len(), 1);
-        engine
+        let stack_object_id = item.id;
+        engine.state.stack.push(item);
+
+        let mut events = Vec::new();
+        assert_eq!(
+            engine.resolve_top_of_stack(&mut events).unwrap(),
+            ResolutionProgress::Completed,
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == stack_object_id
+                ))
+                .count(),
+            1,
+            "an unavailable optional trigger completes its stack occurrence once",
+        );
+        assert!(!events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+    }
+
+    #[test]
+    fn untargeted_optional_trigger_apply_rechecks_and_decline_finishes_once() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            603_505,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let item = optional_triggered_item_with_effect(
+            &mut engine,
+            source,
+            vec![
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                },
+            ],
+        );
+        let stack_object_id = item.id;
+        engine.state.stack.push(item);
+        let mut events = Vec::new();
+        assert_eq!(
+            engine.resolve_top_of_stack(&mut events).unwrap(),
+            ResolutionProgress::Parked,
+        );
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+        let prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("optional trigger is parked")
+            .resolution_prompt_id
+            .get();
+        let offer = events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("the optional trigger offers its existing resolution choice");
+        assert_eq!(offer.choice_kind, rv1::ChoiceKind::ResolutionBranch as i32);
+        assert_eq!((offer.min, offer.max), (0, 1));
+        assert_eq!(
+            offer.resolution_branches[0].label,
+            "Apply the optional effect"
+        );
+
+        let wrong_actor =
+            resolution_choice_command(prompt_id, rv1::ResolutionChoiceDecision::SelectBranch);
+        let before_wrong_actor = format!("{:?}", engine.state);
+        assert!(engine.apply_scenario_command(1, &wrong_actor).is_err());
+        assert_eq!(format!("{:?}", engine.state), before_wrong_actor);
+
+        let stale_prompt = resolution_choice_command(
+            prompt_id.saturating_add(1),
+            rv1::ResolutionChoiceDecision::SelectBranch,
+        );
+        assert!(engine.apply_scenario_command(0, &stale_prompt).is_err());
+        assert_eq!(format!("{:?}", engine.state), before_wrong_actor);
+
+        let invalid_shape = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_scenario_command(0, &invalid_shape).is_err());
+        assert_eq!(format!("{:?}", engine.state), before_wrong_actor);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let before_rejected_apply = format!("{:?}", engine.state);
+        let apply =
+            resolution_choice_command(prompt_id, rv1::ResolutionChoiceDecision::SelectBranch);
+        assert!(engine.apply_scenario_command(0, &apply).is_err());
+        assert_eq!(format!("{:?}", engine.state), before_rejected_apply);
+        assert!(engine.state.pending_resolution.is_some());
+
+        let declined = resolution_choice_command(prompt_id, rv1::ResolutionChoiceDecision::Decline);
+        let batch = engine
+            .apply_scenario_command(0, &declined)
+            .expect("declining skips the optional effect after its source leaves");
+        assert_eq!(engine.state.players[0].life, 20);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(
+            batch
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == stack_object_id
+                ))
+                .count(),
+            1,
+            "decline skips the complete optional effect list and resolves the stack item once",
+        );
+    }
+
+    #[test]
+    fn typed_program_trigger_does_not_receive_the_legacy_optional_gate() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            603_506,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 0, "kiora,_the_rising_tide");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, generation);
+        item.card_id = "kiora,_the_rising_tide".into();
+        let stack_object_id = item.id;
+        let mut ability = engine
+            .registry
+            .get("kiora,_the_rising_tide")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.may = true;
+        let face = engine
+            .registry
+            .get("kiora,_the_rising_tide")
+            .unwrap()
+            .primary_face();
+        item.trigger_use_key = Some(TriggerUseKey {
+            object_id: source,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::Printed(AbilityDefinitionId {
+                card_id: "kiora,_the_rising_tide".into(),
+                face_id: face.face_id.clone(),
+                ability_path: vec![ability.ability_id.clone()],
+            }),
+        });
+        item.triggered_ability = Some(ability);
+        engine.state.stack.push(item);
+
+        let mut events = Vec::new();
+        assert_eq!(
+            engine.resolve_top_of_stack(&mut events).unwrap(),
+            ResolutionProgress::Parked,
+            "the Program's own discard choice parks after its draw instruction",
+        );
+        let choice = events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("the Program reaches its discard choice");
+        assert_eq!(choice.choice_kind, rv1::ChoiceKind::HandCards as i32);
+        assert!(events.iter().all(|event| !matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32
+        )));
+        let chosen = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the Program's discard choice remains pending")
+            .presentation
+            .candidates
+            .iter()
+            .take(2)
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(chosen.len(), 2);
+        let completed = engine
             .submit_resolution_choice(
                 0,
                 &rv1::SubmitResolutionChoice {
@@ -13561,292 +13143,21 @@ mod attached_subject_tests {
                     ..Default::default()
                 },
             )
-            .unwrap();
-        assert!(
-            engine.state.active_event_observers.is_empty(),
-            "the paid sacrifice must dispatch its death observer"
-        );
-        // The fixture calls the resolution handler directly; command dispatch normally flushes.
-        engine.flush_staged_triggers(&mut Vec::new());
+            .expect("finish the Program discard choice");
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
         assert_eq!(
-            engine.state.stack.len(),
+            completed
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == stack_object_id
+                ))
+                .count(),
             1,
-            "delayed death trigger reaches the stack after resolution"
-        );
-        assert_eq!(
-            engine.state.players[0].life, 23,
-            "the trigger has not resolved yet"
-        );
-    }
-
-    #[test]
-    fn issue_195_resolution_payment_rejections_preserve_state_and_allow_decline() {
-        for cost in payment_branch_costs() {
-            for stale in [false, true] {
-                let (mut engine, mut chosen, _) = payment_branch_fixture(cost.clone());
-                if stale {
-                    *engine
-                        .state
-                        .zone_change_generation
-                        .entry(chosen[0])
-                        .or_default() += 1;
-                } else {
-                    chosen.push(chosen[0]);
-                }
-                let before = format!("{:?}", engine.state);
-                assert!(engine
-                    .submit_resolution_choice(
-                        0,
-                        &rv1::SubmitResolutionChoice {
-                            chosen_object_ids: chosen,
-                            ..Default::default()
-                        }
-                    )
-                    .is_err());
-                assert_eq!(
-                    format!("{:?}", engine.state),
-                    before,
-                    "{cost:?}, stale={stale}"
-                );
-                engine
-                    .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
-                    .unwrap();
-                assert!(engine.state.pending_resolution.is_none());
-                assert_eq!(
-                    engine.state.players[0].life, 22,
-                    "decline runs only the tail"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn forced_resolution_branch_runs_its_tail_exactly_once() {
-        let mut engine = GameEngine::new_with_default_decks(
-            tricerules_cards::registry::global(),
-            142_102,
-            &[0, 1],
-            20,
-        )
-        .expect("engine");
-        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-        let generation = engine
-            .state
-            .zone_change_generation
-            .get(&source)
-            .copied()
-            .unwrap_or(0);
-        let mut item = triggered_item(source, generation);
-        item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-            trigger: TriggerCondition::WhenSelfEntersBattlefield,
-            effect: vec![
-                SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: false,
-                    selection:
-                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
-                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement:
-                            tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
-                        effects: vec![SpellEffectKind::GainLife {
-                            amount: Amount::Fixed(1),
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                },
-                SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(2),
-                },
-            ],
-            program: None,
-            modal: None,
-            targeting: None,
-            may: false,
-            intervening_if: None,
-            max_triggers_per_turn: None,
-            triggers_only_once: false,
-        });
-        let (effects, label) = engine.build_resolution_effects(&item);
-        let mut events = Vec::new();
-
-        engine
-            .run_effect_list(&item, &label, effects, 0, &mut events)
-            .expect("resolve forced branch and tail");
-
-        assert_eq!(engine.state.players[0].life, 23);
-        assert!(engine.state.pending_resolution.is_none());
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_))))
-                .count(),
-            2,
-        );
-    }
-
-    #[test]
-    fn first_applicable_resolution_branch_uses_authored_order_and_runs_its_tail_once() {
-        let mut engine = GameEngine::new_with_default_decks(
-            tricerules_cards::registry::global(),
-            116_102,
-            &[0, 1],
-            20,
-        )
-        .expect("engine");
-        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-        let generation = engine
-            .state
-            .zone_change_generation
-            .get(&source)
-            .copied()
-            .unwrap_or(0);
-        let mut item = triggered_item(source, generation);
-        item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-            trigger: TriggerCondition::WhenSelfEntersBattlefield,
-            effect: vec![
-                SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: false,
-                    selection:
-                        tricerules_card_model::primitives::ResolutionBranchSelection::FirstApplicable,
-                    branches: vec![
-                        ResolutionBranchDef {
-                            branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
-                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                            runtime_fallback: None,
-                            cost: ResolutionCost::None,
-                            requirement: tricerules_card_model::primitives::ResolutionBranchRequirement::GameCondition(
-                                GameCondition::ActivePlayer {
-                                    players: RelativePlayerSet::Controller,
-                                },
-                            ),
-                            effects: vec![SpellEffectKind::GainLife {
-                                amount: Amount::Fixed(1),
-                            }],
-                        },
-                        ResolutionBranchDef {
-                            branch_id: tricerules_card_model::ChoiceId::new("branch_02").unwrap(),
-                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                            runtime_fallback: None,
-                            cost: ResolutionCost::None,
-                            requirement:
-                                tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
-                            effects: vec![SpellEffectKind::GainLife {
-                                amount: Amount::Fixed(5),
-                            }],
-                        },
-                    ],
-                    otherwise: Vec::new(),
-                },
-                SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(2),
-                },
-            ],
-            program: None,
-            modal: None,
-            targeting: None,
-            may: false,
-            intervening_if: None,
-            max_triggers_per_turn: None,
-            triggers_only_once: false,
-        });
-        let (effects, label) = engine.build_resolution_effects(&item);
-        let mut events = Vec::new();
-
-        engine
-            .run_effect_list(&item, &label, effects, 0, &mut events)
-            .expect("resolve first applicable branch and tail");
-
-        assert_eq!(engine.state.players[0].life, 23);
-        assert!(engine.state.pending_resolution.is_none());
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_))))
-                .count(),
-            2,
-        );
-    }
-
-    #[test]
-    fn optional_resolution_branch_with_no_legal_option_skips_to_the_tail() {
-        let mut engine = GameEngine::new_with_default_decks(
-            tricerules_cards::registry::global(),
-            142_103,
-            &[0, 1],
-            20,
-        )
-        .expect("engine");
-        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
-        let generation = engine
-            .state
-            .zone_change_generation
-            .get(&source)
-            .copied()
-            .unwrap_or(0);
-        let mut item = triggered_item(source, generation.saturating_add(1));
-        item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_card_model::AbilityPresentation::Fallback,
-            trigger: TriggerCondition::WhenSelfEntersBattlefield,
-            effect: vec![
-                SpellEffectKind::ChooseResolutionBranch {
-                    chooser: PlayerRecipient::Controller,
-                    optional: true,
-                    selection:
-                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
-                    branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
-                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
-                        runtime_fallback: None,
-                        cost: ResolutionCost::None,
-                        requirement:
-                            tricerules_card_model::primitives::ResolutionBranchRequirement::EffectsApplicable,
-                        effects: vec![SpellEffectKind::PutCounters {
-                            counter: CounterKind::PlusOnePlusOne,
-                            count: Amount::Fixed(1),
-                            subject: EffectSubject::Source,
-                        }],
-                    }],
-                    otherwise: Vec::new(),
-                },
-                SpellEffectKind::GainLife {
-                    amount: Amount::Fixed(2),
-                },
-            ],
-            program: None,
-            modal: None,
-            targeting: None,
-            may: false,
-            intervening_if: None,
-            max_triggers_per_turn: None,
-            triggers_only_once: false,
-        });
-        let (effects, label) = engine.build_resolution_effects(&item);
-        let mut events = Vec::new();
-
-        engine
-            .run_effect_list(&item, &label, effects, 0, &mut events)
-            .expect("skip impossible optional branch and resolve tail");
-
-        assert_eq!(engine.state.players[0].life, 22);
-        assert!(engine.state.pending_resolution.is_none());
-        assert_eq!(
-            engine
-                .state
-                .objects
-                .get(&source)
-                .expect("source")
-                .counter_count(CounterKind::PlusOnePlusOne),
-            0,
+            "the typed Program continues and resolves its stack occurrence once",
         );
     }
 

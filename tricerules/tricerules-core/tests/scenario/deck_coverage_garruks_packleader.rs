@@ -26,6 +26,24 @@ fn engine(seed: u64) -> GameEngine {
     engine
 }
 
+fn three_player_engine(seed: u64) -> GameEngine {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        Some(vec![
+            forest_only_deck(),
+            forest_only_deck(),
+            forest_only_deck(),
+        ]),
+        true,
+    )
+    .expect("new three-player Garruk's Packleader engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
 fn resolve_top_stack_item(engine: &mut GameEngine) -> RuledEventBatch {
     answer_trigger_order_in_engine_order(engine);
     let first = engine.state.priority_player_id();
@@ -164,4 +182,66 @@ fn garruks_packleader_can_decline_its_optional_draw() {
     assert!(!engine.state.players[0].hand.contains(&expected_draw));
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn garruks_packleader_controller_concession_clears_three_player_optional_choice() {
+    let mut engine = three_player_engine(2026_1021);
+    for card_id in [GARRUKS_PACKLEADER, "air_elemental"] {
+        inject_card_into_hand(&mut engine, 0, card_id);
+        grant_pool(&mut engine, 0);
+        let slot = hand_index_for_card(&engine, 0, card_id);
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
+        pass_priority_round(&mut engine);
+    }
+    assert_eq!(engine.state.stack.len(), 1, "the creature entry triggers");
+
+    pass_priority_round(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the optional trigger reaches its resolution choice");
+    assert_eq!(pending.deciding_player, 0);
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::OptionalTriggeredAbility { .. }
+    ));
+    let draws_before: Vec<_> = engine
+        .state
+        .players
+        .iter()
+        .map(|player| {
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn
+        })
+        .collect();
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the trigger controller may concede during the optional choice");
+    assert!(engine.state.players[0].has_lost);
+    assert!(!engine.state.players[1].has_lost && !engine.state.players[2].has_lost);
+    assert!(engine.state.outcome.is_none(), "the survivors keep playing");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(find_resolution_choice(&departure).is_none());
+    for (player, before) in engine.state.players.iter().zip(draws_before) {
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(player.id)
+                .cards_drawn,
+            before,
+            "departure clears the optional choice without delegating its draw"
+        );
+    }
 }

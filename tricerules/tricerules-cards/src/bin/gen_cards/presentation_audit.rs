@@ -347,11 +347,43 @@ mod tests {
 
     #[test]
     fn validates_whole_mapping_and_descends_into_nested_choices() {
-        let node = json!({"ability_id":"parent", "presentation":{"OracleLines":[1,3]}, "effect":[{"ChooseResolutionBranch":{"branches":[{"branch_id":"child", "presentation":"Fallback"}]}}]});
+        let ability: tricerules_cards::primitives::TriggeredAbilityDef = ron::from_str(
+            r#"(ability_id: "parent", presentation: OracleLines([1,3]),
+                trigger: WhenSelfEntersBattlefield,
+                program: Some((body: (steps: [
+                    (id: "choose_child", kind: Choose(
+                        choice: "nested_choice", chooser: Controller, optional: false,
+                        branches: [(
+                            branch_id: "child", presentation: Fallback, cost: None,
+                            requirement: Always,
+                            body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                        )],
+                        otherwise: (steps: [], yields: []),
+                    )),
+                ], yields: []))))"#,
+        )
+        .expect("the nested presentation fixture uses a supported triggered Program Choose");
+        let node = serde_json::to_value(ability).expect("serialize the typed ability");
         let mut found = Vec::new();
         nodes(&node, "abilities/parent", &mut found);
         assert_eq!(found.len(), 2);
-        assert!(found[1].0.ends_with("branches/child"));
+        assert_eq!(found[0].0, "abilities/parent");
+        assert_eq!(
+            found[1].0,
+            "abilities/parent/program/body/steps/0/kind/Choose/branches/child"
+        );
+        let (whole_line, problem) = report_node(
+            "abilities/parent",
+            &node,
+            "Parent",
+            Some(&["first".into(), "second".into(), "third".into()]),
+            None,
+        );
+        assert!(
+            !problem,
+            "the complete 1,3 line mapping should be valid: {whole_line}"
+        );
+        assert!(whole_line.contains("mapped"), "{whole_line}");
         for indices in [
             json!([]),
             json!([0]),
