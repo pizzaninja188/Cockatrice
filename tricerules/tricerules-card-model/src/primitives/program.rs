@@ -7,8 +7,10 @@
 //! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
 //! literals. `If` admits the global `Void` predicate and, on ability programs, a recursive
 //! source-owned condition family built from bounded `SourceCounterCount`, exact live
-//! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. Choose
-//! requirements use the same source family; conditional search predicates remain narrower.
+//! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. Ability Choose
+//! requirements additionally admit one exact live controller creature counter-count profile;
+//! that profile remains Choose-only because branch draw availability is checked before selection.
+//! Conditional search predicates remain narrower.
 //! Permanent choices cannot use event-bound filters or cross-object constraints.
 //! Widening these rules needs a separately typed context/result contract.
 
@@ -1834,8 +1836,10 @@ impl Compiler<'_> {
                             }
                             ResolutionBranchRequirement::GameCondition(condition) => {
                                 let compiled = if self.context == EffectContext::Ability
-                                    && is_ability_source_condition_family(condition)
-                                {
+                                    && (is_ability_source_condition_family(condition)
+                                        || is_exact_ability_choose_countered_creature_count(
+                                            condition,
+                                        )) {
                                     condition.validate_live().map_err(|reason| {
                                         format!(
                                             "Choose instruction '{}' branch '{}': {reason}",
@@ -4129,6 +4133,27 @@ fn is_ability_source_condition_family(condition: &GameCondition) -> bool {
         }
         _ => false,
     }
+}
+
+/// Trade Route Envoy's mandatory Choose branch is available only when its controller controls at
+/// least one creature with any counter. Delta Bloodflies uses the same live predicate on its
+/// intervening-if; this narrow Choose-only admission relies on Program's draw-selectability gate
+/// and does not widen generic Program `If` conditions.
+fn is_exact_ability_choose_countered_creature_count(condition: &GameCondition) -> bool {
+    matches!(
+        condition,
+        GameCondition::BattlefieldCreatureCount {
+            filter,
+            min: Some(1),
+            max: None,
+        } if filter.controllers == RelativePlayerSet::Controller
+            && filter.subtype.is_none()
+            && filter.required_keywords.is_empty()
+            && filter.tapped.is_none()
+            && filter.requires_any_counter
+            && filter.required_counter.is_none()
+            && !filter.exclude_source
+    )
 }
 
 const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(

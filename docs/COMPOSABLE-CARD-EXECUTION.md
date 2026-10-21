@@ -21,9 +21,13 @@ validation checks the actor and that actor's prompt identity. This does not wide
 Card-specific update (2026-10-21): The Final Days and Sold Out now use typed spell-face Programs.
 Sold Out uses the narrow Subject-bound singleton-Creature Exile and target-damage-history profile;
 its [review map](../tricerules/tricerules-cards/authoring/review-maps/sold_out.json) records the
-source-line mapping and semantic evidence for that owner. Trade Route Envoy is the only intentionally
-excluded legacy card in this migration census. These owner ports do not claim that broader legacy
-execution retirement or the composable-card migration is complete.
+source-line mapping and semantic evidence for that owner. Trade Route Envoy's enter trigger now uses
+a mandatory controller `Choose` with a live countered-creature draw branch and a +1/+1-counter
+`Otherwise`; its [review map](../tricerules/tricerules-cards/authoring/review-maps/trade_route_envoy.json)
+records the full printed line and semantic fixtures. The narrow compiler admission leaves generic
+Program `If` unchanged, and production core, protocol, and clients are unchanged. Trade Route Envoy
+was outside the original `DrawDiscard` migration census. These owner ports do not claim that broader
+legacy execution retirement or the composable-card migration is complete.
 
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are

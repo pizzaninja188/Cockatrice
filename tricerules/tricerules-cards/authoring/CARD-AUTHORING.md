@@ -212,7 +212,25 @@ draw operation still applies normal draw limits when it resolves. Common targetl
 and `GainLife`,
 plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
-accepted targetless forms, are described below. A spell Program also admits the resultless
+accepted targetless forms, are described below.
+
+One narrow ability `Choose` requirement is admitted for the Trade Route Envoy shape:
+`BattlefieldCreatureCount` with `controllers: Controller`, `requires_any_counter: true`,
+`exclude_source: false`, `min: Some(1)`, `max: None`, and no subtype, keyword, tapped, or
+specific-counter constraints. This predicate is admitted only as an ability `Choose` requirement;
+generic Program `If` remains unchanged. Trade Route Envoy is the reviewed use: its mandatory
+controller `Choose` has one free `Draw(1)` branch and a Source +1/+1-counter `Otherwise`. The live
+condition determines whether a countered controller creature exists; branch availability also
+checks whether the free draw instruction can start under the current draw limit. With that creature
+still present, Narset's exhausted opponent draw limit makes Envoy's draw branch unavailable, so
+`Otherwise` places the counter (CR 101.2, 101.3, 118.3, 614.17b; this is a reasoned application,
+not a card-specific ruling). This is not a general rule that every card that does not actually draw
+selects `Otherwise`: an available draw with an empty library is still attempted and commits the
+library-loss state, and an Abundance replacement suspends/resumes the started draw without
+re-running `Choose` or counting as an actual card draw. See the [Trade Route Envoy review
+map](review-maps/trade_route_envoy.json) for its line mapping and executed fixtures.
+
+A spell Program also admits the resultless
 `ExileTopWithPlayPermission` leaf only as `player: Controller`, `count: 1`, and
 `count_by_cast_cost: None`. It uses the existing permission operation, keeps ordinary costs and
 timing for playing the exiled card, and creates no permission when the library is empty. Impossible

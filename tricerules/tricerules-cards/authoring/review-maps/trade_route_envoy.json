@@ -1,0 +1,79 @@
+{
+  "format_version": 1,
+  "oracle_id": "95d51048-be32-4c5f-8b75-fca3a891c9d6",
+  "spans": [
+    {
+      "face_id": "trade_route_envoy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/requirement/GameCondition/BattlefieldCreatureCount",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/PutCounters"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldCreatureCount",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/requirement/GameCondition/BattlefieldCreatureCount"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/PutCounters"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/PutCounters/counter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_uses_live_counter_state_without_prompting",
+      "covers": "a live controller creature counter qualifies for the automatic draw branch, while removing its counter before resolution automatically runs Otherwise"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_uses_fallback_when_narset_blocks_the_draw",
+      "covers": "with a qualifying counter still present, Narset's exhausted opponent draw limit makes the free draw branch unavailable and the mandatory counter Otherwise resolves without a prompt"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_ignores_counters_on_opponent_creatures",
+      "covers": "an opponent-controlled countered creature does not satisfy the controller-only battlefield cohort condition"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_source_with_any_counter_qualifies_for_draw",
+      "covers": "the exact Envoy source is included in the live creature cohort and a Charge counter satisfies the any-counter requirement"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_draw_resumes_abundance_replacement_once",
+      "covers": "the automatic draw branch parks at Abundance's replacement choice, resumes through the land/nonland choice, moves exactly one nonland to hand, and produces no actual draw, fallback counter, or duplicate choice"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_empty_library_attempt_does_not_add_fallback_counter",
+      "covers": "a permitted empty-library draw attempt commits the deferred library loss instead of resolving Otherwise"
+    },
+    {
+      "test": "scenario issue_116_condition_branches::trade_route_envoy_replay_matches_exact_batches_and_diagnostic_state",
+      "covers": "identical fixtures and accepted cast/pass commands produce identical event batches and diagnostic snapshots across local replay"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

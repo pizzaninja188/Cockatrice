@@ -1,5 +1,6 @@
-// Oracle checked 2026-08-21. CR 608.2c: the condition is checked as this instruction
-// resolves, then exactly one authored result is applied without presenting a player choice.
+// Exact Oracle 95d51048-be32-4c5f-8b75-fca3a891c9d6; source/rulings checked 2026-10-18 (none).
+// Reasoned CR application, not a card-specific ruling: 101.2, 101.3, 118.3, and 614.17b make
+// a Narset-prohibited mandatory single draw unavailable, so the Otherwise counter branch resolves.
 (
   id: "trade_route_envoy",
   name: "Trade Route Envoy",
@@ -12,25 +13,37 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [ChooseResolutionBranch(
-      selection: FirstApplicable,
-      branches: [
-        (
-          branch_id: "draw_a_card", presentation: Fallback,
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "draw_or_counter", kind: Choose(
+        choice: "draw_if_countered",
+        chooser: Controller,
+        optional: false,
+        branches: [(
+          branch_id: "draw_a_card",
+          presentation: OracleLines([1]),
           cost: None,
           requirement: GameCondition(BattlefieldCreatureCount(
-            filter: (controllers: Controller, requires_any_counter: true),
+            filter: (
+              controllers: Controller,
+              requires_any_counter: true,
+              exclude_source: false,
+            ),
             min: Some(1),
+            max: None,
           )),
-          effects: [Draw(count: 1)],
-        ),
-        (
-          branch_id: "put_a_1_1_counter_on_trade_route_envoy", presentation: Fallback,
-          cost: None,
-          requirement: Always,
-          effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-        ),
-      ],
-    )],
+          body: (steps: [
+            (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+          ], yields: []),
+        )],
+        otherwise: (steps: [
+          (id: "put_counter", kind: Perform(PutCounters(
+            counter: PlusOnePlusOne,
+            count: 1,
+            subject: Source,
+          ))),
+        ], yields: []),
+      )),
+    ], yields: []))),
   )],
 )

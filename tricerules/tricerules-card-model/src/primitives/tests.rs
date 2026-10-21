@@ -8170,6 +8170,158 @@ fn mosswort_total_power_choose_body(condition: &str) -> String {
 }
 
 #[test]
+fn program_choose_accepts_trade_route_envoy_live_countered_creature_branch() {
+    use crate::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, GameCondition, PlayerRecipient,
+        RelativePlayerSet,
+    };
+
+    let condition = r#"BattlefieldCreatureCount(
+        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
+        min: Some(1), max: None,
+    )"#;
+    let body = trade_route_envoy_counter_choose_body(condition);
+    let program = ability_program_fixture("trade_route_envoy_compiler_fixture", &body)
+        .expect("the complete Trade Route Envoy Choose Program compiles");
+
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("Trade Route Envoy retains one root Choose instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &instruction.kind
+    else {
+        panic!("Trade Route Envoy retains one root Choose instruction");
+    };
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(!optional, "the entry branch is mandatory");
+    let [branch] = branches.as_slice() else {
+        panic!("the entry Program has exactly one draw branch");
+    };
+    assert!(matches!(
+        &branch.requirement,
+        CompiledChooseRequirement::GameCondition(
+            GameCondition::BattlefieldCreatureCount {
+                filter,
+                min: Some(1),
+                max: None,
+            }
+        ) if filter.controllers == RelativePlayerSet::Controller
+            && filter.subtype.is_none()
+            && filter.required_keywords.is_empty()
+            && filter.tapped.is_none()
+            && filter.requires_any_counter
+            && filter.required_counter.is_none()
+            && !filter.exclude_source
+    ));
+    assert_eq!(branch.body.steps.len(), 1, "the branch draws one card");
+    assert_eq!(
+        otherwise.steps.len(),
+        1,
+        "Otherwise adds one source counter"
+    );
+}
+
+fn trade_route_envoy_counter_choose_body(condition: &str) -> String {
+    format!(
+        r#"(steps: [(id: "draw_or_counter", kind: Choose(
+            choice: "draw_if_countered", chooser: Controller, optional: false,
+            branches: [(branch_id: "draw_a_card", presentation: Fallback, cost: None,
+                requirement: GameCondition({condition}),
+                body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: []))],
+            otherwise: (steps: [(id: "put_counter", kind: Perform(PutCounters(
+                counter: PlusOnePlusOne, count: 1, subject: Source,
+            )))], yields: []),
+        ))], yields: [])"#
+    )
+}
+
+#[test]
+fn program_choose_rejects_nonexact_trade_route_envoy_counter_conditions() {
+    let base = r#"BattlefieldCreatureCount(
+        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
+        min: Some(1), max: None,
+    )"#;
+    let cases = [
+        (
+            "opponent cohort",
+            base.replace("controllers: Controller", "controllers: Opponents"),
+        ),
+        (
+            "source exclusion",
+            base.replace("exclude_source: false", "exclude_source: true"),
+        ),
+        (
+            "subtype filter",
+            base.replace(
+                "controllers: Controller",
+                "controllers: Controller, subtype: Some(\"Elf\")",
+            ),
+        ),
+        (
+            "keyword filter",
+            base.replace(
+                "controllers: Controller",
+                "controllers: Controller, required_keywords: [Flying]",
+            ),
+        ),
+        (
+            "tapped filter",
+            base.replace(
+                "controllers: Controller",
+                "controllers: Controller, tapped: Some(true)",
+            ),
+        ),
+        (
+            "specific counter instead of any counter",
+            base.replace(
+                "requires_any_counter: true",
+                "requires_any_counter: false, required_counter: Some(PlusOnePlusOne)",
+            ),
+        ),
+        (
+            "wrong minimum",
+            base.replace("min: Some(1)", "min: Some(2)"),
+        ),
+        ("missing minimum", base.replace("min: Some(1)", "min: None")),
+        ("maximum bound", base.replace("max: None", "max: Some(2)")),
+    ];
+
+    for (label, condition) in cases {
+        let body = trade_route_envoy_counter_choose_body(&condition);
+        assert!(
+            ability_program_fixture("trade_route_envoy_compiler_fixture", &body).is_err(),
+            "the Program compiler must reject the {label} counter-count shape"
+        );
+    }
+}
+
+#[test]
+fn program_if_still_rejects_trade_route_envoy_counter_condition() {
+    let condition = r#"BattlefieldCreatureCount(
+        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
+        min: Some(1), max: None,
+    )"#;
+    let body = format!(
+        r#"(steps: [(id: "counter_check", kind: If(
+            condition: {condition},
+            yes: (steps: [], yields: []),
+            no: (steps: [], yields: []),
+        ))], yields: [])"#
+    );
+    let error = ability_program_fixture("trade_route_envoy_compiler_fixture", &body)
+        .expect_err("the Choose-only profile must not widen generic Program If");
+    assert!(
+        error.contains("If condition uses context outside"),
+        "unexpected Program If diagnostic: {error}"
+    );
+}
+
+#[test]
 fn program_choose_rejects_nonexact_controller_creature_total_power_conditions() {
     let base = r#"BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature)),
