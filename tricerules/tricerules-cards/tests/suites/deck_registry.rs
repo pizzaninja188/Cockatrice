@@ -93,6 +93,8 @@ mod deck_coverage_mind_stone;
 mod deck_coverage_mirrorworks;
 #[path = "../deck_coverage_mithril_coat.rs"]
 mod deck_coverage_mithril_coat;
+#[path = "../deck_coverage_molten_echoes.rs"]
+mod deck_coverage_molten_echoes;
 #[path = "../deck_coverage_mycosynth_gardens.rs"]
 mod deck_coverage_mycosynth_gardens;
 #[path = "../deck_coverage_myr_battlesphere.rs"]

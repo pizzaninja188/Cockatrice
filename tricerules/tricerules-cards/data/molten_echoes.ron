@@ -21,22 +21,29 @@
         source_chosen_creature_type: Some("chosen_type"),
       ),
     ),
-    effect: [
-      CreateTokenCopies(count: 1, source: TriggerObject),
-      ApplyPermanentModifier(
-        subject: PreviousEffectObjects,
-        modifier: GrantKeywords([Haste]),
-        duration: Indefinite,
-      ),
-      CreateDelayedTrigger(
-        subject: Some(PreviousEffectObjects),
-        ability: (
-          ability_id: "exile_copy",
-          presentation: OracleLines([2]),
-          trigger: AtBeginningOfNextEndStep,
-          effect: [ExileObservedObjects],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "copy_entry", bind: ["copies"], kind: Perform(
+        CreateTokenCopies(count: 1, source: TriggerObject),
+      )),
+      (id: "grant_haste", input: Some("copies"), kind: Perform(
+        ApplyPermanentModifier(
+          subject: PreviousEffectObjects,
+          modifier: GrantKeywords([Haste]),
+          duration: Indefinite,
         ),
-      ),
-    ],
+      )),
+      (id: "schedule_exile", input: Some("copies"), kind: Perform(
+        CreateDelayedTrigger(
+          subject: Some(PreviousEffectObjects),
+          ability: (
+            ability_id: "exile_copy",
+            presentation: OracleLines([2]),
+            trigger: AtBeginningOfNextEndStep,
+            effect: [ExileObservedObjects],
+          ),
+        ),
+      )),
+    ], yields: []))),
   )],
 )

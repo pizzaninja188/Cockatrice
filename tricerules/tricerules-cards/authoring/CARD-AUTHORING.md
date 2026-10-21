@@ -687,11 +687,12 @@ abilities retain their existing validation path.
 
 `CreateTokenCopies(source: TriggerObject)` consumes the captured `TriggerObservedObject` input.
 Flameshadow Conjuring uses it as the typed token-batch producer for its shared Haste and
-delayed-exile cohort; Mirrorworks uses the observed entry object but keeps its copy result
-resultless. Registry admission requires the exact triggered ability owner to observe a permanent
-entry; runtime checks the captured reference and its matching current or last-known copy snapshot
-before instruction zero and each program-unit resume. Non-entry triggers and activated ability
-owners do not supply this input.
+delayed-exile cohort; Molten Echoes uses the same mandatory three-instruction body behind its
+linked creature-type trigger filter. Mirrorworks uses the observed entry object but keeps its copy
+result resultless. Registry admission requires the exact triggered ability owner to observe a
+permanent entry; runtime checks the captured reference and its matching current or last-known copy
+snapshot before instruction zero and each program-unit resume. Non-entry triggers and activated
+ability owners do not supply this input.
 
 Declare each target role in `CardProgram.target_bindings` by its stable instruction `id`, role and
 zero-based `target_group_index`. Target groups remain in the owner's `TargetingDef`; use an empty

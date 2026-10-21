@@ -17,15 +17,15 @@
       "typed_paths": [
         "/faces/0/triggered_abilities/0",
         "/faces/0/triggered_abilities/0/trigger",
-        "/faces/0/triggered_abilities/0/effect/0",
-        "/faces/0/triggered_abilities/0/effect/0/CreateTokenCopies",
-        "/faces/0/triggered_abilities/0/effect/1",
-        "/faces/0/triggered_abilities/0/effect/1/ApplyPermanentModifier",
-        "/faces/0/triggered_abilities/0/effect/2",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier",
+        "/faces/0/triggered_abilities/0/program/body/steps/2",
+        "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability",
+        "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/trigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/effect/0"
       ]
     }
   ],
@@ -44,31 +44,35 @@
     },
     {
       "symbol": "SpellEffectKind::CreateTokenCopies",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/CreateTokenCopies"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies"
     },
     {
       "symbol": "SpellEffectKind::ApplyPermanentModifier",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ApplyPermanentModifier"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier"
     },
     {
       "symbol": "EffectSubject::PreviousEffectObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ApplyPermanentModifier/subject"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier/subject"
     },
     {
       "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/trigger"
     },
     {
       "symbol": "EffectSubject::PreviousEffectObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/subject"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/subject"
     },
     {
       "symbol": "SpellEffectKind::ExileObservedObjects",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/effect/0"
     }
   ],
   "tokens": [],
   "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_molten_echoes::molten_echoes_copy_matching_creature_is_a_mandatory_typed_program",
+      "covers": "the exact triggered owner has one mandatory three-instruction Program that reuses one typed token-copy batch for haste and next-end-step exile"
+    },
     {
       "test": "scenario deck_coverage_molten_echoes::molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry",
       "covers": "chooses from the canonical creature type list, matches a controlled nontoken creature of the chosen type, creates one hasty copy, and schedules its exact next-end-step exile"
