@@ -1,24 +1,26 @@
 use tricerules_cards::primitives::{
-    ActivatedCostModifier, ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate,
-    BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardProgram, CardResultAction,
-    CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef,
-    CastCostOptionDef, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
-    CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
-    DelayedTokenSacrificeTiming, DiscardQuantity, EffectSubject, EntersTappedAffected,
-    EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction, GameCondition,
-    GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction,
-    HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount, LifeChangeKind,
-    ManaCostChoiceKind, ManaRetention, MassPlayerSet, ObjectCastCostKind, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale,
-    PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    ActivatedCostModifier, ActivationLimit, AuthoredBlock, BasePowerToughnessValue,
+    BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardProgram,
+    CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
+    CastCostGroupDef, CastCostOptionDef, CombatRestriction, CombatRestrictionScope, CombatRole,
+    ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource, CreatureScopeController,
+    CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity, EffectSubject,
+    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
+    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, Instruction, InstructionKind,
+    LibraryPlacement, LifeAmount, LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet,
+    ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
     ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
     SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
     StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
     TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TokenCopySource,
     TypeLineAddition, ZoneCardFilter, ZoneEventCardinality, ZoneEventDestination,
 };
+#[cfg(test)]
+use tricerules_cards::primitives::{ResolutionBranchRequirement, ResolutionCost};
+
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CastTriggerPlayer,
@@ -143,13 +145,12 @@ pub(super) enum RecipeEmission {
         effects: Vec<SpellEffectKind>,
         targeting: TargetingDef,
     },
-    /// One exact clause that also establishes face-level cast conditions, for example a spell
-    /// that behaves differently when cast from a graveyard. The conditions are appended to the
-    /// face's cast-condition list and the effects to its spell-effect list. The Final Days is
-    /// the first consumer.
-    SpellEffectsWithCastConditions {
+    /// One exact clause that establishes face-level cast conditions and owns the spell's
+    /// suspension-safe resolution program. Conditions are appended once, before the program is
+    /// assigned; mixing either owner with another spell-resolution form stays unsupported.
+    SpellProgramWithCastConditions {
         conditions: Vec<GameCondition>,
-        effects: Vec<SpellEffectKind>,
+        program: CardProgram,
     },
     SpellCostModifier(SpellCostModifier),
     TriggeredAbility(TriggeredAbilityDef),
@@ -15871,7 +15872,7 @@ fn match_etb_create_two_insect_tokens(
 // instead of a second token printing. The stated printed clause is normalized only for CR 201.5c
 // shortened self-references (Aatchik, Kiora, Lluwen). Creatures use `this creature`; the
 // enchantment source (Morcant's Eyes) keeps its dedicated surface. The Final Days establishes a
-// face cast condition consumed through `CastSnapshot`, matching the shipped branch pattern.
+// face cast condition consumed through a direct Program `If` `CastSnapshot` check.
 // ---------------------------------------------------------------------------
 
 const ISSUE_371_AATCHIK_ETB_CLAUSE: &str = "When this creature enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard.";
@@ -16222,56 +16223,64 @@ fn match_triggered_attack_create_octopus_may_threshold_seven(
     Some(RecipeEmission::TriggeredAbility(ability))
 }
 
-/// 8. The Final Days establishes `CastOrigin(Graveyard)` as the face's cast condition and resolves
-///    the printed "instead" substitution through the shipped mandatory `FirstApplicable` branch: the
+/// 8. The Final Days establishes `CastOrigin(Graveyard)` as the face's cast condition and compiles
+///    the printed "instead" substitution as a direct snapshot-conditioned Program `If`: the
 ///    cast-from-graveyard branch creates X tokens from the creature-card graveyard count, and the
-///    unconditional fallback creates exactly two. The issue's suggested nested
-///    `Amount::Conditional` shape cannot express a dynamic `when_true` (both branches are `u32`), so
-///    this exact shipped shape replaces it without widening any matcher or adding vocabulary.
+///    unconditional fallback creates exactly two. This exact named singleton recipe uses the
+///    narrow spell-face CastSnapshot and typed graveyard-count Program contracts.
 fn match_spell_create_horror_tapped_cast_from_graveyard_scales(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == ISSUE_371_FINAL_DAYS_CLAUSE).then(|| RecipeEmission::SpellEffectsWithCastConditions {
-        conditions: vec![GameCondition::CastOrigin {
-            origin: SpellCastOrigin::Graveyard,
-        }],
-        effects: vec![SpellEffectKind::ChooseResolutionBranch {
-            chooser: PlayerRecipient::Controller,
-            optional: false,
-            selection: ResolutionBranchSelection::FirstApplicable,
-            branches: vec![
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new("cast_from_graveyard")
-                        .expect("closed Final Days branch uses a valid choice ID"),
-                    presentation: AbilityPresentation::Fallback,
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::GameCondition(
-                        GameCondition::CastSnapshot { index: 0 },
-                    ),
-                    effects: vec![issue_371_create_tokens(
-                        "horror_b_2_2",
-                        issue_373_graveyard_count(Some(issue_371_creature_card_filter())),
-                        true,
-                    )],
+    (text == ISSUE_371_FINAL_DAYS_CLAUSE).then(|| {
+        let create_tokens = |count| {
+            InstructionKind::Perform(Box::new(SpellEffectKind::CreateTokens {
+                token: "horror_b_2_2".into(),
+                count,
+                who: PlayerRecipient::Controller,
+                tapped: true,
+                sacrifice_timing: None,
+            }))
+        };
+        RecipeEmission::SpellProgramWithCastConditions {
+            conditions: vec![GameCondition::CastOrigin {
+                origin: SpellCastOrigin::Graveyard,
+            }],
+            program: CardProgram {
+                body: AuthoredBlock {
+                    steps: vec![Instruction {
+                        id: "graveyard_cast_check".into(),
+                        bind: Vec::new(),
+                        input: None,
+                        kind: InstructionKind::If {
+                            condition: Box::new(GameCondition::CastSnapshot { index: 0 }),
+                            yes: AuthoredBlock {
+                                steps: vec![Instruction {
+                                    id: "create_scaled_horrors".into(),
+                                    bind: Vec::new(),
+                                    input: None,
+                                    kind: create_tokens(issue_373_graveyard_count(Some(
+                                        issue_371_creature_card_filter(),
+                                    ))),
+                                }],
+                                yields: Vec::new(),
+                            },
+                            no: AuthoredBlock {
+                                steps: vec![Instruction {
+                                    id: "create_two_horrors".into(),
+                                    bind: Vec::new(),
+                                    input: None,
+                                    kind: create_tokens(Amount::Fixed(2)),
+                                }],
+                                yields: Vec::new(),
+                            },
+                        },
+                    }],
+                    yields: Vec::new(),
                 },
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new("cast_otherwise")
-                        .expect("closed Final Days fallback uses a valid choice ID"),
-                    presentation: AbilityPresentation::Fallback,
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::Always,
-                    effects: vec![issue_371_create_tokens(
-                        "horror_b_2_2",
-                        Amount::Fixed(2),
-                        true,
-                    )],
-                },
-            ],
-            otherwise: Vec::new(),
-        }],
+                target_bindings: Vec::new(),
+            },
+        }
     })
 }
 
@@ -27199,10 +27208,8 @@ pub(super) static CATALOG: &[Recipe] = &[
         label: "cast-from-graveyard Horror token substitution",
         surface: RecipeSurface::SpellClause,
         matcher: match_spell_create_horror_tapped_cast_from_graveyard_scales,
-        // The Final Days is the only exact full-corpus printing. The issue's nested
-        // Amount::Conditional shape cannot hold a dynamic when_true; the shipped mandatory
-        // FirstApplicable branch over the face CastSnapshot expresses the printed "instead"
-        // exactly (same branch shape as the engine's cast-snapshot regression test).
+        // The Final Days is the only exact full-corpus printing. The face-level cast snapshot
+        // selects the direct Program `If` branch; the recipe remains exact and named-only.
         calibration: singleton_calibrations!(
             "The Final Days" => "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
             "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from your hand, instead create X of those tokens, where X is the number of creature cards in your graveyard.",
@@ -44577,13 +44584,13 @@ mod tests {
                 if token == "scion_of_the_deep"
         ));
 
-        // 8. The Final Days establishes the face cast origin and the exact substitution branch.
-        let RecipeEmission::SpellEffectsWithCastConditions {
+        // 8. The Final Days establishes the face cast origin and a direct Program substitution.
+        let RecipeEmission::SpellProgramWithCastConditions {
             conditions,
-            effects,
+            program,
         } = issue_371_emission("The Final Days", ISSUE_371_FINAL_DAYS_CLAUSE, true)
         else {
-            panic!("The Final Days must emit a cast condition and branch effects");
+            panic!("The Final Days must emit a cast condition and spell program");
         };
         assert_eq!(
             conditions,
@@ -44591,31 +44598,37 @@ mod tests {
                 origin: SpellCastOrigin::Graveyard,
             }]
         );
-        let [SpellEffectKind::ChooseResolutionBranch {
-            selection,
-            branches,
-            otherwise,
+        let [Instruction {
+            kind: InstructionKind::If { condition, yes, no },
             ..
-        }] = effects.as_slice()
+        }] = program.body.steps.as_slice()
         else {
-            panic!("unexpected The Final Days payload: {effects:?}");
+            panic!("unexpected The Final Days program: {:?}", program.body);
         };
-        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-        assert!(otherwise.is_empty());
-        assert_eq!(
-            branches[0].requirement,
-            ResolutionBranchRequirement::GameCondition(GameCondition::CastSnapshot { index: 0 })
-        );
+        assert_eq!(**condition, GameCondition::CastSnapshot { index: 0 });
+        let [Instruction {
+            kind: InstructionKind::Perform(effect),
+            ..
+        }] = yes.steps.as_slice()
+        else {
+            panic!("unexpected Final Days graveyard branch: {yes:?}");
+        };
         assert!(matches!(
-            branches[0].effects.as_slice(),
-            [SpellEffectKind::CreateTokens { token, count, tapped: true, .. }]
+            effect.as_ref(),
+            SpellEffectKind::CreateTokens { token, count, who: PlayerRecipient::Controller, tapped: true, sacrifice_timing: None }
                 if token == "horror_b_2_2"
-                    && matches!(count, Amount::Count(CountExpression::GraveyardCards { .. }))
+                    && matches!(count, Amount::Count(CountExpression::GraveyardCards { owners: RelativePlayerSet::Controller, filter: Some(filter) }) if filter.card_type == Some(CardTypeFilter::Creature))
         ));
-        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
+        let [Instruction {
+            kind: InstructionKind::Perform(effect),
+            ..
+        }] = no.steps.as_slice()
+        else {
+            panic!("unexpected Final Days fallback branch: {no:?}");
+        };
         assert!(matches!(
-            branches[1].effects.as_slice(),
-            [SpellEffectKind::CreateTokens { token, count: Amount::Fixed(2), tapped: true, .. }]
+            effect.as_ref(),
+            SpellEffectKind::CreateTokens { token, count: Amount::Fixed(2), who: PlayerRecipient::Controller, tapped: true, sacrifice_timing: None }
                 if token == "horror_b_2_2"
         ));
     }

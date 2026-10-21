@@ -378,6 +378,18 @@ graveyard after milling and HYDRA Troopers checks before either its token creati
 amount applied to `Controller` on a spell or ability program; neither form can bind or yield a
 result. Dawnhand uses the EachOpponent form, which it shares with Acolyte of Aclazotz and Arbiter of
 Woe. Decode Transmissions and Visions of Villainy use the fixed Controller form on spell programs.
+An exact face-owned spell Program may use `If(condition: CastSnapshot(index: n))` only when `n`
+references an existing entry in that face's `cast_conditions`. The cast origin is captured as the
+spell is cast and the Program reads that snapshot when its instruction resolves (CR 601.2, 608.2c);
+it does not reevaluate the cast condition. This remains unavailable to ability- or mode-owned
+Programs and to `Choose` requirements. The Final Days uses the snapshot to select its graveyard
+token count or its fixed fallback.
+Spell Programs may create tokens with a fixed count, or with
+`Count(GraveyardCards(owners: Controller, filter: Some(valid_filter)))`, only when the token
+recipient is `Controller`. The explicit filter is validated by the normal graveyard-card filter
+contract. This count is read when the `CreateTokens` instruction resolves (CR 608.2h); The Final
+Days counts creature cards in its controller's graveyard after the cast snapshot selects the
+graveyard branch.
 `If` may also inspect the current battlefield with `BattlefieldAggregate(Count)`, inclusive count
 bounds, and a validated `BattlefieldPermanentFilter`. This family requires
 `exclude_observed_object: false` and `Controller` at the root filter and every recursively nested

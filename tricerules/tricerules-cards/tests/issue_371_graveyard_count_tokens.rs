@@ -11,8 +11,7 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    CardProgram, CardTypeFilter, InstructionKind, PlayerRecipient, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ZoneCardFilter,
+    CardProgram, CardTypeFilter, InstructionKind, PlayerRecipient, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CastTriggerPlayer, Color,
@@ -526,39 +525,54 @@ fn issue_371_revenge_and_final_days_payloads_are_exact() {
             origin: SpellCastOrigin::Graveyard,
         }]
     );
-    let [SpellEffectKind::ChooseResolutionBranch {
-        chooser,
-        optional,
-        selection,
-        branches,
-        otherwise,
-    }] = final_days.spell_effect.as_slice()
-    else {
-        panic!("The Final Days must emit one mandatory first-applicable branch");
+    assert!(
+        final_days.spell_effect.is_empty(),
+        "the spell program is the only resolution owner"
+    );
+    let program = final_days
+        .spell_program
+        .as_ref()
+        .expect("The Final Days owns a spell program");
+    assert!(program.target_bindings.is_empty());
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("The Final Days has one cast-snapshot conditional");
     };
-    assert_eq!(*chooser, PlayerRecipient::Controller);
-    assert!(!optional);
-    assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-    assert!(otherwise.is_empty());
-    assert_eq!(branches[0].branch_id.as_str(), "cast_from_graveyard");
+    let InstructionKind::If { condition, yes, no } = &instruction.kind else {
+        panic!("The Final Days uses direct Program If control flow");
+    };
     assert_eq!(
-        branches[0].requirement,
-        ResolutionBranchRequirement::GameCondition(GameCondition::CastSnapshot { index: 0 })
+        condition.as_ref(),
+        &GameCondition::CastSnapshot { index: 0 }
     );
-    assert_eq!(
-        branches[0].effects,
-        [create_tokens(
-            "horror_b_2_2",
-            graveyard_count(creature_filter()),
-            true,
-        )]
-    );
-    assert_eq!(branches[1].branch_id.as_str(), "cast_otherwise");
-    assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
-    assert_eq!(
-        branches[1].effects,
-        [create_tokens("horror_b_2_2", Amount::Fixed(2), true)]
-    );
+    assert!(yes.yields.is_empty() && no.yields.is_empty());
+    let [graveyard_create] = yes.steps.as_slice() else {
+        panic!("the graveyard branch creates one Horror cohort");
+    };
+    assert!(matches!(
+        &graveyard_create.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateTokens {
+                token,
+                count,
+                who: PlayerRecipient::Controller,
+                tapped: true,
+                sacrifice_timing: None,
+            } if token == "horror_b_2_2" && *count == graveyard_count(creature_filter()))
+    ));
+    let [fallback_create] = no.steps.as_slice() else {
+        panic!("the non-graveyard branch creates one Horror cohort");
+    };
+    assert!(matches!(
+        &fallback_create.kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::CreateTokens {
+                token,
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: true,
+                sacrifice_timing: None,
+            } if token == "horror_b_2_2")
+    ));
 }
 
 #[test]

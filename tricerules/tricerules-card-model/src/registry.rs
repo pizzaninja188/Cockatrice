@@ -92,6 +92,49 @@ fn face_static_abilities(
     )
 }
 
+fn validate_spell_program_cast_snapshot_references(
+    program: &crate::primitives::CardProgram,
+    cast_condition_count: usize,
+) -> Result<(), String> {
+    fn visit_block(
+        block: &crate::primitives::AuthoredBlock,
+        cast_condition_count: usize,
+    ) -> Result<(), String> {
+        for instruction in &block.steps {
+            match &instruction.kind {
+                crate::primitives::InstructionKind::If {
+                    condition, yes, no, ..
+                } => {
+                    if matches!(condition.as_ref(), GameCondition::CastSnapshot { .. }) {
+                        condition.validate_cast_snapshot_reference(cast_condition_count)?;
+                    }
+                    visit_block(yes, cast_condition_count)?;
+                    visit_block(no, cast_condition_count)?;
+                }
+                crate::primitives::InstructionKind::Choose {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    for branch in branches {
+                        visit_block(&branch.body, cast_condition_count)?;
+                    }
+                    visit_block(otherwise, cast_condition_count)?;
+                }
+                crate::primitives::InstructionKind::IfResult { yes, no, .. } => {
+                    visit_block(yes, cast_condition_count)?;
+                    visit_block(no, cast_condition_count)?;
+                }
+                crate::primitives::InstructionKind::ImportCastPayment
+                | crate::primitives::InstructionKind::Perform(_) => {}
+            }
+        }
+        Ok(())
+    }
+
+    visit_block(&program.body, cast_condition_count)
+}
+
 /// Validate invariants that can only be checked on the immutable compiled form. Both authored
 /// programs and legacy-lowered owners pass through this walk so target binding and token
 /// references cannot be skipped by choosing a different authoring path.
@@ -4162,6 +4205,14 @@ impl CardRegistry {
                             reason: "spell_program requires an instant or sorcery face".into(),
                         });
                     }
+                    validate_spell_program_cast_snapshot_references(
+                        program,
+                        face.cast_conditions.len(),
+                    )
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: format!("spell_program: {reason}"),
+                    })?;
                     let owner = ProgramOwnerId::face(card.id.clone(), face.face_id.clone());
                     let cast_payment_profile = if face.modal_spell.is_none()
                         && matches!(

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "f2b88031-bfb7-46c4-abdd-3b6b5f5acfa4",
+  "spans": [
+    {
+      "face_id": "the_final_days",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_conditions/0",
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/If/condition/CastSnapshot",
+        "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/CreateTokens",
+        "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0/kind/Perform/CreateTokens"
+      ]
+    },
+    {
+      "face_id": "the_final_days",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "GameCondition::CastOrigin",
+      "typed_path": "/faces/0/cast_conditions/0/CastOrigin"
+    },
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If"
+    },
+    {
+      "symbol": "GameCondition::CastSnapshot",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/condition/CastSnapshot"
+    },
+    {
+      "symbol": "CountExpression::GraveyardCards",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/CreateTokens/count/Count/GraveyardCards"
+    },
+    {
+      "symbol": "PlayerRecipient::Controller",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/CreateTokens/who"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/yes/steps/0/kind/Perform/CreateTokens"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/If/no/steps/0/kind/Perform/CreateTokens"
+    }
+  ],
+  "tokens": ["horror_b_2_2"],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::issue_371_graveyard_count_tokens::issue_371_revenge_and_final_days_payloads_are_exact",
+      "covers": "Exact The Final Days face identity, CastOrigin(Graveyard), Flashback cost, direct Program If, typed controller-creature graveyard count, fixed-two fallback, and Horror token profile. This is a structural assertion; it does not execute another graveyard cast permission."
+    },
+    {
+      "test": "scenario issue_371_graveyard_count_tokens::issue_371_the_final_days_uses_two_from_hand_and_x_from_graveyard",
+      "covers": "From-hand two-token behavior; Flashback resolution-time X after the graveyard changes, excluding noncreatures and the opponent; X=0; tapped Horrors, Flashback exile, serialized accepted-command replay including the generic simultaneous-entry-order answer, and final-state equality. A non-Flashback graveyard cast is not exercised: the engine currently accepts graveyard casts only by Flashback or Harmonize, and this card has no Harmonize cost."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

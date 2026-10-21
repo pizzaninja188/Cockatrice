@@ -1368,6 +1368,17 @@ impl Compiler<'_> {
                             format!("If instruction '{}': {reason}", instruction.id)
                         })?;
                         CompiledProgramCondition::Game(condition.as_ref().clone())
+                    } else if self.context == EffectContext::Spell
+                        && matches!(&self.owner, ProgramOwnerId::Face(_))
+                        && matches!(condition.as_ref(), GameCondition::CastSnapshot { .. })
+                    {
+                        // A non-modal spell face may branch directly on a cast condition saved
+                        // when it was cast. Keep this owner-specific exception out of the shared
+                        // Program condition validator and Choose requirements.
+                        condition.validate().map_err(|reason| {
+                            format!("If instruction '{}': {reason}", instruction.id)
+                        })?;
+                        CompiledProgramCondition::Game(condition.as_ref().clone())
                     } else {
                         compile_program_condition(
                             &ProgramCondition::Game(condition.as_ref().clone()),
@@ -2960,8 +2971,7 @@ fn validate_and_result_types(
                         .into(),
                 );
             }
-            validate_program_amount(count)?;
-            validate_fixed_program_amount("CreateTokens count", count)?;
+            validate_program_create_tokens_amount(count, who)?;
             Ok(Vec::new())
         }
         SpellEffectKind::CreateTokenCopies { count, source } => {
@@ -4063,6 +4073,23 @@ fn validate_fixed_program_amount(role: &str, amount: &Amount) -> Result<(), Stri
         Err(format!(
             "{role} supports only a fixed literal in spell_program"
         ))
+    }
+}
+
+fn validate_program_create_tokens_amount(
+    amount: &Amount,
+    recipient: &PlayerRecipient,
+) -> Result<(), String> {
+    validate_program_amount(amount)?;
+    match amount {
+        Amount::Fixed(_) => Ok(()),
+        Amount::Count(super::CountExpression::GraveyardCards {
+            owners: RelativePlayerSet::Controller,
+            filter: Some(_),
+        }) if recipient == &PlayerRecipient::Controller => Ok(()),
+        _ => Err(
+            "CreateTokens count supports only a fixed literal or an explicitly filtered Controller GraveyardCards count for Controller token creation in spell_program".into(),
+        ),
     }
 }
 

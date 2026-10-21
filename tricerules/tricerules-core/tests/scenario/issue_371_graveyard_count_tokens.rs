@@ -125,6 +125,29 @@ fn flashback_cast(engine: &GameEngine, object_id: u32) -> RuledCommand {
     }
 }
 
+fn assert_accepted_command_replays(
+    original: &mut GameEngine,
+    replay: &mut GameEngine,
+    actor: i32,
+    command: RuledCommand,
+) {
+    use prost::Message;
+
+    let expected = original
+        .apply_scenario_command(actor, &command)
+        .expect("accepted Flashback command");
+    let raw_command = command.encode_to_vec();
+    let decoded = RuledCommand::decode(raw_command.as_slice()).expect("raw command decodes");
+    let actual = replay
+        .apply_scenario_command(actor, &decoded)
+        .expect("replayed accepted Flashback command");
+    assert_eq!(
+        actual.encode_to_vec(),
+        expected.encode_to_vec(),
+        "accepted commands replay byte-identical serialized event batches"
+    );
+}
+
 fn move_to_declare_attackers(engine: &mut GameEngine) {
     engine
         .apply_scenario_command(0, &primitive_yield())
@@ -583,25 +606,99 @@ fn issue_371_the_final_days_uses_two_from_hand_and_x_from_graveyard() {
         assert!(hand.state.objects[oid].tapped, "the Horror enters tapped");
     }
 
-    // Cast with flashback: the cast-origin snapshot switches the branch to X.
-    let mut flashback = engine_with(371_081, &[]);
-    let spell = inject_graveyard_card(&mut flashback, 0, "the_final_days");
-    inject_graveyard_card(&mut flashback, 0, "grizzly_bears");
-    inject_graveyard_card(&mut flashback, 0, "ornithopter");
-    inject_graveyard_card(&mut flashback, 0, "grizzly_bears");
-    grant_pool(&mut flashback, 0);
-    flashback
-        .apply_scenario_command(0, &flashback_cast(&flashback, spell))
-        .expect("cast The Final Days from the graveyard");
-    resolve_entire_stack_two_player(&mut flashback);
+    // Flashback captures its cast origin, but the graveyard count is evaluated by the creation
+    // instruction when it resolves. Add two creature cards after the accepted cast command and
+    // replay only the serialized accepted commands against the matching fixture.
+    let flashback_fixture = || {
+        let mut engine = engine_with(371_081, &[]);
+        let spell = inject_graveyard_card(&mut engine, 0, "the_final_days");
+        inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+        inject_graveyard_card(&mut engine, 0, "forest");
+        inject_graveyard_card(&mut engine, 0, "lightning_bolt");
+        inject_graveyard_card(&mut engine, 1, "grizzly_bears");
+        grant_pool(&mut engine, 0);
+        (engine, spell)
+    };
+    let (mut flashback, spell) = flashback_fixture();
+    let (mut replay, replay_spell) = flashback_fixture();
+    assert_eq!(spell, replay_spell);
+    let cast_command = flashback_cast(&flashback, spell);
+    assert_accepted_command_replays(&mut flashback, &mut replay, 0, cast_command);
+    for engine in [&mut flashback, &mut replay] {
+        inject_graveyard_card(engine, 0, "grizzly_bears");
+        inject_graveyard_card(engine, 0, "grizzly_bears");
+    }
+    let first = flashback.state.priority_player_id();
+    let second = if first == flashback.state.players[0].id {
+        flashback.state.players[1].id
+    } else {
+        flashback.state.players[0].id
+    };
+    assert_eq!(first, replay.state.priority_player_id());
+    assert_accepted_command_replays(&mut flashback, &mut replay, first, pass());
+    assert_eq!(second, flashback.state.priority_player_id());
+    assert_eq!(second, replay.state.priority_player_id());
+    assert_accepted_command_replays(&mut flashback, &mut replay, second, pass());
+    let order_answers = answer_simultaneous_entry_order_in_engine_order(&mut flashback);
+    assert_eq!(
+        order_answers.len(),
+        1,
+        "the three-token batch asks for one entry order"
+    );
+    use prost::Message;
+    for (actor, command, expected) in order_answers {
+        let raw_command = command.encode_to_vec();
+        let decoded =
+            RuledCommand::decode(raw_command.as_slice()).expect("raw order command decodes");
+        let actual = replay
+            .apply_scenario_command(actor, &decoded)
+            .expect("replay accepted entry-order command");
+        assert_eq!(
+            actual.encode_to_vec(),
+            expected.encode_to_vec(),
+            "entry-order replay preserves serialized event batches"
+        );
+    }
+    assert!(
+        flashback.state.pending_resolution.is_none(),
+        "Flashback program should resolve without a player prompt: {:?}",
+        flashback.state.pending_resolution
+    );
     let horrors = battlefield_token_oids(&flashback, 0, "horror_b_2_2");
     assert_eq!(
         horrors.len(),
         3,
-        "X is the number of creature cards in the graveyard"
+        "the resolution-time count sees the two added creatures, ignores noncreatures and the opponent's graveyard"
     );
     assert!(
         flashback.state.players[0].exile.contains(&spell),
         "CR 702.34: a flashback cast is exiled on resolution"
     );
+    for oid in &horrors {
+        assert!(
+            flashback.state.objects[oid].tapped,
+            "the Horror enters tapped"
+        );
+    }
+    assert_eq!(
+        replay.diagnostic_snapshot().unwrap(),
+        flashback.diagnostic_snapshot().unwrap(),
+        "accepted-command replay reaches the same final diagnostic state"
+    );
+
+    // A graveyard Flashback cast with only noncreature cards and opposing creatures creates X=0.
+    let mut zero = engine_with(371_082, &[]);
+    let spell = inject_graveyard_card(&mut zero, 0, "the_final_days");
+    inject_graveyard_card(&mut zero, 0, "forest");
+    inject_graveyard_card(&mut zero, 0, "lightning_bolt");
+    inject_graveyard_card(&mut zero, 1, "grizzly_bears");
+    grant_pool(&mut zero, 0);
+    zero.apply_scenario_command(0, &flashback_cast(&zero, spell))
+        .expect("flashback from a graveyard with no controller creature cards");
+    resolve_entire_stack_two_player(&mut zero);
+    assert!(
+        battlefield_token_oids(&zero, 0, "horror_b_2_2").is_empty(),
+        "noncreatures and opposing graveyard cards do not change X=0"
+    );
+    assert!(zero.state.players[0].exile.contains(&spell));
 }

@@ -7070,6 +7070,292 @@ fn program_if_accepts_controller_card_count_graveyard_condition() {
 }
 
 #[test]
+fn spell_program_if_accepts_direct_cast_snapshot_condition() {
+    use crate::primitives::{
+        CompiledInstructionKind, CompiledProgram, CompiledProgramCondition, EffectContext,
+    };
+
+    let program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "cast_origin", kind: If(
+            condition: CastSnapshot(index: 0),
+            yes: (steps: [], yields: []), no: (steps: [], yields: []),
+        ))], yields: []))"#,
+    )
+    .expect("the direct cast-snapshot Program parses");
+    let owner = crate::ProgramOwnerId::face(
+        "cast_snapshot_if",
+        crate::CardFaceId::new("cast_snapshot_if").unwrap(),
+    );
+    let compiled = CompiledProgram::compile(owner, EffectContext::Spell, &program)
+        .expect("a direct spell ProgramIf may read its owning face's cast condition");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("the cast-origin check remains one authored If instruction")
+    };
+    assert!(matches!(
+        &instruction.kind,
+        CompiledInstructionKind::If { condition, .. }
+            if matches!(
+                condition.as_ref(),
+                CompiledProgramCondition::Game(crate::primitives::GameCondition::CastSnapshot {
+                    index: 0
+                })
+            )
+    ));
+}
+
+#[test]
+fn cast_snapshot_program_if_stays_spell_face_scoped_and_checks_its_index() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let body = r#"(steps: [(id: "cast_origin", kind: If(
+        condition: CastSnapshot(index: 0),
+        yes: (steps: [], yields: []), no: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let spell_program: crate::CardProgram =
+        ron::from_str(&format!("(body: {body})")).expect("spell Program parses");
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "cast_snapshot_ability".into(),
+        face_id: crate::CardFaceId::new("cast_snapshot_ability").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    assert!(
+        CompiledProgram::compile(ability_owner, EffectContext::Ability, &spell_program).is_err(),
+        "CastSnapshot remains unavailable to ability ProgramIf"
+    );
+
+    let face = |id: &str, cast_conditions: &str, index: u32| {
+        format!(
+            r#"(id: "{id}", name: "Cast Snapshot Fixture", face_id: "{id}",
+                mana_cost: "{{0}}", types: ["Instant"],
+                cast_conditions: [{cast_conditions}],
+                spell_program: Some((body: (steps: [(id: "cast_origin", kind: If(
+                    condition: CastSnapshot(index: {index}),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: []),
+                ))], yields: []))))"#
+        )
+    };
+    let valid = face(
+        "cast_snapshot_index_valid",
+        "CastOrigin(origin: Graveyard)",
+        0,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("the direct spell ProgramIf references its face's cast condition");
+
+    for (id, conditions, index) in [
+        ("cast_snapshot_index_missing", "", 0),
+        (
+            "cast_snapshot_index_out_of_range",
+            "CastOrigin(origin: Graveyard)",
+            1,
+        ),
+    ] {
+        let invalid = face(id, conditions, index);
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[])
+            .expect_err("a Program CastSnapshot must reference an owning face condition");
+        assert!(
+            format!("{error}").contains(
+                "CastSnapshot requires an existing condition on the resolving spell face"
+            ),
+            "unexpected {id} diagnostic: {error}"
+        );
+    }
+
+    let choose = r#"(id: "cast_snapshot_choose_stays_unsupported",
+        name: "Cast Snapshot Choose Fixture", face_id: "cast_snapshot_choose_stays_unsupported",
+        mana_cost: "{0}", types: ["Instant"],
+        cast_conditions: [CastOrigin(origin: Graveyard)],
+        spell_program: Some((body: (steps: [(id: "choose", kind: Choose(
+            choice: "choose", chooser: Controller, optional: false,
+            branches: [(branch_id: "cast", presentation: Fallback, cost: None,
+                requirement: GameCondition(CastSnapshot(index: 0)),
+                body: (steps: [], yields: []))],
+            otherwise: (steps: [], yields: []),
+        ))], yields: []))))"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[choose], &[]).is_err(),
+        "the shared validator must not admit CastSnapshot in a Choose requirement"
+    );
+}
+
+#[test]
+fn registry_checks_cast_snapshot_references_inside_nested_if_result_blocks() {
+    let nested = r#"(id: "cast_snapshot_nested_if_result_fixture",
+        name: "Cast Snapshot Nested IfResult Fixture",
+        face_id: "cast_snapshot_nested_if_result_fixture", mana_cost: "{0}",
+        types: ["Instant"], cast_conditions: [CastOrigin(origin: Graveyard)],
+        spell_program: Some((body: (steps: [
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: OptionalExact(1)
+            ))),
+            (id: "paid", kind: IfResult(
+                condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+                yes: (steps: [(id: "nested_snapshot", kind: If(
+                    condition: CastSnapshot(index: 1),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: []),
+                ))], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: []), target_bindings: [])))"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[nested], &[])
+        .expect_err("CastSnapshot references must be checked in IfResult branches");
+    assert!(
+        format!("{error}")
+            .contains("CastSnapshot requires an existing condition on the resolving spell face"),
+        "unexpected nested snapshot diagnostic: {error}"
+    );
+}
+
+#[test]
+fn spell_program_create_tokens_accepts_typed_graveyard_count() {
+    use crate::primitives::{
+        Amount, CompiledInstructionKind, CompiledProgram, CountExpression, EffectContext,
+        PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+    };
+
+    let compile =
+        |card_id: &str, count: &str, token: &str, who: &str, tapped: bool, sacrifice: &str| {
+            let program: crate::CardProgram = ron::from_str(&format!(
+                r#"(body: (steps: [(id: "create_tokens", kind: Perform(CreateTokens(
+                token: "{token}", count: {count}, who: {who}, tapped: {tapped},
+                sacrifice_timing: {sacrifice},
+            )))], yields: []))"#
+            ))
+            .expect("the CreateTokens Program parses");
+            let owner =
+                crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap());
+            CompiledProgram::compile(owner, EffectContext::Spell, &program)
+        };
+    let count =
+        "Count(GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))))";
+    let compiled = compile(
+        "graveyard_count_tokens",
+        count,
+        "horror_b_2_2",
+        "Controller",
+        true,
+        "None",
+    )
+    .expect("spell Programs may count the controller's filtered graveyard for token creation");
+    let [instruction] = compiled.body.steps.as_slice() else {
+        panic!("the compiled token operation remains one instruction")
+    };
+    assert!(matches!(
+        &instruction.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::CreateTokens {
+                    token,
+                    count: Amount::Count(CountExpression::GraveyardCards {
+                        owners: RelativePlayerSet::Controller,
+                        filter: Some(filter),
+                    }),
+                    who: PlayerRecipient::Controller,
+                    tapped: true,
+                    sacrifice_timing: None,
+                } if token == "horror_b_2_2"
+                    && filter.card_type == Some(crate::primitives::CardTypeFilter::Creature)
+            )
+    ));
+
+    compile(
+        "generic_count_token",
+        count,
+        "generic_token",
+        "Controller",
+        false,
+        "None",
+    )
+    .expect("the generic count profile accepts other valid token identities and tapped states");
+
+    for (label, unsupported_count) in [
+        (
+            "other_dynamic_source",
+            "Count(GraveyardCardsNamed(owners: Controller, name: \"Other Card\"))",
+        ),
+        (
+            "opponent_graveyard",
+            "Count(GraveyardCards(owners: Opponents, filter: Some((card_type: Some(Creature)))))",
+        ),
+        (
+            "unfiltered_graveyard",
+            "Count(GraveyardCards(owners: Controller, filter: None))",
+        ),
+        (
+            "implicit_card_result_count",
+            "Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller)))",
+        ),
+    ] {
+        let id = format!("unsupported_{}", label.replace(' ', "_"));
+        let error = compile(
+            &id,
+            unsupported_count,
+            "generic_token",
+            "Controller",
+            false,
+            "None",
+        )
+        .expect_err("only the explicit Controller graveyard-card profile is admitted");
+        assert!(
+            error.contains("CreateTokens count")
+                || error.contains("program amounts cannot read an implicit card result"),
+            "unexpected {label} diagnostic: {error}"
+        );
+    }
+
+    for (label, who, sacrifice) in [
+        ("spell source controller", "SourceController", "None"),
+        ("delayed sacrifice", "Controller", "Some(NextEndStep)"),
+    ] {
+        let id = format!("unsupported_{}", label.replace(' ', "_"));
+        assert!(
+            compile(&id, count, "generic_token", who, false, sacrifice,).is_err(),
+            "the spell token profile rejects {label}"
+        );
+    }
+}
+
+#[test]
+fn ability_program_source_controller_rejects_dynamic_graveyard_count() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "create_tokens", kind: Perform(CreateTokens(
+            token: "generic_token",
+            count: Count(GraveyardCards(owners: Controller,
+                filter: Some((card_type: Some(Creature))))),
+            who: SourceController, tapped: false, sacrifice_timing: None,
+        )))], yields: []))"#,
+    )
+    .expect("the ability token Program parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "ability_source_controller_dynamic_count".into(),
+        face_id: crate::CardFaceId::new("ability_source_controller_dynamic_count").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    assert!(
+        CompiledProgram::compile(owner, EffectContext::Ability, &program).is_err(),
+        "dynamic graveyard counts require ordinary Controller token creation"
+    );
+
+    let fixed_program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "create_tokens", kind: Perform(CreateTokens(
+            token: "generic_token", count: 1, who: SourceController,
+            tapped: false, sacrifice_timing: None,
+        )))], yields: []))"#,
+    )
+    .expect("the fixed-count ability Program parses");
+    let fixed_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "ability_source_controller_fixed_count".into(),
+        face_id: crate::CardFaceId::new("ability_source_controller_fixed_count").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    CompiledProgram::compile(fixed_owner, EffectContext::Ability, &fixed_program)
+        .expect("fixed SourceController token creation remains supported for ability Programs");
+}
+
+#[test]
 fn program_if_accepts_controller_distinct_card_types_graveyard_condition() {
     let definition = program_fixture(
         r#"(steps: [

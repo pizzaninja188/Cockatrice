@@ -1391,18 +1391,23 @@ fn parse_rules_text(
                 assemble_spell_effects(&mut parsed, vec![effect])?
             }
             RecipeEmission::SpellEffects(effects) => assemble_spell_effects(&mut parsed, effects)?,
-            RecipeEmission::SpellEffectsWithCastConditions {
+            RecipeEmission::SpellProgramWithCastConditions {
                 conditions,
-                effects,
+                program,
             } => {
-                // One clause may establish a face's cast conditions exactly once. A second
-                // authored cast-condition clause stays unsupported so a face cannot silently
-                // accumulate or reorder its snapshot indices.
-                if !parsed.cast_conditions.is_empty() {
+                // Keep a face's cast-condition indexes stable and preserve one resolution
+                // owner: a combined clause cannot be appended to another condition, effect,
+                // program, targeting owner, or modal owner.
+                if !parsed.cast_conditions.is_empty()
+                    || !parsed.spell_effect.is_empty()
+                    || parsed.spell_program.is_some()
+                    || parsed.targeting.is_some()
+                    || parsed.modal_spell.is_some()
+                {
                     return Err(RulesParseError::Unsupported);
                 }
                 parsed.cast_conditions = conditions;
-                assemble_spell_effects(&mut parsed, effects)?;
+                parsed.spell_program = Some(program);
             }
             RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
                 assemble_spell_effects_with_targeting(&mut parsed, effects, targeting)?
@@ -14951,9 +14956,8 @@ mod tests {
         );
     }
 
-    /// Issue #371: a clause that establishes a face cast condition must assemble that condition
-    /// and its ordered spell effects in one pass, and the same line must stay unsupported on a
-    /// non-spell face or when repeated.
+    /// Issue #371: The Final Days assembles its cast condition and direct spell program once, and
+    /// the same line stays unsupported on a non-spell face or when repeated.
     #[test]
     fn issue_371_cast_condition_clause_assembles_with_its_branch_effects() {
         const CLAUSE: &str = "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
@@ -14968,49 +14972,64 @@ mod tests {
         let generated = evaluate_fresh(&card).expect("exact cast-origin clause should qualify");
         let raw = parse_generated(&generated.to_ron("fixture"));
         assert_eq!(
-            raw.cast_conditions,
-            [GameCondition::CastOrigin {
+            raw.cast_conditions.len(),
+            1,
+            "one cast condition is emitted"
+        );
+        assert_eq!(
+            raw.cast_conditions[0],
+            GameCondition::CastOrigin {
                 origin: tricerules_cards::SpellCastOrigin::Graveyard,
-            }],
+            },
             "the clause establishes exactly the graveyard cast origin"
         );
+        assert!(
+            raw.spell_effect.is_empty(),
+            "the program is the only resolution owner"
+        );
+        let program = raw
+            .spell_program
+            .as_ref()
+            .expect("one spell program is emitted");
         assert_eq!(
             raw.flashback_cost.as_ref().map(ToString::to_string),
             Some("{4}{B}{B}".to_string())
         );
-        let [SpellEffectKind::ChooseResolutionBranch {
-            selection,
-            branches,
-            otherwise,
-            ..
-        }] = raw.spell_effect.as_slice()
-        else {
+        let [instruction] = program.body.steps.as_slice() else {
             panic!(
-                "the clause must emit one first-applicable branch: {:?}",
-                raw.spell_effect
+                "the spell program must contain one conditional: {:?}",
+                program.body
             );
         };
-        assert_eq!(
-            *selection,
-            tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable
-        );
-        assert!(otherwise.is_empty());
-        assert_eq!(branches.len(), 2);
-        assert!(
+        let InstructionKind::If { condition, yes, no } = &instruction.kind else {
+            panic!("the spell program must use direct If control flow: {instruction:?}");
+        };
+        assert_eq!(**condition, GameCondition::CastSnapshot { index: 0 });
+        let branch_creates_one_horror = |block: &tricerules_cards::primitives::AuthoredBlock| {
+            let [instruction] = block.steps.as_slice() else {
+                return false;
+            };
+            let InstructionKind::Perform(effect) = &instruction.kind else {
+                return false;
+            };
             matches!(
-                &branches[0].requirement,
-                tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
-                    GameCondition::CastSnapshot { index: 0 }
-                )
-            ),
-            "the first branch consumes the face cast snapshot"
+                effect.as_ref(),
+                SpellEffectKind::CreateTokens {
+                    token,
+                    who: PlayerRecipient::Controller,
+                    tapped: true,
+                    sacrifice_timing: None,
+                    ..
+                } if token == "horror_b_2_2"
+            )
+        };
+        assert!(
+            branch_creates_one_horror(yes),
+            "graveyard branch creates tapped Horrors"
         );
         assert!(
-            matches!(
-                &branches[1].requirement,
-                tricerules_cards::primitives::ResolutionBranchRequirement::Always
-            ),
-            "the final branch is the unconditional fallback"
+            branch_creates_one_horror(no),
+            "fallback branch creates tapped Horrors"
         );
 
         // The same exact line on a permanent face has no matching surface.
