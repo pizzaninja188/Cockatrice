@@ -2157,6 +2157,220 @@ fn currency_converter_declining_one_discard_trigger_does_not_exile_that_card() {
 }
 
 #[test]
+fn currency_discard_to_exile_program_replays_accepted_commands_exactly() {
+    let (mut engine, _converter, land, nonland) = start_converter_multi_card_discard(20_261_132);
+    let mut replay = engine.clone();
+    let mut accepted_stream = Vec::new();
+    let mut original_batches = Vec::new();
+    let discarded;
+    {
+        let mut record = |engine: &mut GameEngine, actor, command| {
+            let batch = engine
+                .apply_command(actor, &command)
+                .expect("apply an accepted Currency discard Program command");
+            accepted_stream.push((actor, command));
+            original_batches.push(batch);
+        };
+
+        while let Some(pending) = engine.state.pending_trigger_order.as_ref() {
+            let actor = pending.deciding_player;
+            let trigger = pending.candidates[0].object_id;
+            record(&mut engine, actor, submit_trigger_order(trigger));
+        }
+        let trigger = engine.state.stack.last().expect("ordered discard trigger");
+        discarded = trigger
+            .trigger_context
+            .observed_object
+            .expect("the trigger retains its exact discarded object")
+            .object_id;
+        assert!([land, nonland].contains(&discarded));
+
+        let priority_count = engine
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .count()
+            .checked_sub(engine.state.passes_since_stack_change as usize)
+            .expect("consistent priority-pass count");
+        for _ in 0..priority_count {
+            let actor = engine.state.priority_player_id();
+            record(&mut engine, actor, pass());
+        }
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the discard Program suspends on its optional choice");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            ChoiceKind::ResolutionBranch
+        );
+        assert_eq!(pending.deciding_player, 0);
+        let prompt_id = pending.resolution_prompt_id.get();
+        let mut decision = submit_resolution_decision(ResolutionChoiceDecision::SelectBranch);
+        if let Some(Cmd::SubmitResolutionChoice(answer)) = decision.cmd.as_mut() {
+            answer.resolution_prompt_id = prompt_id;
+        }
+        record(&mut engine, 0, decision);
+    }
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.objects[&discarded].zone, Zone::Exile);
+    let left_in_graveyard = if discarded == land { nonland } else { land };
+    assert_eq!(
+        engine.state.objects[&left_in_graveyard].zone,
+        Zone::Graveyard
+    );
+
+    let replay_batches = accepted_stream
+        .iter()
+        .map(|(actor, command)| {
+            replay
+                .apply_command(*actor, command)
+                .expect("replay the same accepted Currency discard Program command")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(original_batches, replay_batches);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap()
+    );
+    assert_eq!(engine.state.seed, replay.state.seed);
+    assert_eq!(engine.state.command_index, replay.state.command_index);
+}
+
+#[test]
+fn currency_discard_to_exile_program_uses_lki_after_source_owner_concedes() {
+    let mut engine = GameEngine::new(registry::global(), 20_261_133, &[0, 1, 2], 20, None, true)
+        .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    let owner_index = engine.state.player_idx(0).expect("source owner seat");
+    let opening_hand = std::mem::take(&mut engine.state.players[owner_index].hand);
+    for object_id in opening_hand {
+        engine.state.players[owner_index]
+            .library
+            .push_back(object_id);
+        engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Library;
+    }
+    engine.initial_response_batch();
+    let converter = inject_permanent_on_battlefield(&mut engine, 0, CURRENCY_CONVERTER);
+
+    // Give P1 control of P0's Converter through the ordinary control-changing spell. P1 then
+    // discards P1-owned cards, so P0 can leave while the resolving object remains live.
+    end_active_turn(&mut engine, 0);
+    for _ in 0..3 {
+        if engine.state.turn_step != tricerules_core::TurnStep::Cleanup {
+            break;
+        }
+        pass_priority_round(&mut engine);
+    }
+    advance_to_main1_from_game_start(&mut engine);
+    assert_eq!(engine.state.active_player_id(), 1);
+    inject_card_into_hand(&mut engine, 1, "confiscate");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            u: 2,
+            c: 4,
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let confiscate_slot = hand_index_for_card(&engine, 1, "confiscate");
+    engine
+        .apply_scenario_command(1, &cast_spell(confiscate_slot, target_object(converter)))
+        .expect("P1 takes control of Currency Converter");
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.objects[&converter].owner, 0);
+    assert_eq!(engine.state.objects[&converter].controller, 1);
+
+    inject_card_into_hand(&mut engine, 1, "faithless_looting");
+    let land = inject_card_into_hand(&mut engine, 1, "forest");
+    let nonland = inject_card_into_hand(&mut engine, 1, "hill_giant");
+    inject_library_card(&mut engine, 1, "island");
+    inject_library_card(&mut engine, 1, "plains");
+    let looting_slot = hand_index_for_card(&engine, 1, "faithless_looting");
+    engine
+        .apply_scenario_command(1, &cast_spell(looting_slot, Vec::new()))
+        .expect("P1 casts Faithless Looting");
+    pass_priority_round(&mut engine);
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![land, nonland]))
+        .expect("P1 discards two cards");
+    assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);
+
+    answer_trigger_order_in_engine_order(&mut engine);
+    let trigger = engine.state.stack.last().expect("P1's discard trigger");
+    let discarded = trigger
+        .trigger_context
+        .observed_object
+        .expect("the resolving trigger keeps its exact discarded card")
+        .object_id;
+    assert!([land, nonland].contains(&discarded));
+    let discarded_generation = engine.state.zone_change_generation[&discarded];
+    for _ in 0..12 {
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass until the discard Program publishes its optional choice");
+    }
+    let prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P1 receives the optional linked-Exile choice");
+    assert_eq!(prompt.deciding_player, 1);
+    assert_eq!(
+        prompt.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 concedes while P1's trigger Program is suspended");
+    assert!(engine.state.players[0].has_lost);
+    assert!(
+        !engine.state.objects.contains_key(&converter),
+        "the departed source owner removes Currency Converter"
+    );
+    assert!(engine.state.objects.contains_key(&discarded));
+    assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.zone_change_generation[&discarded], discarded_generation,
+        "source-owner departure leaves P1's exact discard incarnation available"
+    );
+    let resumed =
+        engine.state.pending_resolution.as_ref().expect(
+            "the already-begun discard ability keeps its choice after its source owner leaves",
+        );
+    assert_eq!(resumed.deciding_player, 1);
+    assert_eq!(
+        resumed.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    engine
+        .apply_scenario_command(
+            1,
+            &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
+        )
+        .expect("P1 selects the still-applicable branch after P0 leaves");
+
+    assert_eq!(engine.state.objects[&discarded].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&discarded].owner, 1);
+    assert_eq!(
+        engine.state.objects[&if discarded == land { nonland } else { land }].zone,
+        Zone::Graveyard
+    );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
 fn currency_converter_has_no_token_branch_when_no_linked_card_remains_in_exile() {
     let (mut engine, converter, land, nonland) = currency_with_two_linked_cards(20_261_107);
     activate_converter_return(&mut engine, converter, land);

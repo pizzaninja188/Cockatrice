@@ -1,5 +1,6 @@
 // Oracle 981298e6-ddee-49c0-9377-f47f019b4138 and rulings checked 2026-10-20 against the pinned Scryfall snapshot and official card gallery.
-// CR 400.7, 603.2c, 603.5, 607.2a, and 608.2d govern discard triggers and linked-card choices.
+// CR 400.7, 603.2c, 603.5, 607.2a, 608.2d, 608.2m, and 800.4a govern this discard trigger,
+// its linked-card choice, and source-owner departure during a begun multiplayer resolution.
 (
   id: "currency_converter",
   name: "Currency Converter",
@@ -10,21 +11,28 @@
     ability_id: "discard_to_exile",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerDiscardsCard(player: Controller),
-    effect: [ChooseResolutionBranch(
-      chooser: Controller,
-      optional: true,
-      selection: PlayerChoice,
-      branches: [(
-        branch_id: "exile_discarded_card",
-        presentation: OracleLines([1]),
-        cost: None,
-        requirement: EffectsApplicable,
-        effects: [Exile(
-          subject: TriggerObject,
-          linked_exile_id: Some("exiled_cards"),
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "choose_to_exile", bind: [], input: None, kind: Choose(
+        choice: "may_exile_discarded_card",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "exile_discarded_card",
+          presentation: OracleLines([1]),
+          cost: None,
+          requirement: EffectsApplicable,
+          body: (steps: [
+            (id: "exile_discarded_card", bind: [], input: None,
+              kind: Perform(Exile(
+                subject: TriggerObject,
+                linked_exile_id: Some("exiled_cards"),
+              ))),
+          ], yields: []),
         )],
-      )],
-    )],
+        otherwise: (steps: [], yields: []),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
   activated_abilities: [(
     ability_id: "draw_then_discard",

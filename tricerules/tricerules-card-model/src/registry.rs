@@ -229,6 +229,10 @@ fn compile_authored_program_owner(
                 trigger.is_some_and(TriggerCondition::observes_permanent_entry)
             }
             ProgramRequiredInput::CapturedTriggerObjectRef => inputs.captured_trigger_object_ref,
+            ProgramRequiredInput::TriggerLinkedExileObject => {
+                inputs.captured_trigger_object_ref
+                    || trigger.is_some_and(TriggerCondition::supplies_trigger_object)
+            }
             ProgramRequiredInput::TriggerTargetingStackObject => {
                 trigger.is_some_and(TriggerCondition::supplies_targeting_stack_object)
             }

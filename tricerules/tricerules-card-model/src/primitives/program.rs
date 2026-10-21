@@ -77,6 +77,9 @@ pub enum ProgramRequiredInput {
     /// observed-object snapshot, this reference may be stale or absent from its former zone when
     /// the delayed ability resolves; only the captured identity must have been supplied.
     CapturedTriggerObjectRef,
+    /// Exact event object consumed by the guarded linked-Exile TriggerObject leaf. This remains
+    /// distinct from the ETB token-copy snapshot and the delayed exact-reference contract above.
+    TriggerLinkedExileObject,
     /// Exact spell or ability reference that chose a permanent carrying a Ward ability. The
     /// captured identity remains present even when that stack object has since left the stack.
     TriggerTargetingStackObject,
@@ -428,6 +431,9 @@ pub enum CompiledChooseRequirement {
     CastCostReceipt(CastCostReceiptCondition),
     /// The exact source object can receive one +1/+1 counter at this resolution point.
     SourceCanReceivePlusOnePlusOneCounters,
+    /// The event-captured TriggerObject remains a legal linked-Exile subject under the existing
+    /// object-generation and zone rules.
+    TriggerObjectCanBeLinkedExiled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -456,6 +462,7 @@ struct Compiler<'a> {
     instruction_ids: HashSet<String>,
     choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
+    allow_trigger_object_linked_exile: bool,
     next_instruction_address: u32,
 }
 
@@ -602,6 +609,7 @@ impl CompiledProgram {
             instruction_ids: HashSet::new(),
             choice_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
+            allow_trigger_object_linked_exile: false,
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -1196,7 +1204,21 @@ impl Compiler<'_> {
                         self.context,
                         target_group_index,
                         target_group_max,
+                        self.allow_trigger_object_linked_exile,
                     )?;
+                    if self.allow_trigger_object_linked_exile
+                        && matches!(
+                            effect.as_ref(),
+                            SpellEffectKind::Exile {
+                                subject: EffectSubject::TriggerObject,
+                                linked_exile_id: Some(_),
+                                ..
+                            }
+                        )
+                    {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerLinkedExileObject);
+                    }
                     if target_group_index.is_some()
                         && matches!(
                             effect.as_ref(),
@@ -1632,19 +1654,41 @@ impl Compiler<'_> {
                                 CompiledChooseRequirement::CastCostReceipt(condition.clone())
                             }
                             ResolutionBranchRequirement::EffectsApplicable => {
+                                let exact_linked_exile_body =
+                                    exact_trigger_object_linked_exile_body(&branch.body);
+                                let exact_linked_exile_profile = exact_linked_exile_body
+                                    && *chooser == PlayerRecipient::Controller
+                                    && *optional
+                                    && branches.len() == 1
+                                    && branch.cost == ResolutionCost::None
+                                    && otherwise.steps.is_empty()
+                                    && otherwise.yields.is_empty();
                                 if self.context != EffectContext::Ability
-                                    || !exact_source_plus_one_counter_body(&branch.body)
+                                    || (!exact_source_plus_one_counter_body(&branch.body)
+                                        && !exact_linked_exile_profile)
                                 {
                                     return Err(format!(
-                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction",
+                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction; alternatively, the exact optional Controller linked-Exile TriggerObject branch is supported",
                                         instruction.id
                                     ));
                                 }
-                                CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters
+                                if exact_linked_exile_profile {
+                                    CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
+                                } else {
+                                    CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters
+                                }
                             }
                         };
 
-                        let (body, body_types) = self.compile_block(&branch.body, &names)?;
+                        let previous_linked_exile_permission =
+                            self.allow_trigger_object_linked_exile;
+                        self.allow_trigger_object_linked_exile = matches!(
+                            &requirement,
+                            CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
+                        );
+                        let compiled_body = self.compile_block(&branch.body, &names);
+                        self.allow_trigger_object_linked_exile = previous_linked_exile_permission;
+                        let (body, body_types) = compiled_body?;
                         joined_types = Some(match joined_types {
                             None => body_types,
                             Some(current) => {
@@ -2323,6 +2367,7 @@ fn validate_and_result_types(
     context: EffectContext,
     target_group_index: Option<u32>,
     target_group_max: Option<u32>,
+    allow_trigger_object_linked_exile: bool,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::MoveGraveyardCards {
@@ -2883,6 +2928,13 @@ fn validate_and_result_types(
         } if context == EffectContext::Ability && *count > 0 => {
             effect.validate(context)?;
             counter.validate()?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::Exile {
+            subject: EffectSubject::TriggerObject,
+            linked_exile_id: Some(_),
+        } if context == EffectContext::Ability && allow_trigger_object_linked_exile => {
+            effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::ChooseLinkedExiledCard {
@@ -3449,6 +3501,28 @@ fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {
             count: Amount::Fixed(count),
             subject: EffectSubject::Source,
         } if *count > 0
+    )
+}
+
+fn exact_trigger_object_linked_exile_body(body: &AuthoredBlock) -> bool {
+    if !body.yields.is_empty() {
+        return false;
+    }
+    let [instruction] = body.steps.as_slice() else {
+        return false;
+    };
+    if !instruction.bind.is_empty() || instruction.input.is_some() {
+        return false;
+    }
+    let InstructionKind::Perform(effect) = &instruction.kind else {
+        return false;
+    };
+    matches!(
+        effect.as_ref(),
+        SpellEffectKind::Exile {
+            subject: EffectSubject::TriggerObject,
+            linked_exile_id: Some(_),
+        }
     )
 }
 

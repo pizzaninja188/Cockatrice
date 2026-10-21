@@ -7,7 +7,8 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0"
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Exile"
       ]
     },
     {
@@ -42,6 +43,14 @@
     "rogue_b_2_2"
   ],
   "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_discard_to_exile_program_replays_accepted_commands_exactly",
+      "covers": "the real discard trigger's exact accepted commands, prompt ID, linked Exile result and final state replay identically"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_discard_to_exile_program_uses_lki_after_source_owner_concedes",
+      "covers": "when the source owner leaves during the other player's begun resolution, the source leaves but the controller's prompt and exact discarded-card generation remain valid"
+    },
     {
       "test": "scenario deck_coverage_linked_exile_choice::currency_converter_is_registered_with_its_exact_card_identity",
       "covers": "exact Currency Converter identity resolves to its complete handwritten rules definition"
@@ -117,6 +126,10 @@
   ],
   "complete_definition_review_confirmed": true,
   "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Exile"
+    },
     {
       "symbol": "SpellEffectKind::Draw",
       "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Draw"

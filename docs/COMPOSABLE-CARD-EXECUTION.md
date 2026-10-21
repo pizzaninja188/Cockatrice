@@ -117,8 +117,19 @@ lookup preserves existing source/LKI behavior, while `ObjectMatches` checks exac
 membership. This source family remains unsupported in spell Programs and conditional-search
 predicates; event-bound leaves and cross-object matching remain closed. Ability Programs admit fixed-positive `PutCounters` and
 `RemoveCounters` on `Source` as ordinary effects, plus the existing resultless `RemoveAllCounters`
-shape; `EffectsApplicable` remains limited to its complete fixed-positive `PlusOnePlusOne`
-source-counter branch.
+shape. `EffectsApplicable` currently supports only its existing complete fixed-positive
+`PlusOnePlusOne` source-counter branch and Currency Converter's linked-Exile branch below.
+
+There is one additional closed `EffectsApplicable` profile for Currency Converter's first discard
+trigger owner: an ability-only optional Controller choice with one free branch, one resultless
+`Exile(TriggerObject, Some(linked_id))` operation and an empty `Otherwise` block. The compiler admits
+that leaf only inside this exact branch shape and records `TriggerLinkedExileObject`; registry
+admission requires a captured event object from the trigger (or an explicit captured-reference
+contract). At resolution, the existing object-generation and zone checks decide whether the linked
+Exile branch is applicable. This profile does not admit another subject or destination, unlinked
+Exile, extra operation, result binding/yield, cost, extra branch, mandatory choice, or spell Program.
+`draw_then_discard` and the later `return_linked_card` consumer remain separate owners. Model and
+scenario coverage is recorded in the Currency Converter review map.
 
 Ring's upkeep Program places one Night counter, checks the threshold after replacement choices
 resume the same cursor, removes only Night at eight, and creates eight named Replicated Ring tokens.

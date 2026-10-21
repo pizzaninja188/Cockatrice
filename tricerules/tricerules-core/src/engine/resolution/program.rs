@@ -1443,6 +1443,15 @@ impl GameEngine {
                     &tricerules_card_model::primitives::EffectSubject::Source,
                 )
             }
+            CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled => {
+                super::resolve_zone_effect_subject(
+                    self,
+                    top,
+                    &[],
+                    &tricerules_card_model::primitives::EffectSubject::TriggerObject,
+                )
+                .is_some()
+            }
         }
     }
 
@@ -2083,6 +2092,15 @@ fn validate_program_unit_inputs(
     {
         return Err(EngineError::ProgramInvariant(
             "resolution program is missing its captured delayed-object reference",
+        ));
+    }
+    if compiled
+        .required_inputs
+        .contains(&ProgramRequiredInput::TriggerLinkedExileObject)
+        && top.trigger_context.observed_object.is_none()
+    {
+        return Err(EngineError::ProgramInvariant(
+            "resolution program is missing its linked-Exile trigger-object reference",
         ));
     }
     Ok(())

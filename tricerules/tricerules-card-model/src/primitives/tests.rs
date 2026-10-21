@@ -12466,6 +12466,212 @@ fn endure_program_constituent_contracts_fail_independently_before_admission() {
 }
 
 #[test]
+fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice() {
+    use crate::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram, EffectContext,
+        PlayerRecipient, ProgramRequiredInput, SpellEffectKind,
+    };
+
+    let body = r#"(steps: [(id: "choose_to_exile", kind: Choose(
+        choice: "may_exile", chooser: Controller, optional: true,
+        branches: [(branch_id: "exile", presentation: Fallback, cost: None,
+            requirement: EffectsApplicable, body: (steps: [
+                (id: "exile_discarded", kind: Perform(Exile(
+                    subject: TriggerObject, linked_exile_id: Some("exiled_cards"),
+                )))
+            ], yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let compile = |body: &str, context| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("Currency Program fixture parses");
+        let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "currency_converter".into(),
+            face_id: crate::CardFaceId::new("currency_converter").unwrap(),
+            ability_path: vec![crate::AbilityId::new("discard_to_exile").unwrap()],
+        });
+        CompiledProgram::compile(owner, context, &program)
+    };
+
+    let compiled = compile(body, EffectContext::Ability)
+        .expect("the exact Currency discard_to_exile Program shape should compile");
+    assert_eq!(
+        compiled.required_inputs,
+        vec![ProgramRequiredInput::TriggerLinkedExileObject]
+    );
+    let [choose] = compiled.body.steps.as_slice() else {
+        panic!("the Currency trigger contains one optional linked-Exile choice")
+    };
+    let CompiledInstructionKind::Choose {
+        chooser,
+        optional,
+        branches,
+        otherwise,
+        ..
+    } = &choose.kind
+    else {
+        panic!("Currency's choice is a compiled Choose")
+    };
+    assert_eq!(*chooser, PlayerRecipient::Controller);
+    assert!(*optional);
+    assert!(otherwise.steps.is_empty());
+    assert!(otherwise.yields.is_empty());
+    let [branch] = branches.as_slice() else {
+        panic!("Currency's optional choice has one branch")
+    };
+    assert!(matches!(
+        branch.requirement,
+        CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
+    ));
+    assert!(matches!(
+        branch.body.steps.as_slice(),
+        [step]
+            if matches!(
+                &step.kind,
+                CompiledInstructionKind::Perform(effect)
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::Exile {
+                            subject: crate::primitives::EffectSubject::TriggerObject,
+                            linked_exile_id: Some(link),
+                        } if link.as_str() == "exiled_cards"
+                    )
+            )
+    ));
+
+    for (label, invalid_body) in [
+        (
+            "wrong chooser",
+            body.replace("chooser: Controller", "chooser: SourceController"),
+        ),
+        (
+            "mandatory choice",
+            body.replace("optional: true", "optional: false"),
+        ),
+        (
+            "paid branch",
+            body.replace("cost: None", "cost: Mana(\"{1}\")"),
+        ),
+        (
+            "unlinked exile",
+            body.replace("linked_exile_id: Some(\"exiled_cards\")", "linked_exile_id: None"),
+        ),
+        (
+            "different subject",
+            body.replace("subject: TriggerObject", "subject: Source"),
+        ),
+        (
+            "bound result",
+            body.replace(
+                "id: \"exile_discarded\", kind: Perform(Exile(",
+                "id: \"exile_discarded\", bind: [\"exiled\"], kind: Perform(Exile(",
+            ),
+        ),
+        (
+            "input-bound leaf",
+            body.replace(
+                "id: \"exile_discarded\", kind: Perform(Exile(",
+                "id: \"exile_discarded\", input: Some(\"prior\"), kind: Perform(Exile(",
+            ),
+        ),
+        (
+            "yielded branch result",
+            body.replace(
+                "            ], yields: []))],",
+                "            ], yields: [\"exiled\"]))],",
+            ),
+        ),
+        (
+            "extra branch operation",
+            body.replace(
+                "(id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))",
+                "(id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                ))),\n                (id: \"extra\", kind: Perform(GainLife(amount: 1)))",
+            ),
+        ),
+        (
+            "nonempty Otherwise",
+            body.replace(
+                "otherwise: (steps: [], yields: [])",
+                "otherwise: (steps: [(id: \"extra\", kind: Perform(GainLife(amount: 1)))], yields: [])",
+            ),
+        ),
+        (
+            "multiple branches",
+            body.replace(
+                "branches: [(branch_id: \"exile\", presentation: Fallback, cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: []))],",
+                "branches: [(branch_id: \"exile\", presentation: Fallback, cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: [])),\n            (branch_id: \"empty\", presentation: Fallback, cost: None, requirement: Always, body: (steps: [], yields: []))],",
+            ),
+        ),
+    ] {
+        assert_ne!(invalid_body, body, "{label} fixture must alter the valid source");
+        assert!(
+            compile(&invalid_body, EffectContext::Ability).is_err(),
+            "accepted invalid Currency EffectsApplicable profile: {label}"
+        );
+    }
+    assert!(
+        compile(body, EffectContext::Spell).is_err(),
+        "the linked-Exile applicability guard remains ability-only"
+    );
+}
+
+#[test]
+fn linked_exile_program_input_requires_an_exact_event_object_source() {
+    const BODY: &str = r#"(steps: [(id: "choose_to_exile", kind: Choose(
+        choice: "may_exile", chooser: Controller, optional: true,
+        branches: [(branch_id: "exile", presentation: Fallback, cost: None,
+            requirement: EffectsApplicable, body: (steps: [
+                (id: "exile_discarded", kind: Perform(Exile(
+                    subject: TriggerObject, linked_exile_id: Some("exiled_cards"),
+                )))
+            ], yields: []))],
+        otherwise: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let make_card = |id: &str, trigger: &str| {
+        format!(
+            r#"(id: "{id}", name: "Linked Exile Program Input Fixture",
+                face_id: "{id}", types: ["Artifact"],
+                triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger}, effect: [],
+                    program: Some((body: {BODY}, target_bindings: [])),
+                    modal: None, targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None,
+                )], activated_abilities: [(
+                    ability_id: "consume_link", presentation: Fallback, costs: [Tap],
+                    effect: [ChooseLinkedExiledCard(
+                        producer_ability_id: "triggered_01",
+                        linked_exile_id: "exiled_cards",
+                        filter: (any_of: Some([
+                            (card_type: Some(Creature)),
+                            (card_type: Some(Noncreature)),
+                        ])),
+                        destination: OwnerGraveyard, optional: false,
+                    )],
+                )])"#
+        )
+    };
+
+    let discard = make_card(
+        "linked_exile_program_discard_input",
+        "WheneverPlayerDiscardsCard(player: Controller)",
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&discard], &[])
+        .expect("the discard trigger supplies its exact event object");
+
+    let unrelated = make_card("linked_exile_program_no_input", "WheneverYouProliferate");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unrelated], &[])
+        .expect_err("an unrelated trigger cannot use the linked-Exile event object")
+        .to_string();
+    assert!(
+        error.contains(
+            "requires TriggerLinkedExileObject, but its trigger does not supply that input"
+        ),
+        "unexpected linked-Exile input error: {error}"
+    );
+}
+
+#[test]
 fn endure_program_admits_only_the_source_counter_choice_composition() {
     use crate::primitives::{
         CompiledInstructionKind, CompiledProgram, EffectContext, PlayerRecipient, SpellEffectKind,

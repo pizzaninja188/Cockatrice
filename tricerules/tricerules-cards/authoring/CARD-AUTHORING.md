@@ -735,7 +735,25 @@ matching mandatory Program consumer.
 
 The handwritten [Currency Converter definition](../data/currency_converter.ron) and
 [review map](review-maps/currency_converter.json) pin its three Oracle lines to the actual-card
-scenario coverage. The begun mandatory choice keeps its original ability-controller attribution and
+scenario coverage. The first triggered-ability owner, `discard_to_exile`, uses a separate finite
+Program profile: the discard trigger supplies its exact captured event object to one optional,
+free Controller `Choose`; its sole `EffectsApplicable` branch performs only linked
+`Exile(TriggerObject, "exiled_cards")`, and its `Otherwise` block is empty. The compiled
+`TriggerLinkedExileObject` requirement admits only an event that supplies that object (or an
+explicitly captured trigger-object reference), and the choice checks the existing object-generation
+and zone rules before offering the branch. For this Currency trigger, that means the exact discarded
+card must still be the same graveyard incarnation. An empty/declined choice makes no linked record.
+This does not migrate `draw_then_discard` or alter the later `return_linked_card` consumer. Its
+compiler profile and exact linked subject are covered by
+`currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice` and
+`linked_exile_program_input_requires_an_exact_event_object_source`; actual-card tests cover
+multi-card identity, replacement, decline, stale generation, and accepted-command replay. The
+source-owner departure scenario has the Converter owner leave while the other player controls and
+resolves the already-begun discard ability. CR 800.4a removes the departed owner's permanent; CR
+608.2m lets the begun ability finish. This checks source removal and retained last-known trigger
+context, not chooser delegation under CR 800.4g.
+
+The begun mandatory choice keeps its original ability-controller attribution and
 Program cursor through the narrow active/saved departure path for this profile. When that ability
 has begun resolving, CR 800.4a makes its departed controller's noncard stack object cease to exist;
 CR 608.2m requires the already-resolving ability to finish. The retained Program is execution state,
