@@ -25,22 +25,41 @@
         mode_id: "remove_abilities",
         presentation: OracleLines([2]),
         linked_cast_cost: Some((group_id: "spree", option_id: "remove_abilities_cost")),
-        effects: [RemoveAbilitiesAll(filter: ())],
+        effects: [],
+        program: Some((body: (steps: [
+          (id: "remove_abilities", bind: [], input: None,
+            kind: Perform(RemoveAbilitiesAll(filter: ())))
+        ], yields: []))),
       ),
       (
         mode_id: "grant_indestructible",
         presentation: OracleLines([3]),
         linked_cast_cost: Some((group_id: "spree", option_id: "grant_indestructible_cost")),
-        effects: [
-          ChoosePermanents(chooser: Controller, filter: (kind: Creature, controller: You), min: 1, max: 1),
-          GrantKeywords(subject: PreviousEffectObject, keywords: [Indestructible]),
-        ],
+        effects: [],
+        program: Some((body: (steps: [
+          (id: "choose_creature", bind: ["creature"], input: None,
+            kind: Perform(ChoosePermanents(
+              chooser: Controller,
+              filter: (kind: Creature, controller: You),
+              min: 1,
+              max: 1,
+          ))),
+          (id: "grant_indestructible", bind: [], input: Some("creature"),
+            kind: Perform(GrantKeywords(
+              subject: PreviousEffectObject,
+              keywords: [Indestructible],
+          )))
+        ], yields: []))),
       ),
       (
         mode_id: "destroy_creatures",
         presentation: OracleLines([4]),
         linked_cast_cost: Some((group_id: "spree", option_id: "destroy_creatures_cost")),
-        effects: [DestroyAll(kind: (kind: Creature))],
+        effects: [],
+        program: Some((body: (steps: [
+          (id: "destroy_creatures", bind: [], input: None,
+            kind: Perform(DestroyAll(kind: (kind: Creature))))
+        ], yields: []))),
       ),
     ],
   ),

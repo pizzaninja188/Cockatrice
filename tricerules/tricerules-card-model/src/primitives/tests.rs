@@ -9774,6 +9774,91 @@ fn spell_program_typechecks_a_generation_bound_permanent_result_consumer() {
 }
 
 #[test]
+fn spell_program_grants_keywords_from_an_explicit_single_permanent_selection() {
+    use crate::primitives::{Cardinality, CompiledProgram, EffectContext, ResultType};
+
+    let body = r#"(steps: [
+        (id: "choose_creature", bind: ["creature"], kind: Perform(ChoosePermanents(
+            chooser: Controller,
+            filter: (kind: Creature, controller: You),
+            min: 1,
+            max: 1,
+        ))),
+        (id: "grant_indestructible", input: Some("creature"), kind: Perform(GrantKeywords(
+            subject: PreviousEffectObject,
+            keywords: [Indestructible],
+        ))),
+    ], yields: [])"#;
+    let definition = program_fixture(body);
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("a spell Program may grant a keyword to its explicit single permanent result");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the spell Program compiles under its exact owner");
+    let [choose, grant] = compiled.body.steps.as_slice() else {
+        panic!("the choice and its keyword consumer remain separate instructions");
+    };
+    let [creature] = choose.outputs.as_slice() else {
+        panic!("ChoosePermanents binds its typed selection");
+    };
+    assert!(matches!(
+        &compiled
+            .slot(*creature)
+            .expect("choice output slot")
+            .result_type,
+        ResultType::PermanentSelection {
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(1)
+            },
+            ..
+        }
+    ));
+    assert_eq!(grant.input, Some(*creature));
+    assert!(grant.outputs.is_empty(), "GrantKeywords is resultless");
+
+    let wrong_type = program_fixture(
+        r#"(steps: [
+            (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1))),
+            (id: "grant", input: Some("drawn"), kind: Perform(GrantKeywords(
+                subject: PreviousEffectObject, keywords: [Indestructible],
+            ))),
+        ], yields: [])"#,
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&wrong_type], &[]).is_err());
+
+    let multiple_objects = program_fixture(
+        r#"(steps: [
+            (id: "choose_creatures", bind: ["creatures"], kind: Perform(ChoosePermanents(
+                chooser: Controller,
+                filter: (kind: Creature, controller: You),
+                min: 0,
+                max: 2,
+            ))),
+            (id: "grant", input: Some("creatures"), kind: Perform(GrantKeywords(
+                subject: PreviousEffectObject, keywords: [Indestructible],
+            ))),
+        ], yields: [])"#,
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&multiple_objects], &[]).is_err());
+
+    let ability_program: crate::CardProgram =
+        ron::from_str(&format!("(body: {body})")).expect("the shared Program body parses");
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "program_fixture".into(),
+        face_id: crate::CardFaceId::new("program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    assert!(
+        CompiledProgram::compile(ability_owner, EffectContext::Ability, &ability_program).is_err()
+    );
+}
+
+#[test]
 fn program_compiler_preserves_owner_context_and_local_target_projection() {
     let definition = program_fixture(
         r#"(steps: [(id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))], yields: [])"#,

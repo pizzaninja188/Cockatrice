@@ -2321,6 +2321,10 @@ fn compile_input(
     let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
     let expected = match effect {
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
+        EffectOp::GrantKeywords {
+            subject: EffectSubject::PreviousEffectObject,
+            ..
+        } => Some("PermanentSelection"),
         EffectOp::AttachEquipment {
             equipment: EffectSubject::Source,
             creature: EffectSubject::PreviousEffectObject,
@@ -2402,6 +2406,19 @@ fn compile_input(
                             min: 0,
                             max: Some(1),
                         },
+                    }
+                ),
+                EffectOp::GrantKeywords {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                } => matches!(
+                    actual.result_type,
+                    ResultType::PermanentSelection {
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                        ..
                     }
                 ),
                 EffectOp::CreateReflexiveTrigger { .. }
@@ -2886,6 +2903,21 @@ fn validate_and_result_types(
                     "GrantKeywordsAll in a resolution program does not support TargetedPlayer scopes without a target-role binding".into(),
                 );
             }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::PreviousEffectObject,
+            ..
+        } if context == EffectContext::Spell => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::PreviousEffectObject,
+            ..
+        } => Err("GrantKeywords(PreviousEffectObject) in a resolution program is spell-only".into()),
+        SpellEffectKind::RemoveAbilitiesAll { .. } | SpellEffectKind::DestroyAll { .. } => {
+            effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::CreateReflexiveTrigger { .. } => {

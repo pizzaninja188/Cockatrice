@@ -185,3 +185,64 @@ fn final_showdown_chooses_during_resolution_and_applies_modes_in_printed_order()
     assert!(!characteristics.has_keyword(Keyword::Flying));
     assert!(characteristics.has_keyword(Keyword::Indestructible));
 }
+
+#[test]
+fn final_showdown_empty_grant_selection_continues_to_later_mode() {
+    let decks = Some(vec![
+        deck_with("plains", &["final_showdown"]),
+        deck_with("mountain", &["grizzly_bears"]),
+    ]);
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        177_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "final_showdown");
+    let opposing = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
+    e.state.players[0].mana_pool.white = 3;
+    e.state.players[0].mana_pool.colorless = 5;
+
+    let slot = hand_index_for_card(&e, 0, "final_showdown");
+    let command = RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
+            source: Some(hand_cast_source(slot)),
+            selected_modes: (0..3)
+                .map(|mode_index| SelectedSpellMode {
+                    mode_index,
+                    targets: vec![],
+                })
+                .collect(),
+            cast_cost_group_selections: (0..3).map(mana_option).collect(),
+            ..Default::default()
+        })),
+    };
+    e.apply_scenario_command(0, &command)
+        .expect("cast all three modes with no creatures controlled");
+    let first = e.state.priority_player_id();
+    let second = if first == 0 { 1 } else { 0 };
+    e.apply_scenario_command(first, &pass())
+        .expect("first pass");
+    let resolving = e
+        .apply_scenario_command(second, &pass())
+        .expect("second pass resolves without a creature choice");
+
+    assert!(
+        find_resolution_choice(&resolving).is_none(),
+        "an empty PreviousEffectObject selection must not open a choice"
+    );
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "the empty grant consumer must not park the later mode"
+    );
+    assert_eq!(
+        e.state.objects[&opposing].zone,
+        Zone::Graveyard,
+        "the third destroy mode must continue after the empty grant selection"
+    );
+}

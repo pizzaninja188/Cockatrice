@@ -281,6 +281,14 @@ and does not include later entrants (CR 611.2c, 613.1f, 702.111). Lord Skitter's
 ability Program form for its Menace mode; Overrun and Make a Stand are existing `GrantKeywordsAll`
 effect-list analogues. This adds no card admission or runtime operation.
 
+Modal spell modes also admit `GrantKeywords(subject: PreviousEffectObject, ...)` when it consumes an
+explicit `ChoosePermanents` result typed as `PermanentSelection` with cardinality `0..1`. The
+choice remains `min: 1, max: 1` when a candidate exists; an empty legal set produces no selected
+object, so the grant is a no-op. This consumer is spell-only and does not generalize to other
+contexts, result types, or cardinalities. Resultless `RemoveAbilitiesAll` and `DestroyAll` are
+accepted `Perform` leaves through their ordinary effect validators. Final Showdown demonstrates
+these forms with every modal sibling authored as a Program under the all-sibling rule above.
+
 The filtered Program discard cost is narrowly admitted as `DiscardCard(filter: Some(Creature))`
 on an optional `Controller`-chosen ability branch; it selects one creature card from that payer's
 hand. Crypt Lurker uses it beside a creature-sacrifice branch, and either paid branch draws one

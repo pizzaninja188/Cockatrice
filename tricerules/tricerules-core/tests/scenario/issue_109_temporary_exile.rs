@@ -1587,7 +1587,7 @@ fn two_sources_destroyed_together_return_both_linked_cards() {
 }
 
 #[test]
-fn observer_restore_rebuilds_nonprogram_permanent_choice_after_candidate_owner_concedes() {
+fn observer_restore_rebuilds_program_permanent_choice_after_candidate_owner_concedes() {
     let decks = Some(vec![
         deck_with("forest", &["ray_of_command", "final_showdown"]),
         deck_with("forest", &["grizzly_bears"]),
@@ -1765,12 +1765,34 @@ fn observer_restore_rebuilds_nonprogram_permanent_choice_after_candidate_owner_c
         engine.state.objects[&returned_creature].zone,
         tricerules_core::Zone::Battlefield
     );
-    let resumed_offer = find_resolution_choice(&concession).unwrap_or_else(|| {
-        panic!(
-            "restored Final Showdown choice is republished; pending={:#?}; events={:#?}",
-            engine.state.pending_resolution, concession.events
-        )
-    });
+    let prompt_state = concession
+        .resolution_prompt_state
+        .as_ref()
+        .expect("concession batch publishes final prompt state");
+    assert!(prompt_state.active);
+    assert_eq!(prompt_state.deciding_player_id, 0);
+    let resumed_prompt_id = prompt_state
+        .resolution_prompt_id
+        .expect("refreshed Program choice has an active prompt ID");
+    assert_ne!(resumed_prompt_id, 0);
+    let resumed_offer = concession
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ResolutionChoiceRequired(choice))
+                if choice.resolution_prompt_id == resumed_prompt_id =>
+            {
+                Some(choice.clone())
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "restored Final Showdown choice is republished; pending={:#?}; events={:#?}",
+                engine.state.pending_resolution, concession.events
+            )
+        });
     assert_ne!(
         resumed_offer.resolution_prompt_id,
         original_offer.resolution_prompt_id
@@ -1783,7 +1805,6 @@ fn observer_restore_rebuilds_nonprogram_permanent_choice_after_candidate_owner_c
         resumed_candidates, expected_candidates,
         "the offer is rebuilt from current legality rather than reusing a departed candidate"
     );
-
     let before_stale_answer = format!("{:?}", engine.state);
     let before_stale_answer_index = engine.state.command_index;
     let stale = RuledCommand {
