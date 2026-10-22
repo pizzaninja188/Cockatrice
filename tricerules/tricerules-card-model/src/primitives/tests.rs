@@ -545,6 +545,22 @@ fn spell_program_target_damage_history_requires_the_bound_singleton_creature_exi
             true,
         ),
         spell_target_damage_history_fixture(
+            "Destroy(subject: Chosen((kind: Creature)))",
+            condition,
+            "(instruction_id: \"target\", role: Subject, target_group_index: 0), (instruction_id: \"target\", role: Target, target_group_index: 0)",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Destroy(subject: Chosen((kind: Creature)))",
+            condition,
+            "(instruction_id: \"target\", role: Subject, target_group_index: 0), (instruction_id: \"target\", role: Subject, target_group_index: 0)",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
             "Exile(subject: Chosen((kind: Creature)))",
             condition,
             "",
@@ -556,6 +572,22 @@ fn spell_program_target_damage_history_requires_the_bound_singleton_creature_exi
             "Exile(subject: Chosen((kind: Creature)))",
             condition,
             "(instruction_id: \"target\", role: Target, target_group_index: 0)",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            "(instruction_id: \"target\", role: Subject, target_group_index: 0), (instruction_id: \"target\", role: Target, target_group_index: 0)",
+            singleton,
+            clue,
+            true,
+        ),
+        spell_target_damage_history_fixture(
+            "Exile(subject: Chosen((kind: Creature)))",
+            condition,
+            "(instruction_id: \"target\", role: Subject, target_group_index: 0), (instruction_id: \"target\", role: Subject, target_group_index: 0)",
             singleton,
             clue,
             true,
@@ -2500,6 +2532,61 @@ fn flat_previous_effect_objects_batch_consumers_are_rejected_recursively() {
 }
 
 #[test]
+fn flat_koya_exile_to_delayed_trigger_signature_requires_an_authored_program() {
+    let exile: super::SpellEffectKind =
+        ron::from_str(r#"Exile(subject: Chosen((kind: Creature, excluded_objects: [Source])))"#)
+            .expect("Koya's legacy optional Exile producer parses");
+    let delayed_source = r#"CreateDelayedTrigger(
+            subject: Some(PreviousEffectObject),
+            ability: (
+                ability_id: "delayed_01",
+                presentation: OracleLines([2]),
+                trigger: AtBeginningOfNextEndStep,
+                program: Some((body: (steps: [], yields: []))),
+            ),
+        )"#;
+    let delayed: super::SpellEffectKind =
+        ron::from_str(delayed_source).expect("Koya's legacy delayed exact-object consumer parses");
+    let wrapped_delayed: super::SpellEffectKind = ron::from_str(&format!(
+        "Conditional(condition: Void, effect: {delayed_source})"
+    ))
+    .expect("wrapped Koya delayed exact-object consumer parses");
+
+    for (label, delayed) in [("direct", delayed), ("wrapped", wrapped_delayed)] {
+        let error = super::SpellEffectKind::validate_list(&[exile.clone(), delayed]).expect_err(
+            &format!("the retired flat Koya {label} signature must be refused"),
+        );
+        assert!(
+            error.contains("PreviousEffectObject delayed triggers require an authored Program"),
+            "unexpected flat Koya {label} signature error: {error}"
+        );
+    }
+}
+
+#[test]
+fn teferi_flat_single_previous_object_return_remains_admitted() {
+    let effects: Vec<super::SpellEffectKind> = ron::from_str(
+        r#"[
+            ChoosePermanents(
+                chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                filter: (kind: AnyPermanent, controller: You),
+                min: 1,
+                max: 1,
+                constraints: [],
+            ),
+            ReturnToOwnersHand(subject: PreviousEffectObject),
+            ShuffleNonlandPermanentsIntoOwnersLibraries(
+                players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+            ),
+        ]"#,
+    )
+    .expect("Teferi's live flat choose-return-shuffle sequence parses");
+
+    super::SpellEffectKind::validate_list(&effects)
+        .expect("the legacy single-object Teferi return remains valid");
+}
+
+#[test]
 fn token_copy_cohort_exile_rejects_unscoped_and_wrong_consumers() {
     let direct_consumer = r#"(
         id: "test_unscoped_cohort_exile",
@@ -4366,29 +4453,67 @@ fn resolution_cost_supports_exact_hand_card_bottom_payment() {
 
 #[test]
 fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
-    let effects: Vec<SpellEffectKind> = ron::from_str(
-        r#"[
-          Exile(subject: Chosen((kind: Creature))),
-          CreateDelayedTrigger(
-            subject: Some(PreviousEffectObject),
-            ability: (
-              ability_id: "delayed_01",
-              presentation: Fallback,
-              trigger: AtBeginningOfNextEndStep,
-            effect: [Draw(count: 1)],
-            ),
-          ),
-        ]"#,
+    let program: crate::primitives::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "exile_target", bind: ["exiled"], input: None,
+                kind: Perform(Exile(subject: Chosen((kind: Creature,
+                    excluded_objects: [Source]))))),
+            (id: "schedule_return", bind: [], input: Some("exiled"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObject),
+                    ability: (
+                        ability_id: "delayed_01", presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep,
+                        program: Some((body: (steps: [], yields: []))),
+                    ),
+                )))
+        ], yields: []), target_bindings: [
+            (instruction_id: "exile_target", role: Subject, target_group_index: 0),
+        ])"#,
     )
-    .expect("generic delayed pay-or-otherwise sequence parses");
+    .expect("Koya's typed Exile-to-delayed-trigger Program parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "koya,_death_from_above".into(),
+        face_id: crate::CardFaceId::new("koya_death_from_above").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let targeting = crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min: 0,
+            max: 1,
+            prompt: "Choose up to one other target creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let compiled = crate::primitives::CompiledProgram::compile_with_targeting(
+        owner,
+        EffectContext::Ability,
+        &program,
+        Some(&targeting),
+    )
+    .expect("only the exact Koya owner admits this typed Exile result flow");
 
-    for effect in &effects {
-        effect
-            .validate(EffectContext::Ability)
-            .expect("each issue 241 primitive is valid in an ability");
-    }
-    SpellEffectKind::validate_list(&effects)
-        .expect("Exile publishes one exact object for the following delayed trigger");
+    let [exile, schedule_return] = compiled.body.steps.as_slice() else {
+        panic!("Koya keeps the Exile producer and observer adjacent");
+    };
+    let [exiled_slot] = exile.outputs.as_slice() else {
+        panic!("the exact optional Exile writes one typed result slot");
+    };
+    assert_eq!(
+        compiled.slot(*exiled_slot).unwrap().result_type,
+        crate::primitives::ResultType::ExiledObject {
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        },
+    );
+    assert_eq!(schedule_return.input, Some(*exiled_slot));
+    assert!(schedule_return.outputs.is_empty());
 }
 
 #[test]
@@ -9629,63 +9754,99 @@ fn choose_cast_cost_receipts_reject_unknown_group_option_and_sibling_face() {
 }
 
 #[test]
-fn registry_compiles_nested_delayed_program_under_its_exact_child_owner() {
-    let fixture = r#"(id: "delayed_program_owner_fixture", name: "Delayed Program Owner Fixture",
-        face_id: "delayed_program_owner_fixture", mana_cost: "{2}{W}",
-        types: ["Legendary", "Creature"], power: 2, toughness: 1,
+fn registry_discovers_nested_koya_delayed_program_and_rejects_unavailable_capture() {
+    let fixture = r#"(id: "koya,_death_from_above", name: "Koya, Death from Above",
+        face_id: "koya_death_from_above", mana_cost: "{2}{W}",
+        supertypes: ["Legendary"], types: ["Creature"], power: 2, toughness: 1,
         triggered_abilities: [(
             ability_id: "triggered_01", presentation: Fallback,
             trigger: WhenSelfEntersBattlefield,
             targeting: Some((groups: [(
-                min: 0, max: 1, prompt: "Choose up to one target creature",
-                effect_indices: [0],
+                min: 0, max: 1, prompt: "Choose up to one other target creature",
+                effect_indices: [],
             )])),
-            effect: [
-                Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),
-                CreateDelayedTrigger(subject: Some(PreviousEffectObject), ability: (
-                    ability_id: "delayed_01", presentation: Fallback,
-                    trigger: AtBeginningOfNextEndStep,
-                    program: Some((body: (steps: [
-                        (id: "choose_return", kind: Choose(
-                            choice: "pay_or_return", chooser: Controller, optional: true,
-                            branches: [(branch_id: "pay", presentation: Fallback,
-                                cost: Mana("{3}{B}"), requirement: Always,
-                                body: (steps: [], yields: []))],
-                            otherwise: (steps: [
-                                (id: "return", kind: Perform(ReturnTriggeredCard(
-                                    reference: ExactTriggerObject, from: [Exile],
-                                    destination: Battlefield, controller: Owner,
+            effect: [],
+            program: Some((body: (
+                steps: [(id: "optional_pair", bind: [], input: None,
+                    kind: If(condition: Void,
+                        yes: (steps: [
+                            (id: "exile_target", bind: ["exiled"], input: None,
+                                kind: Perform(Exile(subject: Chosen((kind: Creature,
+                                    excluded_objects: [Source]))))),
+                            (id: "schedule_return", bind: [], input: Some("exiled"),
+                                kind: Perform(CreateDelayedTrigger(
+                                    subject: Some(PreviousEffectObject),
+                                    ability: (
+                                        ability_id: "delayed_01", presentation: Fallback,
+                                        trigger: AtBeginningOfNextEndStep,
+                                        program: Some((body: (steps: [
+                                            (id: "choose_return", kind: Choose(
+                                                choice: "pay_or_return", chooser: Controller,
+                                                optional: true,
+                                                branches: [(branch_id: "pay",
+                                                    presentation: Fallback,
+                                                    cost: Mana("{3}{B}"), requirement: Always,
+                                                    body: (steps: [], yields: []))],
+                                                otherwise: (steps: [
+                                                    (id: "return", kind: Perform(ReturnTriggeredCard(
+                                                        reference: ExactTriggerObject, from: [Exile],
+                                                        destination: Battlefield, controller: Owner,
+                                                    )))
+                                                ], yields: []),
+                                            )),
+                                            (id: "gain_life", kind: Perform(GainLife(amount: 1)))
+                                        ], yields: []))),
+                                    ),
                                 )))
-                            ], yields: []),
-                        )),
-                        (id: "gain_life", kind: Perform(GainLife(amount: 1)))
-                    ], yields: []))),
-                )),
-            ],
+                        ], yields: []),
+                        no: (steps: [], yields: [])))],
+                yields: [],
+            ), target_bindings: [(
+                    instruction_id: "exile_target", role: Subject, target_group_index: 0,
+                )],
+            ))
         )])"#
         .to_owned();
 
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
-        .expect("a delayed ability with an immutable nested definition ID compiles");
-    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "delayed_program_owner_fixture".into(),
-        face_id: crate::CardFaceId::new("delayed_program_owner_fixture").unwrap(),
+        .expect("an admitted Koya delayed child nested in If is compiled");
+    let parent_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "koya,_death_from_above".into(),
+        face_id: crate::CardFaceId::new("koya_death_from_above").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let parent = registry
+        .compiled_program_for_owner(&parent_owner)
+        .expect("the exact Koya parent owner is compiled");
+    let crate::primitives::CompiledInstructionKind::If { yes, .. } = &parent.body.steps[0].kind
+    else {
+        panic!("the admitted Exile/delayed pair remains inside the If branch");
+    };
+    assert_eq!(
+        yes.steps.len(),
+        2,
+        "producer and consumer are in the branch"
+    );
+
+    let child_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "koya,_death_from_above".into(),
+        face_id: crate::CardFaceId::new("koya_death_from_above").unwrap(),
         ability_path: vec![
             crate::AbilityId::new("triggered_01").unwrap(),
             crate::AbilityId::new("delayed_01").unwrap(),
         ],
     });
-    let compiled = registry
-        .compiled_program_for_owner(&owner)
-        .expect("the child definition owns the nested compiled program");
-    assert_eq!(compiled.owner, owner);
-    assert_eq!(compiled.body.steps.len(), 2);
+    let child = registry
+        .compiled_program_for_owner(&child_owner)
+        .expect("the nested child is discovered through the supported If branch");
+    assert_eq!(child.owner, child_owner);
+    assert_eq!(child.body.steps.len(), 2);
     assert_eq!(
-        compiled.required_inputs,
+        child.required_inputs,
         vec![crate::primitives::ProgramRequiredInput::CapturedTriggerObjectRef]
     );
     assert!(matches!(
-        &compiled.body.steps[0].kind,
+        &child.body.steps[0].kind,
         crate::primitives::CompiledInstructionKind::Choose { otherwise, .. }
             if matches!(
                 otherwise.steps[0].kind,
@@ -9697,100 +9858,36 @@ fn registry_compiles_nested_delayed_program_under_its_exact_child_owner() {
             )
     ));
 
-    for (label, invalid) in [
-        (
-            "another delayed-only timing",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextTurnUpkeep,\n                    program",
-            ),
-        ),
-        (
-            "a maximum-two parent target group",
-            fixture.replace(
-                "min: 0, max: 1, prompt: \"Choose up to one target creature\"",
-                "min: 0, max: 2, prompt: \"Choose up to two target creatures\"",
-            ),
-        ),
-        (
-            "a may delayed child",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextEndStep, may: true,\n                    program",
-            ),
-        ),
-        (
-            "a once-only delayed child",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextEndStep, triggers_only_once: true,\n                    program",
-            ),
-        ),
-        (
-            "a capped delayed child",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextEndStep, max_triggers_per_turn: Some(1),\n                    program",
-            ),
-        ),
-        (
-            "an intervening-if delayed child",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextEndStep, intervening_if: Some(ControllerLibraryEmpty),\n                    program",
-            ),
-        ),
-        (
-            "a targeted delayed child",
-            fixture.replace(
-                "trigger: AtBeginningOfNextEndStep,\n                    program",
-                "trigger: AtBeginningOfNextEndStep, targeting: Some((groups: [])),\n                    program",
-            ),
-        ),
-        (
-            "a non-adjacent Exile producer",
-            fixture.replace(
-                "Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),\n                CreateDelayedTrigger",
-                "Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),\n                Draw(count: 1),\n                CreateDelayedTrigger",
-            ),
-        ),
-        (
-            "a plural previous-effect subject",
-            fixture.replace(
-                "subject: Some(PreviousEffectObject), ability:",
-                "subject: Some(PreviousEffectObjects), ability:",
-            ),
-        ),
-    ] {
-        let error = crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[])
-            .expect_err(&format!("{label} is outside this exact delayed-owner contract"))
-            .to_string();
-        let expected = match label {
-            "a non-adjacent Exile producer" => {
-                "PreviousEffectObject requires an immediately preceding compatible single-object producer"
-            }
-            "a plural previous-effect subject" => {
-                "PreviousEffectObjects delayed triggers require one next-end-step ExileObservedObjects effect"
-            }
-            _ => "authored delayed child programs require",
-        };
-        assert!(error.contains(expected), "{label}: {error}");
-    }
+    let unsupported_capture = fixture.replace(
+        "choice: \"pay_or_return\", chooser: Controller,\n                                                optional: true,",
+        "choice: \"pay_or_return\", chooser: AffectedPlayer,\n                                                optional: true,",
+    );
+    assert_ne!(
+        unsupported_capture, fixture,
+        "the child chooser mutation applies"
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_capture], &[])
+        .expect_err("a discovered child needing an uncaptured affected player is rejected")
+        .to_string();
+    assert!(
+        error.contains("program.instruction=schedule_return.ability requires TriggerAffectedPlayer, but its trigger does not supply that input"),
+        "the admitted parent reaches child capture validation: {error}"
+    );
 
-    let return_leaf = "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner,";
+    let return_leaf = "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: Owner,";
     for (label, replacement) in [
-        ("wrong reference", "reference: TriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner,"),
-        ("wrong source zone", "reference: ExactTriggerObject, from: [Graveyard],\n                                    destination: Battlefield, controller: Owner,"),
-        ("wrong destination", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Hand, controller: Owner,"),
-        ("wrong controller", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: AbilityController,"),
-        ("tapped entry", "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, tapped: true,"),
+        ("wrong reference", "reference: TriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: Owner,"),
+        ("wrong source zone", "reference: ExactTriggerObject, from: [Graveyard],\n                                                        destination: Battlefield, controller: Owner,"),
+        ("wrong destination", "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Hand, controller: Owner,"),
+        ("wrong controller", "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: AbilityController,"),
+        ("tapped entry", "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: Owner, tapped: true,"),
         (
             "entry counters",
-            "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, entry_counters: [(counter: PlusOnePlusOne, count: 1)],",
+            "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: Owner, entry_counters: [(counter: PlusOnePlusOne, count: 1)],",
         ),
         (
             "type-setting replacement",
-            "reference: ExactTriggerObject, from: [Exile],\n                                    destination: Battlefield, controller: Owner, set_types: Some((card_types: [Creature])),",
+            "reference: ExactTriggerObject, from: [Exile],\n                                                        destination: Battlefield, controller: Owner, set_types: Some((card_types: [Creature])),",
         ),
     ] {
         let invalid = fixture.replace(return_leaf, replacement);
@@ -11230,6 +11327,20 @@ fn spell_targeted_hand_discard_program_captures_target_group_result_for_card_typ
             verdict.replace("role: Target", "role: Subject"),
         ),
         (
+            "mixed-role duplicate Target binding",
+            verdict.replace(
+                "(instruction_id: \"discard\", role: Target, target_group_index: 0),",
+                "(instruction_id: \"discard\", role: Target, target_group_index: 0),\n            (instruction_id: \"discard\", role: Subject, target_group_index: 0),",
+            ),
+        ),
+        (
+            "repeated Target binding",
+            verdict.replace(
+                "(instruction_id: \"discard\", role: Target, target_group_index: 0),",
+                "(instruction_id: \"discard\", role: Target, target_group_index: 0),\n            (instruction_id: \"discard\", role: Target, target_group_index: 0),",
+            ),
+        ),
+        (
             "non-singleton target group",
             verdict.replace("min: 1, max: 1, prompt", "min: 0, max: 1, prompt"),
         ),
@@ -11308,6 +11419,12 @@ fn chosen_destroy_program_requires_one_singleton_subject_binding_and_joins_only_
             "destroy_repeated_subject_binding",
             r#"[(instruction_id: "destroy", role: Subject, target_group_index: 0),
                 (instruction_id: "destroy", role: Subject, target_group_index: 0)]"#,
+            group(1, 1),
+        ),
+        (
+            "destroy_mixed_role_duplicate_binding",
+            r#"[(instruction_id: "destroy", role: Subject, target_group_index: 0),
+                (instruction_id: "destroy", role: Target, target_group_index: 0)]"#,
             group(1, 1),
         ),
         ("destroy_nontarget_group_0_1", subject0, group(0, 1)),
@@ -15957,6 +16074,13 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
             Some(GROUP),
         ),
         (
+            "mixed-role duplicate Target binding",
+            crate::primitives::EffectContext::Ability,
+            EXILE,
+            "(instruction_id: \"exile\", role: Target, target_group_index: 0), (instruction_id: \"exile\", role: Subject, target_group_index: 0)",
+            Some(GROUP),
+        ),
+        (
             "mismatched instruction binding",
             crate::primitives::EffectContext::Ability,
             EXILE,
@@ -17472,6 +17596,55 @@ mod tidebinder_program_compiler_tests {
         )
         .unwrap_err()
         .contains("StackAbility"));
+
+        for (label, target_bindings) in [
+            (
+                "a second role",
+                vec![
+                    ProgramTargetReference {
+                        instruction_id: "counter".into(),
+                        role: ProgramTargetRole::StackAbility,
+                        target_group_index: 0,
+                    },
+                    ProgramTargetReference {
+                        instruction_id: "counter".into(),
+                        role: ProgramTargetRole::Target,
+                        target_group_index: 0,
+                    },
+                ],
+            ),
+            (
+                "a repeated StackAbility role",
+                vec![
+                    ProgramTargetReference {
+                        instruction_id: "counter".into(),
+                        role: ProgramTargetRole::StackAbility,
+                        target_group_index: 0,
+                    },
+                    ProgramTargetReference {
+                        instruction_id: "counter".into(),
+                        role: ProgramTargetRole::StackAbility,
+                        target_group_index: 0,
+                    },
+                ],
+            ),
+        ] {
+            let duplicate = CardProgram {
+                body: body.clone(),
+                target_bindings,
+            };
+            let error = CompiledProgram::compile_with_targeting(
+                owner(),
+                EffectContext::Ability,
+                &duplicate,
+                Some(&one_group),
+            )
+            .expect_err(label);
+            assert!(
+                error.contains("requires exactly one explicit StackAbility target binding"),
+                "{label}: {error}"
+            );
+        }
 
         assert!(compile_single_counter(EffectContext::Ability, "[]", 0, 2)
             .unwrap_err()

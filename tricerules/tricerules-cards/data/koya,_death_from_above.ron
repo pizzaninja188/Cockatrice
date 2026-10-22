@@ -1,10 +1,11 @@
-// Oracle and rulings verified 2026-10-17. CR 118.12a, 400.7j, 603.7a/b/c/e, and 608.2m.
+// Oracle and rulings verified 2026-10-17. CR 113.7a, 118.12a, 400.7j, 603.7a/b/c/e, and 608.2h.
 (
   id: "koya,_death_from_above",
   name: "Koya, Death from Above",
   face_id: "koya_death_from_above",
   mana_cost: "{2}{W}",
-  types: ["Legendary", "Creature", "Mutant", "Ninja", "Bird"],
+  supertypes: ["Legendary"],
+  types: ["Creature", "Mutant", "Ninja", "Bird"],
   power: 2,
   toughness: 1,
   keywords: [Flying],
@@ -16,38 +17,46 @@
       min: 0,
       max: 1,
       prompt: "Choose up to one other target creature",
-      effect_indices: [0],
+      effect_indices: [],
     )])),
-    effect: [
-      Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),
-      CreateDelayedTrigger(
-        subject: Some(PreviousEffectObject),
-        ability: (
-          ability_id: "delayed_01",
-          presentation: OracleLines([2]),
-          trigger: AtBeginningOfNextEndStep,
-          program: Some((body: (steps: [
-            (id: "pay_or_return", kind: Choose(
-              choice: "pay_or_return", chooser: Controller, optional: true,
-              branches: [(
-                branch_id: "pay",
-                // The choice is only the payment fragment of the printed delayed instruction.
-                presentation: Fallback,
-                cost: Mana("{3}{B}"),
-                requirement: Always,
-                body: (steps: [], yields: []),
-              )],
-              otherwise: (steps: [
-                (id: "return", kind: Perform(ReturnTriggeredCard(
-                  reference: ExactTriggerObject,
-                  from: [Exile],
-                  controller: Owner,
-                )))
-              ], yields: []),
-            ))
-          ], yields: []))),
-        ),
-      ),
-    ],
+    effect: [],
+    program: Some((body: (
+      steps: [
+        (id: "exile_target", bind: ["exiled"], input: None,
+          kind: Perform(Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))))),
+        (id: "schedule_return", bind: [], input: Some("exiled"),
+          kind: Perform(CreateDelayedTrigger(
+            subject: Some(PreviousEffectObject),
+            ability: (
+              ability_id: "delayed_01",
+              presentation: OracleLines([2]),
+              trigger: AtBeginningOfNextEndStep,
+              program: Some((body: (steps: [
+                (id: "pay_or_return", kind: Choose(
+                  choice: "pay_or_return", chooser: Controller, optional: true,
+                  branches: [(
+                    branch_id: "pay",
+                    // The choice is only the payment fragment of the printed delayed instruction.
+                    presentation: Fallback,
+                    cost: Mana("{3}{B}"),
+                    requirement: Always,
+                    body: (steps: [], yields: []),
+                  )],
+                  otherwise: (steps: [
+                    (id: "return", kind: Perform(ReturnTriggeredCard(
+                      reference: ExactTriggerObject,
+                      from: [Exile],
+                      controller: Owner,
+                    )))
+                  ], yields: []),
+                ))
+              ], yields: []))),
+            ),
+          ))),
+      ],
+      yields: [],
+    ), target_bindings: [
+      (instruction_id: "exile_target", role: Subject, target_group_index: 0),
+    ])),
   )],
 )

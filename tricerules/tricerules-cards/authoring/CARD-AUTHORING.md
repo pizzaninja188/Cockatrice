@@ -176,6 +176,14 @@ owners are all-authored or all-legacy: when any sibling declares a program, ever
 declare one; otherwise their effects stay on ordinary effect-list dispatch. Each authored mode keeps
 its own targeting groups and group indices. Do not add a face-level `spell_program` to a modal spell.
 
+At each family checkpoint, inventory its real RON and generator callers before reusing a legacy
+signature, then retire that exact path when its last caller moves to the typed contract. Keep shared
+rule-transaction state that still has live callers, and use one shared lookup or control-flow walk
+when the validated semantics are the same; add specialized runtime state only for a concrete rule
+need. Whole-card AST and Oracle-source checks belong in conformance tests unless the runtime
+operation itself consumes that metadata. Report production-code changes separately from tests,
+documentation and card data so necessary typed-state growth and retired code remain visible.
+
 The exact triggered Equipment ETB profile used by Conductive Machete, Cursed Windbreaker, and
 Killer's Mask is `ManifestDread` bound as an optional `ManifestedPermanent` result with cardinality
 `0..1`, followed immediately by `AttachEquipment(input: manifested, equipment: Source,
@@ -671,14 +679,25 @@ Icewrought Sentry pays before creating its reflexive tap trigger; and Sparktongu
 creating its reflexive damage trigger. Keep each real card's ordered actions and fallback in its
 source-backed program; do not flatten the payment into a legacy branch effect.
 
-One bounded nested-child case is admitted for Koya, Death from Above: the triggered parent immediately
-exiles its chosen object, then creates an `AtBeginningOfNextEndStep` delayed trigger for
-`PreviousEffectObject`. The parent's `TargetingDef` must bind that immediately preceding
-`Exile(Chosen)` instruction to a group with `max: 1`. The child is compiled under the full
-parent-and-child ability identity. Its
-exact exiled object is an inferred `CapturedTriggerObjectRef` input, distinct from the
-current/last-known copy snapshot used by `CreateTokenCopies(TriggerObject)`; authors do not declare
-this input. The admitted child leaf is exactly
+One bounded outer-and-child case is admitted for Koya, Death from Above. Only the exact
+`koya,_death_from_above` `triggered_01` owner may use the outer Program profile. Its triggered
+ability keeps one optional target group (`min: 0`, `max: 1`, no legacy `effect_indices`); the group
+binds as `Subject` to the immediately following `Exile(Chosen(Creature except Source))` instruction.
+The compiler carries that operation's exact post-move object as a private zero-or-one
+`ExiledObject` result, including its object ID, zone-change generation, and controller snapshot.
+The immediately adjacent `CreateDelayedTrigger(PreviousEffectObject)` consumes that result for
+`AtBeginningOfNextEndStep` and the exact `delayed_01` child. A completed optional-target Exile with
+no target binds `None` and creates no observer; if the trigger fizzles before the Exile instruction,
+there is no completed result to consume. Resolution never searches the Exile zone for a substitute.
+These identity and source-departure rules follow CR 400.7j, 113.7a, and 608.2h. The observer is
+created before a declared commander owner receives the state-based command-zone choice (CR 704.6d,
+903.9a); once that choice moves the object to Command, the captured Exile incarnation cannot be
+returned from there.
+
+The child is compiled under the full parent-and-child ability identity. Its exact exiled object is
+an inferred `CapturedTriggerObjectRef` input, distinct from the current/last-known copy snapshot
+used by `CreateTokenCopies(TriggerObject)`; authors do not declare this input. The admitted child
+leaf is exactly
 `ReturnTriggeredCard(ExactTriggerObject, from: [Exile], destination: Battlefield, controller: Owner)`
 with the default untapped entry behavior and no entry counters or type-setting replacement. Ordinary
 supported program instructions may compose before, inside, or after that return; a registry-backed
@@ -691,6 +710,8 @@ This exception fails closed for a non-adjacent producer, other delayed timings, 
 previous-effect subjects, modal or targetful child bodies, `may`, `once`, and maximum-use metadata;
 do not generalize it to arbitrary effect-created or activated abilities. Koya's exact trigger,
 target filters, and target bounds remain in its card definition and ordinary targeting validation.
+The actual definition, closed owner/consumer profile, completed-empty versus fizzled execution, and
+commander choice are indexed by the [Koya review map](review-maps/koya,_death_from_above.json).
 
 Arcane Denial is a separate, closed face-spell child profile. On a nonmodal face, a direct top-level
 `CreateDelayedTrigger` may own a Program only immediately after `CounterTargetSpell` with both

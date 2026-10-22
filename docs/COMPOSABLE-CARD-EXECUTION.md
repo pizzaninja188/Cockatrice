@@ -228,6 +228,19 @@ supported. Automated scenarios cover an empty Vat, source departure through the 
 leave-and-return with a changed link (CR 400.7, 603.7, 607.2a). This adds no card admission or
 protocol, relay, or client change.
 
+The 2026-10-22 Koya increment moves only the `triggered_01` parent body into a Program. Its exact
+owner binds the optional `0..1` creature target to `Exile(Chosen)` and immediately passes the
+operation's zero-or-one exact post-Exile object to `CreateDelayedTrigger(PreviousEffectObject)` for
+the existing `delayed_01` child. A completed no-target Exile carries an explicit empty result and
+stages no observer; a trigger whose target is illegal before resolution never reaches that producer.
+The delayed child keeps the captured object generation and controller rather than searching Exile,
+including when a declared commander owner chooses Command after observer creation (CR 400.7j,
+113.7a, 608.2h, 704.6d, 903.9a). The retired flat Koya Exile-to-delayed-consumer signature now
+requires a typed Program; Teferi's independent flat single-object choose-and-return sequence remains
+supported. Compiler profile, source-departure, fizzled-target, optional-empty,
+and commander evidence is recorded in the [Koya review map](../tricerules/tricerules-cards/authoring/review-maps/koya,_death_from_above.json).
+This adds no card admission or protocol, relay, or client change.
+
 Ring's upkeep Program places one Night counter, checks the threshold after replacement choices
 resume the same cursor, removes only Night at eight, and creates eight named Replicated Ring tokens.
 Floodgates uses an optional `AffectedPlayer` choice and requires the trigger's captured actor before

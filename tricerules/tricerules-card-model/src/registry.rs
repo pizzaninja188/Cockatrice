@@ -137,70 +137,70 @@ fn validate_spell_program_cast_snapshot_references(
 /// Validate invariants that can only be checked on the immutable compiled form. Both authored
 /// programs and legacy-lowered owners pass through this walk so target binding and token
 /// references cannot be skipped by choosing a different authoring path.
+fn visit_compiled_program_effects(
+    block: &crate::primitives::CompiledBlock,
+    visit: &mut impl FnMut(
+        &crate::primitives::CompiledInstruction,
+        &SpellEffectKind,
+    ) -> Result<(), String>,
+) -> Result<(), String> {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            crate::primitives::CompiledInstructionKind::Perform(effect) => {
+                visit(instruction, effect)?;
+            }
+            crate::primitives::CompiledInstructionKind::If { yes, no, .. } => {
+                visit_compiled_program_effects(yes, visit)?;
+                visit_compiled_program_effects(no, visit)?;
+            }
+            crate::primitives::CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    visit_compiled_program_effects(&branch.body, visit)?;
+                }
+                visit_compiled_program_effects(otherwise, visit)?;
+            }
+            crate::primitives::CompiledInstructionKind::ImportCastPayment => {}
+        }
+    }
+    Ok(())
+}
+
 fn validate_compiled_program_admission(
     program: &CompiledProgram,
     tokens: &HashMap<String, CardDefinition>,
 ) -> Result<(), String> {
-    fn visit_block(
-        block: &crate::primitives::CompiledBlock,
-        program: &CompiledProgram,
-        tokens: &HashMap<String, CardDefinition>,
-        consumed_bindings: &mut [bool],
-    ) -> Result<(), String> {
-        for instruction in &block.steps {
-            match &instruction.kind {
-                crate::primitives::CompiledInstructionKind::ImportCastPayment => {}
-                crate::primitives::CompiledInstructionKind::Perform(effect) => {
-                    for token in effect.referenced_token_ids() {
-                        if !tokens.contains_key(token) {
-                            return Err(format!("CreateTokens references unknown token '{token}'"));
-                        }
-                    }
-                    let roles = program_effect_target_roles(effect.as_ref());
-                    if !roles.is_empty() {
-                        for role_index in 0..roles.len() {
-                            let binding_index = program
-                                .target_bindings
-                                .iter()
-                                .enumerate()
-                                .find_map(|(index, binding)| {
-                                    (!consumed_bindings[index]
-                                        && binding.instruction_address
-                                            == instruction.instruction_address
-                                        && usize::try_from(binding.role_index).ok()
-                                            == Some(role_index))
-                                        .then_some(index)
-                                })
-                                .ok_or_else(|| {
-                                    format!(
-                                        "targeted resolution operation {effect:?} role {role_index} has no matching compiled target binding"
-                                    )
-                                })?;
-                            consumed_bindings[binding_index] = true;
-                        }
-                    }
-                }
-                crate::primitives::CompiledInstructionKind::If { yes, no, .. } => {
-                    visit_block(yes, program, tokens, consumed_bindings)?;
-                    visit_block(no, program, tokens, consumed_bindings)?;
-                }
-                crate::primitives::CompiledInstructionKind::Choose {
-                    branches,
-                    otherwise,
-                    ..
-                } => {
-                    for branch in branches {
-                        visit_block(&branch.body, program, tokens, consumed_bindings)?;
-                    }
-                    visit_block(otherwise, program, tokens, consumed_bindings)?;
-                }
+    let mut consumed_bindings = vec![false; program.target_bindings.len()];
+    visit_compiled_program_effects(&program.body, &mut |instruction, effect| {
+        for token in effect.referenced_token_ids() {
+            if !tokens.contains_key(token) {
+                return Err(format!("CreateTokens references unknown token '{token}'"));
             }
         }
+        let roles = program_effect_target_roles(effect);
+        for role_index in 0..roles.len() {
+            let binding_index = program
+                .target_bindings
+                .iter()
+                .enumerate()
+                .find_map(|(index, binding)| {
+                    (!consumed_bindings[index]
+                        && binding.instruction_address == instruction.instruction_address
+                        && usize::try_from(binding.role_index).ok() == Some(role_index))
+                        .then_some(index)
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "targeted resolution operation {effect:?} role {role_index} has no matching compiled target binding"
+                    )
+                })?;
+            consumed_bindings[binding_index] = true;
+        }
         Ok(())
-    }
-
-    let mut consumed_bindings = vec![false; program.target_bindings.len()];
-    visit_block(&program.body, program, tokens, &mut consumed_bindings)?;
+    })?;
     if consumed_bindings.iter().any(|consumed| !consumed) {
         return Err("compiled program contains an unused owner-local target binding".into());
     }
@@ -290,7 +290,7 @@ fn compile_authored_program_owner(
     }
     if registry
         .compiled_programs
-        .insert(owner.clone(), compiled)
+        .insert(owner.clone(), compiled.clone())
         .is_some()
     {
         return Err(RegistryError::InvalidCard {
@@ -298,7 +298,129 @@ fn compile_authored_program_owner(
             reason: format!("multiple programs resolve to exact owner {owner:?}"),
         });
     }
+    compile_authored_program_children(
+        registry,
+        card_id,
+        &owner,
+        &compiled,
+        inputs.cast_cost_groups,
+        source_path,
+    )
+}
+
+fn compile_authored_program_children(
+    registry: &mut CardRegistry,
+    card_id: &str,
+    parent_owner: &ProgramOwnerId,
+    parent: &CompiledProgram,
+    cast_cost_groups: &[CastCostGroupDef],
+    source_path: &str,
+) -> Result<(), RegistryError> {
+    let mut children = Vec::new();
+    visit_compiled_program_effects(&parent.body, &mut |instruction, effect| {
+        let SpellEffectKind::CreateDelayedTrigger {
+            subject,
+            affected_player,
+            ability,
+        } = effect
+        else {
+            return Ok(());
+        };
+        if ability.program.is_none() {
+            return Ok(());
+        }
+        if subject != &Some(crate::primitives::EffectSubject::PreviousEffectObject)
+            || affected_player.is_some()
+        {
+            return Err(format!(
+                "nested delayed Program child at {source_path}.program.instruction={} has no supported typed object capture",
+                instruction.id
+            ));
+        }
+        let Some(input) = instruction.input else {
+            return Err(format!(
+                "nested delayed Program child at {source_path}.program.instruction={} has no typed producer input",
+                instruction.id
+            ));
+        };
+        let captured_object = parent.slot(input).is_some_and(|slot| {
+            matches!(
+                &slot.result_type,
+                crate::primitives::ResultType::ExiledObject { cardinality }
+                    if cardinality.min == 0 && cardinality.max == Some(1)
+            )
+        });
+        if !captured_object {
+            return Err(format!(
+                "nested delayed Program child at {source_path}.program.instruction={} requires a 0..1 typed object producer",
+                instruction.id
+            ));
+        }
+        children.push((instruction.id.clone(), ability.clone()));
+        Ok(())
+    })
+    .map_err(|reason| RegistryError::InvalidCard {
+        id: card_id.to_owned(),
+        reason: format!("resolution program owner {parent_owner:?} at {source_path}: {reason}"),
+    })?;
+
+    for (instruction_id, ability) in children {
+        let program = ability
+            .program
+            .as_ref()
+            .expect("only delayed abilities with programs were collected");
+        let owner = child_ability_owner(parent_owner, &ability.ability_id).map_err(|reason| {
+            RegistryError::InvalidCard {
+                id: card_id.to_owned(),
+                reason: format!(
+                    "resolution program owner {parent_owner:?} at {source_path}.program.instruction={instruction_id}: {reason}"
+                ),
+            }
+        })?;
+        compile_authored_program_owner(
+            registry,
+            card_id,
+            owner,
+            program,
+            ProgramOwnerInputs {
+                targeting: ability.targeting.as_ref(),
+                cast_cost_groups,
+                captured_trigger_object_ref: true,
+                captured_delayed_affected_player: false,
+            },
+            &format!("{source_path}.program.instruction={instruction_id}.ability"),
+            Some(&ability.trigger),
+        )?;
+    }
     Ok(())
+}
+
+fn child_ability_owner(
+    parent: &ProgramOwnerId,
+    child_id: &crate::AbilityId,
+) -> Result<ProgramOwnerId, String> {
+    let definition = match parent {
+        ProgramOwnerId::Face(face) => AbilityDefinitionId {
+            card_id: face.card_id.clone(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![child_id.clone()],
+        },
+        ProgramOwnerId::Ability(definition) => {
+            let mut child_path = definition.ability_path.clone();
+            child_path.push(child_id.clone());
+            AbilityDefinitionId {
+                card_id: definition.card_id.clone(),
+                face_id: definition.face_id.clone(),
+                ability_path: child_path,
+            }
+        }
+        ProgramOwnerId::FaceMode { .. } | ProgramOwnerId::AbilityMode { .. } => {
+            return Err(
+                "nested delayed Program children under mode-owned Programs are unsupported".into(),
+            );
+        }
+    };
+    Ok(ProgramOwnerId::ability(definition))
 }
 
 fn compile_authored_face_programs(
@@ -576,58 +698,6 @@ fn compile_authored_triggered_program(
             },
             source_path,
             Some(&ability.trigger),
-        )?;
-    }
-    for (index, effect) in ability.effect.iter().enumerate() {
-        let SpellEffectKind::CreateDelayedTrigger {
-            subject: Some(crate::primitives::EffectSubject::PreviousEffectObject),
-            ability: delayed,
-            ..
-        } = effect
-        else {
-            continue;
-        };
-        let Some(program) = &delayed.program else {
-            continue;
-        };
-        if index == 0
-            || !matches!(
-                &ability.effect[index - 1],
-                SpellEffectKind::Exile {
-                    subject: crate::primitives::EffectSubject::Chosen(_),
-                    ..
-                }
-            )
-            || !matches!(delayed.trigger, TriggerCondition::AtBeginningOfNextEndStep)
-            || delayed.modal.is_some()
-        {
-            return Err(RegistryError::InvalidCard {
-                id: card.id.clone(),
-                reason: format!(
-                    "nested delayed program at {source_path}.effect[{index}] has no admitted exact-object owner"
-                ),
-            });
-        }
-        let mut child_path = ability_path.to_vec();
-        child_path.push(delayed.ability_id.clone());
-        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
-            card_id: card.id.clone(),
-            face_id: face.face_id.clone(),
-            ability_path: child_path,
-        });
-        compile_authored_program_owner(
-            registry,
-            &card.id,
-            owner,
-            program,
-            ProgramOwnerInputs {
-                targeting: delayed.targeting.as_ref(),
-                cast_cost_groups: &face.cast_cost_groups,
-                captured_trigger_object_ref: true,
-                captured_delayed_affected_player: false,
-            },
-            &format!("{source_path}.effect[{index}].ability"),
-            Some(&delayed.trigger),
         )?;
     }
     Ok(())

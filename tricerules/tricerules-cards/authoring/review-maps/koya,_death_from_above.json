@@ -1,0 +1,83 @@
+{
+  "format_version": 1,
+  "oracle_id": "e7cd87d4-028c-49d9-9416-69f57e7dfec5",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "koya_death_from_above",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/supertypes/0",
+        "/faces/0/types/0",
+        "/faces/0/types/1",
+        "/faces/0/types/2",
+        "/faces/0/types/3"
+      ]
+    },
+    {
+      "face_id": "koya_death_from_above",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/targeting/groups/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Exile",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Exile/subject",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/input",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/CreateDelayedTrigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/CreateDelayedTrigger/subject",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/trigger",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_koya::koya_triggered_program_compiles_from_the_actual_definition",
+      "covers": "The exact Koya ability owner compiles in Ability context with its optional singleton target group, Creature-excluding-Source filter, outer instruction order, delayed child, and full child owner path."
+    },
+    {
+      "test": "deck_registry::deck_coverage_koya::koya_exile_producer_accepts_arbitrary_and_discarded_output_bindings",
+      "covers": "The owner-specific Exile producer accepts an arbitrary result name or a deliberately discarded result."
+    },
+    {
+      "test": "deck_registry::deck_coverage_koya::koya_exile_producer_and_delayed_consumer_reject_near_misses",
+      "covers": "The profile rejects a different owner, target maximum or filter, delayed subject or timing, unknown or wrong-type input, and a nonadjacent producer."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_zero_targets_creates_no_delayed_trigger_and_self_is_illegal",
+      "covers": "Koya's resolved optional-target ability completes with no ExiledObject and creates no delayed observer; Koya itself is not a legal target."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_target_that_leaves_before_outer_resolution_creates_no_observer",
+      "covers": "A chosen target that leaves before resolution makes the targeted ability fizzle before the Exile producer, so no delayed observer is created."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_outer_resolution_keeps_last_known_source_and_exact_post_exile_watch",
+      "covers": "The parent ability resolves after Koya leaves and the observer captures the target's exact post-Exile generation and controller."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_declared_commander_observer_exists_before_command_choice_and_cannot_return_from_command",
+      "covers": "The observer exists before the declared commander's owner chooses Command; declining at the next end step does not return it from Command."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_declining_returns_the_exact_card_under_its_owner",
+      "covers": "The delayed child returns the exact exiled card to the battlefield under its owner when payment is declined."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_paying_leaves_the_card_exiled",
+      "covers": "Paying the delayed cost leaves the exact exiled card in Exile."
+    },
+    {
+      "test": "scenario issue_241_koya::issue_241_exiled_token_still_creates_the_delayed_payment_choice",
+      "covers": "A token target is watched through its exact Exile generation and still creates the delayed payment choice after the token ceases to exist."
+    }
+  ],
+  "tokens": []
+}

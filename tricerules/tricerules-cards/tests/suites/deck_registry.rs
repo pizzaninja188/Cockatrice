@@ -73,6 +73,8 @@ mod deck_coverage_gruul_war_chant;
 mod deck_coverage_ichor_wellspring;
 #[path = "../deck_coverage_khalni_ambush.rs"]
 mod deck_coverage_khalni_ambush;
+#[path = "../deck_coverage_koya.rs"]
+mod deck_coverage_koya;
 #[path = "../deck_coverage_krark_clan_ironworks.rs"]
 mod deck_coverage_krark_clan_ironworks;
 #[path = "../deck_coverage_land_type_pair.rs"]

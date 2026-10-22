@@ -13,8 +13,8 @@ use crate::state::{
     ProgramRunState, ProgramValue,
 };
 use tricerules_card_model::primitives::{
-    ChooseDeparturePolicy, CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement,
-    CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
+    Cardinality, ChooseDeparturePolicy, CompiledBlock, CompiledChooseBranch,
+    CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
     CompiledProgramResultCondition, HandCardAction, HandCardChooser, HandChoiceVisibility,
     PermanentTypeFilter, ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType,
     SpellEffectKind, TargetFilter, TargetKind,
@@ -1315,6 +1315,10 @@ impl GameEngine {
                                 previous.produced_objects.push(*object);
                             }
                             ProgramValue::TriggerObjectLinkedExileReceipt(None) => {}
+                            ProgramValue::ExiledObject(Some(object)) => {
+                                previous.produced_objects.push(*object);
+                            }
+                            ProgramValue::ExiledObject(None) => {}
                             value @ (ProgramValue::FoundLibraryCohort(_)
                             | ProgramValue::RevealedLibraryCohort(_)
                             | ProgramValue::CardPartition(_)) => {
@@ -2151,6 +2155,30 @@ fn capture_program_outputs_for_stack(
     capture_program_outputs_inner(Some((engine, top)), compiled, run, outputs, result)
 }
 
+fn validate_physical_output_cardinality(
+    result: &EffectResult,
+    cardinality: &Cardinality,
+    invariant: &'static str,
+) -> Result<(), EngineError> {
+    if result.produced_objects.len() < cardinality.min as usize
+        || cardinality
+            .max
+            .is_some_and(|max| result.produced_objects.len() > max as usize)
+    {
+        return Err(EngineError::ProgramInvariant(invariant));
+    }
+    Ok(())
+}
+
+fn optional_physical_output(
+    result: &EffectResult,
+    cardinality: &Cardinality,
+    invariant: &'static str,
+) -> Result<Option<crate::state::TriggerObjectRef>, EngineError> {
+    validate_physical_output_cardinality(result, cardinality, invariant)?;
+    Ok(result.produced_objects.first().copied())
+}
+
 fn capture_program_outputs_inner(
     stack_context: Option<(&crate::engine::GameEngine, &StackItem)>,
     compiled: &CompiledProgram,
@@ -2183,29 +2211,21 @@ fn capture_program_outputs_inner(
                 )?)
             }
             ResultType::CounteredAbilitySource { cardinality } => {
-                if result.produced_objects.len() < cardinality.min as usize
-                    || cardinality
-                        .max
-                        .is_some_and(|max| result.produced_objects.len() > max as usize)
-                {
-                    return Err(EngineError::ProgramInvariant(
-                        "CounterTargetAbility result exceeded its compiled cardinality",
-                    ));
-                }
-                ProgramValue::CounteredAbilitySource(result.produced_objects.first().copied())
+                ProgramValue::CounteredAbilitySource(optional_physical_output(
+                    result,
+                    cardinality,
+                    "CounterTargetAbility result exceeded its compiled cardinality",
+                )?)
             }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
             }
             ResultType::ManifestedPermanent { cardinality } => {
-                if result.produced_objects.len() > cardinality.max.unwrap_or(u32::MAX) as usize
-                    || result.produced_objects.len() < cardinality.min as usize
-                {
-                    return Err(EngineError::ProgramInvariant(
-                        "Manifest Dread result exceeded its compiled cardinality",
-                    ));
-                }
-                ProgramValue::ManifestedPermanent(result.produced_objects.first().copied())
+                ProgramValue::ManifestedPermanent(optional_physical_output(
+                    result,
+                    cardinality,
+                    "Manifest Dread result exceeded its compiled cardinality",
+                )?)
             }
             ResultType::HandSelection { .. } => {
                 ProgramValue::HandSelection(result.selected_hand_cards.clone())
@@ -2258,31 +2278,34 @@ fn capture_program_outputs_inner(
                 }
                 ProgramValue::TokenCopyBatch(result.produced_objects.clone())
             }
+            ResultType::ExiledObject { cardinality } => {
+                ProgramValue::ExiledObject(optional_physical_output(
+                    result,
+                    cardinality,
+                    "Koya Exile result exceeded its compiled cardinality",
+                )?)
+            }
             ResultType::CreatedTokenBatch { cardinality } => {
-                if result.produced_objects.len() < cardinality.min as usize
-                    || cardinality
-                        .max
-                        .is_some_and(|max| result.produced_objects.len() > max as usize)
-                {
-                    return Err(EngineError::ProgramInvariant(
-                        "CreateTokens result exceeded its compiled cardinality",
-                    ));
-                }
+                validate_physical_output_cardinality(
+                    result,
+                    cardinality,
+                    "CreateTokens result exceeded its compiled cardinality",
+                )?;
                 ProgramValue::CreatedTokenBatch(result.produced_objects.clone())
             }
             ResultType::TriggerObjectLinkedExileReceipt {
                 producer_ability_id,
                 linked_exile_id,
-                ..
+                cardinality,
             } => {
                 let (engine, top) = stack_context.ok_or(EngineError::ProgramInvariant(
                     "linked-Exile receipt capture lacks its exact stack occurrence",
                 ))?;
-                if result.produced_objects.len() > 1 {
-                    return Err(EngineError::ProgramInvariant(
-                        "linked-Exile receipt exceeded its compiled cardinality",
-                    ));
-                }
+                let receipt = optional_physical_output(
+                    result,
+                    cardinality,
+                    "linked-Exile receipt exceeded its compiled cardinality",
+                )?;
                 let key = super::zones::linked_exile_key(
                     engine,
                     top,
@@ -2294,7 +2317,7 @@ fn capture_program_outputs_inner(
                         "linked-Exile receipt could not resolve its exact ability occurrence",
                     )
                 })?;
-                let receipt = result.produced_objects.first().copied().filter(|receipt| {
+                let receipt = receipt.filter(|receipt| {
                     engine
                         .state
                         .linked_exile_records

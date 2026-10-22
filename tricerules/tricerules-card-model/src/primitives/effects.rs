@@ -3317,79 +3317,78 @@ impl SpellEffectKind {
     /// Find the retired implicit previous-object receipt path through legacy flat effect wrappers.
     /// Programs must bind a typed result instead of relying on the preceding effect list item.
     pub(crate) fn contains_legacy_flat_previous_object_ability_removal(&self) -> bool {
-        match self {
-            Self::RemoveAllAbilities {
-                subject: EffectSubject::PreviousEffectObject,
-                ..
-            } => true,
-            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
-                effect.contains_legacy_flat_previous_object_ability_removal()
-            }
-            Self::MayBehold { if_beheld, .. } => if_beheld
-                .iter()
-                .any(Self::contains_legacy_flat_previous_object_ability_removal),
-            Self::CreateReflexiveTrigger { ability, .. } => ability
-                .effect
-                .iter()
-                .any(Self::contains_legacy_flat_previous_object_ability_removal),
-            Self::GrantTriggeredAbility { ability, .. }
-            | Self::CreateDelayedTrigger { ability, .. } => {
-                ability
-                    .effect
-                    .iter()
-                    .any(Self::contains_legacy_flat_previous_object_ability_removal)
-                    || ability
-                        .modal
-                        .iter()
-                        .flat_map(|modal| &modal.modes)
-                        .flat_map(|mode| &mode.effects)
-                        .any(Self::contains_legacy_flat_previous_object_ability_removal)
-            }
-            Self::ApplyPermanentModifier {
-                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
-                ..
-            } => ability
-                .effect
-                .iter()
-                .any(Self::contains_legacy_flat_previous_object_ability_removal),
-            _ => false,
-        }
+        self.contains_legacy_flat_previous_object_signature(|effect| {
+            matches!(
+                effect,
+                Self::RemoveAllAbilities {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                }
+            )
+        })
     }
 
     /// Find flat batch consumers of the implicit PreviousEffectObjects receipt. These consumers
     /// need a typed Program input so empty and completed batches remain distinct.
     pub(crate) fn contains_legacy_flat_previous_object_batch_consumer(&self) -> bool {
+        self.contains_legacy_flat_previous_object_signature(|effect| {
+            matches!(
+                effect,
+                Self::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObjects,
+                    ..
+                } | Self::CreateDelayedTrigger {
+                    subject: Some(EffectSubject::PreviousEffectObjects),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Find the retired Koya single-object delayed consumer through the same flat wrappers.
+    pub(crate) fn contains_legacy_flat_previous_object_delayed_trigger(&self) -> bool {
+        self.contains_legacy_flat_previous_object_signature(|effect| {
+            matches!(
+                effect,
+                Self::CreateDelayedTrigger {
+                    subject: Some(EffectSubject::PreviousEffectObject),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Visit only legacy flat-effect wrappers; authored Program bodies keep their own typed edges.
+    fn contains_legacy_flat_previous_object_signature(
+        &self,
+        matches_leaf: fn(&Self) -> bool,
+    ) -> bool {
+        if matches_leaf(self) {
+            return true;
+        }
         match self {
-            Self::ApplyPermanentModifier {
-                subject: EffectSubject::PreviousEffectObjects,
-                ..
-            }
-            | Self::CreateDelayedTrigger {
-                subject: Some(EffectSubject::PreviousEffectObjects),
-                ..
-            } => true,
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
-                effect.contains_legacy_flat_previous_object_batch_consumer()
+                effect.contains_legacy_flat_previous_object_signature(matches_leaf)
             }
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
-                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
             Self::CreateReflexiveTrigger { ability, .. } => ability
                 .effect
                 .iter()
-                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
             Self::GrantTriggeredAbility { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. } => {
-                ability
-                    .effect
+                ability.effect.iter().any(|nested| {
+                    nested.contains_legacy_flat_previous_object_signature(matches_leaf)
+                }) || ability
+                    .modal
                     .iter()
-                    .any(Self::contains_legacy_flat_previous_object_batch_consumer)
-                    || ability
-                        .modal
-                        .iter()
-                        .flat_map(|modal| &modal.modes)
-                        .flat_map(|mode| &mode.effects)
-                        .any(Self::contains_legacy_flat_previous_object_batch_consumer)
+                    .flat_map(|modal| &modal.modes)
+                    .flat_map(|mode| &mode.effects)
+                    .any(|nested| {
+                        nested.contains_legacy_flat_previous_object_signature(matches_leaf)
+                    })
             }
             Self::ApplyPermanentModifier {
                 modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
@@ -3397,7 +3396,7 @@ impl SpellEffectKind {
             } => ability
                 .effect
                 .iter()
-                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
             _ => false,
         }
     }
@@ -3969,6 +3968,12 @@ impl SpellEffectKind {
         {
             return Err("PreviousEffectObjects batch consumers require an authored Program".into());
         }
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_flat_previous_object_delayed_trigger)
+        {
+            return Err("PreviousEffectObject delayed triggers require an authored Program".into());
+        }
 
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum ProducedObjectCardinality {
@@ -3988,7 +3993,6 @@ impl SpellEffectKind {
                     ProducedObjectCardinality::ExactlyOne
                 }
                 SpellEffectKind::ChoosePermanents { max: 1, .. }
-                | SpellEffectKind::Exile { .. }
                 | SpellEffectKind::CounterTargetAbility
                 | SpellEffectKind::Amass { .. } => ProducedObjectCardinality::OptionalOne,
                 SpellEffectKind::ChoosePermanents { .. } => ProducedObjectCardinality::Many,
@@ -4027,10 +4031,6 @@ impl SpellEffectKind {
                 } => Some(PreviousObjectRequirement::OptionalOne),
                 SpellEffectKind::ReturnToOwnersHand {
                     subject: EffectSubject::PreviousEffectObject,
-                }
-                | SpellEffectKind::CreateDelayedTrigger {
-                    subject: Some(EffectSubject::PreviousEffectObject),
-                    ..
                 } => Some(PreviousObjectRequirement::OptionalOne),
                 _ => None,
             }

@@ -1,10 +1,10 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_card_model::{AbilityDefinitionId, AbilityId, CardFaceId, ProgramOwnerId};
-use tricerules_core::{TurnStep, Zone};
+use tricerules_core::{EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
-    ruled_command::Cmd, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
-    SubmitResolutionChoice,
+    dev_command, ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone,
+    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
 
 fn choose_trigger_targets(targets: Vec<TargetRef>) -> RuledCommand {
@@ -88,6 +88,85 @@ fn remove_koya_source(engine: &mut GameEngine) {
         .or_default() += 1;
 }
 
+fn move_target_to_graveyard(engine: &mut GameEngine, target: u32, owner_index: usize) {
+    let owner_id = engine.state.players[owner_index].id;
+    engine.state.players[owner_index]
+        .battlefield
+        .retain(|object_id| *object_id != target);
+    engine.state.players[owner_index].graveyard.push(target);
+    let object = engine.state.objects.get_mut(&target).unwrap();
+    object.zone = Zone::Graveyard;
+    object.controller = owner_id;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(target)
+        .or_default() += 1;
+}
+
+fn setup_with_declared_commander_target(seed: u64) -> (GameEngine, u32) {
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: vec!["plains".into(); 40],
+            commanders: vec![],
+        },
+        EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("declared-commander Koya scenario engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine.enable_dev_commands();
+    let target = engine.state.players[1].command_zone[0];
+    engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 1,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Kami of the Crescent Moon".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("move the declared commander onto the battlefield");
+    assert_eq!(
+        engine.state.players[1].declared_commander_object_ids,
+        [target]
+    );
+    assert!(engine.state.players[1].battlefield.contains(&target));
+
+    inject_card_into_hand(&mut engine, 0, "koya,_death_from_above");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "koya,_death_from_above");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .expect("cast Koya against the declared commander");
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    (engine, target)
+}
+
 fn resolve_etb(engine: &mut GameEngine, targets: Vec<TargetRef>) {
     let creates_delayed_trigger = !targets.is_empty();
     engine
@@ -102,6 +181,12 @@ fn resolve_etb(engine: &mut GameEngine, targets: Vec<TargetRef>) {
                 if payload.program_definition.is_some()
         ));
     } else {
+        assert!(engine.state.pending_triggers.is_empty());
+        assert!(
+            engine.state.stack.is_empty(),
+            "the optional-target Koya ability resolved with an empty Exile result"
+        );
+        assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.active_event_observers.is_empty());
     }
 }
@@ -150,20 +235,20 @@ fn advance_to_next_end_step(engine: &mut GameEngine) {
 
 fn koya_return_tail_program(include_early_life: bool) -> String {
     let early = if include_early_life {
-        "(id: \"early_gain\", kind: Perform(GainLife(who: Controller, amount: 1))),\n            "
+        "(id: \"early_gain\", kind: Perform(GainLife(who: Controller, amount: 1))),\n                "
     } else {
         ""
     };
     include_str!("../../../tricerules-cards/data/koya,_death_from_above.ron")
         .replace("\r\n", "\n")
         .replacen(
-            "steps: [\n            (id: \"pay_or_return\"",
-            &format!("steps: [\n            {early}(id: \"pay_or_return\""),
+            "steps: [\n                (id: \"pay_or_return\"",
+            &format!("steps: [\n                {early}(id: \"pay_or_return\""),
             1,
         )
         .replacen(
-            "            ))\n          ], yields: [])))",
-            "            )),\n            (id: \"tail\", kind: Perform(GainLife(who: Controller, amount: 1)))\n          ], yields: [])))",
+            "                ))\n              ], yields: [])))",
+            "                )),\n                (id: \"tail\", kind: Perform(GainLife(who: Controller, amount: 1)))\n              ], yields: [])))",
             1,
         )
 }
@@ -386,7 +471,12 @@ fn issue_241_same_parent_delayed_occurrences_have_independent_answers() {
     assert_eq!(engine.state.active_event_observers.len(), 2);
 
     let source = koya_id(&engine);
-    let source_generation = engine.state.zone_change_generation[&source];
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or_default();
 
     advance_to_end_step_with_two_delayed_triggers(&mut engine);
     pass_both_players(&mut engine);
@@ -476,6 +566,120 @@ fn issue_241_zero_targets_creates_no_delayed_trigger_and_self_is_illegal() {
         .apply_scenario_command(0, &choose_trigger_targets(target_object(source)))
         .is_err());
     assert_eq!(illegal.state.pending_triggers.len(), 1);
+}
+
+#[test]
+fn issue_241_outer_resolution_keeps_last_known_source_and_exact_post_exile_watch() {
+    let (mut engine, target) = setup(241_003);
+    let source = koya_id(&engine);
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or_default();
+    let target_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or_default();
+    engine
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(target)))
+        .expect("choose Koya's target before its source leaves");
+
+    remove_koya_source(&mut engine);
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        source_generation + 1
+    );
+    pass_both_players(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    let exile_generation = engine.state.zone_change_generation[&target];
+    assert_eq!(exile_generation, target_generation + 1);
+    assert_eq!(engine.state.active_event_observers.len(), 1);
+    let observer = &engine.state.active_event_observers[0];
+    assert_eq!(
+        observer.watched,
+        Some(tricerules_core::state::TriggerObjectRef {
+            object_id: target,
+            zone_change_generation: exile_generation,
+            controller_at_event: 1,
+        }),
+        "the delayed return watches the exact post-Exile incarnation and event controller"
+    );
+}
+
+#[test]
+fn issue_241_target_that_leaves_before_outer_resolution_creates_no_observer() {
+    let (mut engine, target) = setup(241_004);
+    engine
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(target)))
+        .expect("choose the legal battlefield target");
+    assert_eq!(engine.state.stack.len(), 1);
+
+    move_target_to_graveyard(&mut engine, target, 1);
+    pass_both_players(&mut engine);
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
+    assert!(
+        engine.state.stack.is_empty(),
+        "the targeted trigger fizzled"
+    );
+    assert!(engine.state.active_event_observers.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn issue_241_declared_commander_observer_exists_before_command_choice_and_cannot_return_from_command(
+) {
+    let (mut engine, commander) = setup_with_declared_commander_target(241_005);
+    let exile_generation = engine.state.zone_change_generation[&commander] + 1;
+    engine
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(commander)))
+        .expect("choose the declared commander");
+    pass_both_players(&mut engine);
+
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Exile);
+    assert_eq!(engine.state.active_event_observers.len(), 1);
+    assert_eq!(
+        engine.state.active_event_observers[0].watched,
+        Some(tricerules_core::state::TriggerObjectRef {
+            object_id: commander,
+            zone_change_generation: exile_generation,
+            controller_at_event: 1,
+        })
+    );
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("commander owner is offered the state-based Command choice");
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        tricerules_core::custom::ChoiceKind::ResolutionBranch
+    );
+    engine
+        .apply_scenario_command(1, &select_payment_branch())
+        .expect("move the declared commander to Command after the observer was staged");
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
+    assert_eq!(engine.state.players[1].command_zone, [commander]);
+
+    advance_to_next_end_step(&mut engine);
+    pass_both_players(&mut engine);
+    assert!(engine.state.pending_resolution.is_some());
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline payment for Koya's delayed return");
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
+    assert_eq!(engine.state.players[1].command_zone, [commander]);
+    assert!(engine.state.active_event_observers.is_empty());
 }
 
 #[test]

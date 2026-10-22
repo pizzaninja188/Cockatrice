@@ -304,6 +304,10 @@ pub enum ResultType {
     ManifestedPermanent {
         cardinality: Cardinality,
     },
+    /// Exact post-move object from Koya's optional Exile, carried to its adjacent delayed observer.
+    ExiledObject {
+        cardinality: Cardinality,
+    },
     HandSelection {
         cardinality: Cardinality,
         ordered: bool,
@@ -510,6 +514,7 @@ struct Compiler<'a> {
     allow_mosswort_linked_play: bool,
     allow_equipment_receipt: bool,
     allow_vow_equipment_choice: bool,
+    allow_koya_outer_exile_result: bool,
     next_instruction_address: u32,
 }
 
@@ -669,6 +674,7 @@ impl CompiledProgram {
             allow_mosswort_linked_play,
             allow_equipment_receipt: is_kyoshi_battle_fan_receipt_owner(&owner),
             allow_vow_equipment_choice: is_vow_to_erebor_face(&owner),
+            allow_koya_outer_exile_result: is_koya_outer_program_owner(&owner),
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -693,19 +699,12 @@ fn spell_destroy_target_group(
     instruction_id: &str,
     references: &[ProgramTargetReference],
 ) -> Result<u32, String> {
-    let mut matches = references
-        .iter()
-        .filter(|reference| reference.instruction_id == instruction_id);
-    let Some(reference) = matches.next() else {
-        return Err(format!(
-            "spell_program Destroy instruction '{instruction_id}' requires one explicit Subject target binding"
-        ));
-    };
-    if reference.role != ProgramTargetRole::Subject || matches.next().is_some() {
-        return Err(format!(
-            "spell_program Destroy instruction '{instruction_id}' requires exactly one explicit Subject target binding"
-        ));
-    }
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Subject,
+        "spell_program Destroy",
+    )?;
     Ok(reference.target_group_index)
 }
 
@@ -713,19 +712,12 @@ fn spell_hand_discard_target_group(
     instruction_id: &str,
     references: &[ProgramTargetReference],
 ) -> Result<u32, String> {
-    let mut matches = references
-        .iter()
-        .filter(|reference| reference.instruction_id == instruction_id);
-    let Some(reference) = matches.next() else {
-        return Err(format!(
-            "spell_program ChooseHandCards instruction '{instruction_id}' requires one explicit Target binding"
-        ));
-    };
-    if reference.role != ProgramTargetRole::Target || matches.next().is_some() {
-        return Err(format!(
-            "spell_program ChooseHandCards instruction '{instruction_id}' requires exactly one explicit Target binding"
-        ));
-    }
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Target,
+        "spell_program ChooseHandCards",
+    )?;
     Ok(reference.target_group_index)
 }
 
@@ -734,19 +726,12 @@ fn spell_exile_target_group(
     references: &[ProgramTargetReference],
     targeting: Option<&TargetingDef>,
 ) -> Result<(u32, u32), String> {
-    let mut matches = references
-        .iter()
-        .filter(|reference| reference.instruction_id == instruction_id);
-    let Some(reference) = matches.next() else {
-        return Err(format!(
-            "spell_program Exile instruction '{instruction_id}' requires one explicit Subject target binding"
-        ));
-    };
-    if reference.role != ProgramTargetRole::Subject || matches.next().is_some() {
-        return Err(format!(
-            "spell_program Exile instruction '{instruction_id}' requires exactly one explicit Subject target binding"
-        ));
-    }
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Subject,
+        "spell_program Exile",
+    )?;
     let targeting = targeting
         .ok_or_else(|| "spell_program Exile requires an authored target group".to_string())?;
     let group = targeting
@@ -754,6 +739,35 @@ fn spell_exile_target_group(
         .get(reference.target_group_index as usize)
         .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
     Ok((reference.target_group_index, group.max))
+}
+
+fn single_instruction_target_binding<'a>(
+    instruction_id: &str,
+    references: &'a [ProgramTargetReference],
+    role: ProgramTargetRole,
+    operation: &str,
+) -> Result<&'a ProgramTargetReference, String> {
+    let role_name = match role {
+        ProgramTargetRole::Subject => "Subject",
+        ProgramTargetRole::Target => "Target",
+        ProgramTargetRole::StackAbility => "StackAbility",
+        ProgramTargetRole::Spell => "Spell",
+        ProgramTargetRole::Source => "Source",
+    };
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "{operation} instruction '{instruction_id}' requires one explicit {role_name} target binding"
+        ));
+    };
+    if reference.role != role || matches.next().is_some() {
+        return Err(format!(
+            "{operation} instruction '{instruction_id}' requires exactly one explicit {role_name} target binding"
+        ));
+    }
+    Ok(reference)
 }
 
 fn is_spell_target_damage_history_condition(condition: &GameCondition) -> bool {
@@ -884,19 +898,12 @@ fn ability_graveyard_exile_target_group(
     references: &[ProgramTargetReference],
     targeting: Option<&TargetingDef>,
 ) -> Result<(u32, u32), String> {
-    let mut matches = references
-        .iter()
-        .filter(|reference| reference.instruction_id == instruction_id);
-    let Some(reference) = matches.next() else {
-        return Err(format!(
-            "ability_program MoveGraveyardCards Exile instruction '{instruction_id}' requires one explicit Target binding"
-        ));
-    };
-    if reference.role != ProgramTargetRole::Target || matches.next().is_some() {
-        return Err(format!(
-            "ability_program MoveGraveyardCards Exile instruction '{instruction_id}' requires exactly one explicit Target binding"
-        ));
-    }
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Target,
+        "ability_program MoveGraveyardCards Exile",
+    )?;
     let targeting = targeting.ok_or_else(|| {
         "ability_program graveyard Exile result requires an authored target group".to_string()
     })?;
@@ -930,19 +937,12 @@ fn counter_target_ability_target_group(
     references: &[ProgramTargetReference],
     targeting: Option<&TargetingDef>,
 ) -> Result<(u32, u32), String> {
-    let mut matches = references
-        .iter()
-        .filter(|reference| reference.instruction_id == instruction_id);
-    let Some(reference) = matches.next() else {
-        return Err(format!(
-            "CounterTargetAbility instruction '{instruction_id}' requires one explicit StackAbility target binding"
-        ));
-    };
-    if reference.role != ProgramTargetRole::StackAbility || matches.next().is_some() {
-        return Err(format!(
-            "CounterTargetAbility instruction '{instruction_id}' requires exactly one StackAbility target binding"
-        ));
-    }
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::StackAbility,
+        "CounterTargetAbility",
+    )?;
     let targeting = targeting.ok_or_else(|| {
         "CounterTargetAbility requires an authored StackAbility target group".to_string()
     })?;
@@ -1408,13 +1408,25 @@ impl Compiler<'_> {
                     )
                 }
                 InstructionKind::Perform(effect) => {
-                    let input =
-                        compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
+                    let input = compile_input(
+                        effect,
+                        instruction.input.as_deref(),
+                        &names,
+                        &self.slots,
+                        self.allow_koya_outer_exile_result,
+                    )?;
                     validate_previous_mill_mana_value_sum_input(
                         effect,
                         input,
                         steps.last(),
                         &self.slots,
+                    )?;
+                    validate_koya_exile_delayed_input(
+                        effect,
+                        input,
+                        steps.last(),
+                        &self.slots,
+                        self.allow_koya_outer_exile_result,
                     )?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
@@ -1460,6 +1472,18 @@ impl Compiler<'_> {
                             }
                         } else if self.context == EffectContext::Ability {
                             match effect.as_ref() {
+                                SpellEffectKind::Exile {
+                                    subject: EffectSubject::Chosen(_),
+                                    linked_exile_id: None,
+                                } if self.allow_koya_outer_exile_result => {
+                                    let (group_index, group_max) = koya_outer_exile_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                    )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
                                 SpellEffectKind::MoveGraveyardCards {
                                     destination: GraveyardDestination::Exile,
                                     ..
@@ -2439,11 +2463,78 @@ fn validate_previous_mill_mana_value_sum_input(
     Ok(())
 }
 
+fn is_koya_outer_exile_delayed_consumer(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        EffectOp::CreateDelayedTrigger {
+            subject: Some(EffectSubject::PreviousEffectObject),
+            affected_player: None,
+            ability,
+        } if ability.ability_id.as_str() == "delayed_01"
+            && ability.trigger == super::TriggerCondition::AtBeginningOfNextEndStep
+    )
+}
+
+fn is_koya_outer_exile_producer(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        EffectOp::Exile {
+            subject: EffectSubject::Chosen(filter),
+            linked_exile_id: None,
+        } if is_exact_koya_other_creature_filter(filter)
+    )
+}
+
+fn validate_koya_exile_delayed_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    previous: Option<&CompiledInstruction>,
+    slots: &[CompiledSlot],
+    allow_koya_outer_exile_result: bool,
+) -> Result<(), String> {
+    if !allow_koya_outer_exile_result || !is_koya_outer_exile_delayed_consumer(effect) {
+        return Ok(());
+    }
+    let invalid = || {
+        "Koya delayed Exile consumer requires the immediately preceding exact optional Exile result"
+            .to_string()
+    };
+    let Some(input) = input else {
+        return Err(invalid());
+    };
+    let Some(previous) = previous else {
+        return Err(invalid());
+    };
+    let [previous_output] = previous.outputs.as_slice() else {
+        return Err(invalid());
+    };
+    if *previous_output != input
+        || !matches!(
+            &previous.kind,
+            CompiledInstructionKind::Perform(previous_effect)
+                if is_koya_outer_exile_producer(previous_effect)
+        )
+        || !matches!(
+            slots.get(input.0 as usize).map(|slot| &slot.result_type),
+            Some(ResultType::ExiledObject {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1)
+                }
+            })
+        )
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
     names: &HashMap<String, ResultSlotId>,
     slots: &[CompiledSlot],
+    allow_koya_outer_exile_result: bool,
 ) -> Result<Option<ResultSlotId>, String> {
     let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
     let expected = match effect {
@@ -2477,6 +2568,9 @@ fn compile_input(
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
         EffectOp::ReturnOtherLinkedExiledCards { .. } => Some("TriggerObjectLinkedExileReceipt"),
+        _ if allow_koya_outer_exile_result && is_koya_outer_exile_delayed_consumer(effect) => {
+            Some("ExiledObject")
+        }
         EffectOp::CreateReflexiveTrigger { .. }
             if is_source_sacrifice_reflexive_consumer(effect) =>
         {
@@ -2535,6 +2629,19 @@ fn compile_input(
                     } if receipt_producer == producer_ability_id
                         && receipt_link == linked_exile_id
                 ),
+                _ if allow_koya_outer_exile_result
+                    && is_koya_outer_exile_delayed_consumer(effect) =>
+                {
+                    matches!(
+                        actual.result_type,
+                        ResultType::ExiledObject {
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        }
+                    )
+                }
                 EffectOp::RemoveAllAbilities {
                     subject: EffectSubject::PreviousEffectObject,
                     duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
@@ -2884,6 +2991,12 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             ResultType::CounteredAbilitySource { cardinality: a },
             ResultType::CounteredAbilitySource { cardinality: b },
         ) => ResultType::CounteredAbilitySource {
+            cardinality: union(*a, *b),
+        },
+        (
+            ResultType::ExiledObject { cardinality: a },
+            ResultType::ExiledObject { cardinality: b },
+        ) => ResultType::ExiledObject {
             cardinality: union(*a, *b),
         },
         (
@@ -3764,6 +3877,28 @@ fn validate_and_result_types(
             Ok(Vec::new())
         }
         SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(filter),
+            linked_exile_id: None,
+        } if context == EffectContext::Ability && compiler.allow_koya_outer_exile_result => {
+            if target_group_index != Some(0)
+                || target_group_max != Some(1)
+                || !is_exact_koya_other_creature_filter(filter)
+            {
+                return Err(
+                    "Koya triggered_01 Exile requires its optional other-Creature target group 0"
+                        .into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Koya Exile target")?;
+            Ok(vec![ResultType::ExiledObject {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
+        }
+        SpellEffectKind::Exile {
             subject: EffectSubject::TriggerObject,
             linked_exile_id: Some(linked_exile_id),
         } if context == EffectContext::Ability
@@ -3909,6 +4044,12 @@ fn validate_and_result_types(
             Ok(Vec::new())
         }
         SpellEffectKind::CreateDelayedTrigger { .. } if is_token_copy_batch_consumer(effect) => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        _ if compiler.allow_koya_outer_exile_result
+            && is_koya_outer_exile_delayed_consumer(effect) =>
+        {
             effect.validate(context)?;
             Ok(Vec::new())
         }
@@ -4462,6 +4603,58 @@ fn is_mimic_vat_create_copy_owner(owner: &ProgramOwnerId) -> bool {
                 && definition.ability_path.len() == 1
                 && definition.ability_path[0].as_str() == "create_copy"
     )
+}
+
+fn is_koya_outer_program_owner(owner: &ProgramOwnerId) -> bool {
+    matches!(
+        owner,
+        ProgramOwnerId::Ability(definition)
+            if definition.card_id == "koya,_death_from_above"
+                && definition.face_id.as_str() == "koya_death_from_above"
+                && definition.ability_path.len() == 1
+                && definition.ability_path[0].as_str() == "triggered_01"
+    )
+}
+
+fn is_exact_koya_other_creature_filter(filter: &TargetFilter) -> bool {
+    filter
+        == &TargetFilter {
+            kind: TargetKind::Creature,
+            excluded_objects: vec![super::TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        }
+}
+
+fn koya_outer_exile_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+) -> Result<(u32, u32), String> {
+    let invalid = || {
+        "Koya triggered_01 Exile requires its optional other-Creature target group 0".to_string()
+    };
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Subject,
+        "Koya triggered_01 Exile",
+    )
+    .map_err(|_| invalid())?;
+    let Some(group) = targeting.and_then(|targeting| targeting.groups.first()) else {
+        return Err(invalid());
+    };
+    if reference.target_group_index != 0
+        || group.chooser != super::TargetChooser::Controller
+        || group.min != 0
+        || group.max != 1
+        || !group.effect_indices.is_empty()
+        || !group.distinct_from.is_empty()
+        || group.same_graveyard
+        || group.cast_cost_expansion.is_some()
+    {
+        return Err(invalid());
+    }
+    Ok((0, 1))
 }
 
 fn is_mosswort_bridge_activated_02(owner: &ProgramOwnerId) -> bool {

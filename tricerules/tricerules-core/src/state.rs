@@ -1453,6 +1453,9 @@ pub(crate) enum ProgramValue {
     /// The exact new current linked-Exile member produced by a typed Exile instruction.
     /// `None` is a proven attempted Exile with no current linked object.
     TriggerObjectLinkedExileReceipt(Option<TriggerObjectRef>),
+    /// The exact post-move object from Koya's optional targeted Exile. `None` is a completed
+    /// optional-target Exile with no object to watch.
+    ExiledObject(Option<TriggerObjectRef>),
 }
 
 /// Physical card identity frozen for a typed resolution-program library cohort.
