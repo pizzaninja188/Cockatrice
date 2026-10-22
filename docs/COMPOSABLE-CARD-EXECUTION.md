@@ -5,8 +5,8 @@ grammar/runtime are retired. After the Trade Route Envoy port, flat-variant vali
 selection/dispatch, and expansion paths were removed. The shared internal
 `EffectOutcome::RestartResolutionBranch` remains for MayBehold's no-candidate path; typed Program
 `Choose` and shared cost, requirement, and branch-selection helpers remain. The broader composable-card execution
-migration remains incomplete: receipt composition, library-return transactions, Mosswort Bridge
-departure handling, and the separate optional-trigger continuation departure fix remain open.
+migration remains incomplete: receipt composition, library-return transactions, and Mosswort Bridge
+departure handling remain open.
 The target design also established cross-component resolution-prompt identity, exact compiled owner
 identities, and immutable ability binding. The runner supports
 targetless program operations and four targetful role signatures on spell faces, modal modes,
@@ -37,8 +37,13 @@ the protobuf, relay, or client contract. Trade Route Envoy
 was outside the original `DrawDiscard` migration census. Following this port, the flat
 `ChooseResolutionBranch` schema/runtime was retired; typed Program `Choose` and shared branch/cost
 helpers remain. This does not complete the broader migration: receipt composition, library-return
-transactions, Mosswort Bridge departure handling, and optional-trigger continuation departure
-semantics remain open.
+transactions, and Mosswort Bridge departure handling remain open. The bounded 2026-10-21
+optional-trigger continuation correction retains a begun choice after its original controller
+leaves, lets a surviving player select who will apply or decline it, and preserves the original
+stack controller, source, target IDs, and target generations (CR 400.7, 608.2m, 800.4a, 800.4g–h).
+Source-owner-only departure leaves the live controller's choice in place. A chosen zone effect
+resumes only for the captured object incarnation; a missing or later incarnation is a no-op. Existing
+typed Program `Choose` departure behavior is retained through the shared delegation helpers.
 
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are

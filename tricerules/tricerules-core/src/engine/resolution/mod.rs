@@ -23,8 +23,11 @@ mod chaos_warp;
 mod choices;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
-    direct_draw_effect_is_selectable, permanent_choice_prompt, resolution_branch_is_selectable,
-    resolution_choice_delegate_candidates, targeted_player_permanent_choice_event,
+    direct_draw_effect_is_selectable, permanent_choice_prompt,
+    reconcile_resolution_choice_delegate_slots, resolution_branch_is_selectable,
+    resolution_choice_delegate_at_index, resolution_choice_delegate_candidates,
+    resolution_choice_delegate_options, resolution_choice_selector,
+    targeted_player_permanent_choice_event,
 };
 pub(in crate::engine) use choices::{
     card_result_characteristic_sum, card_result_count, card_result_count_for_player,
@@ -1119,6 +1122,26 @@ fn resolve_zone_effect_subject(
             || is_discarded_graveyard_incarnation)
             .then_some(observed.object_id);
     }
+    if matches!(subject, EffectSubject::Chosen(_)) {
+        // Target legality was snapshotted when this resolution began. If a parked continuation
+        // resumes after that object left or changed zones, treat the chosen zone effect as a
+        // no-op instead of moving a stale or new incarnation by ObjectId alone.
+        let object_id = targets.first().copied()?;
+        let expected_generation = top
+            .targets
+            .iter()
+            .find(|target| target.object_id == object_id)?
+            .zone_change_generation?;
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        return (current_generation == expected_generation
+            && engine.state.objects.contains_key(&object_id))
+        .then_some(object_id);
+    }
     if !matches!(subject, EffectSubject::Source) {
         return resolve_effect_subject(engine, top, targets, subject);
     }
@@ -1736,7 +1759,6 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> ResolutionProgress {
         let prompt = format!("{spell_label}: apply the optional effect?");
-        let apply_label = "Apply the optional effect".to_string();
         self.state.pending_resolution = Some(PendingResolution {
             resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
             resolution_prompt_semantics: None,
@@ -1753,45 +1775,13 @@ impl GameEngine {
             },
             continuation: ResolutionContinuation::OptionalTriggeredAbility {
                 stack: ParkedStackResolution::new(top),
+                stage: crate::state::PendingOptionalTriggeredAbilityStage::Selecting,
             },
         });
-        events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                rv1::ResolutionChoiceRequired {
-                    resolution_prompt_id: 0,
-                    deciding_player_id: self
-                        .state
-                        .pending_resolution
-                        .as_ref()
-                        .expect("optional trigger choice was parked")
-                        .deciding_player,
-                    source_object_id: self
-                        .state
-                        .pending_resolution
-                        .as_ref()
-                        .expect("optional trigger choice was parked")
-                        .presentation
-                        .source_object_id,
-                    prompt_text: prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
-                    min: 0,
-                    max: 1,
-                    resolution_branches: vec![rv1::ResolutionBranchOption {
-                        branch_index: 0,
-                        label: apply_label.clone(),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
-                        selectable: true,
-                        search_zones: Vec::new(),
-                        presentation: Some(rv1::PresentationRef {
-                            fallback_text: apply_label,
-                            ..Default::default()
-                        }),
-                    }],
-                    ..Default::default()
-                },
-            )),
-        });
+        events.push(
+            self.optional_triggered_ability_choice_event()
+                .expect("optional trigger choice was parked"),
+        );
         events.push(ev_log(prompt));
         ResolutionProgress::Parked
     }
@@ -2745,6 +2735,7 @@ impl GameEngine {
         if self.reconcile_departed_target_hand_discard_program(events)? {
             return Ok(true);
         }
+        self.refresh_optional_triggered_ability_departure(events)?;
         if self.refresh_suspended_program_draw_replacement(events)?
             || self.refresh_suspended_program_discard_replacement(events)?
             || self.refresh_suspended_program_choice(events)?
@@ -4718,6 +4709,46 @@ mod attached_subject_tests {
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         }
+    }
+
+    #[test]
+    fn chosen_zone_effect_subject_requires_the_captured_incarnation() {
+        let mut engine = observer_restore_test_engine(494_049);
+        let target = add_battlefield_object(&mut engine, 1, "hill_giant");
+        let captured_generation = 7;
+        engine
+            .state
+            .zone_change_generation
+            .insert(target, captured_generation);
+        let mut item = triggered_item(target, 0);
+        item.targets = vec![crate::state::StackTarget {
+            object_id: target,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(captured_generation),
+        }];
+        let subject = tricerules_card_model::primitives::EffectSubject::Chosen(Box::new(
+            tricerules_card_model::primitives::TargetFilter::default_creature(),
+        ));
+
+        assert_eq!(
+            resolve_zone_effect_subject(&engine, &item, &[target], &subject),
+            Some(target),
+            "the captured target incarnation remains eligible for its zone effect"
+        );
+
+        engine
+            .state
+            .zone_change_generation
+            .insert(target, captured_generation + 1);
+        assert!(engine.state.objects.contains_key(&target));
+        assert_eq!(
+            resolve_zone_effect_subject(&engine, &item, &[target], &subject),
+            None,
+            "the same ObjectId in a later zone-change generation is a new object"
+        );
     }
 
     fn observer_restore_test_engine(seed: u64) -> GameEngine {

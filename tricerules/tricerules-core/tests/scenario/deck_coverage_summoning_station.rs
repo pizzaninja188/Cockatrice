@@ -13,14 +13,14 @@ use tricerules_proto::ruled::v1::{
 const STATION: &str = "summoning_station";
 const PINCHER: &str = "pincher_c_2_2";
 
-fn setup() -> (GameEngine, u32) {
+fn setup_with_players(player_ids: &[i32], seed: u64) -> (GameEngine, u32) {
     let deck = deck_with("mountain", &[]);
     let mut e = GameEngine::new(
         tricerules_cards::registry::global(),
-        26_100_701,
-        &[10, 20, 30],
+        seed,
+        player_ids,
         20,
-        Some(vec![deck.clone(), deck.clone(), deck]),
+        Some((0..player_ids.len()).map(|_| deck.clone()).collect()),
         true,
     )
     .unwrap();
@@ -41,6 +41,53 @@ fn setup() -> (GameEngine, u32) {
     assert_eq!(e.state.objects[&station].zone, Zone::Battlefield);
     assert_eq!(e.state.players[0].mana_pool, Default::default());
     (e, station)
+}
+
+fn setup() -> (GameEngine, u32) {
+    setup_with_players(&[10, 20, 30], 26_100_701)
+}
+
+fn stack_resolved_count(batch: &RuledEventBatch, stack_id: u32) -> usize {
+    batch
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.ev,
+                Some(tricerules_proto::ruled::v1::ruled_event::Ev::StackResolved(resolved))
+                    if resolved.object_id == stack_id
+            )
+        })
+        .count()
+}
+
+fn select_branch_index(index: u32) -> tricerules_proto::ruled::v1::RuledCommand {
+    let mut command = submit_resolution_decision(ResolutionChoiceDecision::SelectBranch);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = command.cmd.as_mut() {
+        answer.selected_branch_index = index;
+    }
+    command
+}
+
+fn advance_to_player_main1(e: &mut GameEngine, player: i32) {
+    for _ in 0..40 {
+        if e.state.turn_step == tricerules_core::TurnStep::Main1
+            && e.state.active_player_id() == player
+        {
+            return;
+        }
+        let (actor, command) = match e.state.cleanup_discard_player {
+            Some(player) => {
+                let player_index = e.state.player_idx(player).expect("cleanup player");
+                let excess = e.state.players[player_index].hand.len() - 7;
+                (player, discard_cleanup_batch((0..excess as u32).collect()))
+            }
+            None => (e.state.priority_player_id(), pass()),
+        };
+        e.apply_scenario_command(actor, &command)
+            .expect("pass priority toward the requested player's main phase");
+    }
+    panic!("game did not reach player {player}'s main phase");
 }
 
 #[test]
@@ -507,4 +554,360 @@ fn summoning_station_optional_untap_respects_stun_and_prohibition() {
             resolve_one(&mut e);
         }
     }
+}
+
+#[test]
+fn summoning_station_confiscate_controller_concession_preserves_begun_untap() {
+    for accept in [false, true] {
+        run_confiscated_station_departure(&[10, 20, 30], 26_100_704, 2, accept, 30, 0, 10);
+    }
+}
+
+#[test]
+fn summoning_station_four_player_departure_keeps_selector_and_delegate_distinct() {
+    run_confiscated_station_departure(&[10, 20, 30, 40], 26_100_705, 3, true, 30, 2, 40);
+}
+
+#[test]
+fn summoning_station_same_player_delegate_gets_a_fresh_prompt_id() {
+    run_confiscated_station_departure(&[10, 20, 30], 26_100_706, 2, true, 30, 1, 30);
+}
+
+#[test]
+fn summoning_station_source_owner_departure_keeps_live_controller_choice() {
+    let (mut e, station) = setup_with_players(&[10, 20, 30], 26_100_707);
+    advance_to_player_main1(&mut e, 20);
+    inject_card_into_hand(&mut e, 1, "confiscate");
+    give_mana(
+        &mut e,
+        20,
+        ManaGift {
+            u: 6,
+            ..Default::default()
+        },
+    );
+    priority(&mut e, 20);
+    let confiscate_slot = hand_index_for_card(&e, 1, "confiscate");
+    e.apply_scenario_command(20, &cast_spell(confiscate_slot, target_object(station)))
+        .expect("P20 controls the Station with Confiscate");
+    resolve_one(&mut e);
+    tap_station(&mut e, station, 20);
+    sacrifice_gnomes(&mut e, 2, false);
+    let _initial_offer = resolve_one(&mut e);
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the stolen Station's controller has begun resolving its trigger");
+    assert_eq!(pending.deciding_player, 20);
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("the Station trigger uses an optional-trigger continuation");
+    };
+    let original = stack.item.clone();
+    assert_eq!(original.controller, 20);
+    assert_eq!(original.source_owner, Some(10));
+    assert_eq!(original.source_permanent_id, Some(station));
+
+    e.apply_scenario_command(10, &concede())
+        .expect("the physical source owner may leave during the live controller's choice");
+    assert!(e.state.players[0].has_lost);
+    assert!(!e.state.players[1].has_lost && !e.state.players[2].has_lost);
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the controller's begun choice remains pending");
+    assert_eq!(pending.deciding_player, 20);
+    assert_eq!((pending.presentation.min, pending.presentation.max), (0, 1));
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("source-owner departure does not replace the continuation");
+    };
+    assert_eq!(stack.item.id, original.id);
+    assert_eq!(stack.item.controller, 20);
+    assert_eq!(stack.item.source_owner, Some(10));
+    assert_eq!(stack.item.source_permanent_id, Some(station));
+
+    let declined = e
+        .apply_scenario_command(
+            20,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("the still-live original controller may decline after source-owner departure");
+    assert_eq!(stack_resolved_count(&declined, original.id), 1);
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn summoning_station_departed_delegate_is_replaced_and_root_completes_once() {
+    let (mut e, station) = setup_with_players(&[10, 20, 30, 40], 26_100_708);
+    advance_to_player_main1(&mut e, 20);
+    inject_card_into_hand(&mut e, 1, "confiscate");
+    give_mana(
+        &mut e,
+        20,
+        ManaGift {
+            u: 6,
+            ..Default::default()
+        },
+    );
+    priority(&mut e, 20);
+    let confiscate_slot = hand_index_for_card(&e, 1, "confiscate");
+    e.apply_scenario_command(20, &cast_spell(confiscate_slot, target_object(station)))
+        .expect("P20 controls the Station with Confiscate");
+    resolve_one(&mut e);
+    tap_station(&mut e, station, 20);
+    sacrifice_gnomes(&mut e, 3, false);
+    let _ = resolve_one(&mut e);
+    let original = match &e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the Station trigger begins resolving")
+        .continuation
+    {
+        ResolutionContinuation::OptionalTriggeredAbility { stack, .. } => stack.item.clone(),
+        _ => panic!("the Station trigger is optional"),
+    };
+    let station_generation = e.state.zone_change_generation[&station];
+
+    e.apply_scenario_command(20, &concede())
+        .expect("P20 leaves while its Station trigger is pending");
+    let selector = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P30 receives the selector stage")
+        .deciding_player;
+    assert_eq!(selector, 30);
+    e.apply_scenario_command(selector, &select_branch_index(2))
+        .expect("P30 chooses P40 as the first delegate");
+    let delegated = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P40 receives the Apply/Decline stage");
+    assert_eq!(delegated.deciding_player, 40);
+    let stale_delegate_prompt_id = delegated.resolution_prompt_id.get();
+
+    e.apply_scenario_command(40, &concede())
+        .expect("the selected delegate may leave before answering");
+    assert!(e.state.players[3].has_lost);
+    let selector_prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the remaining selector receives a refreshed delegate offer");
+    assert_eq!(selector_prompt.deciding_player, 30);
+    assert_eq!(
+        (
+            selector_prompt.presentation.min,
+            selector_prompt.presentation.max
+        ),
+        (1, 1)
+    );
+    assert!(matches!(
+        &selector_prompt.continuation,
+        ResolutionContinuation::OptionalTriggeredAbility { .. }
+    ));
+    let selector_prompt_id = selector_prompt.resolution_prompt_id.get();
+
+    let before_stale_departed_delegate = format!("{:?}", e.state);
+    let mut stale_answer = select_branch_index(1);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_answer.cmd.as_mut() {
+        answer.resolution_prompt_id = stale_delegate_prompt_id;
+    }
+    e.apply_scenario_command(40, &stale_answer)
+        .expect_err("a departed delegate cannot answer its former prompt");
+    assert_eq!(format!("{:?}", e.state), before_stale_departed_delegate);
+
+    e.apply_scenario_command(30, &select_branch_index(1))
+        .expect("the sole remaining eligible player may delegate to themself");
+    let self_delegate = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P30 receives the same trigger's Apply/Decline stage");
+    assert_eq!(self_delegate.deciding_player, 30);
+    assert_ne!(self_delegate.resolution_prompt_id.get(), selector_prompt_id);
+    let applied = e
+        .apply_scenario_command(
+            30,
+            &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
+        )
+        .expect("the surviving delegate applies the original untap");
+    assert_eq!(stack_resolved_count(&applied, original.id), 1);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(!e.state.objects[&station].tapped);
+    assert_eq!(e.state.zone_change_generation[&station], station_generation);
+}
+
+fn run_confiscated_station_departure(
+    player_ids: &[i32],
+    seed: u64,
+    artifact_seat: usize,
+    accept: bool,
+    selector: i32,
+    delegate_index: u32,
+    delegate: i32,
+) {
+    let (mut e, station) = setup_with_players(player_ids, seed);
+    advance_to_player_main1(&mut e, 20);
+    inject_card_into_hand(&mut e, 1, "confiscate");
+    give_mana(
+        &mut e,
+        20,
+        ManaGift {
+            u: 6,
+            ..Default::default()
+        },
+    );
+    priority(&mut e, 20);
+    let confiscate_slot = hand_index_for_card(&e, 1, "confiscate");
+    e.apply_scenario_command(20, &cast_spell(confiscate_slot, target_object(station)))
+        .expect("cast Confiscate on the owned Station");
+    resolve_one(&mut e);
+    assert_eq!(e.state.objects[&station].owner, 10);
+    assert_eq!(e.state.objects[&station].controller, 20);
+
+    tap_station(&mut e, station, 20);
+    let sacrificed_artifact = sacrifice_gnomes(&mut e, artifact_seat, false);
+    assert_eq!(e.state.objects[&sacrificed_artifact].zone, Zone::Graveyard);
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "Station trigger is above the sacrifice"
+    );
+    let initial_offer = resolve_one(&mut e);
+    let choice = find_resolution_choice(&initial_offer).expect("Station's optional untap offer");
+    assert_eq!(choice.deciding_player_id, 20);
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the trigger has begun resolving");
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("the begun trigger remains an optional-trigger continuation");
+    };
+    let original = stack.item.clone();
+    let station_generation = e.state.zone_change_generation[&station];
+    assert_eq!(original.controller, 20);
+    assert_eq!(original.source_permanent_id, Some(station));
+    assert_eq!(original.source_zone_change, station_generation);
+
+    let departure = e
+        .apply_scenario_command(20, &concede())
+        .expect("the Confiscate controller may concede during Station's untap choice");
+    assert!(e.state.players[1].has_lost);
+    assert!(!e.state.players[0].has_lost && !e.state.players[2].has_lost);
+    assert_eq!(
+        e.state.objects[&station].controller, 10,
+        "Station returns to its surviving owner after Confiscate leaves"
+    );
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the begun Station untap choice remains pending for delegation");
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("the original optional-trigger continuation is retained");
+    };
+    assert_eq!(pending.deciding_player, selector);
+    assert_eq!(stack.item.id, original.id);
+    assert_eq!(stack.item.controller, original.controller);
+    assert_eq!(stack.item.source_owner, original.source_owner);
+    assert_eq!(stack.item.source_permanent_id, original.source_permanent_id);
+    assert_eq!(stack.item.source_zone_change, original.source_zone_change);
+    assert_eq!(stack.item.targets, original.targets);
+    assert_eq!(e.state.zone_change_generation[&station], station_generation);
+    assert!(find_resolution_choice(&departure).is_some());
+
+    let selector_prompt_id = pending.resolution_prompt_id.get();
+    e.apply_scenario_command(selector, &select_branch_index(delegate_index))
+        .expect("the next live player selects a delegate");
+    let delegated_prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the selected delegate receives Apply/Decline");
+    assert_eq!(delegated_prompt.deciding_player, delegate);
+    assert_ne!(
+        (
+            delegated_prompt.deciding_player,
+            delegated_prompt.resolution_prompt_id.get()
+        ),
+        (selector, selector_prompt_id),
+        "the new actor and prompt ID together identify the delegate's answer stage"
+    );
+    assert!(matches!(
+        &delegated_prompt.continuation,
+        ResolutionContinuation::OptionalTriggeredAbility { .. }
+    ));
+    assert_eq!(
+        (
+            delegated_prompt.presentation.min,
+            delegated_prompt.presentation.max
+        ),
+        (0, 1)
+    );
+    let delegated_prompt_id = delegated_prompt.resolution_prompt_id.get();
+
+    let mut malformed_answer = submit_resolution_decision(ResolutionChoiceDecision::SelectBranch);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = malformed_answer.cmd.as_mut() {
+        answer.chosen_object_ids.push(station);
+    }
+    let before_malformed_answer = format!("{:?}", e.state);
+    e.apply_scenario_command(delegate, &malformed_answer)
+        .expect_err("a delegated optional answer cannot include object selections");
+    assert_eq!(format!("{:?}", e.state), before_malformed_answer);
+
+    if selector == delegate {
+        assert_ne!(delegated_prompt_id, selector_prompt_id);
+        let before_stale_prompt = format!("{:?}", e.state);
+        let mut stale_stage_answer = select_branch_index(0);
+        if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_stage_answer.cmd.as_mut() {
+            answer.resolution_prompt_id = selector_prompt_id;
+        }
+        e.apply_scenario_command(delegate, &stale_stage_answer)
+            .expect_err("the prior selector-stage prompt cannot answer the delegate stage");
+        assert_eq!(format!("{:?}", e.state), before_stale_prompt);
+    } else {
+        let before_old_actor = format!("{:?}", e.state);
+        let mut old_actor_answer = select_branch_index(0);
+        if let Some(Cmd::SubmitResolutionChoice(answer)) = old_actor_answer.cmd.as_mut() {
+            answer.resolution_prompt_id = delegated_prompt_id;
+        }
+        e.apply_scenario_command(selector, &old_actor_answer)
+            .expect_err("the prior selector cannot answer the delegate's current prompt");
+        assert_eq!(format!("{:?}", e.state), before_old_actor);
+    }
+
+    let answer = if accept {
+        submit_resolution_decision(ResolutionChoiceDecision::SelectBranch)
+    } else {
+        submit_resolution_decision(ResolutionChoiceDecision::Decline)
+    };
+    let completed = e
+        .apply_scenario_command(delegate, &answer)
+        .expect("the delegate answers the original optional untap");
+    assert_eq!(stack_resolved_count(&completed, original.id), 1);
+    assert_eq!(e.state.objects[&station].tapped, !accept);
+    assert_eq!(e.state.zone_change_generation[&station], station_generation);
+    assert!(e.state.pending_resolution.is_none());
+
+    let before_replay = format!("{:?}", e.state);
+    let mut stale_delegate_answer = submit_resolution_decision(if accept {
+        ResolutionChoiceDecision::SelectBranch
+    } else {
+        ResolutionChoiceDecision::Decline
+    });
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_delegate_answer.cmd.as_mut() {
+        answer.resolution_prompt_id = delegated_prompt_id;
+    }
+    e.apply_scenario_command(delegate, &stale_delegate_answer)
+        .expect_err("a completed root cannot be answered a second time");
+    assert_eq!(format!("{:?}", e.state), before_replay);
 }

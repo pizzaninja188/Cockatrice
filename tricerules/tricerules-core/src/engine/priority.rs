@@ -169,6 +169,16 @@ impl GameEngine {
                 }
                 _ => false,
             });
+        let pending_optional_source_identity =
+            self.state.pending_resolution.as_ref().and_then(|pending| {
+                match &pending.continuation {
+                    ResolutionContinuation::OptionalTriggeredAbility { stack, .. } => stack
+                        .item
+                        .source_owner
+                        .map(|owner| (stack.item.id, stack.item.source_zone_change, owner)),
+                    _ => None,
+                }
+            });
         let pending_target_hand_discard_departed =
             pending_target_hand_discard.is_some_and(|(_, _, target)| departed.contains(&target));
         let discard_departed_suspended_resolution = self
@@ -328,10 +338,17 @@ impl GameEngine {
                             stack.item.id == root_id
                                 && stack.item.source_zone_change == root_generation
                         });
+                    let optional_source_owner_departed = pending_optional_source_identity
+                        .is_some_and(|(root_id, root_generation, owner)| {
+                            stack.item.id == root_id
+                                && stack.item.source_zone_change == root_generation
+                                && departed.contains(&owner)
+                        });
                     (is_departed(stack)
                         || (is_pending_linked_root && pending_linked_source_departed)
                         || (is_pending_target_hand_discard_root
-                            && pending_target_hand_discard_departed))
+                            && pending_target_hand_discard_departed)
+                        || optional_source_owner_departed)
                         .then_some(stack)
                 })
                 .cloned()
@@ -455,6 +472,12 @@ impl GameEngine {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
                     // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
+                ResolutionContinuation::OptionalTriggeredAbility { .. } => {
+                    // This optional trigger already began resolving. Preserve its exact root
+                    // across controller or source-owner departure so its original choice can be
+                    // answered by the controller or an authorized delegate (CR 608.2m).
                     preserve = true;
                 }
                 ResolutionContinuation::HandChoice { .. }
@@ -1078,6 +1101,7 @@ impl GameEngine {
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_program_choose_departure(events)?;
+        self.refresh_optional_triggered_ability_departure(events)?;
         self.refresh_program_proliferate_departure(events)?;
         self.refresh_program_proliferate_replacement_departure(events)?;
         self.refresh_owner_hand_return_departure(&departed_objects, &stranded_objects, events)?;

@@ -70,6 +70,58 @@ pub(in crate::engine) fn can_preserve_player_set_discard_after_controller_depart
             .all(|choice| !choice.optional_exact && choice.alternative_filter.is_none())
 }
 
+impl GameEngine {
+    pub(in crate::engine) fn optional_triggered_ability_choice_event(
+        &self,
+    ) -> Option<rv1::RuledEvent> {
+        let pending = self.state.pending_resolution.as_ref()?;
+        let (stack, stage) = match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility { stack, stage } => (stack, stage),
+            _ => return None,
+        };
+        let options = match stage {
+            crate::state::PendingOptionalTriggeredAbilityStage::Selecting => {
+                let label = "Apply the optional effect".to_string();
+                vec![rv1::ResolutionBranchOption {
+                    branch_index: 0,
+                    label: label.clone(),
+                    cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                    cost_text: String::new(),
+                    selectable: true,
+                    search_zones: Vec::new(),
+                    presentation: Some(rv1::PresentationRef {
+                        fallback_text: label,
+                        ..Default::default()
+                    }),
+                }]
+            }
+            crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { candidates } => {
+                super::resolution::resolution_choice_delegate_options(
+                    &self.state,
+                    stack.item.controller,
+                    stack.item.controller,
+                    candidates,
+                )
+            }
+        };
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: pending.presentation.min,
+                    max: pending.presentation.max,
+                    resolution_branches: options,
+                    ..Default::default()
+                },
+            )),
+        })
+    }
+}
+
 fn extend_disjoint_card_names(
     previously_seen: &mut HashSet<String>,
     card_names: impl IntoIterator<Item = String>,
@@ -1524,15 +1576,91 @@ impl GameEngine {
         }
     }
 
+    fn select_optional_triggered_ability_delegate(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || !answer.chosen_player_ids.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some()
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "selecting an optional-trigger delegate requires one delegate index",
+            ));
+        }
+        let (controller, candidates) = match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility {
+                stack,
+                stage:
+                    crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { candidates },
+            } => (stack.item.controller, candidates.clone()),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "optional-trigger delegate continuation missing",
+                ));
+            }
+        };
+        let Some(delegate) = super::resolution::resolution_choice_delegate_at_index(
+            &self.state,
+            controller,
+            controller,
+            &candidates,
+            answer.selected_branch_index,
+        ) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        let selector = pending.deciding_player;
+        pending.deciding_player = delegate;
+        pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+        pending.presentation.min = 0;
+        pending.presentation.max = 1;
+        pending.presentation.prompt = "Choose a resolution option, or decline.".into();
+        pending.resolution_prompt_semantics = None;
+        let ResolutionContinuation::OptionalTriggeredAbility { stage, .. } =
+            &mut pending.continuation
+        else {
+            unreachable!("validated optional-trigger delegate continuation")
+        };
+        *stage = crate::state::PendingOptionalTriggeredAbilityStage::Selecting;
+        self.state.pending_resolution = Some(pending);
+        let mut events = vec![ev_log(format!(
+            "P{selector} selects P{delegate} to make P{controller}'s optional-trigger choice."
+        ))];
+        events.push(
+            self.optional_triggered_ability_choice_event()
+                .expect("delegated optional trigger remains parked"),
+        );
+        Ok(finish_with_events(self, events))
+    }
+
     fn finish_optional_triggered_ability_choice(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
+        let choosing_delegate = matches!(
+            &pending.continuation,
+            ResolutionContinuation::OptionalTriggeredAbility {
+                stage: crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { .. },
+                ..
+            }
+        );
         let invalid_shape = !answer.chosen_object_ids.is_empty()
             || !answer.chosen_player_ids.is_empty()
-            || answer.selected_branch_index != 0
+            || (!choosing_delegate && answer.selected_branch_index != 0)
             || answer.cast_spell.is_some()
             || answer.chosen_combat_defender.is_some()
             || answer.payment.is_some()
@@ -1544,8 +1672,13 @@ impl GameEngine {
                 "optional triggered ability choice contains unrelated fields",
             ));
         }
-        let stack = match &pending.continuation {
-            ResolutionContinuation::OptionalTriggeredAbility { stack } => stack.clone(),
+        if choosing_delegate {
+            return self.select_optional_triggered_ability_delegate(pending, answer, decision);
+        }
+        let (stack, stage) = match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility { stack, stage } => {
+                (stack.clone(), stage.clone())
+            }
             _ => {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
@@ -1553,6 +1686,26 @@ impl GameEngine {
                 ));
             }
         };
+        if !matches!(
+            stage,
+            crate::state::PendingOptionalTriggeredAbilityStage::Selecting
+        ) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "optional triggered ability choice is in the wrong stage",
+            ));
+        }
+        let original_controller_live = self
+            .state
+            .player_idx(stack.item.controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let is_delegated_answer = !original_controller_live
+            && super::resolution::resolution_choice_delegate_candidates(
+                &self.state,
+                stack.item.controller,
+                stack.item.controller,
+            )
+            .contains(&pending.deciding_player);
         let mut events = Vec::new();
         let ability_text = stack.item.ability_text.as_deref().unwrap_or_default();
         let ability_presentation = self
@@ -1571,33 +1724,35 @@ impl GameEngine {
                                 .get(stack.item.ability_index.unwrap_or(0))
                         })
                 });
-                if let Some(branch) = ability.and_then(optional_triggered_ability_branch) {
-                    if !resolution_branch_is_selectable(
-                        self,
-                        &stack.item,
-                        &stack.previous_result,
-                        pending.deciding_player,
-                        stack.item.controller,
-                        &branch,
-                        true,
-                    ) {
+                if !is_delegated_answer {
+                    if let Some(branch) = ability.and_then(optional_triggered_ability_branch) {
+                        if !resolution_branch_is_selectable(
+                            self,
+                            &stack.item,
+                            &stack.previous_result,
+                            pending.deciding_player,
+                            stack.item.controller,
+                            &branch,
+                            true,
+                        ) {
+                            self.state.pending_resolution = Some(pending);
+                            return Err(EngineError::Illegal(
+                                "the optional effect is no longer applicable",
+                            ));
+                        }
+                    } else if ability.is_some_and(|ability| {
+                        super::resolution::direct_draw_effect_is_selectable(
+                            self,
+                            &stack.item,
+                            &stack.previous_result,
+                            &ability.effect,
+                        ) == Some(false)
+                    }) {
                         self.state.pending_resolution = Some(pending);
                         return Err(EngineError::Illegal(
-                            "the optional effect is no longer applicable",
+                            "the optional draw is no longer legal under the current draw limit",
                         ));
                     }
-                } else if ability.is_some_and(|ability| {
-                    super::resolution::direct_draw_effect_is_selectable(
-                        self,
-                        &stack.item,
-                        &stack.previous_result,
-                        &ability.effect,
-                    ) == Some(false)
-                }) {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(EngineError::Illegal(
-                        "the optional draw is no longer legal under the current draw limit",
-                    ));
                 }
                 Some(0)
             }
@@ -1623,6 +1778,104 @@ impl GameEngine {
             stack.previous_result,
             events,
         )
+    }
+
+    pub(in crate::engine) fn refresh_optional_triggered_ability_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (controller, stage) = match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility { stack, stage } => {
+                (stack.item.controller, stage.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let controller_live = self
+            .state
+            .player_idx(controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let current_chooser_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if controller_live {
+            // A source-owner-only departure does not transfer the original controller's choice.
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        let eligible =
+            resolution::resolution_choice_delegate_candidates(&self.state, controller, controller);
+        if matches!(
+            stage,
+            crate::state::PendingOptionalTriggeredAbilityStage::Selecting
+        ) && current_chooser_live
+            && eligible.contains(&pending.deciding_player)
+        {
+            // The current live decider is the already selected delegate for Apply/Decline.
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        let Some(selector) = resolution::resolution_choice_selector(&self.state, controller) else {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        };
+        if eligible.is_empty() {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        let previous_slots = match &stage {
+            crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { candidates } => {
+                candidates.as_slice()
+            }
+            crate::state::PendingOptionalTriggeredAbilityStage::Selecting => &[],
+        };
+        let candidate_slots =
+            resolution::reconcile_resolution_choice_delegate_slots(previous_slots, &eligible);
+        let same_prompt = matches!(
+            &stage,
+            crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { candidates }
+                if current_chooser_live
+                    && pending.deciding_player == selector
+                    && *candidates == candidate_slots
+        );
+        if same_prompt {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        pending.deciding_player = selector;
+        pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+        pending.presentation.min = 1;
+        pending.presentation.max = 1;
+        pending.presentation.prompt = format!(
+            "P{selector}: choose a player to make P{controller}'s optional-trigger choice."
+        );
+        pending.resolution_prompt_semantics = None;
+        let ResolutionContinuation::OptionalTriggeredAbility { stage, .. } =
+            &mut pending.continuation
+        else {
+            unreachable!("validated optional-trigger continuation")
+        };
+        *stage = crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate {
+            candidates: candidate_slots,
+        };
+        self.state.pending_resolution = Some(pending);
+        events.push(ev_log(format!(
+            "P{selector} must choose a replacement for P{controller}'s optional-trigger choice."
+        )));
+        events.push(
+            self.optional_triggered_ability_choice_event()
+                .expect("optional-trigger delegate prompt remains parked"),
+        );
+        Ok(())
     }
 
     fn finish_aura_return(

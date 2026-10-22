@@ -9,7 +9,7 @@ use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, TurnStep, Zon
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 use tricerules_proto::ruled::v1::{
     dev_command::Dev, ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget, DevCommand,
-    DevMoveCard, DevZone, RuledCommand,
+    DevMoveCard, DevZone, RuledCommand, RuledEventBatch,
 };
 
 fn engine() -> GameEngine {
@@ -26,6 +26,54 @@ fn engine() -> GameEngine {
     assert_eq!(engine.state.turn_step, TurnStep::Main1);
     grant_pool(&mut engine, 0);
     engine
+}
+
+fn three_player_engine() -> GameEngine {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        508_003,
+        &[0, 1, 2],
+        20,
+        None,
+        true,
+    )
+    .expect("three-player engine");
+    advance_to_main1_from_game_start(&mut engine);
+    grant_pool(&mut engine, 0);
+    engine
+}
+
+fn four_player_engine() -> GameEngine {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        508_004,
+        &[0, 1, 2, 3],
+        20,
+        None,
+        true,
+    )
+    .expect("four-player engine");
+    advance_to_main1_from_game_start(&mut engine);
+    grant_pool(&mut engine, 0);
+    engine
+}
+
+fn select_branch(index: u32) -> RuledCommand {
+    let mut command = submit_resolution_decision(ResolutionChoiceDecision::SelectBranch);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = command.cmd.as_mut() {
+        answer.selected_branch_index = index;
+    }
+    command
+}
+
+fn stack_resolved_count(batch: &RuledEventBatch, stack_id: u32) -> usize {
+    batch
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(event.ev.as_ref(), Some(Ev::StackResolved(resolved)) if resolved.object_id == stack_id)
+        })
+        .count()
 }
 
 fn choose_trigger_target(object_id: Option<u32>) -> RuledCommand {
@@ -455,6 +503,243 @@ fn duplicant_does_not_exile_a_new_zone_incarnation_of_its_target() {
     assert_eq!(
         (characteristics.power, characteristics.toughness),
         (Some(2), Some(4))
+    );
+}
+
+#[test]
+fn duplicant_delegate_applies_to_the_exact_original_target_without_a_second_fizzle() {
+    let mut engine = three_player_engine();
+    let target = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
+    let other_creature = inject_creature_on_battlefield(&mut engine, 2, "hill_giant");
+    let target_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+    let other_generation = engine
+        .state
+        .zone_change_generation
+        .get(&other_creature)
+        .copied()
+        .unwrap_or(0);
+    let duplicant = inject_card_into_hand(&mut engine, 0, "duplicant");
+    let slot = hand_index_for_card(&engine, 0, "duplicant");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .expect("cast Duplicant");
+    pass_priority_round(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(Some(target)))
+        .expect("choose the exact original Hill Giant incarnation");
+    pass_priority_round(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Duplicant begins resolving its optional targeted ability");
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("Duplicant uses the optional-trigger continuation");
+    };
+    let original = stack.item.clone();
+    assert_eq!(original.controller, 0);
+    assert_eq!(original.source_permanent_id, Some(duplicant));
+    assert_eq!(original.targets.len(), 1);
+    assert_eq!(original.targets[0].object_id, target);
+    assert_eq!(
+        original.targets[0].zone_change_generation,
+        Some(target_generation)
+    );
+
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("the original optional-trigger controller concedes");
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the begun targeted ability survives its controller's departure");
+    let selector = pending.deciding_player;
+    assert_ne!(selector, 0);
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("the targeted ability keeps its original continuation");
+    };
+    assert_eq!(stack.item.id, original.id);
+    assert_eq!(stack.item.controller, original.controller);
+    assert_eq!(stack.item.source_permanent_id, original.source_permanent_id);
+    assert_eq!(stack.item.source_zone_change, original.source_zone_change);
+    assert_eq!(stack.item.targets[0].object_id, target);
+    assert_eq!(
+        stack.item.targets[0].zone_change_generation,
+        Some(target_generation)
+    );
+
+    engine
+        .apply_scenario_command(selector, &select_branch(0))
+        .expect("a survivor selects the delegate for the targeted ability");
+    let delegate = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the delegated Apply/Decline stage remains on the same trigger")
+        .deciding_player;
+    let applied = engine
+        .apply_scenario_command(
+            delegate,
+            &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
+        )
+        .expect("the delegate applies Duplicant's original target effect");
+
+    assert_eq!(stack_resolved_count(&applied, original.id), 1);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        target_generation + 1,
+        "only the originally targeted object incarnation is exiled"
+    );
+    assert_eq!(
+        engine.state.objects[&other_creature].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&other_creature)
+            .copied()
+            .unwrap_or(0),
+        other_generation
+    );
+}
+
+#[test]
+fn duplicant_departed_target_does_not_rebind_during_delegated_resolution() {
+    let mut engine = four_player_engine();
+    let departed_target = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
+    let surviving_same_name = inject_creature_on_battlefield(&mut engine, 3, "hill_giant");
+    let target_generation = engine
+        .state
+        .zone_change_generation
+        .get(&departed_target)
+        .copied()
+        .unwrap_or(0);
+    let surviving_generation = engine
+        .state
+        .zone_change_generation
+        .get(&surviving_same_name)
+        .copied()
+        .unwrap_or(0);
+    let duplicant = inject_card_into_hand(&mut engine, 0, "duplicant");
+    let slot = hand_index_for_card(&engine, 0, "duplicant");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .expect("cast Duplicant");
+    pass_priority_round(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(Some(departed_target)))
+        .expect("choose the exact Hill Giant owned by P1");
+    pass_priority_round(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Duplicant begins its targeted optional ability");
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } = &pending.continuation
+    else {
+        panic!("the begun ability uses the optional-trigger continuation");
+    };
+    let original = stack.item.clone();
+    assert_eq!(original.source_permanent_id, Some(duplicant));
+    assert_eq!(original.targets.len(), 1);
+    assert_eq!(original.targets[0].object_id, departed_target);
+    assert_eq!(
+        original.targets[0].zone_change_generation,
+        Some(target_generation)
+    );
+
+    engine
+        .apply_scenario_command(1, &concede())
+        .expect("the targeted creature's owner leaves during the begun choice");
+    assert!(engine.state.players[1].has_lost);
+    assert!(engine
+        .state
+        .objects
+        .get(&departed_target)
+        .is_none_or(|object| object.zone != Zone::Battlefield));
+    let still_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the live controller keeps the same started ability");
+    assert_eq!(still_pending.deciding_player, 0);
+    let ResolutionContinuation::OptionalTriggeredAbility { stack, .. } =
+        &still_pending.continuation
+    else {
+        panic!("the first departure does not replace the targeted continuation");
+    };
+    assert_eq!(stack.item.id, original.id);
+    assert_eq!(stack.item.targets[0].object_id, departed_target);
+    assert_eq!(
+        stack.item.targets[0].zone_change_generation,
+        Some(target_generation)
+    );
+
+    let delegation_offer = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the original controller leaves after target cleanup");
+    let selector = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P2 selects the delegate for the same root")
+        .deciding_player;
+    assert_eq!(selector, 2);
+    let _delegate_choice = find_resolution_choice(&delegation_offer)
+        .expect("P2 receives the actual delegate-selection offer");
+    engine
+        .apply_scenario_command(selector, &select_branch(1))
+        .expect("P2 selects P3 as delegate for the same root");
+    let delegate = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P3 receives the original targeted ability")
+        .deciding_player;
+    assert_eq!(delegate, 3);
+    let applied = engine
+        .apply_scenario_command(
+            delegate,
+            &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
+        )
+        .expect("the delegate applies the original target effect");
+
+    assert_eq!(stack_resolved_count(&applied, original.id), 1);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine
+        .state
+        .objects
+        .get(&departed_target)
+        .is_none_or(|object| object.zone != Zone::Battlefield));
+    assert_eq!(
+        engine.state.objects[&surviving_same_name].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&surviving_same_name)
+            .copied()
+            .unwrap_or(0),
+        surviving_generation,
+        "the effect never substitutes a surviving same-name incarnation"
     );
 }
 

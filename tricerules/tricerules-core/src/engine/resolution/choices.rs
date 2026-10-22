@@ -1251,6 +1251,106 @@ pub(in crate::engine) fn resolution_choice_delegate_candidates(
     other_live_players
 }
 
+/// Select the live object controller, or the next live seat after a departed controller (CR 800.4h).
+pub(in crate::engine) fn resolution_choice_selector(
+    state: &crate::state::GameState,
+    controller: PlayerId,
+) -> Option<PlayerId> {
+    if state
+        .player_idx(controller)
+        .is_some_and(|index| !state.players[index].has_lost)
+    {
+        return Some(controller);
+    }
+    state
+        .player_idx(controller)
+        .and_then(|index| state.next_in_game_player_idx(index))
+        .map(|index| state.players[index].id)
+        .or_else(|| {
+            state
+                .players
+                .iter()
+                .find(|player| !player.has_lost)
+                .map(|player| player.id)
+        })
+}
+
+/// Keep branch indices stable as eligible replacement choosers leave or become eligible.
+pub(in crate::engine) fn reconcile_resolution_choice_delegate_slots(
+    previous: &[Option<PlayerId>],
+    eligible: &[PlayerId],
+) -> Vec<Option<PlayerId>> {
+    let mut slots = previous.to_vec();
+    for slot in &mut slots {
+        if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
+            *slot = None;
+        }
+    }
+    for candidate in eligible.iter().copied() {
+        if !slots.contains(&Some(candidate)) {
+            slots.push(Some(candidate));
+        }
+    }
+    slots
+}
+
+/// Resolve a submitted delegate index against the preserved slots and current CR 800.4g menu.
+pub(in crate::engine) fn resolution_choice_delegate_at_index(
+    state: &crate::state::GameState,
+    controller: PlayerId,
+    original_chooser: PlayerId,
+    candidates: &[Option<PlayerId>],
+    index: u32,
+) -> Option<PlayerId> {
+    let eligible = resolution_choice_delegate_candidates(state, controller, original_chooser);
+    candidates
+        .get(index as usize)
+        .copied()
+        .flatten()
+        .filter(|delegate| eligible.contains(delegate))
+        .filter(|delegate| {
+            state
+                .player_idx(*delegate)
+                .is_some_and(|player| !state.players[player].has_lost)
+        })
+}
+
+/// Project delegate slots consistently for the real ProgramChoose and optional-trigger menus.
+pub(in crate::engine) fn resolution_choice_delegate_options(
+    state: &crate::state::GameState,
+    controller: PlayerId,
+    original_chooser: PlayerId,
+    candidates: &[Option<PlayerId>],
+) -> Vec<rv1::ResolutionBranchOption> {
+    let eligible = resolution_choice_delegate_candidates(state, controller, original_chooser);
+    candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| {
+            let selectable = candidate.is_some_and(|candidate| {
+                eligible.contains(&candidate)
+                    && state
+                        .player_idx(candidate)
+                        .is_some_and(|player| !state.players[player].has_lost)
+            });
+            let label = candidate.map_or_else(
+                || "Unavailable player".to_string(),
+                |candidate| format!("P{candidate} makes the choice"),
+            );
+            rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: label.clone(),
+                selectable,
+                presentation: Some(rv1::PresentationRef {
+                    fallback_text: label,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        })
+        .collect()
+}
+
 /// Rebuild the current authored-branch prompt from its serialized continuation. This is also used
 /// after a player leaves, so a stale client prompt cannot retain a departed delegate.
 pub(in crate::engine) fn authored_resolution_branch_choice_event(

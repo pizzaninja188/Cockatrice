@@ -1665,38 +1665,12 @@ impl GameEngine {
         }
         let options = match &choose.stage {
             crate::state::PendingProgramChooseStage::ChoosingDelegate { candidates } => {
-                let eligible = super::resolution_choice_delegate_candidates(
+                super::resolution_choice_delegate_options(
                     &self.state,
                     stack.item.controller,
                     choose.original_chooser,
-                );
-                candidates
-                    .iter()
-                    .enumerate()
-                    .map(|(index, candidate)| {
-                        let selectable = candidate.is_some_and(|candidate| {
-                            eligible.contains(&candidate)
-                                && self
-                                    .state
-                                    .player_idx(candidate)
-                                    .is_some_and(|idx| !self.state.players[idx].has_lost)
-                        });
-                        let label = candidate.map_or_else(
-                            || "Unavailable player".to_string(),
-                            |candidate| format!("P{candidate} makes the choice"),
-                        );
-                        rv1::ResolutionBranchOption {
-                            branch_index: index as u32,
-                            label: label.clone(),
-                            selectable,
-                            presentation: Some(rv1::PresentationRef {
-                                fallback_text: label,
-                                ..Default::default()
-                            }),
-                            ..Default::default()
-                        }
-                    })
-                    .collect()
+                    candidates,
+                )
             }
             crate::state::PendingProgramChooseStage::Selecting => {
                 let original_chooser_live = self

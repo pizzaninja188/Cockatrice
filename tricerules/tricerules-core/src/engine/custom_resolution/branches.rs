@@ -2215,31 +2215,18 @@ impl GameEngine {
                 ));
             }
         };
-        let delegate = candidates
-            .get(answer.selected_branch_index as usize)
-            .copied()
-            .flatten();
-        let eligible = resolution::resolution_choice_delegate_candidates(
+        let Some(delegate) = resolution::resolution_choice_delegate_at_index(
             &self.state,
             controller,
             original_chooser,
-        );
-        let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+            &candidates,
+            answer.selected_branch_index,
+        ) else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "that replacement chooser is no longer available",
             ));
         };
-        if self
-            .state
-            .player_idx(delegate)
-            .is_none_or(|index| self.state.players[index].has_lost)
-        {
-            self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal(
-                "that replacement chooser is no longer available",
-            ));
-        }
         let ResolutionContinuation::ProgramChoose { choose, .. } = &mut pending.continuation else {
             unreachable!("validated program Choose delegate continuation")
         };
@@ -2814,10 +2801,6 @@ impl GameEngine {
             }
         };
         let controller = stack.item.controller;
-        let controller_live = self
-            .state
-            .player_idx(controller)
-            .is_some_and(|index| !self.state.players[index].has_lost);
         let original_chooser_live = self
             .state
             .player_idx(choose.original_chooser)
@@ -3207,21 +3190,7 @@ impl GameEngine {
             return Ok(());
         }
 
-        let selector = if controller_live {
-            Some(controller)
-        } else {
-            self.state
-                .player_idx(controller)
-                .and_then(|controller_index| self.state.next_in_game_player_idx(controller_index))
-                .map(|index| self.state.players[index].id)
-                .or_else(|| {
-                    self.state
-                        .players
-                        .iter()
-                        .find(|player| !player.has_lost)
-                        .map(|player| player.id)
-                })
-        };
+        let selector = resolution::resolution_choice_selector(&self.state, controller);
         let eligible = resolution::resolution_choice_delegate_candidates(
             &self.state,
             controller,
@@ -3298,20 +3267,14 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         };
-        let mut candidate_slots = match &choose.stage {
+        let previous_candidate_slots = match &choose.stage {
             PendingProgramChooseStage::ChoosingDelegate { candidates } => candidates.clone(),
             _ => Vec::new(),
         };
-        for slot in &mut candidate_slots {
-            if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
-                *slot = None;
-            }
-        }
-        for candidate in eligible.iter().copied() {
-            if !candidate_slots.contains(&Some(candidate)) {
-                candidate_slots.push(Some(candidate));
-            }
-        }
+        let candidate_slots = resolution::reconcile_resolution_choice_delegate_slots(
+            &previous_candidate_slots,
+            &eligible,
+        );
 
         let same_prompt = delegate_prompt
             && current_chooser_live

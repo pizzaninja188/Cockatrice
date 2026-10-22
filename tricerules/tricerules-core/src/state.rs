@@ -1385,6 +1385,12 @@ pub(crate) struct PendingProgramChoose {
     pub stage: PendingProgramChooseStage,
 }
 
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum PendingOptionalTriggeredAbilityStage {
+    Selecting,
+    ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
+}
+
 /// The resultless Proliferate instruction in a typed program can keep resolving after its
 /// controller leaves (CR 608.2m). The next live player chooses a delegate; the delegate then
 /// receives the original Proliferate recipient menu. `None` slots preserve branch indices if a
@@ -1656,6 +1662,7 @@ pub enum ResolutionContinuation {
     /// resolution-time choice decides whether its optional effects happen.
     OptionalTriggeredAbility {
         stack: ParkedStackResolution,
+        stage: PendingOptionalTriggeredAbilityStage,
     },
     DrawReplacement {
         stack: Option<ParkedStackResolution>,
@@ -2158,7 +2165,7 @@ pub(crate) struct ActivationCostCounterDebit {
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
-            Self::OptionalTriggeredAbility { stack } => Some(stack),
+            Self::OptionalTriggeredAbility { stack, .. } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_ref(),
             Self::DiscardReplacement { stack }
             | Self::ManaPayment { stack, .. }
@@ -2227,7 +2234,7 @@ impl ResolutionContinuation {
 
     pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
         match self {
-            Self::OptionalTriggeredAbility { stack } => Some(stack),
+            Self::OptionalTriggeredAbility { stack, .. } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_mut(),
             Self::DiscardReplacement { stack }
             | Self::ManaPayment { stack, .. }
