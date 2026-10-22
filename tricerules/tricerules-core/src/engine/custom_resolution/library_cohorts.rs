@@ -20,6 +20,12 @@ impl GameEngine {
                 "typed library cohort branch choice has unrelated answer fields",
             ));
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramHandLibraryReturn { .. }
+        ) {
+            return self.finish_program_hand_library_return_choice(pending, answer);
+        }
         let mut events = Vec::new();
         match &mut pending.continuation {
             ResolutionContinuation::ProgramCohortPartition {

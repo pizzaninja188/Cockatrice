@@ -1488,6 +1488,26 @@ pub(crate) struct ProgramPartitionMovePlan {
     pub stage: PendingProgramPartitionMoveStage,
 }
 
+/// One Brainstorm hand selection retained while its declared commanders receive CR 903.9b
+/// Library-versus-Command-zone choices. The selected references remain in the original order;
+/// no member moves until every choice has been collected.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingProgramHandLibraryReturnStage {
+    ReadyToCommit,
+    ChoosingCommander { index: usize },
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramHandLibraryReturnPlan {
+    pub owner: PlayerId,
+    pub selected: Vec<TriggerObjectRef>,
+    pub commander_choice_indices: Vec<usize>,
+    pub commander_choice_cursor: usize,
+    /// (selected index, destination) for every answered declared commander.
+    pub commander_destinations: Vec<(usize, Zone)>,
+    pub stage: PendingProgramHandLibraryReturnStage,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct ProgramRunState {
     pub owner: ProgramOwnerId,
@@ -1735,6 +1755,12 @@ pub enum ResolutionContinuation {
     ProgramPartitionMove {
         stack: ParkedStackResolution,
         plan: ProgramPartitionMovePlan,
+    },
+    /// Brainstorm's ordered hand-to-library result stays private and generation-bound while all
+    /// declared commanders in the selected cohort receive their Library/Command-zone choice.
+    ProgramHandLibraryReturn {
+        stack: ParkedStackResolution,
+        plan: ProgramHandLibraryReturnPlan,
     },
     /// Owner choices for one simultaneous battlefield-to-hand cohort, parked intact until the
     /// exact Command/Hand destinations can be committed together.
@@ -2177,6 +2203,7 @@ impl ResolutionContinuation {
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::ProgramCohortPartition { stack, .. }
             | Self::ProgramPartitionMove { stack, .. }
+            | Self::ProgramHandLibraryReturn { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::ProgramProliferate { stack, .. }
@@ -2246,6 +2273,7 @@ impl ResolutionContinuation {
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::ProgramCohortPartition { stack, .. }
             | Self::ProgramPartitionMove { stack, .. }
+            | Self::ProgramHandLibraryReturn { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::ProgramProliferate { stack, .. }

@@ -21,6 +21,7 @@ use tricerules_card_model::{AbilityPresentation, ChoiceId};
 
 mod chaos_warp;
 mod choices;
+mod hand_library_return;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
     direct_draw_effect_is_selectable, permanent_choice_prompt,

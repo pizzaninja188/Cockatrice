@@ -4766,6 +4766,778 @@ fn brainstorm_put_back_emits_no_public_move_event() {
     }
 }
 
+fn make_brainstorm_commander_engine(seed: u64, players: &[i32], commanders: &[&str]) -> GameEngine {
+    let decks = Some(
+        players
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                if index == 0 {
+                    tricerules_core::EngineDeck {
+                        mainboard: std::iter::once("brainstorm".to_string())
+                            .chain(std::iter::repeat_n("island".to_string(), 29))
+                            .collect(),
+                        commanders: commanders.iter().map(|id| (*id).to_string()).collect(),
+                    }
+                } else {
+                    tricerules_core::EngineDeck {
+                        mainboard: vec!["forest".into(); 30],
+                        commanders: Vec::new(),
+                    }
+                }
+            })
+            .collect(),
+    );
+    GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        seed,
+        players,
+        20,
+        decks,
+        true,
+    )
+    .expect("Brainstorm Commander fixture engine")
+}
+
+fn put_declared_commander_in_hand(
+    engine: &mut GameEngine,
+    player_index: usize,
+    commander_index: usize,
+) -> (u32, u64) {
+    let commander =
+        engine.state.players[player_index].declared_commander_object_ids[commander_index];
+    let player_id = engine.state.players[player_index].id;
+    engine.state.players[player_index]
+        .command_zone
+        .retain(|object_id| *object_id != commander);
+    engine.state.players[player_index].hand.push(commander);
+    let object = engine
+        .state
+        .objects
+        .get_mut(&commander)
+        .expect("commander object");
+    assert_eq!(object.owner, player_id);
+    object.zone = tricerules_core::Zone::Hand;
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&commander)
+        .copied()
+        .unwrap_or(0)
+        + 1;
+    engine
+        .state
+        .zone_change_generation
+        .insert(commander, generation);
+    (commander, generation)
+}
+
+fn cast_brainstorm_and_resolve_for_all_players(engine: &mut GameEngine) -> RuledEventBatch {
+    cast_brainstorm_and_resolve_with_controller(engine, 0, 0)
+}
+
+fn cast_brainstorm_and_resolve_with_controller(
+    engine: &mut GameEngine,
+    caster_index: usize,
+    controller_index: usize,
+) -> RuledEventBatch {
+    ensure_in_hand(engine, caster_index, "brainstorm");
+    let caster_player_id = engine.state.players[caster_index].id;
+    give_mana(
+        engine,
+        caster_player_id,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let spell_slot = hand_index_for_card(engine, caster_index, "brainstorm");
+    engine
+        .apply_scenario_command(caster_player_id, &cast_spell(spell_slot, vec![]))
+        .expect("cast Brainstorm");
+    if caster_index != controller_index {
+        engine
+            .state
+            .stack
+            .last_mut()
+            .expect("Brainstorm is on the stack")
+            .controller = engine.state.players[controller_index].id;
+    }
+    for _ in 0..engine.state.players.len() {
+        let actor = engine.state.priority_player_id();
+        let batch = engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass before Brainstorm resolves");
+        if engine.state.pending_resolution.is_some() {
+            return batch;
+        }
+    }
+    panic!("Brainstorm did not reach its hand-selection prompt");
+}
+
+fn submit_brainstorm_destination(branch_index: u32, prompt_id: u64) -> RuledCommand {
+    let mut command = submit_resolution_decision(
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch,
+    );
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        command.cmd.as_mut()
+    else {
+        unreachable!("resolution decision helper creates a choice command")
+    };
+    answer.resolution_prompt_id = prompt_id;
+    answer.selected_branch_index = branch_index;
+    command
+}
+
+fn assert_brainstorm_private_destination_prompt(
+    batch: &RuledEventBatch,
+    card_name: &str,
+) -> tricerules_proto::ruled::v1::ResolutionChoiceRequired {
+    assert_brainstorm_private_destination_prompt_for_player(batch, card_name, 0)
+}
+
+fn assert_brainstorm_private_destination_prompt_for_player(
+    batch: &RuledEventBatch,
+    card_name: &str,
+    deciding_player_id: i32,
+) -> tricerules_proto::ruled::v1::ResolutionChoiceRequired {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    let choice = find_resolution_choice(batch).expect("commander destination prompt");
+    assert_eq!(choice.deciding_player_id, deciding_player_id);
+    assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_eq!((choice.min, choice.max), (1, 1));
+    assert!(choice.candidate_object_ids.is_empty());
+    assert!(choice.candidate_card_ids.is_empty());
+    assert!(choice.candidate_names.is_empty());
+    assert!(choice.public_reveal.is_none());
+    assert!(!choice.prompt_text.contains(card_name));
+    assert_eq!(
+        choice
+            .resolution_branches
+            .iter()
+            .map(|branch| branch.label.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Command zone", "Library"]
+    );
+
+    let named_logs = batch
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::Log(log)) if log.text.contains(card_name) => Some(log),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !named_logs.is_empty(),
+        "the owner needs the selected card's name"
+    );
+    assert!(named_logs.iter().all(|log| {
+        log.visible_to_player_id == Some(deciding_player_id) && log.hidden_from_player_id.is_none()
+    }));
+    for log in batch.events.iter().filter_map(|event| match &event.ev {
+        Some(Ev::Log(log)) => Some(log),
+        _ => None,
+    }) {
+        if log.visible_to_player_id != Some(deciding_player_id) {
+            assert!(
+                !log.text.contains(card_name),
+                "a public or opponent-visible log disclosed {card_name}"
+            );
+        }
+    }
+    choice
+}
+
+fn assert_rejected_brainstorm_choice_is_immutable(
+    engine: &mut GameEngine,
+    actor: i32,
+    command: &RuledCommand,
+    label: &str,
+) {
+    let state_before = format!("{:?}", engine.state);
+    let seed_before = engine.state.seed;
+    let command_index_before = engine.state.command_index;
+    assert!(
+        engine.apply_scenario_command(actor, command).is_err(),
+        "{label} must be rejected"
+    );
+    assert_eq!(format!("{:?}", engine.state), state_before);
+    assert_eq!(engine.state.seed, seed_before);
+    assert_eq!(engine.state.command_index, command_index_before);
+}
+
+#[test]
+fn brainstorm_selected_commander_waits_for_private_library_replacement_choice() {
+    use tricerules_core::Zone;
+
+    let mut engine =
+        make_brainstorm_commander_engine(42, &[0, 1], &["captain_storm,_cosmium_raider"]);
+    advance_to_main1_from_game_start(&mut engine);
+
+    // Model an earlier effect having put the exact declared commander into its owner's hand.
+    // Keep the generation receipt current so Brainstorm's choice binds this physical card.
+    let (commander, commander_generation) = put_declared_commander_in_hand(&mut engine, 0, 0);
+    let draw = cast_brainstorm_and_resolve_for_all_players(&mut engine);
+    let hand_choice = find_resolution_choice(&draw).expect("Brainstorm hand selection");
+    assert_eq!(hand_choice.choice_kind(), ChoiceKind::HandCards);
+    assert!(hand_choice.candidate_object_ids.contains(&commander));
+    let another = hand_choice
+        .candidate_object_ids
+        .iter()
+        .copied()
+        .find(|object_id| *object_id != commander)
+        .expect("one other hand card");
+    let library_before = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+
+    let replacement_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![commander, another]))
+        .expect("choose the commander and another card for Brainstorm's ordered return");
+    let replacement = assert_brainstorm_private_destination_prompt(
+        &replacement_batch,
+        "Captain Storm, Cosmium Raider",
+    );
+    assert_eq!(
+        engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "the whole selected cohort stays put until the replacement decision is answered"
+    );
+    assert!(engine.state.players[0].hand.contains(&commander));
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&commander),
+        Some(&commander_generation)
+    );
+
+    // Choosing Library commits both selected cards in the established last-selected-on-top order.
+    let library_choice = engine
+        .apply_scenario_command(
+            0,
+            &submit_brainstorm_destination(1, replacement.resolution_prompt_id),
+        )
+        .expect("commander may use the Library replacement");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(!engine.state.players[0].hand.contains(&commander));
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Library);
+    let library_after = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(library_after.len(), library_before.len() + 2);
+    assert_eq!(&library_after[..2], &[another, commander]);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&commander),
+        Some(&(commander_generation + 1))
+    );
+    assert!(!permanents_moved_in(&library_choice)
+        .iter()
+        .any(|moved| moved.object_id == commander));
+}
+
+#[test]
+fn brainstorm_collects_two_commander_replacements_before_any_cohort_move() {
+    use tricerules_core::Zone;
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    // The fixture records the two declared identities but does not validate partner legality.
+    let mut engine = make_brainstorm_commander_engine(
+        43,
+        &[0, 1],
+        &[
+            "captain_storm,_cosmium_raider",
+            "vial_smasher,_gleeful_grenadier",
+        ],
+    );
+    advance_to_main1_from_game_start(&mut engine);
+    let (first, first_generation) = put_declared_commander_in_hand(&mut engine, 0, 0);
+    let (second, second_generation) = put_declared_commander_in_hand(&mut engine, 0, 1);
+    let hand_prompt = cast_brainstorm_and_resolve_for_all_players(&mut engine);
+    let hand_choice = find_resolution_choice(&hand_prompt).expect("Brainstorm hand choice");
+    assert!(hand_choice.candidate_object_ids.contains(&first));
+    assert!(hand_choice.candidate_object_ids.contains(&second));
+    let library_before = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+
+    let first_offer = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first, second]))
+        .expect("select both declared commanders");
+    let first_choice =
+        assert_brainstorm_private_destination_prompt(&first_offer, "Captain Storm, Cosmium Raider");
+    assert_eq!(
+        engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before
+    );
+
+    // The first card chooses Command, but remains in hand until the second replacement is known.
+    let second_offer = engine
+        .apply_scenario_command(
+            0,
+            &submit_brainstorm_destination(0, first_choice.resolution_prompt_id),
+        )
+        .expect("choose Command for the first commander");
+    let second_choice = assert_brainstorm_private_destination_prompt(
+        &second_offer,
+        "Vial Smasher, Gleeful Grenadier",
+    );
+    assert_ne!(
+        first_choice.resolution_prompt_id, second_choice.resolution_prompt_id,
+        "each sequential commander gets a distinct prompt generation"
+    );
+    assert!(permanents_moved_in(&second_offer).is_empty());
+    assert!(engine.state.players[0].hand.contains(&first));
+    assert!(engine.state.players[0].hand.contains(&second));
+    assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
+    assert_eq!(engine.state.objects[&second].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&first),
+        Some(&first_generation)
+    );
+    assert_eq!(
+        engine.state.zone_change_generation.get(&second),
+        Some(&second_generation)
+    );
+    assert_eq!(
+        engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before
+    );
+
+    let mut stale_prompt = submit_brainstorm_destination(1, second_choice.resolution_prompt_id);
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        stale_prompt.cmd.as_mut()
+    else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = first_choice.resolution_prompt_id;
+    assert_rejected_brainstorm_choice_is_immutable(
+        &mut engine,
+        0,
+        &stale_prompt,
+        "stale prior commander prompt ID",
+    );
+
+    let committed = engine
+        .apply_scenario_command(
+            0,
+            &submit_brainstorm_destination(1, second_choice.resolution_prompt_id),
+        )
+        .expect("choose Library for the second commander");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.objects[&first].zone, Zone::Command);
+    assert_eq!(engine.state.objects[&second].zone, Zone::Library);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&first),
+        Some(&(first_generation + 1))
+    );
+    assert_eq!(
+        engine.state.zone_change_generation.get(&second),
+        Some(&(second_generation + 1))
+    );
+    assert_eq!(engine.state.players[0].command_zone.last(), Some(&first));
+    assert_eq!(engine.state.players[0].library.front(), Some(&second));
+    let moved = permanents_moved_in(&committed);
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0].object_id, first);
+    assert_eq!(
+        moved[0].destination(),
+        tricerules_proto::ruled::v1::permanent_moved::Destination::Command
+    );
+    assert!(committed.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::CardsRevealed(reveal)) if reveal.cards.iter().any(|card| card.object_id == first)
+    )));
+    assert!(committed.events.iter().all(|event| match &event.ev {
+        Some(Ev::CardsRevealed(reveal)) => reveal.cards.iter().all(|card| card.object_id != second),
+        Some(Ev::Log(log)) if log.visible_to_player_id != Some(0) => {
+            !log.text.contains("Vial Smasher, Gleeful Grenadier")
+        }
+        _ => true,
+    }));
+}
+
+#[test]
+fn brainstorm_rejects_wrong_actor_decline_malformed_branch_and_stale_generation_atomically() {
+    use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
+
+    let mut engine =
+        make_brainstorm_commander_engine(44, &[0, 1], &["captain_storm,_cosmium_raider"]);
+    advance_to_main1_from_game_start(&mut engine);
+    let (commander, _) = put_declared_commander_in_hand(&mut engine, 0, 0);
+    let hand_prompt = cast_brainstorm_and_resolve_for_all_players(&mut engine);
+    let hand_choice = find_resolution_choice(&hand_prompt).expect("Brainstorm hand choice");
+    let another = hand_choice
+        .candidate_object_ids
+        .iter()
+        .copied()
+        .find(|object_id| *object_id != commander)
+        .expect("one other hand card");
+    let offer = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![commander, another]))
+        .expect("select commander for replacement");
+    let choice =
+        assert_brainstorm_private_destination_prompt(&offer, "Captain Storm, Cosmium Raider");
+
+    let valid = submit_brainstorm_destination(1, choice.resolution_prompt_id);
+    assert_rejected_brainstorm_choice_is_immutable(&mut engine, 1, &valid, "wrong actor");
+
+    let mut decline = submit_resolution_decision(ResolutionChoiceDecision::Decline);
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        decline.cmd.as_mut()
+    else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = choice.resolution_prompt_id;
+    assert_rejected_brainstorm_choice_is_immutable(&mut engine, 0, &decline, "decline");
+
+    let invalid_branch = submit_brainstorm_destination(2, choice.resolution_prompt_id);
+    assert_rejected_brainstorm_choice_is_immutable(
+        &mut engine,
+        0,
+        &invalid_branch,
+        "out-of-range branch",
+    );
+
+    let mut malformed = valid.clone();
+    let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(answer)) =
+        malformed.cmd.as_mut()
+    else {
+        unreachable!()
+    };
+    answer.chosen_object_ids.push(another);
+    assert_rejected_brainstorm_choice_is_immutable(&mut engine, 0, &malformed, "malformed branch");
+
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&commander)
+        .copied()
+        .unwrap_or(0);
+    engine
+        .state
+        .zone_change_generation
+        .insert(commander, generation + 1);
+    assert_rejected_brainstorm_choice_is_immutable(
+        &mut engine,
+        0,
+        &valid,
+        "stale selected generation",
+    );
+}
+
+#[test]
+fn brainstorm_unrelated_departure_refreshes_private_offer_without_moving_the_cohort() {
+    let mut engine =
+        make_brainstorm_commander_engine(45, &[0, 1, 2], &["captain_storm,_cosmium_raider"]);
+    advance_to_main1_from_game_start(&mut engine);
+    let (commander, generation) = put_declared_commander_in_hand(&mut engine, 0, 0);
+    let hand_prompt = cast_brainstorm_and_resolve_for_all_players(&mut engine);
+    let hand_choice = find_resolution_choice(&hand_prompt).expect("Brainstorm hand choice");
+    let another = hand_choice
+        .candidate_object_ids
+        .iter()
+        .copied()
+        .find(|object_id| *object_id != commander)
+        .expect("one other hand card");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![commander, another]))
+        .expect("select commander for replacement");
+    let library_before = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+
+    let departure = engine
+        .apply_scenario_command(2, &concede())
+        .expect("unrelated player may leave during the private replacement offer");
+    assert!(engine.state.players[2].has_lost);
+    let refreshed =
+        assert_brainstorm_private_destination_prompt(&departure, "Captain Storm, Cosmium Raider");
+    assert!(engine.state.pending_resolution.is_some());
+    assert!(engine.state.players[0].hand.contains(&commander));
+    assert!(engine.state.players[0].hand.contains(&another));
+    assert_eq!(
+        engine.state.objects[&commander].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert_eq!(
+        engine.state.zone_change_generation.get(&commander),
+        Some(&generation)
+    );
+    assert_eq!(
+        engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before
+    );
+    assert!(permanents_moved_in(&departure)
+        .iter()
+        .all(|moved| moved.object_id != commander && moved.object_id != another));
+
+    let completed = engine
+        .apply_scenario_command(
+            0,
+            &submit_brainstorm_destination(1, refreshed.resolution_prompt_id),
+        )
+        .expect("the refreshed live offer remains answerable");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&commander].zone,
+        tricerules_core::Zone::Library
+    );
+    assert_eq!(
+        engine.state.objects[&another].zone,
+        tricerules_core::Zone::Library
+    );
+    let library_after = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(&library_after[..2], &[another, commander]);
+    assert!(permanents_moved_in(&completed)
+        .iter()
+        .all(|moved| moved.object_id != commander && moved.object_id != another));
+}
+
+#[test]
+fn brainstorm_caster_departure_discards_the_uncommitted_owned_frame() {
+    let mut engine =
+        make_brainstorm_commander_engine(46, &[0, 1, 2], &["captain_storm,_cosmium_raider"]);
+    advance_to_main1_from_game_start(&mut engine);
+    let (commander, _) = put_declared_commander_in_hand(&mut engine, 0, 0);
+    let hand_prompt = cast_brainstorm_and_resolve_for_all_players(&mut engine);
+    let hand_choice = find_resolution_choice(&hand_prompt).expect("Brainstorm hand choice");
+    let another = hand_choice
+        .candidate_object_ids
+        .iter()
+        .copied()
+        .find(|object_id| *object_id != commander)
+        .expect("one other hand card");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![commander, another]))
+        .expect("select commander for replacement");
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("caster may leave while their private replacement choice is pending");
+    assert!(engine.state.players[0].has_lost);
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .count(),
+        2,
+        "the other players continue the game after the caster leaves"
+    );
+    assert!(engine.state.winner().is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(permanents_moved_in(&departure).iter().all(|moved| {
+        (moved.object_id != commander && moved.object_id != another)
+            || (moved.destination()
+                != tricerules_proto::ruled::v1::permanent_moved::Destination::Command
+                && moved.destination()
+                    != tricerules_proto::ruled::v1::permanent_moved::Destination::Library)
+    }));
+}
+
+#[test]
+fn brainstorm_source_owner_departure_preserves_live_controller_cohort_and_commits_it() {
+    use tricerules_core::{engine::EngineDeck, Zone};
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    let decks = Some(vec![
+        EngineDeck {
+            mainboard: std::iter::once("brainstorm".to_string())
+                .chain(std::iter::repeat_n("island".to_string(), 29))
+                .collect(),
+            commanders: Vec::new(),
+        },
+        EngineDeck {
+            mainboard: vec!["forest".into(); 30],
+            commanders: vec!["captain_storm,_cosmium_raider".into()],
+        },
+        EngineDeck {
+            mainboard: vec!["forest".into(); 30],
+            commanders: Vec::new(),
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        47,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("three-player Brainstorm source-owner fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    let (commander, commander_generation) = put_declared_commander_in_hand(&mut engine, 1, 0);
+    ensure_in_hand(&mut engine, 0, "brainstorm");
+    let physical_spell =
+        engine.state.players[0].hand[hand_index_for_card(&engine, 0, "brainstorm")];
+    assert_eq!(engine.state.objects[&physical_spell].owner, 0);
+
+    // Model a live P1 controller/cohort owner for P0's actual Brainstorm object. This is a
+    // parked-state continuation fixture, not a claim about the legal cast/steal path.
+    let hand_prompt = cast_brainstorm_and_resolve_with_controller(&mut engine, 0, 1);
+    let hand_choice = find_resolution_choice(&hand_prompt).expect("P1's Brainstorm hand choice");
+    assert_eq!(hand_choice.deciding_player_id, 1);
+    let another = hand_choice
+        .candidate_object_ids
+        .iter()
+        .copied()
+        .find(|object_id| *object_id != commander)
+        .expect("one other card from the live controller's hand");
+    assert_eq!(engine.state.objects[&another].owner, 1);
+    let selected = [commander, another];
+    let generations = selected
+        .iter()
+        .map(|object_id| {
+            engine
+                .state
+                .zone_change_generation
+                .get(object_id)
+                .copied()
+                .unwrap_or(0)
+        })
+        .collect::<Vec<_>>();
+    let library_before = engine.state.players[1]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    let first_offer_batch = engine
+        .apply_scenario_command(1, &submit_resolution_choice(selected.to_vec()))
+        .expect("P1 selects the commander and another card for the ordered return");
+    let first_offer = assert_brainstorm_private_destination_prompt_for_player(
+        &first_offer_batch,
+        "Captain Storm, Cosmium Raider",
+        1,
+    );
+    let pending_before = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P1's private replacement choice is parked");
+    let continuation_before = format!("{:?}", pending_before.continuation);
+    let prompt_id_before = pending_before.resolution_prompt_id.get();
+    assert_eq!(first_offer.resolution_prompt_id, prompt_id_before);
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("physical source owner P0 leaves while P1 controls the resolving Program");
+    assert!(engine.state.players[0].has_lost);
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .count(),
+        2
+    );
+    assert!(engine.state.winner().is_none());
+    assert!(!engine.state.objects.contains_key(&physical_spell));
+    assert_eq!(
+        departure
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectRemoved(removed)) if removed.object_id == physical_spell
+            ))
+            .count(),
+        1,
+        "the departed physical source exits exactly once"
+    );
+    let refreshed = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the live controller's pending hand return survives source-owner departure");
+    assert_eq!(refreshed.deciding_player, 1);
+    assert_eq!(refreshed.resolution_prompt_id.get(), prompt_id_before);
+    assert_eq!(format!("{:?}", refreshed.continuation), continuation_before);
+    assert_brainstorm_private_destination_prompt_for_player(
+        &departure,
+        "Captain Storm, Cosmium Raider",
+        1,
+    );
+    assert!(selected.iter().all(|object_id| {
+        engine.state.players[1].hand.contains(object_id)
+            && engine.state.objects[object_id].zone == Zone::Hand
+    }));
+    assert_eq!(
+        selected
+            .iter()
+            .map(|object_id| {
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+            })
+            .collect::<Vec<_>>(),
+        generations
+    );
+    assert_eq!(
+        engine.state.players[1]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before
+    );
+
+    let completed = engine
+        .apply_scenario_command(1, &submit_brainstorm_destination(1, prompt_id_before))
+        .expect("P1 answers the preserved Library replacement");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(!engine.state.objects.contains_key(&physical_spell));
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&another].zone, Zone::Library);
+    assert_eq!(engine.state.players[1].library.front(), Some(&another));
+    assert_eq!(engine.state.players[1].library.get(1), Some(&commander));
+    assert_eq!(
+        engine.state.zone_change_generation.get(&commander),
+        Some(&(commander_generation + 1))
+    );
+    assert!(completed.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::CardsRevealed(reveal))
+            if reveal.cards.iter().any(|card| selected.contains(&card.object_id))
+    )));
+}
+
 #[test]
 fn brainstorm_rejects_card_not_in_hand_without_mutating() {
     let decks = Some(vec![

@@ -1043,6 +1043,12 @@ impl GameEngine {
                     ..
                 },
                 ..
+            } | ResolutionContinuation::ProgramHandLibraryReturn {
+                plan: crate::state::ProgramHandLibraryReturnPlan {
+                    stage: crate::state::PendingProgramHandLibraryReturnStage::ChoosingCommander { .. },
+                    ..
+                },
+                ..
             }
         ) {
             return self.finish_program_branch_choice(pending, answer, decision);
@@ -1431,6 +1437,9 @@ impl GameEngine {
             }
             ResolutionContinuation::ProgramPartitionMove { .. } => {
                 self.finish_program_graveyard_order(pending, chosen)
+            }
+            ResolutionContinuation::ProgramHandLibraryReturn { .. } => {
+                unreachable!("commander replacement handled before object-choice validation")
             }
             ResolutionContinuation::BattlefieldReturn { .. } => {
                 self.finish_owner_hand_return_order(pending, chosen)

@@ -536,6 +536,15 @@ impl GameEngine {
                     // reconciliation prunes the departed library owner's exact references.
                     preserve = true;
                 }
+                ResolutionContinuation::ProgramHandLibraryReturn { stack, .. }
+                    if stack.program.is_some() && !departed.contains(&stack.item.controller) =>
+                {
+                    // A begun Brainstorm return belongs to the live controller's instruction.
+                    // Preserve its exact private cohort when an unrelated player or only the
+                    // physical spell owner leaves; departure reconciliation removes the source
+                    // object before the same Program frame is refreshed and answered.
+                    preserve = true;
+                }
                 ResolutionContinuation::AuraReturn { stack, .. } => {
                     *stack = None;
                     preserve = true;
@@ -1109,6 +1118,7 @@ impl GameEngine {
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;
         self.refresh_program_library_cohort_departure(events)?;
+        self.refresh_program_hand_library_return_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
         self.refresh_departed_ward_payment(events)?;

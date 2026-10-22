@@ -2437,68 +2437,8 @@ fn run_program_only_leaf(
             super::zones::select_hand_cards_for_program(cx, amount, ordered, &prompt)
         }
         SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {
-            let engine = &mut *cx.engine;
-            let top = cx.top;
             let selected = &cx.previous_effect_result.selected_hand_cards;
-            let mut ordered = Vec::with_capacity(selected.len());
-            for selected in selected {
-                let Some(object) = engine.state.objects.get(&selected.object_id) else {
-                    return Err(EngineError::Illegal(
-                        "selected hand card disappeared before library placement",
-                    ));
-                };
-                let Some(index) = engine.state.player_idx(object.owner) else {
-                    return Err(EngineError::Illegal("selected hand card owner disappeared"));
-                };
-                if object.zone != Zone::Hand
-                    || !engine.state.players[index]
-                        .hand
-                        .contains(&selected.object_id)
-                    || engine
-                        .state
-                        .zone_change_generation
-                        .get(&selected.object_id)
-                        .copied()
-                        .unwrap_or(0)
-                        != selected.zone_change_generation
-                    || object.owner != top.controller
-                {
-                    return Err(EngineError::Illegal(
-                        "selected hand card became stale before library placement",
-                    ));
-                }
-                ordered.push(selected.object_id);
-            }
-            // The choice sequence is bottom-to-top; each later selected card is placed above
-            // those selected earlier, matching the existing Brainstorm contract.
-            for object_id in &ordered {
-                move_object_to_zone(
-                    &mut engine.state,
-                    engine.registry,
-                    *object_id,
-                    Zone::Library,
-                    None,
-                )?;
-                let index = engine
-                    .state
-                    .player_idx(top.controller)
-                    .ok_or(EngineError::Illegal(
-                        "resolution-program controller disappeared",
-                    ))?;
-                let library = &mut engine.state.players[index].library;
-                library.retain(|other| *other != *object_id);
-                library.push_front(*object_id);
-            }
-            if !ordered.is_empty() {
-                cx.events.push(ev_log(format!(
-                    "P{} puts {} card{} on top of library ({}).",
-                    top.controller,
-                    ordered.len(),
-                    if ordered.len() == 1 { "" } else { "s" },
-                    cx.spell_label,
-                )));
-            }
-            Ok(EffectOutcome::Continue)
+            super::hand_library_return::begin_program_hand_library_return(cx, selected)
         }
         _ => Err(EngineError::Illegal(
             "operation is not a resolution-program-only leaf",
@@ -7650,6 +7590,7 @@ mod invariant_rollback_tests {
             ResolutionContinuation::ProgramChoose { stack, .. }
             | ResolutionContinuation::PermanentChoice { stack, .. }
             | ResolutionContinuation::HandChoice { stack, .. }
+            | ResolutionContinuation::ProgramHandLibraryReturn { stack, .. }
             | ResolutionContinuation::SearchLibrary { stack, .. } => stack,
             other => panic!("unexpected continuation: {other:?}"),
         };
@@ -7695,6 +7636,17 @@ mod invariant_rollback_tests {
      no: (steps: [(id: "otherwise_no", bind: [], input: None,
       kind: Perform(Draw(who: Controller, count: 3)))], yields: [])))], yields: []))),
   (id: "tail", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))
+ ], yields: []), target_bindings: [])))"#;
+
+    const HAND_LIBRARY_RETURN_WITH_TAIL: &str = r#"(id: "hand_library_return_tail_fixture",
+ name: "Hand Library Return Tail Fixture", face_id: "hand_library_return_tail_fixture",
+ mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
+  (id: "select", bind: ["selected"], input: None,
+   kind: Perform(SelectHandCards(count: 2, ordered: true, prompt: "Choose two cards to put back."))),
+  (id: "put_back", bind: [], input: Some("selected"),
+   kind: Perform(PutSelectedHandCardsOnLibraryTop)),
+  (id: "tail_draw", bind: ["drawn"], input: None,
+   kind: Perform(Draw(who: Controller, count: 1)))
  ], yields: []), target_bindings: [])))"#;
 
     #[test]
@@ -7816,6 +7768,360 @@ mod invariant_rollback_tests {
             assert!(engine.state.pending_resolution.is_none());
             assert!(engine.state.stack.is_empty());
         }
+    }
+
+    #[test]
+    fn hand_library_return_resumes_the_program_tail_once_with_deterministic_replay() {
+        use prost::Message;
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let run = || {
+            let (mut engine, top, owners, _) = nested_choose_fixture(
+                HAND_LIBRARY_RETURN_WITH_TAIL,
+                "hand_library_return_tail_fixture",
+                91_231,
+                0,
+                &[],
+            );
+            // This unit fixture marks a synthetic spell object as declared commander solely to
+            // exercise the replacement and parked Program continuation. Registered identities
+            // and Commander-deck legality remain covered by the scenario tests.
+            let commander = *engine.state.players[0]
+                .library
+                .back()
+                .expect("a synthetic card remains in the caster's library");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                commander,
+                Zone::Hand,
+                None,
+            )
+            .expect("fixture object moves to hand");
+            engine.state.players[0]
+                .declared_commander_object_ids
+                .push(commander);
+            let other = *engine.state.players[0]
+                .hand
+                .iter()
+                .find(|object_id| **object_id != commander)
+                .expect("another card is available for ordered selection");
+            let library_before = engine.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            let before_draws = engine.state.turn_history.current.player(0).cards_drawn;
+
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            let hand_prompt = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("hand selection pending");
+            assert!(hand_prompt.presentation.candidates.contains(&commander));
+            nested_select_objects(&mut engine, vec![commander, other]);
+            let replacement = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("commander replacement pending");
+            assert!(matches!(
+                &replacement.continuation,
+                ResolutionContinuation::ProgramHandLibraryReturn { .. }
+            ));
+            assert_eq!(
+                engine.state.players[0]
+                    .library
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                library_before,
+                "the Program tail remains parked before the replacement commits"
+            );
+
+            let completed = nested_answer(&mut engine, Decision::SelectBranch, 1, Vec::new());
+            assert_eq!(
+                engine.state.turn_history.current.player(0).cards_drawn,
+                before_draws + 1,
+                "the Program tail draw resumes exactly once"
+            );
+            assert_eq!(engine.state.objects[&commander].zone, Zone::Library);
+            assert_eq!(engine.state.objects[&other].zone, Zone::Hand);
+            assert_eq!(engine.state.players[0].library.front(), Some(&commander));
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+            assert!(engine.state.players[0].graveyard.contains(&top.id));
+            (
+                completed.encode_to_vec(),
+                engine.state.players[0].hand.clone(),
+                engine.state.players[0]
+                    .library
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                engine.state.turn_history.current.player(0).cards_drawn,
+            )
+        };
+
+        assert_eq!(
+            run(),
+            run(),
+            "same seed and accepted answers replay identically"
+        );
+    }
+
+    #[test]
+    fn hand_library_return_survives_source_owner_departure_then_resumes_tail_once() {
+        use prost::Message;
+        use tricerules_proto::ruled::v1::ResolutionChoiceDecision as Decision;
+
+        let run = || {
+            let registry = Box::leak(Box::new(
+                tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                    &[
+                        HAND_LIBRARY_RETURN_WITH_TAIL,
+                        include_str!("../../../../tricerules-cards/data/island.ron"),
+                        include_str!("../../../../tricerules-cards/data/forest.ron"),
+                    ],
+                    &[],
+                )
+                .expect("source-owner departure tail fixture registry"),
+            ));
+            let decks = Some(vec![
+                vec!["hand_library_return_tail_fixture".to_string(); 30],
+                vec!["island".to_string(); 30],
+                vec!["forest".to_string(); 30],
+            ]);
+            let mut engine = GameEngine::new(registry, 91_232, &[0, 1, 2], 20, decks, true)
+                .expect("three-player source-owner departure fixture engine");
+            engine.state.opening = None;
+            engine.state.turn_step = TurnStep::Main1;
+            engine.state.active_player_idx = 0;
+            engine.state.priority_idx = 1;
+
+            // This parked-state fixture directly models a P0-owned physical source with P1 as
+            // controller/caster/cohort owner. It tests continuation behavior after source-owner
+            // departure, not a cast or control-change path exposed by a card API.
+            let spell = *engine.state.players[0]
+                .hand
+                .first()
+                .expect("P0 has a physical source card");
+            move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+                .expect("physical source enters the modeled stack state");
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&spell)
+                .copied()
+                .unwrap_or(0);
+            let mut top = engine.observer_return_item(spell, 1);
+            top.id = spell;
+            top.controller = 1;
+            top.card_id = "hand_library_return_tail_fixture".into();
+            top.ability_text = None;
+            top.is_copy = false;
+            top.face_index = 0;
+            top.source_owner = Some(0);
+            top.cast_by = Some(1);
+            top.cast_occurrence = Some(crate::state::StackObjectRef {
+                object_id: spell,
+                zone_change_generation: Some(generation),
+            });
+            let owners = engine
+                .compiled_resolution_program_owners(&top)
+                .expect("program owner lookup")
+                .expect("fixture Program owner exists");
+            engine.state.stack.push(top.clone());
+
+            // Mark one exact P1-owned card as a fixture commander, then retain two exact hand
+            // references in a deliberate order through the P0 source-owner departure.
+            let commander = *engine.state.players[1]
+                .hand
+                .first()
+                .expect("P1 has a cohort card");
+            engine.state.players[1]
+                .declared_commander_object_ids
+                .push(commander);
+            let other = *engine.state.players[1]
+                .hand
+                .iter()
+                .find(|object_id| **object_id != commander)
+                .expect("P1 has a second cohort card");
+            let selected = [commander, other];
+            let generations = selected
+                .iter()
+                .map(|object_id| {
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                })
+                .collect::<Vec<_>>();
+            let library_before = engine.state.players[1]
+                .library
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            let before_draws = engine.state.turn_history.current.player(1).cards_drawn;
+
+            nested_start(
+                &mut engine,
+                &top,
+                owners,
+                crate::state::EffectResult::default(),
+            );
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("P1 hand selection pending")
+                    .deciding_player,
+                1
+            );
+            nested_select_objects(&mut engine, selected.to_vec());
+            let pending_before = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("P1 replacement choice pending");
+            let continuation_before = format!("{:?}", pending_before.continuation);
+            let prompt_id = pending_before.resolution_prompt_id.get();
+            assert!(matches!(
+                &pending_before.continuation,
+                ResolutionContinuation::ProgramHandLibraryReturn { .. }
+            ));
+
+            let departure = engine
+                .apply_scenario_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                    },
+                )
+                .expect("physical source owner P0 leaves while P1's Program is parked");
+            assert!(engine.state.players[0].has_lost);
+            assert_eq!(
+                engine
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| !player.has_lost)
+                    .count(),
+                2
+            );
+            assert!(engine.state.winner().is_none());
+            assert!(!engine.state.objects.contains_key(&spell));
+            assert_eq!(
+                departure
+                    .events
+                    .iter()
+                    .filter(|event| matches!(
+                        &event.ev,
+                        Some(rv1::ruled_event::Ev::StackObjectRemoved(removed))
+                            if removed.object_id == spell
+                    ))
+                    .count(),
+                1
+            );
+            let refreshed = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("P1's exact hand return survives source-owner departure");
+            assert_eq!(refreshed.deciding_player, 1);
+            assert_eq!(refreshed.resolution_prompt_id.get(), prompt_id);
+            assert_eq!(
+                format!("{:?}", refreshed.continuation),
+                continuation_before,
+                "selected order, generation-bound cohort, and Program frame are retained"
+            );
+            let refreshed_offer = departure.events.iter().find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            });
+            let refreshed_offer = refreshed_offer.expect("P1's private offer is re-emitted");
+            assert_eq!(refreshed_offer.deciding_player_id, 1);
+            assert_eq!(
+                refreshed_offer.choice_kind(),
+                rv1::ChoiceKind::ResolutionBranch
+            );
+            assert!(refreshed_offer.candidate_object_ids.is_empty());
+            assert!(refreshed_offer.candidate_names.is_empty());
+            assert!(refreshed_offer.public_reveal.is_none());
+            assert_eq!(
+                refreshed_offer
+                    .resolution_branches
+                    .iter()
+                    .map(|branch| branch.label.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["Command zone", "Library"]
+            );
+            assert!(selected.iter().all(|object_id| {
+                engine.state.players[1].hand.contains(object_id)
+                    && engine.state.objects[object_id].zone == Zone::Hand
+            }));
+            assert_eq!(
+                selected
+                    .iter()
+                    .map(|object_id| {
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                    })
+                    .collect::<Vec<_>>(),
+                generations
+            );
+            assert_eq!(
+                engine.state.players[1]
+                    .library
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                library_before
+            );
+
+            let completed = nested_answer(&mut engine, Decision::SelectBranch, 1, Vec::new());
+            assert_eq!(
+                engine.state.turn_history.current.player(1).cards_drawn,
+                before_draws + 1,
+                "the resumed Program tail executes once after source-owner departure"
+            );
+            assert_eq!(engine.state.objects[&commander].zone, Zone::Library);
+            assert_eq!(engine.state.objects[&other].zone, Zone::Hand);
+            assert_eq!(engine.state.players[1].library.front(), Some(&commander));
+            assert!(!engine.state.objects.contains_key(&spell));
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.stack.is_empty());
+            (
+                departure.encode_to_vec(),
+                completed.encode_to_vec(),
+                engine.state.players[1].hand.clone(),
+                engine.state.players[1]
+                    .library
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                engine.state.turn_history.current.player(1).cards_drawn,
+            )
+        };
+
+        assert_eq!(
+            run(),
+            run(),
+            "same three-player fixture and accepted commands replay identically"
+        );
     }
 
     const MODAL_PARKING: &str = r#"(id: "nested_modal_parking_fixture", name: "Nested Modal Parking Fixture",
