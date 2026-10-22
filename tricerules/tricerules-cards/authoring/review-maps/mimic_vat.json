@@ -24,9 +24,20 @@
       "end_line": 2,
       "typed_paths": [
         "/faces/0/activated_abilities/0",
-        "/faces/0/activated_abilities/0/effect/0",
-        "/faces/0/activated_abilities/0/effect/1",
-        "/faces/0/activated_abilities/0/effect/2"
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies",
+        "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies/source",
+        "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies/count",
+        "/faces/0/activated_abilities/0/program/body/steps/1",
+        "/faces/0/activated_abilities/0/program/body/steps/1/input",
+        "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier",
+        "/faces/0/activated_abilities/0/program/body/steps/2",
+        "/faces/0/activated_abilities/0/program/body/steps/2/input",
+        "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger",
+        "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/subject",
+        "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability",
+        "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/trigger",
+        "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/effect/0"
       ]
     }
   ],
@@ -60,20 +71,48 @@
       "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/1/kind/Perform/ReturnOtherLinkedExiledCards"
     },
     {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies"
+    },
+    {
       "symbol": "TokenCopySource::LinkedExile",
-      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateTokenCopies/source"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies/source"
+    },
+    {
+      "symbol": "Amount::Fixed(1)",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/CreateTokenCopies/count"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyPermanentModifier",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier/modifier/GrantKeywords/0"
+    },
+    {
+      "symbol": "ResolvingEffectDuration::Indefinite",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier/duration"
     },
     {
       "symbol": "EffectSubject::PreviousEffectObjects",
-      "typed_path": "/faces/0/activated_abilities/0/effect/1/ApplyPermanentModifier/subject"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/ApplyPermanentModifier/subject"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateDelayedTrigger",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger"
+    },
+    {
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/subject"
     },
     {
       "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
-      "typed_path": "/faces/0/activated_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/trigger"
     },
     {
       "symbol": "SpellEffectKind::ExileObservedObjects",
-      "typed_path": "/faces/0/activated_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/2/kind/Perform/CreateDelayedTrigger/ability/effect/0"
     }
   ],
   "tokens": [],
@@ -112,7 +151,15 @@
     },
     {
       "test": "scenario deck_coverage_mimic_vat::queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves",
-      "covers": "An activation queued while Savannah Lions is linked copies the Grizzly Bears linked before resolution, even after Mimic Vat leaves the battlefield."
+      "covers": "An activation queued while Savannah Lions is linked copies the Grizzly Bears linked before resolution after Mimic Vat leaves; the copied token gains haste and is exiled at the next end step."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::queued_activation_keeps_its_source_generation_after_the_same_vat_returns",
+      "covers": "A queued activation retains the original Vat zone-change generation and copies its Savannah Lions link even after the same physical Vat leaves, returns, and links Grizzly Bears."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_copy_activation_serialized_command_tail_replays_once",
+      "covers": "Encoding and decoding the copy activation and following priority passes produces identical event batches and diagnostics; the activation creates exactly one Savannah Lions token and one delayed observer."
     },
     {
       "test": "scenario deck_coverage_mimic_vat::mimic_vat_program_optional_cost_decline_preserves_the_previous_link",
@@ -139,8 +186,24 @@
       "covers": "One Nevinyrral's Disk resolution destroys Mimic Vat and both observed creatures together; the death triggers still resolve from last-known source information."
     },
     {
+      "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_create_copy_program_compiles_from_the_actual_card_definition",
+      "covers": "The actual Mimic Vat definition compiles the exact create_copy owner Program, with one linked-exile TokenCopyBatch shared by Haste and next-end-step exile consumers; the imprint Program remains present."
+    },
+    {
+      "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_linked_copy_admission_rejects_near_miss_profiles",
+      "covers": "Linked-exile copy admission rejects wrong producer or link IDs, copy counts other than one, a different owner, and Spell context."
+    },
+    {
+      "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_typed_copy_batch_checks_consumer_input_and_result_type",
+      "covers": "A Haste consumer must name an in-scope batch, and a CreatedTokenBatch result cannot satisfy its TokenCopyBatch input."
+    },
+    {
+      "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_copy_program_allows_arbitrary_and_discarded_batch_bindings",
+      "covers": "The linked-copy Program accepts an arbitrary batch binding name and permits an unused producer result to be discarded."
+    },
+    {
       "test": "scenario deck_coverage_mimic_vat::an_empty_vat_creates_no_token_and_a_real_copy_exiles_at_the_next_end_step",
-      "covers": "An empty linked record creates no token; after an imprint, the token copies the current linked card, gains haste, and is exiled at the next end step."
+      "covers": "An empty linked record creates no token or delayed observer; after an imprint, the token copies the current linked card, gains haste, and is exiled at the next end step."
     },
     {
       "test": "scenario deck_coverage_mimic_vat::manifested_instant_can_be_imprinted_but_cannot_be_copied",

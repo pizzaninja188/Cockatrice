@@ -47,28 +47,35 @@
     presentation: OracleLines([2]),
     source_zone: Battlefield,
     costs: [Mana("{3}"), Tap],
-    effect: [
-      CreateTokenCopies(
-        count: 1,
-        source: LinkedExile(
-          producer_ability_id: "imprint",
-          linked_exile_id: "imprinted_card",
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "copy_entry", bind: ["copies"], input: None, kind: Perform(
+        CreateTokenCopies(
+          count: 1,
+          source: LinkedExile(
+            producer_ability_id: "imprint",
+            linked_exile_id: "imprinted_card",
+          ),
         ),
-      ),
-      ApplyPermanentModifier(
-        subject: PreviousEffectObjects,
-        modifier: GrantKeywords([Haste]),
-        duration: Indefinite,
-      ),
-      CreateDelayedTrigger(
-        subject: Some(PreviousEffectObjects),
-        ability: (
-          ability_id: "exile_copy",
-          presentation: OracleLines([2]),
-          trigger: AtBeginningOfNextEndStep,
-          effect: [ExileObservedObjects],
+      )),
+      (id: "grant_haste", bind: [], input: Some("copies"), kind: Perform(
+        ApplyPermanentModifier(
+          subject: PreviousEffectObjects,
+          modifier: GrantKeywords([Haste]),
+          duration: Indefinite,
         ),
-      ),
-    ],
+      )),
+      (id: "schedule_exile", bind: [], input: Some("copies"), kind: Perform(
+        CreateDelayedTrigger(
+          subject: Some(PreviousEffectObjects),
+          ability: (
+            ability_id: "exile_copy",
+            presentation: OracleLines([2]),
+            trigger: AtBeginningOfNextEndStep,
+            effect: [ExileObservedObjects],
+          ),
+        ),
+      )),
+    ], yields: []), target_bindings: [])),
   )],
 )

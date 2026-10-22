@@ -6,6 +6,7 @@ use tricerules_cards::{
     ContinuousEffectKind, ControllerReference, EffectDuration, Keyword, PermanentTypeFilter,
     TypeLineAddition,
 };
+use tricerules_core::state::EventObserverPayload;
 use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
@@ -52,6 +53,20 @@ fn creature_death_observer_retains_the_exact_event_object_for_imprint() {
 }
 
 const MIMIC_VAT: &str = "mimic_vat";
+
+fn delayed_trigger_observer_count(engine: &GameEngine) -> usize {
+    engine
+        .state
+        .active_event_observers
+        .iter()
+        .filter(|observer| {
+            matches!(
+                &observer.payload,
+                EventObserverPayload::StageDelayedTrigger(_)
+            )
+        })
+        .count()
+}
 
 fn engine_with_vat(seed: u64) -> (GameEngine, u32) {
     engine_with_vat_and_opponent_cards(seed, &["savannah_lions"])
@@ -692,6 +707,160 @@ fn queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves() {
         })
         .expect("the queued activation copies the currently linked card after Vat leaves");
     assert!(engine.effective_has_keyword(token, Keyword::Haste));
+    assert_eq!(
+        delayed_trigger_observer_count(&engine),
+        1,
+        "the completed copy schedules one cohort observer after Vat leaves"
+    );
+
+    pass_until_end_step(&mut engine);
+    assert_eq!(engine.state.stack.len(), 1, "the delayed exile is staged");
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(
+        !engine.state.objects.contains_key(&token),
+        "the queued activation's exact token cohort is exiled after its source leaves"
+    );
+}
+
+#[test]
+fn queued_activation_keeps_its_source_generation_after_the_same_vat_returns() {
+    let (mut engine, vat) = engine_with_vat(2_026_101_019);
+    let original_link = kill_creature(&mut engine, 1, "savannah_lions", 1);
+    resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(engine.state.objects[&original_link].zone, Zone::Exile);
+
+    let original_generation = engine.state.zone_change_generation[&vat];
+    grant_pool(&mut engine, 0);
+    let activation = activate_ability_for(&engine, vat, 0, Vec::new());
+    engine
+        .apply_scenario_command(0, &activation)
+        .expect("queue the copy ability on the original Vat incarnation");
+    let activation_stack_id = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| {
+            item.source_permanent_id == Some(vat) && !item.is_triggered && item.card_id == MIMIC_VAT
+        })
+        .expect("the activated ability remains queued")
+        .id;
+    assert_eq!(
+        engine
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == activation_stack_id)
+            .unwrap()
+            .source_zone_change,
+        original_generation
+    );
+
+    let actor = engine.state.priority_player_id();
+    move_card_to_zone(&mut engine, actor, 0, "Mimic Vat", DevZone::Graveyard);
+    assert_eq!(engine.state.objects[&vat].zone, Zone::Graveyard);
+    let actor = engine.state.priority_player_id();
+    move_card_to_zone(&mut engine, actor, 0, "Mimic Vat", DevZone::Battlefield);
+    assert_eq!(engine.state.objects[&vat].zone, Zone::Battlefield);
+    let returned_generation = engine.state.zone_change_generation[&vat];
+    assert_eq!(returned_generation, original_generation + 2);
+
+    let new_link = kill_creature(&mut engine, 0, "grizzly_bears", 2);
+    let (source, event) =
+        resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+    assert_eq!(
+        source, vat,
+        "the returned physical card is the new imprint source"
+    );
+    assert_eq!(event, new_link);
+    assert_eq!(engine.state.objects[&new_link].zone, Zone::Exile);
+    assert!(engine.state.stack.iter().any(|item| {
+        item.id == activation_stack_id && item.source_zone_change == original_generation
+    }));
+
+    resolve_entire_stack_two_player(&mut engine);
+    let copied = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|object| {
+            engine.state.objects[object].is_token()
+                && engine.state.objects[object].token_origin.is_some()
+        })
+        .expect("the queued activation still uses its original source incarnation");
+    assert_eq!(
+        engine.state.objects[&copied].card_id, "savannah_lions",
+        "the old activation must not read the returned Vat incarnation's Grizzly Bears link"
+    );
+    assert_eq!(engine.state.objects[&original_link].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&new_link].zone, Zone::Exile);
+}
+
+#[test]
+fn mimic_vat_copy_activation_serialized_command_tail_replays_once() {
+    use prost::Message;
+
+    fn apply_wire_pair(
+        original: &mut GameEngine,
+        replay: &mut GameEngine,
+        actor: i32,
+        command: RuledCommand,
+    ) {
+        let original_batch = original
+            .apply_command(actor, &command)
+            .expect("accept the recorded Mimic Vat command");
+        let encoded = command.encode_to_vec();
+        let decoded = RuledCommand::decode(encoded.as_slice()).expect("decode command tail");
+        let replay_batch = replay
+            .apply_command(actor, &decoded)
+            .expect("replay the serialized Mimic Vat command");
+        assert_eq!(original_batch, replay_batch);
+        assert_eq!(
+            original.diagnostic_snapshot().unwrap(),
+            replay.diagnostic_snapshot().unwrap()
+        );
+    }
+
+    let prepare = || {
+        let (mut engine, vat) = engine_with_vat(2_026_102_106);
+        let linked = kill_creature(&mut engine, 1, "savannah_lions", 1);
+        resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
+        assert_eq!(engine.state.objects[&linked].zone, Zone::Exile);
+        grant_pool(&mut engine, 0);
+        (engine, vat, linked)
+    };
+    let (mut original, vat, linked) = prepare();
+    let (mut replay, replay_vat, replay_linked) = prepare();
+    assert_eq!((vat, linked), (replay_vat, replay_linked));
+    assert_eq!(
+        original.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap(),
+        "both engines start at the same linked-card state"
+    );
+
+    let actor = original.state.priority_player_id();
+    assert_eq!(actor, 0);
+    let activation = activate_ability_for(&original, vat, 0, Vec::new());
+    apply_wire_pair(&mut original, &mut replay, actor, activation);
+    for _ in 0..2 {
+        let actor = original.state.priority_player_id();
+        apply_wire_pair(&mut original, &mut replay, actor, pass());
+    }
+
+    assert!(original.state.stack.is_empty());
+    let copies = original.state.players[0]
+        .battlefield
+        .iter()
+        .filter(|object| {
+            original.state.objects[object].card_id == "savannah_lions"
+                && original.state.objects[object].token_origin.is_some()
+        })
+        .count();
+    assert_eq!(copies, 1, "the activation resolves exactly one copy");
+    assert_eq!(delayed_trigger_observer_count(&original), 1);
+    assert_eq!(
+        original.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap()
+    );
 }
 
 #[test]
@@ -1044,6 +1213,13 @@ fn an_empty_vat_creates_no_token_and_a_real_copy_exiles_at_the_next_end_step() {
         .battlefield
         .iter()
         .all(|object| empty.state.objects[object].token_origin.is_none()));
+    assert!(empty.state.stack.is_empty());
+    assert!(empty.state.pending_triggers.is_empty());
+    assert_eq!(
+        delayed_trigger_observer_count(&empty),
+        0,
+        "an empty completed copy batch does not schedule a delayed observer"
+    );
 
     let (mut engine, vat) = engine_with_vat(2_026_101_007);
     let creature = kill_creature(&mut engine, 1, "savannah_lions", 1);
@@ -1060,6 +1236,7 @@ fn an_empty_vat_creates_no_token_and_a_real_copy_exiles_at_the_next_end_step() {
         })
         .expect("copy of the linked card enters the battlefield");
     assert!(engine.effective_has_keyword(token, tricerules_cards::Keyword::Haste));
+    assert_eq!(delayed_trigger_observer_count(&engine), 1);
 
     advance_to_end_step(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "the delayed exile is staged");

@@ -3356,6 +3356,52 @@ impl SpellEffectKind {
         }
     }
 
+    /// Find flat batch consumers of the implicit PreviousEffectObjects receipt. These consumers
+    /// need a typed Program input so empty and completed batches remain distinct.
+    pub(crate) fn contains_legacy_flat_previous_object_batch_consumer(&self) -> bool {
+        match self {
+            Self::ApplyPermanentModifier {
+                subject: EffectSubject::PreviousEffectObjects,
+                ..
+            }
+            | Self::CreateDelayedTrigger {
+                subject: Some(EffectSubject::PreviousEffectObjects),
+                ..
+            } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_legacy_flat_previous_object_batch_consumer()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(Self::contains_legacy_flat_previous_object_batch_consumer)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::contains_legacy_flat_previous_object_batch_consumer)
+            }
+            Self::ApplyPermanentModifier {
+                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => ability
+                .effect
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_batch_consumer),
+            _ => false,
+        }
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3917,6 +3963,12 @@ impl SpellEffectKind {
                     .into(),
             );
         }
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_flat_previous_object_batch_consumer)
+        {
+            return Err("PreviousEffectObjects batch consumers require an authored Program".into());
+        }
 
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum ProducedObjectCardinality {
@@ -3924,19 +3976,10 @@ impl SpellEffectKind {
             OptionalOne,
             ExactlyOne,
             Many,
-            TokenCreationBatch,
         }
 
         fn produced_object_cardinality(effect: &SpellEffectKind) -> ProducedObjectCardinality {
             match effect {
-                SpellEffectKind::CreateTokenCopies {
-                    count: Amount::Fixed(1),
-                    source: TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. },
-                }
-                | SpellEffectKind::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObjects,
-                    ..
-                } => ProducedObjectCardinality::TokenCreationBatch,
                 SpellEffectKind::ApplyPermanentModifier {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
@@ -3957,9 +4000,6 @@ impl SpellEffectKind {
                         | ProducedObjectCardinality::ExactlyOne => {
                             ProducedObjectCardinality::OptionalOne
                         }
-                        ProducedObjectCardinality::TokenCreationBatch => {
-                            ProducedObjectCardinality::None
-                        }
                     }
                 }
                 _ => ProducedObjectCardinality::None,
@@ -3970,7 +4010,6 @@ impl SpellEffectKind {
         enum PreviousObjectRequirement {
             ExactlyOne,
             OptionalOne,
-            TokenCreationBatch,
         }
 
         fn previous_object_requirement(
@@ -3986,14 +4025,6 @@ impl SpellEffectKind {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
                 } => Some(PreviousObjectRequirement::OptionalOne),
-                SpellEffectKind::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObjects,
-                    ..
-                }
-                | SpellEffectKind::CreateDelayedTrigger {
-                    subject: Some(EffectSubject::PreviousEffectObjects),
-                    ..
-                } => Some(PreviousObjectRequirement::TokenCreationBatch),
                 SpellEffectKind::ReturnToOwnersHand {
                     subject: EffectSubject::PreviousEffectObject,
                 }
@@ -4003,42 +4034,6 @@ impl SpellEffectKind {
                 } => Some(PreviousObjectRequirement::OptionalOne),
                 _ => None,
             }
-        }
-
-        fn is_token_copy_batch_producer(effect: &SpellEffectKind) -> bool {
-            matches!(
-                effect,
-                SpellEffectKind::CreateTokenCopies {
-                    count: Amount::Fixed(1),
-                    source: TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. },
-                }
-            )
-        }
-
-        fn is_token_copy_batch_haste(effect: &SpellEffectKind) -> bool {
-            matches!(
-                effect,
-                SpellEffectKind::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObjects,
-                    modifier: ResolvingPermanentModifier::GrantKeywords(keywords),
-                    duration: ResolvingEffectDuration::Indefinite,
-                } if keywords.as_slice() == [Keyword::Haste]
-            )
-        }
-
-        fn is_token_copy_batch_exile_trigger(effect: &SpellEffectKind) -> bool {
-            matches!(
-                effect,
-                SpellEffectKind::CreateDelayedTrigger {
-                    subject: Some(EffectSubject::PreviousEffectObjects),
-                    affected_player: None,
-                    ability,
-                } if matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
-                    && ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects]
-                    && ability.modal.is_none()
-                    && ability.targeting.is_none()
-                    && !ability.may
-            )
         }
 
         fn searched_subjects<'a>(effect: &'a SpellEffectKind, out: &mut Vec<&'a SearchResultId>) {
@@ -4372,45 +4367,14 @@ impl SpellEffectKind {
                         ProducedObjectCardinality::OptionalOne
                             | ProducedObjectCardinality::ExactlyOne
                     ),
-                    PreviousObjectRequirement::TokenCreationBatch => {
-                        previous_cardinality == ProducedObjectCardinality::TokenCreationBatch
-                    }
                 };
                 if !valid {
                     return Err(match requirement {
-                        PreviousObjectRequirement::TokenCreationBatch => "PreviousEffectObjects requires an immediately preceding token-copy batch",
                         PreviousObjectRequirement::ExactlyOne
                         | PreviousObjectRequirement::OptionalOne => "PreviousEffectObject requires an immediately preceding compatible single-object producer",
                     }
                     .into());
                 }
-            }
-            if matches!(effect, SpellEffectKind::Conditional { effect, .. }
-                if previous_object_requirement(effect)
-                    == Some(PreviousObjectRequirement::TokenCreationBatch))
-            {
-                return Err(
-                    "PreviousEffectObjects cannot be wrapped in a conditional effect".into(),
-                );
-            }
-            if is_token_copy_batch_haste(effect)
-                && (!previous.is_some_and(is_token_copy_batch_producer)
-                    || !effects
-                        .get(index + 1)
-                        .is_some_and(is_token_copy_batch_exile_trigger))
-            {
-                return Err(
-                    "token-copy batch Haste must follow one token-copy instruction and immediately precede its delayed Exile cohort trigger"
-                        .into(),
-                );
-            }
-            if is_token_copy_batch_exile_trigger(effect)
-                && !previous.is_some_and(is_token_copy_batch_haste)
-            {
-                return Err(
-                    "token-copy batch Exile trigger must immediately follow the batch Haste modifier"
-                        .into(),
-                );
             }
             if let SpellEffectKind::Conditional { condition, .. } = effect {
                 if condition.references_previous_effect_object()

@@ -214,8 +214,19 @@ unpaid and the empty `Otherwise` completes without a replacement chooser (CR 800
 Converter's one-leaf optional Exile has no `If you do` follow-up, so it retains the ordinary non-cost
 delegation flow. Other Program choices also keep the existing CR 800.4g behavior. Receipt binding,
 stale-event rejection, prior-link preservation, source/event-owner departure, and deterministic
-accepted-command replay are covered by the Mimic Vat review map; the activated `create_copy` ability
-remains on its existing definition path.
+accepted-command replay are covered by the Mimic Vat review map.
+
+The 2026-10-22 Mimic Vat increment moves only its activated `create_copy` body into a Program.
+The exact `Ability(mimic_vat,mimic_vat,create_copy)` owner binds the one-copy `LinkedExile` result
+to both haste and the next-end-step delayed Exile consumer. An empty linked Exile creates neither a
+copy nor a delayed observer. The queued activation retains the source incarnation captured when
+activated, then reads that incarnation's current link at resolution; it cannot follow the physical
+Vat into a later zone-change generation. This owner-specific
+admission does not open general Program use of `LinkedExile`, and flat-list `PreviousEffectObjects`
+consumers for Haste or delayed Exile are retired while unrelated flat copy creation remains
+supported. Automated scenarios cover an empty Vat, source departure through the delayed Exile, and
+leave-and-return with a changed link (CR 400.7, 603.7, 607.2a). This adds no card admission or
+protocol, relay, or client change.
 
 Ring's upkeep Program places one Night counter, checks the threshold after replacement choices
 resume the same cursor, removes only Night at eight, and creates eight named Replicated Ring tokens.

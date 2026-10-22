@@ -754,6 +754,16 @@ permanent entry; runtime checks the captured reference and its matching current 
 snapshot before instruction zero and each program-unit resume. Non-entry triggers and activated
 ability owners do not supply this input.
 
+Mimic Vat's `create_copy` owner is the only admitted Program use of
+`CreateTokenCopies(count: Fixed(1), source: LinkedExile(producer_ability_id: "imprint",
+linked_exile_id: "imprinted_card"))`. It binds its `TokenCopyBatch` result to both `Haste` and
+the next-end-step delayed `Exile` consumer; either consumer must name that same result. The producer
+result may instead be discarded or bound under another local name, but consumers still require a
+typed input. This owner-specific compiler admission does not generalize to other linked-copy cards.
+Empty linked exile yields no copy and registers no delayed observer. The matching flat-list
+Haste and delayed-Exile consumers of `PreviousEffectObjects` are retired; ordinary flat token-copy
+lists remain supported for noncohort consumers.
+
 Declare each target role in `CardProgram.target_bindings` by its stable instruction `id`, role and
 zero-based `target_group_index`. Target groups remain in the owner's `TargetingDef`; use an empty
 `effect_indices` list for program groups. Every targeted instruction role must bind exactly once,

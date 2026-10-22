@@ -1695,7 +1695,13 @@ fn trigger_observed_object_program_input_is_ability_only_and_trigger_bound() {
             &unsupported,
         )
         .expect_err("unapproved token-copy sources remain outside program scope");
-        assert!(error.contains("source is not supported"), "{error}");
+        assert!(
+            error.contains("source is not supported")
+                || error.contains(
+                    "LinkedExile token copies require Mimic Vat's exact create_copy ability"
+                ),
+            "{error}"
+        );
     }
 }
 
@@ -2414,7 +2420,7 @@ fn linked_exile_token_copy_source_names_its_paired_ability_and_link() {
 }
 
 #[test]
-fn token_copy_cohort_chain_uses_plural_previous_objects_and_one_exile_trigger() {
+fn flat_token_copy_cohort_chain_requires_an_authored_program() {
     let fixture = r#"(
         id: "test_copy_cohort",
         name: "Test Copy Cohort",
@@ -2446,8 +2452,51 @@ fn token_copy_cohort_chain_uses_plural_previous_objects_and_one_exile_trigger() 
             ],
         )],
     )"#;
-    crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
-        .expect("one typed token-copy cohort can feed Haste and a delayed Exile effect");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect_err("flat PreviousEffectObjects batch consumers require a typed Program")
+        .to_string();
+    assert!(
+        error.contains("PreviousEffectObjects batch consumers require an authored Program"),
+        "unexpected flat token-copy rejection: {error}"
+    );
+}
+
+#[test]
+fn flat_previous_effect_objects_batch_consumers_are_rejected_recursively() {
+    let haste = r#"ApplyPermanentModifier(
+        subject: PreviousEffectObjects,
+        modifier: GrantKeywords([Haste]),
+        duration: Indefinite,
+    )"#;
+    let delayed_exile = r#"CreateDelayedTrigger(
+        subject: Some(PreviousEffectObjects),
+        ability: (
+            ability_id: "exile_copies",
+            presentation: Fallback,
+            trigger: AtBeginningOfNextEndStep,
+            effect: [ExileObservedObjects],
+        ),
+    )"#;
+    let nested_haste = format!("Conditional(condition: Void, effect: {haste})");
+    let nested_delayed = format!(
+        "CreateDelayedTrigger(subject: None, ability: (ability_id: \"nested\", presentation: Fallback, trigger: AtBeginningOfNextEndStep, effect: [{haste}]))"
+    );
+
+    for (label, effect) in [
+        ("Haste", haste.to_owned()),
+        ("delayed exile", delayed_exile.to_owned()),
+        ("conditional Haste", nested_haste),
+        ("nested delayed ability", nested_delayed),
+    ] {
+        let effect: super::SpellEffectKind =
+            ron::from_str(&effect).expect("flat effect fixture parses");
+        let error = super::SpellEffectKind::validate_list(&[effect])
+            .expect_err(&format!("flat {label} must use a typed Program"));
+        assert!(
+            error.contains("PreviousEffectObjects batch consumers require an authored Program"),
+            "flat {label}: {error}"
+        );
+    }
 }
 
 #[test]
@@ -2500,7 +2549,15 @@ fn token_copy_cohort_exile_rejects_unscoped_and_wrong_consumers() {
             ],
         )],
     )"#;
-    assert!(crate::CardRegistry::from_chunks_and_tokens(&[wrong_delayed_consumer], &[]).is_err());
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[wrong_delayed_consumer], &[])
+        .expect_err("flat delayed cohort consumers require a typed Program")
+        .to_string();
+    assert!(
+        error.contains(
+            "PreviousEffectObjects delayed triggers require one next-end-step ExileObservedObjects effect"
+        ),
+        "unexpected flat delayed-consumer rejection: {error}"
+    );
 
     let wrong_modifier = r#"(
         id: "test_wrong_cohort_modifier",
@@ -2533,7 +2590,13 @@ fn token_copy_cohort_exile_rejects_unscoped_and_wrong_consumers() {
             ],
         )],
     )"#;
-    assert!(crate::CardRegistry::from_chunks_and_tokens(&[wrong_modifier], &[]).is_err());
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[wrong_modifier], &[])
+        .expect_err("flat PreviousEffectObjects modifiers require a typed Program")
+        .to_string();
+    assert!(
+        error.contains("PreviousEffectObjects only supports the indefinite Haste modifier"),
+        "unexpected flat modifier rejection: {error}"
+    );
 }
 
 #[test]

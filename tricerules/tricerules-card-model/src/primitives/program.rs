@@ -3690,13 +3690,29 @@ fn validate_and_result_types(
                         "TriggerObject token copies require an ability program owner".into(),
                     );
                 }
-                super::TokenCopySource::Source | super::TokenCopySource::LinkedExile { .. } => {
+                super::TokenCopySource::Source => {
                     return Err(
                         "CreateTokenCopies source is not supported in a resolution program".into(),
                     );
                 }
+                super::TokenCopySource::LinkedExile {
+                    producer_ability_id,
+                    linked_exile_id,
+                } if context == EffectContext::Ability
+                    && is_mimic_vat_create_copy_owner(&compiler.owner)
+                    && producer_ability_id.as_str() == "imprint"
+                    && linked_exile_id.as_str() == "imprinted_card"
+                    && matches!(count, Amount::Fixed(1)) => {}
+                super::TokenCopySource::LinkedExile { .. } => {
+                    return Err(
+                        "LinkedExile token copies require Mimic Vat's exact create_copy ability, imprint producer, imprinted_card link, and count 1".into(),
+                    );
+                }
             }
-            Ok(if matches!(source, TokenCopySource::TriggerObject) {
+            Ok(if matches!(
+                source,
+                TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. }
+            ) {
                 vec![ResultType::TokenCopyBatch]
             } else {
                 Vec::new()
@@ -4435,6 +4451,17 @@ fn exact_mimic_vat_imprint_receipt_body(owner: &ProgramOwnerId, body: &AuthoredB
             )
     );
     exact_exile && exact_consumer
+}
+
+fn is_mimic_vat_create_copy_owner(owner: &ProgramOwnerId) -> bool {
+    matches!(
+        owner,
+        ProgramOwnerId::Ability(definition)
+            if definition.card_id == "mimic_vat"
+                && definition.face_id.as_str() == "mimic_vat"
+                && definition.ability_path.len() == 1
+                && definition.ability_path[0].as_str() == "create_copy"
+    )
 }
 
 fn is_mosswort_bridge_activated_02(owner: &ProgramOwnerId) -> bool {

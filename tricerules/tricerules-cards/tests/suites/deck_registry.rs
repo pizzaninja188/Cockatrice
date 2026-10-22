@@ -87,6 +87,8 @@ mod deck_coverage_manifold_key;
 mod deck_coverage_metalwork_colossus;
 #[path = "../deck_coverage_mh3_mdfcs_registry.rs"]
 mod deck_coverage_mh3_mdfcs_registry;
+#[path = "../deck_coverage_mimic_vat.rs"]
+mod deck_coverage_mimic_vat;
 #[path = "../deck_coverage_mind_stone.rs"]
 mod deck_coverage_mind_stone;
 #[path = "../deck_coverage_mirrorworks.rs"]
