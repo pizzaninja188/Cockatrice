@@ -12663,24 +12663,27 @@ fn match_etb_equipment_create_ally_token_attach_self(
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
     (context.source_is_equipment && text == ISSUE_344_EQUIPMENT_ALLY_ATTACH_CLAUSE).then(|| {
-        triggered_ability_with(
+        triggered_program_ability(
             context,
             TriggerCondition::WhenSelfEntersBattlefield,
-            vec![
-                SpellEffectKind::CreateTokens {
-                    token: "ally_w_1_1".into(),
-                    count: Amount::Fixed(1),
-                    who: PlayerRecipient::Controller,
-                    tapped: false,
-                    sacrifice_timing: None,
-                },
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObject,
-                },
-            ],
+            kyoshi_battle_fan_receipt_program(),
         )
     })
+}
+
+/// The exact Equipment receipt owner binds the completed `CreateTokens` cohort so its narrow
+/// attachment consumer can choose among replacement-expanded Ally entries without scanning the
+/// battlefield. The dedicated CreatedTokenBatch result is specialized to this card and consumer.
+fn kyoshi_battle_fan_receipt_program() -> CardProgram {
+    authored_program(
+        r#"(id: "create_tokens", bind: ["created_tokens"], input: None,
+            kind: Perform(CreateTokens(token: "ally_w_1_1", count: 1,
+                who: Controller, tapped: false, sacrifice_timing: None))),
+        (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
+            kind: Perform(AttachEquipment(
+                equipment: Source, creature: PreviousEffectObjects)))"#,
+        "",
+    )
 }
 
 /// CR 614.1c / 122 / 508.1: the Raid ability word gates a creature's own entry replacement so it
@@ -40290,21 +40293,11 @@ mod tests {
         assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
         assert!(!ability.may);
         assert!(ability.targeting.is_none());
+        assert!(ability.effect.is_empty());
         assert_eq!(
-            ability.effect,
-            [
-                SpellEffectKind::CreateTokens {
-                    token: "ally_w_1_1".into(),
-                    count: Amount::Fixed(1),
-                    who: PlayerRecipient::Controller,
-                    tapped: false,
-                    sacrifice_timing: None,
-                },
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObject,
-                },
-            ]
+            ability.program,
+            Some(kyoshi_battle_fan_receipt_program()),
+            "the recipe binds the exact CreateTokens receipt into its sole attachment consumer"
         );
         for negative in [
             "When this Equipment enters, create a 1/1 colorless Thopter artifact creature token with flying.",

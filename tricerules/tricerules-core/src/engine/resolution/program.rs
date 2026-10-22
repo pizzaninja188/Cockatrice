@@ -1309,6 +1309,9 @@ impl GameEngine {
                                     crate::state::ProducedObjectProvenance::TokenCreationBatch,
                                 );
                             }
+                            ProgramValue::CreatedTokenBatch(objects) => {
+                                previous.produced_objects = objects.clone();
+                            }
                             ProgramValue::TriggerObjectLinkedExileReceipt(Some(object)) => {
                                 previous.produced_objects.push(*object);
                             }
@@ -1341,9 +1344,106 @@ impl GameEngine {
                         .and_then(|definition| definition.face(top.face_index))
                         .map(|face| face.name.to_string())
                         .unwrap_or_else(|| top.card_id.clone());
-                    let outcome = if target_context.has_bindings
-                        && target_context.targets.is_empty()
-                    {
+                    if is_kyoshi_equipment_receipt_attach(compiled, instruction, &effect) {
+                        if let Some(source_id) = top.source_permanent_id {
+                            if let Some(equipment) = super::current_equipment_receipt_source(
+                                self,
+                                source_id,
+                                top.source_zone_change,
+                            ) {
+                                let candidates = super::current_equipment_receipt_candidates(
+                                    self,
+                                    equipment,
+                                    &previous.produced_objects,
+                                );
+                                match candidates.as_slice() {
+                                    [] => {}
+                                    [(candidate, generation)] => {
+                                        let _ = super::misc::attach_equipment_ids(
+                                            self,
+                                            equipment.object_id,
+                                            *candidate,
+                                            &label,
+                                            events,
+                                        );
+                                        debug_assert_eq!(
+                                            self.state
+                                                .zone_change_generation
+                                                .get(candidate)
+                                                .copied(),
+                                            Some(*generation),
+                                            "automatic receipt attachment keeps its exact candidate generation"
+                                        );
+                                    }
+                                    _ => {
+                                        let chooser = equipment.controller_at_event;
+                                        let chooser_index = self
+                                            .state
+                                            .player_idx(chooser)
+                                            .ok_or(EngineError::ProgramInvariant(
+                                                "current Equipment controller is missing from turn order",
+                                            ))?;
+                                        let prompt = "Choose one of the Ally creatures created by Kyoshi Battle Fan.".to_string();
+                                        let mut stack = ParkedStackResolution::new(top.clone())
+                                            .with_previous_result(previous_result.clone());
+                                        stack.program = Some(program_state.clone());
+                                        self.state.pending_resolution =
+                                            Some(crate::state::PendingResolution {
+                                                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                                                resolution_prompt_semantics: None,
+                                                deciding_player: chooser,
+                                                presentation: crate::state::PendingResolutionPresentation {
+                                                    source_object_id: top.id,
+                                                    candidates: candidates
+                                                        .iter()
+                                                        .map(|(object_id, _)| *object_id)
+                                                        .collect(),
+                                                    min: 1,
+                                                    max: 1,
+                                                    ordered: false,
+                                                    prompt: prompt.clone(),
+                                                    choice_kind: rv1::ChoiceKind::PermanentObjects,
+                                                    unique_names: false,
+                                                },
+                                                continuation: crate::state::ResolutionContinuation::EquipmentReceiptAttach {
+                                                    attachment: Box::new(
+                                                        crate::state::PendingEquipmentReceiptAttach {
+                                                            stack,
+                                                            equipment,
+                                                            created_tokens: previous
+                                                                .produced_objects
+                                                                .clone(),
+                                                            candidate_generations: candidates,
+                                                            original_offered_chooser: chooser,
+                                                            delegated: false,
+                                                            turn_order_cursor: chooser_index,
+                                                        },
+                                                    ),
+                                                },
+                                            });
+                                        events.push(
+                                            equipment_receipt_choice_event(self).ok_or(
+                                                EngineError::ProgramInvariant(
+                                                    "Equipment receipt chooser offer could not be rendered",
+                                                ),
+                                            )?,
+                                        );
+                                        events.push(ev_log(prompt));
+                                        #[cfg(test)]
+                                        trip_program_failpoint(ProgramFailpoint::OfferPublished)?;
+                                        return Ok(ResolutionProgress::Parked);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let outcome = if is_kyoshi_equipment_receipt_attach(
+                        compiled,
+                        instruction,
+                        &effect,
+                    ) {
+                        EffectOutcome::Continue
+                    } else if target_context.has_bindings && target_context.targets.is_empty() {
                         // CR 608.2b has already taken the one stack-wide target snapshot. A
                         // authored leaf whose own owner-local role groups are now empty is
                         // skipped while its program unit and any later selected modes continue.
@@ -1825,6 +1925,77 @@ struct ProgramTargetContext {
     target_group_indices: Vec<u32>,
 }
 
+/// This runtime continuation belongs only to Kyoshi Battle Fan's exact compiled receipt
+/// consumer. The model compiler separately rejects widened owners and consumer shapes.
+fn is_kyoshi_equipment_receipt_attach(
+    compiled: &CompiledProgram,
+    instruction: &tricerules_card_model::primitives::CompiledInstruction,
+    effect: &SpellEffectKind,
+) -> bool {
+    use tricerules_card_model::{AbilityDefinitionId, AbilityId, CardFaceId, ProgramOwnerId};
+
+    let expected_owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "kyoshi_battle_fan".into(),
+        face_id: CardFaceId::new("kyoshi_battle_fan").expect("static face id"),
+        ability_path: vec![AbilityId::new("triggered_01").expect("static ability id")],
+    });
+    compiled.owner == expected_owner
+        && matches!(
+            effect,
+            SpellEffectKind::AttachEquipment {
+                equipment: tricerules_card_model::primitives::EffectSubject::Source,
+                creature: tricerules_card_model::primitives::EffectSubject::PreviousEffectObjects,
+            }
+        )
+        && instruction.input.is_some_and(|slot_id| {
+            compiled.slot(slot_id).is_some_and(|slot| {
+                matches!(slot.result_type, ResultType::CreatedTokenBatch { .. })
+            })
+        })
+}
+
+pub(in crate::engine) fn equipment_receipt_choice_event(
+    engine: &GameEngine,
+) -> Option<rv1::RuledEvent> {
+    let pending = engine.state.pending_resolution.as_ref()?;
+    if !matches!(
+        pending.continuation,
+        crate::state::ResolutionContinuation::EquipmentReceiptAttach { .. }
+    ) {
+        return None;
+    }
+    let candidate_names = pending
+        .presentation
+        .candidates
+        .iter()
+        .map(|object_id| {
+            engine
+                .state
+                .objects
+                .get(object_id)
+                .and_then(|object| engine.registry.get(&object.card_id))
+                .map(|definition| definition.name.to_string())
+                .unwrap_or_else(|| "Ally token".to_string())
+        })
+        .collect();
+    Some(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: pending.resolution_prompt_id.get(),
+                deciding_player_id: pending.deciding_player,
+                source_object_id: pending.presentation.source_object_id,
+                prompt_text: pending.presentation.prompt.clone(),
+                choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
+                candidate_object_ids: pending.presentation.candidates.clone(),
+                candidate_names,
+                min: pending.presentation.min,
+                max: pending.presentation.max,
+                ..Default::default()
+            },
+        )),
+    })
+}
+
 /// Return the target records owned by this exact compiled Program projection. Both instruction
 /// role projection and targeted-player chooser resolution must use the same owner-local slice.
 fn program_owner_target_records<'a>(
@@ -2075,6 +2246,18 @@ fn capture_program_outputs_inner(
                     ));
                 }
                 ProgramValue::TokenCopyBatch(result.produced_objects.clone())
+            }
+            ResultType::CreatedTokenBatch { cardinality } => {
+                if result.produced_objects.len() < cardinality.min as usize
+                    || cardinality
+                        .max
+                        .is_some_and(|max| result.produced_objects.len() > max as usize)
+                {
+                    return Err(EngineError::ProgramInvariant(
+                        "CreateTokens result exceeded its compiled cardinality",
+                    ));
+                }
+                ProgramValue::CreatedTokenBatch(result.produced_objects.clone())
             }
             ResultType::TriggerObjectLinkedExileReceipt {
                 producer_ability_id,
@@ -3630,6 +3813,48 @@ mod invariant_rollback_tests {
         (compiled, run)
     }
 
+    fn created_token_batch_capture_fixture() -> (CompiledProgram, ProgramRunState) {
+        use tricerules_card_model::primitives::{
+            Cardinality, CompiledSlot, EffectContext, ProgramTargetProjection,
+        };
+
+        let owner = tricerules_card_model::ProgramOwnerId::ability(
+            tricerules_card_model::AbilityDefinitionId {
+                card_id: "kyoshi_battle_fan".into(),
+                face_id: tricerules_card_model::CardFaceId::new("kyoshi_battle_fan").unwrap(),
+                ability_path: vec![tricerules_card_model::AbilityId::new("triggered_01").unwrap()],
+            },
+        );
+        let compiled = CompiledProgram {
+            owner: owner.clone(),
+            context: EffectContext::Ability,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "created_tokens".into(),
+                result_type: ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None },
+                },
+            }],
+        };
+        let run = ProgramRunState {
+            owner,
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![None],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        };
+        (compiled, run)
+    }
+
     #[test]
     fn token_copy_batch_capture_rejects_missing_provenance_for_empty_result() {
         let (compiled, mut run) = token_copy_batch_capture_fixture();
@@ -3659,6 +3884,27 @@ mod invariant_rollback_tests {
         assert!(matches!(
             run.slots[0],
             Some(ProgramValue::TokenCopyBatch(ref objects)) if objects.is_empty()
+        ));
+    }
+
+    #[test]
+    fn equipment_created_token_batch_records_empty_completion_distinct_from_unwritten_slot() {
+        let (compiled, mut run) = created_token_batch_capture_fixture();
+        assert!(
+            run.slots[0].is_none(),
+            "before the producer, the slot is unwritten"
+        );
+
+        capture_program_outputs(
+            &compiled,
+            &mut run,
+            &[ResultSlotId(0)],
+            &crate::state::EffectResult::default(),
+        )
+        .expect("the exact Equipment receipt permits a completed empty token cohort");
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::CreatedTokenBatch(ref objects)) if objects.is_empty()
         ));
     }
 

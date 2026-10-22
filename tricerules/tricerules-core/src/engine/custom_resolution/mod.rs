@@ -968,6 +968,19 @@ impl GameEngine {
         player: PlayerId,
         answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
+        if self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                matches!(
+                    pending.continuation,
+                    ResolutionContinuation::EquipmentReceiptAttach { .. }
+                )
+            })
+        {
+            return self.finish_equipment_receipt_attach_choice(player, answer);
+        }
         let target_hand_discard_choice =
             self.state
                 .pending_resolution
@@ -1605,11 +1618,95 @@ impl GameEngine {
             ResolutionContinuation::ManaPayment { .. }
             | ResolutionContinuation::JoinForces { .. }
             | ResolutionContinuation::ProgramChoose { .. }
+            | ResolutionContinuation::EquipmentReceiptAttach { .. }
             | ResolutionContinuation::CounterMove { .. }
             | ResolutionContinuation::PublicZoneSearchFixture { .. } => {
                 unreachable!("handled above")
             }
         }
+    }
+
+    /// Apply one answer to Kyoshi Battle Fan's exact token receipt without letting generic
+    /// refresh/choice handling mutate the parked state before validating it.
+    fn finish_equipment_receipt_attach_choice(
+        &mut self,
+        player: PlayerId,
+        answer: &rv1::SubmitResolutionChoice,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("receipt chooser checked above");
+        if pending.deciding_player != player {
+            return Err(EngineError::Illegal("not your resolution choice"));
+        }
+        if answer.decision != rv1::ResolutionChoiceDecision::Unspecified as i32
+            || answer.selected_branch_index != 0
+            || answer.chosen_object_ids.len() != 1
+            || !answer.chosen_player_ids.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+        {
+            return Err(EngineError::Illegal(
+                "Equipment receipt choice contains unrelated or malformed data",
+            ));
+        }
+        let chosen = answer.chosen_object_ids[0];
+        let crate::state::ResolutionContinuation::EquipmentReceiptAttach { attachment } =
+            &pending.continuation
+        else {
+            unreachable!("receipt chooser continuation checked above")
+        };
+        let expected_generation = attachment
+            .candidate_generations
+            .iter()
+            .find_map(|(object_id, generation)| (*object_id == chosen).then_some(*generation))
+            .ok_or(EngineError::Illegal("invalid Equipment receipt choice"))?;
+        let current_candidates = super::resolution::current_equipment_receipt_candidates(
+            self,
+            attachment.equipment,
+            &attachment.created_tokens,
+        );
+        if !current_candidates.contains(&(chosen, expected_generation)) {
+            return Err(EngineError::Illegal("stale Equipment receipt choice"));
+        }
+
+        let pending = self
+            .state
+            .pending_resolution
+            .take()
+            .expect("receipt choice validated against parked state");
+        let crate::state::ResolutionContinuation::EquipmentReceiptAttach { attachment } =
+            pending.continuation
+        else {
+            unreachable!("receipt chooser continuation checked above")
+        };
+        let mut events = vec![ev_log(format!(
+            "P{} chooses {}.",
+            player,
+            object_display_name(&self.state, self.registry, chosen)
+        ))];
+        if !super::resolution::attach_equipment_ids(
+            self,
+            attachment.equipment.object_id,
+            chosen,
+            "Kyoshi Battle Fan",
+            &mut events,
+        ) {
+            self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: pending.resolution_prompt_id,
+                resolution_prompt_semantics: pending.resolution_prompt_semantics,
+                deciding_player: pending.deciding_player,
+                presentation: pending.presentation,
+                continuation: ResolutionContinuation::EquipmentReceiptAttach { attachment },
+            });
+            return Err(EngineError::Illegal("stale Equipment receipt choice"));
+        }
+        self.complete_parked_stack_with_previous(attachment.stack, EffectResult::default(), events)
     }
 
     fn select_optional_triggered_ability_delegate(
@@ -2914,6 +3011,166 @@ impl GameEngine {
         Ok(())
     }
 
+    /// Reconcile the captured Kyoshi token cohort after an authoritative departure or
+    /// controller change. The first chooser's seat cursor is retained for CR 800.4h delegation.
+    pub(in crate::engine) fn refresh_equipment_receipt_attach_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let crate::state::ResolutionContinuation::EquipmentReceiptAttach { attachment } =
+            pending.continuation
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        };
+        let mut attachment = *attachment;
+        let previous_equipment_controller = attachment.equipment.controller_at_event;
+        let Some(equipment) = super::resolution::current_equipment_receipt_source(
+            self,
+            attachment.equipment.object_id,
+            attachment.equipment.zone_change_generation,
+        ) else {
+            let completed = self.complete_parked_stack_with_previous(
+                attachment.stack,
+                EffectResult::default(),
+                Vec::new(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        };
+        attachment.equipment = equipment;
+        let candidates = super::resolution::current_equipment_receipt_candidates(
+            self,
+            equipment,
+            &attachment.created_tokens,
+        );
+        if candidates.is_empty() {
+            let completed = self.complete_parked_stack_with_previous(
+                attachment.stack,
+                EffectResult::default(),
+                Vec::new(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+        if let [(candidate, _generation)] = candidates.as_slice() {
+            let mut attach_events = Vec::new();
+            let _ = super::resolution::attach_equipment_ids(
+                self,
+                equipment.object_id,
+                *candidate,
+                "Kyoshi Battle Fan",
+                &mut attach_events,
+            );
+            let completed = self.complete_parked_stack_with_previous(
+                attachment.stack,
+                EffectResult::default(),
+                attach_events,
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        let old_candidates = attachment.candidate_generations.clone();
+        attachment.candidate_generations = candidates.clone();
+        let mut next_decider = pending.deciding_player;
+        let mut next_cursor = attachment.turn_order_cursor;
+        let decider_live = self
+            .state
+            .player_idx(next_decider)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if !decider_live {
+            // The captured seat advances only when its offered chooser actually leaves. A
+            // controller change while that chooser is live remains an ordinary reoffer.
+            attachment.delegated = true;
+            if let Some((index, player_id)) =
+                self.next_receipt_chooser_after_cursor(attachment.turn_order_cursor)
+            {
+                next_decider = player_id;
+                next_cursor = index;
+            }
+        } else if equipment.controller_at_event != previous_equipment_controller {
+            // A genuine live controller change takes precedence only while the current chooser is
+            // still present. It may reoffer a delegated choice and reset the latch; if the chooser
+            // departed in this same event, the branch above instead delegates from the old cursor.
+            next_decider = equipment.controller_at_event;
+            next_cursor =
+                self.state
+                    .player_idx(next_decider)
+                    .ok_or(EngineError::ProgramInvariant(
+                        "current Equipment controller is missing from turn order",
+                    ))?;
+            attachment.delegated = false;
+        }
+        let candidates_changed = old_candidates != candidates;
+        let chooser_changed = next_decider != pending.deciding_player;
+        if !candidates_changed && !chooser_changed {
+            attachment.turn_order_cursor = next_cursor;
+            self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: pending.resolution_prompt_id,
+                resolution_prompt_semantics: pending.resolution_prompt_semantics,
+                deciding_player: pending.deciding_player,
+                presentation: pending.presentation,
+                continuation: ResolutionContinuation::EquipmentReceiptAttach {
+                    attachment: Box::new(attachment),
+                },
+            });
+            return Ok(());
+        }
+
+        attachment.turn_order_cursor = next_cursor;
+        if chooser_changed && pending.resolution_prompt_id.get() != 0 {
+            // Prompt allocators are normally per chooser. Carry the displaced offer's high-water
+            // mark forward so a delegate cannot accidentally accept the prior chooser's ID.
+            let prior_id = pending.resolution_prompt_id.get();
+            let next_id = self
+                .state
+                .next_resolution_prompt_id
+                .entry(next_decider)
+                .or_default();
+            *next_id = (*next_id).max(prior_id);
+        }
+        let mut refreshed = PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player: next_decider,
+            presentation: pending.presentation,
+            continuation: ResolutionContinuation::EquipmentReceiptAttach {
+                attachment: Box::new(attachment),
+            },
+        };
+        refreshed.presentation.candidates =
+            candidates.iter().map(|(object_id, _)| *object_id).collect();
+        refreshed.presentation.prompt =
+            "Choose one of the Ally creatures created by Kyoshi Battle Fan.".into();
+        self.state.pending_resolution = Some(refreshed);
+        events.push(ev_log(if chooser_changed {
+            format!("P{next_decider} now makes Kyoshi Battle Fan's Equipment receipt choice.")
+        } else {
+            "Kyoshi Battle Fan's available Ally choices have changed.".into()
+        }));
+        events.push(
+            super::resolution::equipment_receipt_choice_event(self).ok_or(
+                EngineError::ProgramInvariant("Equipment receipt choice could not be republished"),
+            )?,
+        );
+        Ok(())
+    }
+
+    fn next_receipt_chooser_after_cursor(&self, cursor: usize) -> Option<(usize, PlayerId)> {
+        let players = &self.state.players;
+        if players.is_empty() {
+            return None;
+        }
+        (1..=players.len()).find_map(|offset| {
+            let index = (cursor + offset) % players.len();
+            (!players[index].has_lost).then_some((index, players[index].id))
+        })
+    }
+
     /// Reevaluate only an in-flight authored permanent-choice leaf after a player departs.
     /// The active frame path and already-bound values remain intact, so no earlier branch or
     /// operation is repeated against the changed battlefield.
@@ -3438,5 +3695,445 @@ mod resolution_payment_actor_tests {
         assert!(engine.state.pending_triggers.is_empty());
         assert!(engine.state.staged_trigger_groups.is_empty());
         assert!(engine.state.stack.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod equipment_receipt_reoffer_tests {
+    use super::*;
+    use crate::state::{
+        AffectedScope, ContinuousEffect, ParkedStackResolution, PendingEquipmentReceiptAttach,
+        PendingResolution, PendingResolutionPresentation, ResolutionContinuation,
+        ResolutionPromptId, TriggerObjectRef,
+    };
+    use tricerules_cards::primitives::{ContinuousEffectKind, ControllerReference, EffectDuration};
+
+    fn pending_receipt_fixture(seed: u64) -> (GameEngine, ObjectId, Vec<ObjectId>) {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[10, 20, 30, 40],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        let p1_hand = engine.state.players[0].hand.clone();
+        let equipment = p1_hand[0];
+        engine.state.objects.get_mut(&equipment).unwrap().card_id = "kyoshi_battle_fan".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            equipment,
+            Zone::Battlefield,
+            Some(20),
+        )
+        .expect("move Equipment under P2's control");
+        let mut candidates = Vec::new();
+        for candidate in p1_hand.into_iter().skip(1).take(2) {
+            engine.state.objects.get_mut(&candidate).unwrap().card_id = "grizzly_bears".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                candidate,
+                Zone::Battlefield,
+                Some(10),
+            )
+            .expect("move a legal creature receipt member");
+            candidates.push(candidate);
+        }
+        let equipment_generation = engine.state.zone_change_generation[&equipment];
+        let equipment_ref = TriggerObjectRef {
+            object_id: equipment,
+            zone_change_generation: equipment_generation,
+            controller_at_event: 20,
+        };
+        let created_tokens = candidates
+            .iter()
+            .map(|object_id| TriggerObjectRef {
+                object_id: *object_id,
+                zone_change_generation: engine.state.zone_change_generation[object_id],
+                controller_at_event: 10,
+            })
+            .collect::<Vec<_>>();
+        let mut item = engine.observer_return_item(equipment, 10);
+        item.id = engine.state.next_object_id;
+        item.card_id = "kyoshi_battle_fan".into();
+        item.is_triggered = true;
+        item.source_permanent_id = Some(equipment);
+        item.source_owner = Some(10);
+        item.source_zone_change = equipment_generation;
+        let stack = ParkedStackResolution::new(item);
+        let candidate_generations = candidates
+            .iter()
+            .map(|object_id| (*object_id, engine.state.zone_change_generation[object_id]))
+            .collect::<Vec<_>>();
+        let pending = PendingResolution {
+            resolution_prompt_id: ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player: 20,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: candidates.clone(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt: "Choose a created Ally.".into(),
+                choice_kind: rv1::ChoiceKind::PermanentObjects,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EquipmentReceiptAttach {
+                attachment: Box::new(PendingEquipmentReceiptAttach {
+                    stack,
+                    equipment: equipment_ref,
+                    created_tokens,
+                    candidate_generations,
+                    original_offered_chooser: 20,
+                    delegated: false,
+                    turn_order_cursor: 1,
+                }),
+            },
+        };
+        engine.state.pending_resolution = Some(pending);
+        (engine, equipment, candidates)
+    }
+
+    fn set_equipment_controller(
+        engine: &mut GameEngine,
+        equipment: ObjectId,
+        controller: PlayerId,
+    ) {
+        engine.state.continuous_effects.retain(
+            |effect| !matches!(effect.affected, AffectedScope::Single(id) if id == equipment),
+        );
+        let base_controller = engine.state.objects[&equipment].base_controller;
+        if controller != base_controller {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(equipment),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(controller),
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index,
+            });
+        }
+    }
+
+    fn pending_receipt(engine: &GameEngine) -> &PendingEquipmentReceiptAttach {
+        match &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .continuation
+        {
+            ResolutionContinuation::EquipmentReceiptAttach { attachment } => attachment,
+            _ => panic!("Equipment receipt continuation remains parked"),
+        }
+    }
+
+    #[test]
+    fn live_equipment_controller_changes_reoffer_until_a_chooser_departure_delegates() {
+        let (mut engine, equipment, _) = pending_receipt_fixture(507_220);
+
+        set_equipment_controller(&mut engine, equipment, 30);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("first live control change reoffers the choice");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            30
+        );
+        assert!(!pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 2);
+
+        set_equipment_controller(&mut engine, equipment, 40);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("a second live control change reoffers the choice again");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            40
+        );
+        assert!(!pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 3);
+
+        set_equipment_controller(&mut engine, equipment, 20);
+        engine.state.players[3].has_lost = true;
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("the departed chooser delegates after Equipment returns to P2");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            10
+        );
+        assert!(pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 0);
+    }
+
+    #[test]
+    fn departed_live_controller_delegates_to_next_seat_even_after_source_reverts() {
+        let (mut engine, equipment, _) = pending_receipt_fixture(507_221);
+
+        set_equipment_controller(&mut engine, equipment, 30);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("live control change reoffers to P3");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            30
+        );
+        assert!(!pending_receipt(&engine).delegated);
+
+        engine.state.players[2].has_lost = true;
+        set_equipment_controller(&mut engine, equipment, 20);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("P3 departure delegates from P3's captured seat despite source reversion");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            40
+        );
+        assert!(pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 3);
+    }
+
+    #[test]
+    fn delegated_offer_stays_with_delegate_until_a_new_live_controller_takes_control() {
+        let (mut engine, equipment, _) = pending_receipt_fixture(507_222);
+        let p1 = engine.state.players[0].id;
+        let p2 = engine.state.players[1].id;
+        let p3 = engine.state.players[2].id;
+        let p4 = engine.state.players[3].id;
+
+        // This seam models an Equipment owned by P1 and currently controlled by P3. The initial
+        // offer therefore belongs to P3; P3's departure returns control to P1 and delegates to P4.
+        engine.state.players[1]
+            .battlefield
+            .retain(|object_id| *object_id != equipment);
+        engine.state.players[0].battlefield.push(equipment);
+        let object = engine.state.objects.get_mut(&equipment).unwrap();
+        object.base_controller = p1;
+        object.controller = p1;
+        set_equipment_controller(&mut engine, equipment, p3);
+        let pending = engine.state.pending_resolution.as_mut().unwrap();
+        pending.deciding_player = p3;
+        if let ResolutionContinuation::EquipmentReceiptAttach { attachment } =
+            &mut pending.continuation
+        {
+            attachment.equipment.controller_at_event = p3;
+            attachment.original_offered_chooser = p3;
+            attachment.turn_order_cursor = 2;
+        }
+
+        engine.state.players[2].has_lost = true;
+        set_equipment_controller(&mut engine, equipment, p1);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("P3 departure delegates to P4 as the Equipment returns to P1");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            p4
+        );
+        assert!(pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 3);
+
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("unchanged P1 control does not recapture P4's live offer");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            p4
+        );
+        assert!(pending_receipt(&engine).delegated);
+
+        set_equipment_controller(&mut engine, equipment, p2);
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("a new live P2 controller takes the choice back from P4");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            p2
+        );
+        assert!(!pending_receipt(&engine).delegated);
+        assert_eq!(pending_receipt(&engine).turn_order_cursor, 1);
+    }
+
+    #[test]
+    fn receipt_answer_rejects_wrong_actor_malformed_and_nonmember_without_mutation() {
+        let (mut engine, equipment, candidates) = pending_receipt_fixture(507_223);
+        let original_prompt = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id;
+        let original_candidates = pending_receipt(&engine).candidate_generations.clone();
+        let original_cursor = pending_receipt(&engine).turn_order_cursor;
+        let assert_unchanged = |engine: &GameEngine| {
+            assert!(engine.state.objects[&equipment].attached_to.is_none());
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .deciding_player,
+                20
+            );
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .resolution_prompt_id,
+                original_prompt
+            );
+            assert_eq!(
+                pending_receipt(engine).candidate_generations,
+                original_candidates
+            );
+            assert_eq!(pending_receipt(engine).turn_order_cursor, original_cursor);
+        };
+
+        let before_wrong_actor = engine.diagnostic_snapshot().unwrap();
+        let wrong_actor = engine.finish_equipment_receipt_attach_choice(
+            10,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![candidates[0]],
+                ..Default::default()
+            },
+        );
+        assert!(wrong_actor.is_err());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before_wrong_actor);
+        assert_unchanged(&engine);
+
+        let before_malformed = engine.diagnostic_snapshot().unwrap();
+        let malformed = engine.finish_equipment_receipt_attach_choice(
+            20,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![candidates[0]],
+                chosen_player_ids: vec![10],
+                ..Default::default()
+            },
+        );
+        assert!(malformed.is_err());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before_malformed);
+        assert_unchanged(&engine);
+
+        let before_nonmember = engine.diagnostic_snapshot().unwrap();
+        let nonmember = engine.finish_equipment_receipt_attach_choice(
+            20,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![equipment],
+                ..Default::default()
+            },
+        );
+        assert!(nonmember.is_err());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before_nonmember);
+        assert_unchanged(&engine);
+    }
+
+    #[test]
+    fn one_remaining_exact_receipt_member_auto_attaches_after_reconciliation() {
+        let (mut engine, equipment, candidates) = pending_receipt_fixture(507_224);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            candidates[0],
+            Zone::Graveyard,
+            None,
+        )
+        .expect("one receipt creature leaves the battlefield");
+
+        engine
+            .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+            .expect("one exact live receipt candidate attaches automatically");
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.objects[&equipment].attached_to,
+            Some(AttachmentRecipient::Object(candidates[1]))
+        );
+        assert_eq!(engine.state.objects[&candidates[0]].zone, Zone::Graveyard);
+        assert_eq!(engine.state.objects[&candidates[1]].zone, Zone::Battlefield);
+    }
+
+    #[test]
+    fn stale_or_new_source_incarnation_completes_without_attachment() {
+        for (seed, return_to_battlefield) in [(507_225, false), (507_226, true)] {
+            let (mut engine, equipment, candidates) = pending_receipt_fixture(seed);
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                equipment,
+                Zone::Graveyard,
+                None,
+            )
+            .expect("source leaves its original battlefield incarnation");
+            if return_to_battlefield {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    equipment,
+                    Zone::Battlefield,
+                    Some(20),
+                )
+                .expect("the same object ID returns as a new Equipment incarnation");
+            }
+
+            engine
+                .refresh_equipment_receipt_attach_departure(&mut Vec::new())
+                .expect("stale source receipt is completed without attachment");
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.objects[&equipment].attached_to.is_none());
+            assert!(candidates.iter().all(|object_id| {
+                engine.state.objects[object_id].zone == Zone::Battlefield
+                    && engine.state.objects[object_id].attached_to.is_none()
+            }));
+        }
     }
 }

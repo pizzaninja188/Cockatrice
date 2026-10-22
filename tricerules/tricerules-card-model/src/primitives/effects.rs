@@ -3314,6 +3314,46 @@ impl SpellEffectKind {
         }
     }
 
+    fn contains_retired_flat_equipment_attachment(&self) -> bool {
+        match self {
+            Self::AttachEquipment {
+                equipment: EffectSubject::Source,
+                creature: EffectSubject::PreviousEffectObjects,
+            } => true,
+            Self::AttachEquipment {
+                equipment: EffectSubject::PreviousEffectObject,
+                creature: EffectSubject::Chosen(_),
+            } => true,
+            Self::AttachEquipment {
+                equipment: EffectSubject::Source,
+                creature: EffectSubject::PreviousEffectObject,
+            } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_retired_flat_equipment_attachment()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_retired_flat_equipment_attachment),
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_retired_flat_equipment_attachment),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_retired_flat_equipment_attachment),
+            Self::ApplyPermanentModifier {
+                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => ability
+                .effect
+                .iter()
+                .any(Self::contains_retired_flat_equipment_attachment),
+            _ => false,
+        }
+    }
+
     pub fn needs_target(&self) -> bool {
         !self.target_roles().is_empty()
     }
@@ -3813,6 +3853,12 @@ impl SpellEffectKind {
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
         if effects
             .iter()
+            .any(SpellEffectKind::contains_retired_flat_equipment_attachment)
+        {
+            return Err("retired flat AttachEquipment shapes require an authored Program".into());
+        }
+        if effects
+            .iter()
             .any(SpellEffectKind::contains_legacy_ward_payment)
         {
             return Err(
@@ -3897,11 +3943,7 @@ impl SpellEffectKind {
                     subject: Some(EffectSubject::PreviousEffectObjects),
                     ..
                 } => Some(PreviousObjectRequirement::TokenCreationBatch),
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::PreviousEffectObject,
-                    ..
-                }
-                | SpellEffectKind::ReturnToOwnersHand {
+                SpellEffectKind::ReturnToOwnersHand {
                     subject: EffectSubject::PreviousEffectObject,
                 }
                 | SpellEffectKind::RemoveAllAbilities {
@@ -6311,6 +6353,9 @@ impl SpellEffectKind {
                             leaf.kind == TargetKind::Creature
                         }) => {}
                     EffectSubject::PreviousEffectObject => {}
+                    EffectSubject::PreviousEffectObjects
+                        if matches!(equipment, EffectSubject::Source)
+                            && context == EffectContext::Ability => {}
                     _ => {
                         return Err(
                             "AttachEquipment creature must be a creature-only Chosen target".into(),

@@ -113,11 +113,39 @@ fn cast_vow_and_reach_choice(
 
 #[test]
 fn issue_188_attachment_vocabulary_loads() {
-    let fixture = r#"
+    let vow = tricerules_cards::registry::global()
+        .get("vow_to_erebor")
+        .expect("Vow to Erebor is registered")
+        .primary_face();
+    assert!(
+        vow.spell_program.is_some(),
+        "Vow's untap, pump, live Dwarf gate, Equipment choice, and attachment use its Program"
+    );
+    for card_id in [
+        "conductive_machete",
+        "cursed_windbreaker",
+        "killers_mask",
+        "kyoshi_battle_fan",
+    ] {
+        let face = tricerules_cards::registry::global()
+            .get(card_id)
+            .unwrap_or_else(|| panic!("{card_id} is registered"))
+            .primary_face();
+        assert!(
+            face.triggered_abilities
+                .iter()
+                .any(|ability| ability.program.is_some()),
+            "{card_id} uses its authored Program for Equipment ETB behavior"
+        );
+    }
+    CardRegistry::from_chunks_and_tokens(&[swordsman_fixture()], &[])
+        .expect("issue #188 two-target attachment vocabulary must load");
+
+    let retired_vow_flat_shape = r#"
 (
-  id: "issue_188_fixture",
-  name: "Issue 188 Fixture",
-  face_id: "issue_188_fixture",
+  id: "issue_188_retired_vow_flat_shape",
+  name: "Issue 188 Retired Vow Flat Shape",
+  face_id: "issue_188_retired_vow_flat_shape",
   mana_cost: "{1}{W}",
   types: ["Instant"],
   spell_effect: [
@@ -136,9 +164,15 @@ fn issue_188_attachment_vocabulary_loads() {
         )],
       ),
     ),
-    AttachEquipment(
-      equipment: PreviousEffectObject,
-      creature: Chosen((kind: Creature, controller: You)),
+    Conditional(
+      condition: ObjectMatches(
+        object: ChosenTarget(group_index: 0, target_index: 0),
+        filter: (kind: Creature, required_subtypes: ["Dwarf"]),
+      ),
+      effect: AttachEquipment(
+        equipment: PreviousEffectObject,
+        creature: Chosen((kind: Creature, controller: You)),
+      ),
     ),
   ],
   targeting: Some((groups: [(
@@ -149,11 +183,69 @@ fn issue_188_attachment_vocabulary_loads() {
   )])),
 )
 "#;
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[retired_vow_flat_shape], &[]).is_err(),
+        "the retired PreviousEffectObject/Chosen attachment must require a Program"
+    );
 
-    CardRegistry::from_chunks_and_tokens(&[fixture], &[])
-        .expect("issue #188 attachment vocabulary must load");
-    CardRegistry::from_chunks_and_tokens(&[swordsman_fixture()], &[])
-        .expect("issue #188 two-target attachment vocabulary must load");
+    let retired_created_token_flat_shape = r#"
+(
+  id: "issue_188_retired_created_token_flat_shape",
+  name: "Issue 188 Retired Created Token Flat Shape",
+  face_id: "issue_188_retired_created_token_flat_shape",
+  mana_cost: "{3}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      CreateTokens(token: "ally_w_1_1", count: 1, who: Controller,
+        tapped: false, sacrifice_timing: None),
+      AttachEquipment(equipment: Source, creature: PreviousEffectObjects),
+    ],
+    targeting: None,
+    modal: None,
+    may: false,
+    intervening_if: None,
+    triggers_only_once: false,
+    max_triggers_per_turn: None,
+  )],
+)
+"#;
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[retired_created_token_flat_shape], &[]).is_err(),
+        "the retired Source/PreviousEffectObjects attachment must require a Program"
+    );
+
+    let retired_manifest_flat_shape = r#"
+(
+  id: "issue_188_retired_manifest_flat_shape",
+  name: "Issue 188 Retired Manifest Flat Shape",
+  face_id: "issue_188_retired_manifest_flat_shape",
+  mana_cost: "{3}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      ManifestDread,
+      AttachEquipment(equipment: Source, creature: PreviousEffectObject),
+    ],
+    targeting: None,
+    modal: None,
+    may: false,
+    intervening_if: None,
+    triggers_only_once: false,
+    max_triggers_per_turn: None,
+  )],
+)
+"#;
+    assert!(
+        CardRegistry::from_chunks_and_tokens(&[retired_manifest_flat_shape], &[]).is_err(),
+        "the retired Source/PreviousEffectObject attachment must require a Program"
+    );
 }
 
 #[test]
@@ -298,6 +390,87 @@ fn issue_188_vow_does_not_offer_equipment_that_cannot_legally_attach() {
     assert!(find_resolution_choice(&resolving).is_none());
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&equipment].attached_to, None);
+}
+
+#[test]
+fn issue_188_vow_rejects_the_same_equipment_object_after_it_returns_as_a_new_incarnation() {
+    let decks = Some(vec![
+        deck_with(
+            "plains",
+            &["vow_to_erebor", "dwarven_priest", "bonesplitter"],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    let dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
+    let equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
+    let resolving = cast_vow_and_reach_choice(&mut engine, dwarf);
+    let choice = find_resolution_choice(&resolving).expect("Vow offers exact Equipment");
+    let old_prompt_id = choice.resolution_prompt_id;
+    let old_generation = engine
+        .state
+        .zone_change_generation
+        .get(&equipment)
+        .copied()
+        .unwrap_or(0);
+
+    // A direct fixture applies the exact out-and-back zone changes while the prompt is parked.
+    // The public object ID is unchanged; the old choice still names the prior incarnation.
+    engine.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != equipment);
+    engine.state.players[0].graveyard.push(equipment);
+    engine.state.objects.get_mut(&equipment).unwrap().zone = tricerules_core::Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(equipment)
+        .or_default() += 1;
+    engine.state.players[0]
+        .graveyard
+        .retain(|object_id| *object_id != equipment);
+    engine.state.players[0].battlefield.push(equipment);
+    engine.state.objects.get_mut(&equipment).unwrap().zone = tricerules_core::Zone::Battlefield;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(equipment)
+        .or_default() += 1;
+    assert!(engine.state.zone_change_generation[&equipment] > old_generation);
+
+    let before = engine
+        .diagnostic_snapshot()
+        .expect("snapshot before Vow receives its stale Equipment incarnation");
+    let seed_before = engine.state.seed;
+    let command_before = engine.state.command_index;
+    let mut stale_answer = submit_resolution_choice(vec![equipment]);
+    if let Some(Cmd::SubmitResolutionChoice(answer)) = stale_answer.cmd.as_mut() {
+        answer.resolution_prompt_id = old_prompt_id;
+    }
+    assert!(engine.apply_command(0, &stale_answer).is_err());
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("snapshot after Vow rejects the old Equipment incarnation"),
+        before
+    );
+    assert_eq!(engine.state.seed, seed_before);
+    assert_eq!(engine.state.command_index, command_before);
+    let pending = engine.state.pending_resolution.as_ref().unwrap();
+    assert_eq!(pending.resolution_prompt_id.get(), old_prompt_id);
+    assert_eq!(pending.presentation.candidates, [equipment]);
+    assert_eq!(engine.state.objects[&equipment].attached_to, None);
+    assert!(!engine.state.objects[&dwarf].tapped);
+    assert_eq!(engine.effective_power(dwarf), Some(4));
 }
 
 #[test]
@@ -520,10 +693,8 @@ fn issue_188_attachment_vocabulary_rejects_malformed_constraints() {
         recipient: ChosenTarget(group_index: 7, target_index: 0),
       )],
     ),
-    AttachEquipment(
-      equipment: PreviousEffectObject,
-      creature: Chosen((kind: Creature, controller: You)),
-    ),
+    PumpTarget(power: 1, toughness: 1,
+      subject: Chosen((kind: Creature, controller: You))),
   ],
   targeting: Some((groups: [(
     min: 1,

@@ -928,35 +928,54 @@ pub(super) fn attach_equipment(
     let Some(creature_id) = attach_equipment_subject(cx, &creature, &mut chosen_role) else {
         return Ok(EffectOutcome::Continue);
     };
-    if !super::super::targeting::equipment_attachment_legal(cx.engine, equipment_id, creature_id) {
-        return Ok(EffectOutcome::Continue);
+    attach_equipment_ids(
+        cx.engine,
+        equipment_id,
+        creature_id,
+        cx.spell_label,
+        cx.events,
+    );
+    Ok(EffectOutcome::Continue)
+}
+
+/// Commit one already-resolved Equipment/creature pair through the shared current attachment
+/// legality check. The receipt-based Program path uses this same seam after filtering its exact
+/// token cohort, while ordinary target and Vow paths keep their existing subject resolution.
+pub(in crate::engine) fn attach_equipment_ids(
+    engine: &mut GameEngine,
+    equipment_id: ObjectId,
+    creature_id: ObjectId,
+    spell_label: &str,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> bool {
+    if !super::super::targeting::equipment_attachment_legal(engine, equipment_id, creature_id) {
+        return false;
     }
 
     let recipient = AttachmentRecipient::Object(creature_id);
-    if cx.engine.state.objects[&equipment_id].attached_to == Some(recipient) {
-        return Ok(EffectOutcome::Continue);
+    if engine.state.objects[&equipment_id].attached_to == Some(recipient) {
+        return true;
     }
-    cx.engine
+    engine
         .state
         .objects
         .get_mut(&equipment_id)
         .expect("validated Equipment")
         .attached_to = Some(recipient);
-    let timestamp = cx.engine.state.command_index;
-    for continuous in &mut cx.engine.state.continuous_effects {
+    let timestamp = engine.state.command_index;
+    for continuous in &mut engine.state.continuous_effects {
         if continuous.source_id == Some(equipment_id)
             && continuous.duration == EffectDuration::WhileSourceOnBattlefield
         {
             continuous.timestamp = timestamp;
         }
     }
-    let equipment_name = object_display_name(&cx.engine.state, cx.engine.registry, equipment_id);
-    let creature_name = object_display_name(&cx.engine.state, cx.engine.registry, creature_id);
-    cx.events.push(ev_log(format!(
-        "{} attaches {equipment_name} to {creature_name}.",
-        cx.spell_label
+    let equipment_name = object_display_name(&engine.state, engine.registry, equipment_id);
+    let creature_name = object_display_name(&engine.state, engine.registry, creature_id);
+    events.push(ev_log(format!(
+        "{spell_label} attaches {equipment_name} to {creature_name}."
     )));
-    Ok(EffectOutcome::Continue)
+    true
 }
 
 pub(super) fn attach_source(

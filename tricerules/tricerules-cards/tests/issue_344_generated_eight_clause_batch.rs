@@ -221,22 +221,23 @@ fn issue_344_kyoshi_battle_fan_creates_and_attaches_an_ally() {
         trigger.presentation,
         AbilityPresentation::OracleLines(vec![1])
     );
-    assert_eq!(
-        trigger.effect,
-        [
-            SpellEffectKind::CreateTokens {
-                token: "ally_w_1_1".into(),
-                count: Amount::Fixed(1),
-                who: PlayerRecipient::Controller,
-                tapped: false,
-                sacrifice_timing: None,
-            },
-            SpellEffectKind::AttachEquipment {
-                equipment: EffectSubject::Source,
-                creature: EffectSubject::PreviousEffectObject,
-            },
-        ]
-    );
+    assert!(trigger.effect.is_empty());
+    let program = trigger
+        .program
+        .as_ref()
+        .expect("Kyoshi's completed token cohort must feed its typed receipt consumer");
+    let expected: tricerules_cards::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "create_tokens", bind: ["created_tokens"], input: None,
+                kind: Perform(CreateTokens(token: "ally_w_1_1", count: 1,
+                    who: Controller, tapped: false, sacrifice_timing: None))),
+            (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
+                kind: Perform(AttachEquipment(
+                    equipment: Source, creature: PreviousEffectObjects))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("the authored Kyoshi receipt Program parses");
+    assert_eq!(program, &expected);
 
     let [modifier] = face.static_abilities.as_slice() else {
         panic!("Kyoshi Battle Fan must keep the equipped-creature modifier");

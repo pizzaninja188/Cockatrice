@@ -5752,6 +5752,266 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+fn kyoshi_battle_fan_program_owner() -> crate::ProgramOwnerId {
+    crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "kyoshi_battle_fan".into(),
+        face_id: crate::CardFaceId::new("kyoshi_battle_fan").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    })
+}
+
+fn vow_equipment_program_ron(condition: &str) -> String {
+    format!(
+        r#"(body: (steps: [
+            (id: "untap", bind: [], input: None,
+                kind: Perform(Untap(subject: Chosen((kind: Creature, controller: You))))),
+            (id: "pump", bind: [], input: None,
+                kind: Perform(PumpTarget(power: 2, toughness: 2,
+                    subject: Chosen((kind: Creature, controller: You))))),
+            (id: "dwarf_gate", bind: [], input: None, kind: Choose(
+                choice: "dwarf_gate", chooser: Controller, optional: false,
+                branches: [(
+                    branch_id: "dwarf", presentation: Fallback, cost: None,
+                    requirement: GameCondition({condition}),
+                    body: (steps: [
+                        (id: "choose_equipment", bind: ["selected_equipment"], input: None,
+                            kind: Perform(ChoosePermanents(
+                                chooser: Controller,
+                                filter: (kind: AnyPermanent, controller: You,
+                                    required_subtypes: ["Equipment"]),
+                                min: 0, max: 1,
+                                constraints: [EquipmentAttachableTo(recipient:
+                                    ChosenTarget(group_index: 0, target_index: 0))]))),
+                        (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
+                            kind: Perform(AttachEquipment(
+                                equipment: PreviousEffectObject,
+                                creature: Chosen((kind: Creature, controller: You))))),
+                    ], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            )),
+        ], yields: []), target_bindings: [
+            (instruction_id: "untap", role: Target, target_group_index: 0),
+            (instruction_id: "pump", role: Target, target_group_index: 0),
+            (instruction_id: "attach_equipment", role: Target, target_group_index: 0),
+        ])"#
+    )
+}
+
+fn compile_vow_equipment_program(
+    condition: &str,
+    card_id: &str,
+) -> Result<super::CompiledProgram, String> {
+    compile_vow_equipment_program_source(&vow_equipment_program_ron(condition), card_id)
+}
+
+fn compile_vow_equipment_program_source(
+    source: &str,
+    card_id: &str,
+) -> Result<super::CompiledProgram, String> {
+    let program: super::CardProgram =
+        ron::from_str(source).expect("Vow full Equipment Program parses");
+    let targeting: super::TargetingDef = ron::from_str(
+        r#"(groups: [(min: 1, max: 1,
+            prompt: "Choose target creature you control", effect_indices: [])])"#,
+    )
+    .expect("Vow target group parses");
+    let owner = crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap());
+    super::CompiledProgram::compile_with_targeting(
+        owner,
+        super::EffectContext::Spell,
+        &program,
+        Some(&targeting),
+    )
+}
+
+#[test]
+fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer() {
+    let source = r#"(body: (steps: [
+            (id: "create_tokens", bind: ["created_tokens"], input: None,
+                kind: Perform(CreateTokens(token: "ally_w_1_1", count: 1,
+                    who: Controller, tapped: false, sacrifice_timing: None))),
+            (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
+                kind: Perform(AttachEquipment(
+                    equipment: Source, creature: PreviousEffectObjects))),
+        ], yields: []), target_bindings: [])"#
+        .to_owned();
+    let program: super::CardProgram =
+        ron::from_str(&source).expect("Kyoshi receipt Program parses");
+
+    let compiled = super::CompiledProgram::compile(
+        kyoshi_battle_fan_program_owner(),
+        super::EffectContext::Ability,
+        &program,
+    );
+    assert!(
+        compiled.is_ok(),
+        "the exact CreateTokens -> Source/PreviousEffectObjects receipt must compile: {compiled:?}"
+    );
+    let compiled = compiled.unwrap();
+    assert_eq!(compiled.slots.len(), 1);
+    assert!(matches!(
+        compiled
+            .slot(compiled.body.steps[0].outputs[0])
+            .map(|slot| &slot.result_type),
+        Some(super::ResultType::CreatedTokenBatch {
+            cardinality: super::Cardinality { min: 0, max: None }
+        })
+    ));
+    assert_eq!(
+        compiled.body.steps[1].input,
+        compiled.body.steps[0].outputs.first().copied()
+    );
+
+    for (label, near_miss) in [
+        (
+            "wrong token identity",
+            source.replace("ally_w_1_1", "soldier_w_1_1"),
+        ),
+        (
+            "unbound producer",
+            source.replace("bind: [\"created_tokens\"]", "bind: []"),
+        ),
+        (
+            "non-immediate consumer",
+            source.replace(
+                "(id: \"attach_created_tokens\"",
+                "(id: \"between\", bind: [], input: None, kind: Perform(GainLife(amount: 1))),\n            (id: \"attach_created_tokens\"",
+            ),
+        ),
+    ] {
+        let program: super::CardProgram =
+            ron::from_str(&near_miss).expect("Kyoshi near-miss Program parses");
+        assert!(
+            super::CompiledProgram::compile(
+                kyoshi_battle_fan_program_owner(),
+                super::EffectContext::Ability,
+                &program,
+            )
+            .is_err(),
+            "Kyoshi receipt compiler must reject {label}"
+        );
+    }
+
+    let legacy_consumer = super::SpellEffectKind::AttachEquipment {
+        equipment: super::EffectSubject::Source,
+        creature: super::EffectSubject::PreviousEffectObjects,
+    };
+    assert!(legacy_consumer
+        .validate(super::EffectContext::Ability)
+        .is_ok());
+    assert!(super::SpellEffectKind::validate_list(&[legacy_consumer]).is_err());
+
+    let token_copy_batch: super::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "copy_tokens", bind: ["copies"], input: None,
+                kind: Perform(CreateTokenCopies(count: 1, source: TriggerObject))),
+            (id: "attach_copies", bind: [], input: Some("copies"),
+                kind: Perform(AttachEquipment(
+                    equipment: Source, creature: PreviousEffectObjects))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("token-copy negative Program parses");
+    assert!(
+        super::CompiledProgram::compile(
+            kyoshi_battle_fan_program_owner(),
+            super::EffectContext::Ability,
+            &token_copy_batch,
+        )
+        .is_err(),
+        "the Equipment receipt must not accept the distinct TokenCopyBatch result"
+    );
+}
+
+#[test]
+fn equipment_receipt_program_compiler_admits_only_exact_vow_dwarf_target_guard() {
+    let exact = "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))";
+    let compiled = compile_vow_equipment_program(exact, "vow_to_erebor");
+    assert!(
+        compiled.is_ok(),
+        "Vow's complete target-bound untap, pump, live Dwarf guard, constrained Equipment choice, and attachment Program must compile for its owning face: {compiled:?}"
+    );
+    let compiled = compiled.unwrap();
+    assert_eq!(compiled.target_bindings.len(), 3);
+    let attach = compiled
+        .body
+        .steps
+        .iter()
+        .find(|step| step.id == "dwarf_gate")
+        .expect("Dwarf gate exists");
+    let super::CompiledInstructionKind::Choose { branches, .. } = &attach.kind else {
+        panic!("Dwarf guard stays a typed Choose requirement");
+    };
+    assert_eq!(branches.len(), 1);
+    assert_eq!(branches[0].body.steps.len(), 2);
+    assert_eq!(
+        branches[0].body.steps[1].input,
+        branches[0].body.steps[0].outputs.first().copied()
+    );
+
+    for (label, card_id, widened) in [
+        (
+            "another target group",
+            "vow_to_erebor",
+            "ObjectMatches(object: ChosenTarget(group_index: 1, target_index: 0), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))",
+        ),
+        (
+            "another target index",
+            "vow_to_erebor",
+            "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 1), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))",
+        ),
+        (
+            "widened permanent filter",
+            "vow_to_erebor",
+            "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: AnyPermanent, required_subtypes: [\"Dwarf\"]))",
+        ),
+        (
+            "missing Dwarf restriction",
+            "vow_to_erebor",
+            "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: Creature))",
+        ),
+        ("wrong face owner", "vow_fixture", exact),
+    ] {
+        assert!(
+            compile_vow_equipment_program(widened, card_id).is_err(),
+            "Vow compiler must reject {label}"
+        );
+    }
+
+    let widened_target_filter =
+        vow_equipment_program_ron(exact).replacen("controller: You", "controller: Any", 1);
+    assert!(
+        compile_vow_equipment_program_source(&widened_target_filter, "vow_to_erebor").is_err(),
+        "Vow's target-bound effect filter must not widen beyond a creature controlled by its caster"
+    );
+
+    let unbounded_equipment_choice = vow_equipment_program_ron(exact).replace(
+        "constraints: [EquipmentAttachableTo(recipient:\n                                    ChosenTarget(group_index: 0, target_index: 0))]",
+        "constraints: []",
+    );
+    let parsed: super::CardProgram =
+        ron::from_str(&unbounded_equipment_choice).expect("Vow near-miss program parses");
+    let targeting: super::TargetingDef = ron::from_str(
+        r#"(groups: [(min: 1, max: 1,
+            prompt: "Choose target creature you control", effect_indices: [])])"#,
+    )
+    .expect("Vow target group parses");
+    let owner = crate::ProgramOwnerId::face(
+        "vow_to_erebor",
+        crate::CardFaceId::new("vow_to_erebor").unwrap(),
+    );
+    assert!(
+        super::CompiledProgram::compile_with_targeting(
+            owner,
+            super::EffectContext::Spell,
+            &parsed,
+            Some(&targeting),
+        )
+        .is_err(),
+        "Vow's equipment selection must retain the exact live attachment constraint"
+    );
+}
+
 #[test]
 fn legacy_flat_resolution_branch_ron_is_rejected() {
     let legacy = r#"ChooseResolutionBranch(

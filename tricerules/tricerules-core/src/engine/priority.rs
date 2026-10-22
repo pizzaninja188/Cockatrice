@@ -1116,6 +1116,7 @@ impl GameEngine {
         self.refresh_owner_hand_return_departure(&departed_objects, &stranded_objects, events)?;
         self.refresh_blight_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
+        self.refresh_equipment_receipt_attach_departure(events)?;
         self.refresh_program_permanent_choice_departure(events)?;
         self.refresh_program_library_cohort_departure(events)?;
         self.refresh_program_hand_library_return_departure(events)?;

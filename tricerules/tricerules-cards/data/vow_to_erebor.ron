@@ -6,41 +6,56 @@
   face_id: "vow_to_erebor",
   mana_cost: "{1}{W}",
   types: ["Instant"],
-  spell_effect: [
-    Untap(subject: Chosen((kind: Creature, controller: You))),
-    PumpTarget(
-      power: 2,
-      toughness: 2,
-      subject: Chosen((kind: Creature, controller: You)),
-    ),
-    Conditional(
-      condition: ObjectMatches(
-        object: ChosenTarget(group_index: 0, target_index: 0),
-        filter: (kind: Creature, required_subtypes: ["Dwarf"]),
-      ),
-      effect: ChoosePermanents(
-        chooser: Controller,
-        filter: (
-          kind: AnyPermanent,
-          controller: You,
-          required_subtypes: ["Equipment"],
-        ),
-        min: 0,
-        max: 1,
-        constraints: [EquipmentAttachableTo(
-          recipient: ChosenTarget(group_index: 0, target_index: 0),
-        )],
-      ),
-    ),
-    AttachEquipment(
-      equipment: PreviousEffectObject,
-      creature: Chosen((kind: Creature, controller: You)),
-    ),
-  ],
+  spell_program: Some((body: (steps: [
+    (id: "untap", bind: [], input: None,
+      kind: Perform(Untap(subject: Chosen((kind: Creature, controller: You))))),
+    (id: "pump", bind: [], input: None,
+      kind: Perform(PumpTarget(
+        power: 2,
+        toughness: 2,
+        subject: Chosen((kind: Creature, controller: You)),
+      ))),
+    (id: "dwarf_gate", bind: [], input: None, kind: Choose(
+      choice: "dwarf_gate",
+      chooser: Controller,
+      optional: false,
+      branches: [(
+        branch_id: "dwarf",
+        presentation: OracleLines([1]),
+        cost: None,
+        requirement: GameCondition(ObjectMatches(
+          object: ChosenTarget(group_index: 0, target_index: 0),
+          filter: (kind: Creature, required_subtypes: ["Dwarf"]),
+        )),
+        body: (steps: [
+          (id: "choose_equipment", bind: ["selected_equipment"], input: None,
+            kind: Perform(ChoosePermanents(
+              chooser: Controller,
+              filter: (kind: AnyPermanent, controller: You,
+                required_subtypes: ["Equipment"]),
+              min: 0,
+              max: 1,
+              constraints: [EquipmentAttachableTo(recipient:
+                ChosenTarget(group_index: 0, target_index: 0))],
+            ))),
+          (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
+            kind: Perform(AttachEquipment(
+              equipment: PreviousEffectObject,
+              creature: Chosen((kind: Creature, controller: You)),
+            ))),
+        ], yields: []),
+      )],
+      otherwise: (steps: [], yields: []),
+    )),
+  ], yields: []), target_bindings: [
+    (instruction_id: "untap", role: Target, target_group_index: 0),
+    (instruction_id: "pump", role: Target, target_group_index: 0),
+    (instruction_id: "attach_equipment", role: Target, target_group_index: 0),
+  ])),
   targeting: Some((groups: [(
     min: 1,
     max: 1,
     prompt: "Choose target creature you control",
-    effect_indices: [0, 1, 3],
+    effect_indices: [],
   )])),
 )

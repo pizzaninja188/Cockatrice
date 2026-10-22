@@ -78,6 +78,7 @@ pub(in crate::engine) mod library_cohorts;
 pub(super) mod life;
 mod mass;
 mod misc;
+pub(in crate::engine) use misc::attach_equipment_ids;
 #[cfg(test)]
 mod portal_sacrifice_tests;
 mod program;
@@ -87,10 +88,80 @@ mod restrictions;
 #[cfg(test)]
 mod retained_exile_tests;
 mod stack_ops;
+pub(in crate::engine) use program::equipment_receipt_choice_event;
 pub(super) use pump_counters::materialize_resolving_modifier;
 pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
 mod tokens;
 pub(in crate::engine) mod zones;
+
+/// Resolve the current attachable incarnation of Kyoshi Battle Fan's exact `Source` object.
+/// Object IDs are insufficient here because a source that leaves and returns is a new object.
+pub(in crate::engine) fn current_equipment_receipt_source(
+    engine: &GameEngine,
+    object_id: ObjectId,
+    expected_generation: u64,
+) -> Option<crate::state::TriggerObjectRef> {
+    if engine.state.zone_change_generation.get(&object_id).copied() != Some(expected_generation) {
+        return None;
+    }
+    let object = engine.state.objects.get(&object_id)?;
+    if object.zone != Zone::Battlefield {
+        return None;
+    }
+    let characteristics = engine.characteristics(object_id)?;
+    if !characteristics.has_type("Equipment")
+        || characteristics.is_creature()
+        || engine
+            .state
+            .player_idx(characteristics.controller)
+            .is_none_or(|index| engine.state.players[index].has_lost)
+    {
+        return None;
+    }
+    Some(crate::state::TriggerObjectRef {
+        object_id,
+        zone_change_generation: expected_generation,
+        controller_at_event: characteristics.controller,
+    })
+}
+
+/// Refilter only the exact receipt members that remain the same battlefield creature
+/// incarnations and are currently legal recipients for the retained Equipment incarnation.
+pub(in crate::engine) fn current_equipment_receipt_candidates(
+    engine: &GameEngine,
+    equipment: crate::state::TriggerObjectRef,
+    created_tokens: &[crate::state::TriggerObjectRef],
+) -> Vec<(ObjectId, u64)> {
+    if current_equipment_receipt_source(
+        engine,
+        equipment.object_id,
+        equipment.zone_change_generation,
+    )
+    .is_none()
+    {
+        return Vec::new();
+    }
+    created_tokens
+        .iter()
+        .filter_map(|candidate| {
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&candidate.object_id)
+                .copied()
+                .unwrap_or(0);
+            let object = engine.state.objects.get(&candidate.object_id)?;
+            (current_generation == candidate.zone_change_generation
+                && object.zone == Zone::Battlefield
+                && super::targeting::equipment_attachment_legal(
+                    engine,
+                    equipment.object_id,
+                    candidate.object_id,
+                ))
+            .then_some((candidate.object_id, candidate.zone_change_generation))
+        })
+        .collect()
+}
 
 impl GameEngine {
     /// Keep begun ability Programs alive only for the compiled mandatory linked-Exile move
@@ -6341,11 +6412,26 @@ mod attached_subject_tests {
             zone_change_generation: Some(0),
         }];
 
-        let (effects, spell_label) = engine.build_resolution_effects(&item);
+        let owners = engine
+            .compiled_resolution_program_owners(&item)
+            .expect("Vow Program owner lookup")
+            .expect("Vow resolves through its authored Program");
+        let program = engine
+            .begin_program_run(&item, owners)
+            .expect("Vow Program starts");
+        engine.state.stack.push(item.clone());
         let mut initial_events = Vec::new();
-        engine
-            .run_effect_list(&item, &spell_label, effects, 0, &mut initial_events)
-            .expect("Vow reaches its Dwarf-gated Equipment chooser");
+        assert!(matches!(
+            engine
+                .run_program_with_previous(
+                    &item,
+                    program,
+                    crate::state::EffectResult::default(),
+                    &mut initial_events,
+                )
+                .expect("Vow reaches its Dwarf-gated Equipment chooser"),
+            ResolutionProgress::Parked
+        ));
         engine
             .publish_resolution_prompt_ids(&mut initial_events)
             .expect("initial Vow prompt receives an ID");
@@ -6370,6 +6456,8 @@ mod attached_subject_tests {
         assert!(!engine.state.objects[&creature].tapped);
         assert_eq!(engine.effective_power(creature), Some(4));
 
+        // Direct state fixture: the target loses Dwarf while Vow's Program is parked at its
+        // already-entered Equipment choice. Rebuilding that leaf must not rewind its Dwarf gate.
         engine.state.objects.get_mut(&creature).unwrap().card_id = "grizzly_bears".to_string();
         assert!(engine
             .characteristics(creature)
@@ -6377,8 +6465,10 @@ mod attached_subject_tests {
 
         let mut refreshed_events = Vec::new();
         assert!(engine
-            .refresh_suspended_nonprogram_choice(&mut refreshed_events)
-            .expect("the already-entered chooser refreshes without reevaluating its condition"));
+            .refresh_suspended_program_choice(&mut refreshed_events)
+            .expect(
+                "the already-entered Program chooser refreshes without reevaluating its condition"
+            ));
         engine
             .publish_resolution_prompt_ids(&mut refreshed_events)
             .expect("refreshed Vow prompt receives a fresh ID");
@@ -6420,6 +6510,7 @@ mod attached_subject_tests {
             refreshed_prompt_id,
             "a stale answer leaves the current chooser intact"
         );
+
         engine
             .apply_command(
                 0,

@@ -187,6 +187,26 @@ assertions. The runtime has a direct skipped-entry disposition, but the current 
 not provide a scenario that produces that disposition; report that evidence as deferred rather
 than treating ordinary successful entry coverage as proof of it.
 
+Kyoshi Battle Fan's `triggered_01` has its own exact token-receipt profile: an ordinary untapped
+`CreateTokens(token: ally_w_1_1, count: 1, who: Controller)` binds `CreatedTokenBatch(0..*)`,
+immediately consumed by `AttachEquipment(input: created_tokens, equipment: Source,
+creature: PreviousEffectObjects)`. The receipt is the complete replacement-expanded token cohort,
+including a completed empty result, with each token's exact object and generation. Only this
+producer, binding, input, owner and recipient shape is admitted; this specialized use records the
+whole cohort because one created token auto-attaches, several require a choice, and an empty batch
+does nothing. `AttachEquipment` also supports distinct mechanics with targeted subjects on
+Swordsman and Sharp Scoundrel, and a selected Equipment on Vow to Erebor; those do not consume this
+token receipt.
+
+Vow to Erebor's spell Program is admitted only for its exact face and target shape. Bind the same
+caster-controlled creature target to untap and +2/+2, test that target for the Dwarf subtype in a
+resolution-time `GameCondition(ObjectMatches(...))` branch, then offer zero or one of the caster's
+Equipment with `EquipmentAttachableTo(ChosenTarget(0, 0))`. Attach only the exact selected Equipment
+to that already-targeted creature. The selection is optional and is not an additional target
+(CR 115.10, 608.2d). This narrow owner profile permits the chosen-target reference needed by the
+live Dwarf guard and attachment constraint; it does not admit widened target filters, constraints,
+or conditions for other owners.
+
 The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
 is `Controller`, with `SourceController` also admitted for ability Programs and captured

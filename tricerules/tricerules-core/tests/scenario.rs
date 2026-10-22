@@ -456,6 +456,8 @@ mod enters_with_counters;
 mod entry_copy_auras;
 #[path = "scenario/equipment.rs"]
 mod equipment;
+#[path = "scenario/equipment_receipt_program.rs"]
+mod equipment_receipt_program;
 #[path = "scenario/font_of_mythos.rs"]
 mod font_of_mythos;
 #[path = "scenario/generator_servant.rs"]

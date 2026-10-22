@@ -1445,6 +1445,9 @@ pub(crate) enum ProgramValue {
     /// Exact generation-bound tokens created by one copy operation, retained with the
     /// TokenCreationBatch provenance required by the shared Haste and delayed-exile consumers.
     TokenCopyBatch(Vec<TriggerObjectRef>),
+    /// Exact replacement-expanded ordinary tokens created by Kyoshi Battle Fan's authored
+    /// `CreateTokens` instruction. An empty vector is a completed batch, not an unwritten slot.
+    CreatedTokenBatch(Vec<TriggerObjectRef>),
     /// The exact new current linked-Exile member produced by a typed Exile instruction.
     /// `None` is a proven attempted Exile with no current linked object.
     TriggerObjectLinkedExileReceipt(Option<TriggerObjectRef>),
@@ -1546,6 +1549,22 @@ pub(crate) struct ProgramRunState {
     /// matching token-batch proof across that choice without inferring it from display data.
     #[serde(default)]
     pub in_flight_produced_object_provenance: Option<ProducedObjectProvenance>,
+}
+
+/// Kyoshi Battle Fan's receipt-scoped recipient selection. `turn_order_cursor` records the last
+/// player offered this rule-required choice so departure delegation advances from that seat even
+/// after CR 800.4a changes the Equipment controller.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingEquipmentReceiptAttach {
+    pub stack: ParkedStackResolution,
+    pub equipment: TriggerObjectRef,
+    pub created_tokens: Vec<TriggerObjectRef>,
+    pub candidate_generations: Vec<(ObjectId, u64)>,
+    pub original_offered_chooser: PlayerId,
+    /// True after control reoffers or CR 800.4h departure delegation. Once set, a later
+    /// control change cannot recapture an already-delegated choice.
+    pub delegated: bool,
+    pub turn_order_cursor: usize,
 }
 
 /// Stable target slot for one retargeting decision while a spell copy is being assembled.
@@ -1735,6 +1754,9 @@ pub enum ResolutionContinuation {
     ProgramChoose {
         stack: ParkedStackResolution,
         choose: PendingProgramChoose,
+    },
+    EquipmentReceiptAttach {
+        attachment: Box<PendingEquipmentReceiptAttach>,
     },
     CounterMove {
         stack: ParkedStackResolution,
@@ -2266,6 +2288,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::BattlefieldReturn { pending } => Some(&pending.stack),
+            Self::EquipmentReceiptAttach { attachment } => Some(&attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&progress.stack),
@@ -2337,6 +2360,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::BattlefieldReturn { pending } => Some(&mut pending.stack),
+            Self::EquipmentReceiptAttach { attachment } => Some(&mut attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&mut order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&mut progress.stack),

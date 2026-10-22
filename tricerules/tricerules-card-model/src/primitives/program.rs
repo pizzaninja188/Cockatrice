@@ -335,6 +335,11 @@ pub enum ResultType {
     CardPartition,
     /// Exact replacement-expanded TriggerObject token cohort from one admitted copy effect.
     TokenCopyBatch,
+    /// Exact replacement-expanded ordinary token cohort from Kyoshi Battle Fan's trigger.
+    /// Empty completion is a recorded result, distinct from an unwritten slot.
+    CreatedTokenBatch {
+        cardinality: Cardinality,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -492,6 +497,8 @@ struct Compiler<'a> {
     allow_trigger_object_linked_exile: bool,
     allow_mimic_vat_linked_exile_receipt: bool,
     allow_mosswort_linked_play: bool,
+    allow_equipment_receipt: bool,
+    allow_vow_equipment_choice: bool,
     next_instruction_address: u32,
 }
 
@@ -577,13 +584,17 @@ impl CompiledProgram {
                             )
                         },
                     )?;
-                let role_index =
-                    authored_target_role_index(effect, reference.role).ok_or_else(|| {
-                        format!(
-                            "program instruction '{}' does not expose target role {:?}",
-                            reference.instruction_id, reference.role
-                        )
-                    })?;
+                let role_index = authored_target_role_index(
+                    effect,
+                    reference.role,
+                    is_vow_to_erebor_face(&compiled.owner),
+                )
+                .ok_or_else(|| {
+                    format!(
+                        "program instruction '{}' does not expose target role {:?}",
+                        reference.instruction_id, reference.role
+                    )
+                })?;
                 compiled.target_bindings.push(ProgramTargetBinding {
                     instruction_address,
                     target_group_index: reference.target_group_index,
@@ -645,6 +656,8 @@ impl CompiledProgram {
             allow_trigger_object_linked_exile: false,
             allow_mimic_vat_linked_exile_receipt: false,
             allow_mosswort_linked_play,
+            allow_equipment_receipt: is_kyoshi_battle_fan_receipt_owner(&owner),
+            allow_vow_equipment_choice: is_vow_to_erebor_face(&owner),
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -950,7 +963,11 @@ fn validate_target_card_result_groups(
     Ok(())
 }
 
-fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole) -> Option<usize> {
+fn authored_target_role_index(
+    effect: &SpellEffectKind,
+    role: ProgramTargetRole,
+    allow_vow_equipment_choice: bool,
+) -> Option<usize> {
     match (effect, role) {
         (SpellEffectKind::DamageTarget { .. }, ProgramTargetRole::Target)
         | (
@@ -1006,6 +1023,12 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
             ProgramTargetRole::Target,
         )
         | (SpellEffectKind::ChooseHandCards { .. }, ProgramTargetRole::Target) => Some(0),
+        _ if allow_vow_equipment_choice
+            && role == ProgramTargetRole::Target
+            && is_vow_chosen_target_effect(effect) =>
+        {
+            Some(0)
+        }
         _ => None,
     }
 }
@@ -1403,14 +1426,33 @@ impl Compiler<'_> {
                     } else {
                         None
                     };
+                    if self.allow_vow_equipment_choice
+                        && is_vow_chosen_target_effect(effect)
+                        && !self.target_references.iter().any(|reference| {
+                            reference.instruction_id == instruction.id
+                                && reference.role == ProgramTargetRole::Target
+                                && reference.target_group_index == 0
+                        })
+                    {
+                        return Err(format!(
+                            "Vow to Erebor instruction '{}' must bind its target to group 0",
+                            instruction.id
+                        ));
+                    }
                     let result_types = validate_and_result_types(
                         effect,
                         self.context,
                         target_group_index,
                         target_group_max,
-                        self.allow_trigger_object_linked_exile,
-                        self.allow_mimic_vat_linked_exile_receipt,
-                        self.allow_mosswort_linked_play,
+                        self,
+                    )?;
+                    validate_equipment_selection_input(
+                        effect,
+                        input,
+                        steps.last(),
+                        &self.slots,
+                        self.allow_equipment_receipt,
+                        self.allow_vow_equipment_choice,
                     )?;
                     if self.allow_trigger_object_linked_exile
                         && matches!(
@@ -1840,11 +1882,23 @@ impl Compiler<'_> {
                                 CompiledChooseRequirement::Always
                             }
                             ResolutionBranchRequirement::GameCondition(condition) => {
-                                let compiled = if self.context == EffectContext::Ability
+                                let compiled = if self.context == EffectContext::Spell
+                                    && is_vow_to_erebor_face(&self.owner)
+                                    && is_exact_vow_dwarf_target_guard(condition)
+                                {
+                                    condition.validate_live().map_err(|reason| {
+                                        format!(
+                                            "Choose instruction '{}' branch '{}': {reason}",
+                                            instruction.id, branch.branch_id
+                                        )
+                                    })?;
+                                    CompiledProgramCondition::Game(condition.clone())
+                                } else if self.context == EffectContext::Ability
                                     && (is_ability_source_condition_family(condition)
                                         || is_exact_ability_choose_countered_creature_count(
                                             condition,
-                                        )) {
+                                        ))
+                                {
                                     condition.validate_live().map_err(|reason| {
                                         format!(
                                             "Choose instruction '{}' branch '{}': {reason}",
@@ -2329,6 +2383,14 @@ fn compile_input(
             equipment: EffectSubject::Source,
             creature: EffectSubject::PreviousEffectObject,
         } => Some("ManifestedPermanent"),
+        EffectOp::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObjects,
+        }
+        | EffectOp::AttachEquipment {
+            equipment: EffectSubject::PreviousEffectObject,
+            creature: EffectSubject::Chosen(_),
+        } => Some("PermanentSelection"),
         EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
         EffectOp::ChooseCard {
             source: ChooseCardSource::CardResultCohort { .. },
@@ -2408,6 +2470,29 @@ fn compile_input(
                         },
                     }
                 ),
+                EffectOp::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObjects,
+                } => matches!(
+                    &actual.result_type,
+                    ResultType::CreatedTokenBatch {
+                        cardinality: Cardinality { min: 0, max: None },
+                    }
+                ),
+                EffectOp::AttachEquipment {
+                    equipment: EffectSubject::PreviousEffectObject,
+                    creature: EffectSubject::Chosen(_),
+                } => matches!(
+                    &actual.result_type,
+                    ResultType::PermanentSelection {
+                        chooser: PlayerRecipient::Controller,
+                        filter,
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    } if filter.as_ref() == &vow_equipment_filter()
+                ),
                 EffectOp::GrantKeywords {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
@@ -2468,6 +2553,190 @@ fn compile_input(
             Ok(Some(slot))
         }
     }
+}
+
+fn is_kyoshi_battle_fan_receipt_owner(owner: &ProgramOwnerId) -> bool {
+    matches!(
+        owner,
+        ProgramOwnerId::Ability(definition)
+            if definition.card_id == "kyoshi_battle_fan"
+                && definition.face_id.as_str() == "kyoshi_battle_fan"
+                && definition.ability_path.len() == 1
+                && definition.ability_path[0].as_str() == "triggered_01"
+    )
+}
+
+fn is_vow_to_erebor_face(owner: &ProgramOwnerId) -> bool {
+    matches!(
+        owner,
+        ProgramOwnerId::Face(face)
+            if face.card_id == "vow_to_erebor"
+                && face.face_id.as_str() == "vow_to_erebor"
+    )
+}
+
+fn is_exact_vow_target_filter(filter: &TargetFilter) -> bool {
+    filter
+        == &TargetFilter {
+            kind: TargetKind::Creature,
+            controller: super::TargetController::You,
+            ..TargetFilter::default()
+        }
+}
+
+fn vow_equipment_filter() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: super::TargetController::You,
+        required_subtypes: vec!["Equipment".into()],
+        ..TargetFilter::default()
+    }
+}
+
+fn is_exact_vow_dwarf_target_guard(condition: &GameCondition) -> bool {
+    matches!(
+        condition,
+        GameCondition::ObjectMatches { object, filter }
+            if *object == super::ConditionObjectRef::ChosenTarget {
+                group_index: 0,
+                target_index: 0,
+            }
+                && filter.as_ref()
+                    == &TargetFilter {
+                        kind: TargetKind::Creature,
+                        required_subtypes: vec!["Dwarf".into()],
+                        ..TargetFilter::default()
+                    }
+    )
+}
+
+fn is_exact_vow_equipment_choice(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::ChoosePermanents {
+            chooser: PlayerRecipient::Controller,
+            filter,
+            min: 0,
+            max: 1,
+            constraints,
+        } if filter == &vow_equipment_filter()
+            && constraints.as_slice()
+                == [super::PermanentChoiceConstraint::EquipmentAttachableTo {
+                    recipient: super::ConditionObjectRef::ChosenTarget {
+                        group_index: 0,
+                        target_index: 0,
+                    },
+                }]
+    )
+}
+
+fn is_vow_chosen_target_effect(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::Untap {
+            subject: EffectSubject::Chosen(filter),
+        } if is_exact_vow_target_filter(filter)
+    ) || matches!(
+        effect,
+        SpellEffectKind::PumpTarget {
+            power: 2,
+            toughness: 2,
+            subject: EffectSubject::Chosen(filter),
+            ..
+        } if is_exact_vow_target_filter(filter)
+    ) || matches!(
+        effect,
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::PreviousEffectObject,
+            creature: EffectSubject::Chosen(filter),
+        } if is_exact_vow_target_filter(filter)
+    )
+}
+
+fn validate_equipment_selection_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    previous: Option<&CompiledInstruction>,
+    slots: &[CompiledSlot],
+    allow_equipment_receipt: bool,
+    allow_vow_equipment_choice: bool,
+) -> Result<(), String> {
+    match effect {
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObjects,
+        } => {
+            if !allow_equipment_receipt {
+                return Err("CreatedTokenBatch attachment is reserved for Kyoshi Battle Fan's exact triggered Program".into());
+            }
+            let slot = input.ok_or_else(|| {
+                "Kyoshi Battle Fan receipt attachment requires its immediately preceding CreatedTokenBatch input".to_string()
+            })?;
+            let previous = previous.ok_or_else(|| {
+                "Kyoshi Battle Fan receipt attachment requires an immediately preceding CreateTokens instruction".to_string()
+            })?;
+            if previous.outputs.as_slice() != [slot]
+                || !matches!(
+                    &previous.kind,
+                    CompiledInstructionKind::Perform(producer)
+                        if matches!(
+                            producer.as_ref(),
+                            SpellEffectKind::CreateTokens {
+                                token,
+                                count: Amount::Fixed(1),
+                                who: PlayerRecipient::Controller,
+                                tapped: false,
+                                sacrifice_timing: None,
+                            } if token == "ally_w_1_1"
+                        )
+                )
+                || !matches!(
+                    slots.get(slot.0 as usize).map(|slot| &slot.result_type),
+                    Some(ResultType::CreatedTokenBatch {
+                        cardinality: Cardinality { min: 0, max: None }
+                    })
+                )
+            {
+                return Err("Kyoshi Battle Fan receipt attachment must consume the exact immediately preceding Ally CreateTokens result".into());
+            }
+        }
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::PreviousEffectObject,
+            creature: EffectSubject::Chosen(filter),
+        } if is_exact_vow_target_filter(filter) => {
+            if !allow_vow_equipment_choice {
+                return Err(
+                    "Vow to Erebor Equipment selection is reserved for its exact face Program"
+                        .into(),
+                );
+            }
+            let slot = input.ok_or_else(|| {
+                "Vow to Erebor attachment requires its immediately preceding optional Equipment selection".to_string()
+            })?;
+            let previous = previous.ok_or_else(|| {
+                "Vow to Erebor attachment requires an immediately preceding ChoosePermanents instruction".to_string()
+            })?;
+            if previous.outputs.as_slice() != [slot]
+                || !matches!(
+                    &previous.kind,
+                    CompiledInstructionKind::Perform(producer)
+                        if is_exact_vow_equipment_choice(producer.as_ref())
+                )
+                || !matches!(
+                    slots.get(slot.0 as usize).map(|slot| &slot.result_type),
+                    Some(ResultType::PermanentSelection {
+                        chooser: PlayerRecipient::Controller,
+                        filter,
+                        cardinality: Cardinality { min: 0, max: Some(1) },
+                    }) if filter.as_ref() == &vow_equipment_filter()
+                )
+            {
+                return Err("Vow to Erebor attachment must consume only its exact immediately preceding Equipment selection".into());
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn bind_outputs(
@@ -2649,6 +2918,10 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
         }
         (ResultType::CardPartition, ResultType::CardPartition) => ResultType::CardPartition,
         (ResultType::TokenCopyBatch, ResultType::TokenCopyBatch) => ResultType::TokenCopyBatch,
+        (
+            ResultType::CreatedTokenBatch { cardinality: a },
+            ResultType::CreatedTokenBatch { cardinality: b },
+        ) if a == b => ResultType::CreatedTokenBatch { cardinality: *a },
         _ => return None,
     })
 }
@@ -2678,9 +2951,7 @@ fn validate_and_result_types(
     context: EffectContext,
     target_group_index: Option<u32>,
     target_group_max: Option<u32>,
-    allow_trigger_object_linked_exile: bool,
-    allow_mimic_vat_linked_exile_receipt: bool,
-    allow_mosswort_linked_play: bool,
+    compiler: &Compiler<'_>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
@@ -2700,6 +2971,38 @@ fn validate_and_result_types(
             creature: EffectSubject::PreviousEffectObject,
         } => {
             effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObjects,
+        } if compiler.allow_equipment_receipt && context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::PreviousEffectObject,
+            creature: EffectSubject::Chosen(filter),
+        } if compiler.allow_vow_equipment_choice && is_exact_vow_target_filter(filter) => {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Vow to Erebor attachment target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::Untap {
+            subject: EffectSubject::Chosen(filter),
+        } if compiler.allow_vow_equipment_choice && is_exact_vow_target_filter(filter) => {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Vow to Erebor untap target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::PumpTarget {
+            power: 2,
+            toughness: 2,
+            subject: EffectSubject::Chosen(filter),
+            ..
+        } if compiler.allow_vow_equipment_choice && is_exact_vow_target_filter(filter) => {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Vow to Erebor pump target")?;
             Ok(Vec::new())
         }
         SpellEffectKind::AttachEquipment { .. } => Err(
@@ -2960,7 +3263,9 @@ fn validate_and_result_types(
             effect.validate(context)?;
             validate_program_controller(*chooser, "ChoosePermanents chooser")?;
             validate_program_choice_filter(filter)?;
-            if !constraints.is_empty() {
+            if !(constraints.is_empty()
+                || compiler.allow_vow_equipment_choice && is_exact_vow_equipment_choice(effect))
+            {
                 return Err("ChoosePermanents constraints are not supported in spell_program without typed object references".into());
             }
             // Selection can be limited by the live candidate set, even when the authored minimum
@@ -3218,10 +3523,11 @@ fn validate_and_result_types(
             Ok(Vec::new())
         }
         SpellEffectKind::CreateTokens {
+            token,
             count,
             who,
+            tapped,
             sacrifice_timing,
-            ..
         } => {
             effect.validate(context)?;
             let supported_recipient = *who == PlayerRecipient::Controller
@@ -3233,7 +3539,19 @@ fn validate_and_result_types(
                 );
             }
             validate_program_create_tokens_amount(count, who)?;
-            Ok(Vec::new())
+            Ok(if compiler.allow_equipment_receipt
+                && token == "ally_w_1_1"
+                && matches!(count, Amount::Fixed(1))
+                && *who == PlayerRecipient::Controller
+                && !*tapped
+                && sacrifice_timing.is_none()
+            {
+                vec![ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None },
+                }]
+            } else {
+                Vec::new()
+            })
         }
         SpellEffectKind::CreateTokenCopies { count, source } => {
             effect.validate(context)?;
@@ -3310,8 +3628,8 @@ fn validate_and_result_types(
             subject: EffectSubject::TriggerObject,
             linked_exile_id: Some(linked_exile_id),
         } if context == EffectContext::Ability
-            && allow_trigger_object_linked_exile
-            && allow_mimic_vat_linked_exile_receipt =>
+            && compiler.allow_trigger_object_linked_exile
+            && compiler.allow_mimic_vat_linked_exile_receipt =>
         {
             effect.validate(context)?;
             Ok(vec![ResultType::TriggerObjectLinkedExileReceipt {
@@ -3327,13 +3645,13 @@ fn validate_and_result_types(
         SpellEffectKind::Exile {
             subject: EffectSubject::TriggerObject,
             linked_exile_id: Some(_),
-        } if context == EffectContext::Ability && allow_trigger_object_linked_exile => {
+        } if context == EffectContext::Ability && compiler.allow_trigger_object_linked_exile => {
             effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
             if context == EffectContext::Ability
-                && allow_mimic_vat_linked_exile_receipt =>
+                && compiler.allow_mimic_vat_linked_exile_receipt =>
         {
             effect.validate(context)?;
             Ok(Vec::new())
@@ -3369,7 +3687,7 @@ fn validate_and_result_types(
             play_kind: super::LinkedExiledCardPlayKind::Play,
             return_source_to_owner_hand_if_cast: false,
         } if context == EffectContext::Ability
-            && allow_mosswort_linked_play
+            && compiler.allow_mosswort_linked_play
             && producer_ability_id.as_str() == "hideaway"
             && linked_exile_id.as_str() == "exiled_cards" =>
         {
