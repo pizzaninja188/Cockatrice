@@ -55,6 +55,34 @@ new effect-list forms. The runtime has a skipped-entry path, but these three own
 produce an actual skipped-entry scenario, so that specific scenario evidence remains deferred.
 No protobuf, relay, or client contract changed.
 
+Equipment attachment Programs preserve exact produced and selected objects. Kyoshi Battle Fan binds
+the complete replacement-expanded `CreatedTokenBatch` to `AttachEquipment`: one token attaches
+automatically, while multiple tokens require the Equipment controller to choose one. Vow to Erebor
+binds its creature target through the Dwarf check, then offers the spell controller an optional legal
+Equipment choice and attaches only that selection. Stale choices do not advance resolution, and
+pending choices follow the existing departure-delegation rules. The actual-card scenarios in
+`equipment_receipt_program.rs` and `issue_188_chosen_equipment_attachment.rs` cover these receipt and
+controller paths. Ordinary targeted attachment remains available; this adds no card admission or
+protobuf, relay, or client contract.
+
+Tishana's Tidebinder uses a `CounterTargetAbility` Program with an optional typed
+`CounteredAbilitySource` receipt (`0..1`). `IfResult(CounteredAbilitySourceMatches)` requires the
+captured source ObjectId and zone-change generation to identify the same battlefield incarnation,
+and checks its current Artifact, Creature, or Planeswalker types before the typed
+`RemoveAllAbilities(PreviousEffectObject, WhileSourceOnBattlefield)` input applies. The duration is
+linked to Tidebinder remaining on the battlefield. The flat-list implicit `PreviousEffectObject`
+removal route is retired; ordinary flat-list removal, including The Wondrous Wasp's chosen-creature
+effect, remains supported. The actual-card scenarios in `issue_207_stack_abilities.rs` cover
+Teferi's registered `activated_01`, a completed no-target result, source-incarnation checks, and two
+Tidebinder triggers targeting the same activation. This uses Oracle's current-source-type ruling and
+CR 608.2b-c, 611.2b, and 400.7. Prepared-state layer-4 fixtures cover eligible-to-ineligible and
+ineligible-to-eligible source-type changes after target selection and before counter resolution,
+without changing the ObjectId or zone generation. A separate test replays the accepted serialized Tidebinder command tail
+from two identical prepared fixture states and compares every event batch and final diagnostic
+snapshot; it is not a full legal-session replay claim. Source-less ability results and
+ability-counter-prevention cases remain deferred. No protobuf, relay, or client surface changed, so
+native UI acceptance is N/A.
+
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
 `Paid`, `Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` follows an accepted, committed payment;

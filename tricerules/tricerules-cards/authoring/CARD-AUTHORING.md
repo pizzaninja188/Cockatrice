@@ -723,10 +723,12 @@ choices finish, execution continues at the next instruction in the same program 
 controller has no creature, it records Blight without a creature prompt and continues immediately.
 
 Targetful leaves currently accepted are `DamageTarget` with role `Target`, `CounterTargetSpell` with
-role `Spell`, `CreateTokenCopies(Chosen(...))` with role `Source`, and
+role `Spell`, `CounterTargetAbility` with role `StackAbility`,
+`CreateTokenCopies(Chosen(...))` with role `Source`, and
 `ReturnToOwnersHand(Chosen(...))` with role `Subject`. These are the only target-role signatures
-accepted in authored programs. A copied permanent source requires exactly one target (`min: 1`,
-`max: 1`).
+accepted in authored programs. `CounterTargetAbility` has one explicit group with bounds `0..1` or
+`1..1`; its optional bound result may be discarded. A copied permanent source requires exactly one
+target (`min: 1`, `max: 1`).
 
 Ability programs use the ability context. A triggered program may use `AffectedPlayer` for a
 draw/discard recipient or as a `Choose` chooser only when its trigger supplies that event-time
@@ -985,6 +987,22 @@ valid; `unless_controller_pays: None` has no output. Programs continue
 to reject `unless_controller_pays_by_cast_cost`, which needs cast-time receipt inputs outside this
 typed result contract. Conditions must read a dominating in-scope binding of the matching result
 type; missing, forward and wrong-type references fail compilation.
+
+`CounterTargetAbility` can bind an optional `CounteredAbilitySource` result (`0..1`), which stores
+the exact source ObjectId and zone-change generation only when the targeted stack ability was
+actually countered and had a permanent source. `IfResult(CounteredAbilitySourceMatches(result:
+"name"))` is false for a completed counter with no receipt; otherwise it checks that the captured
+incarnation is still a battlefield permanent and currently an artifact, creature, or planeswalker.
+This follows Tishana's Tidebinder's ruling that the source types are checked as its triggered ability
+resolves. Its narrow typed consumer is `RemoveAllAbilities(subject: PreviousEffectObject, duration:
+WhileSourceOnBattlefield)` in an ability Program, with `input: Some("name")` bound to that receipt.
+The former implicit flat-list `PreviousEffectObject` route is rejected recursively; other flat
+`RemoveAllAbilities` subjects remain valid, including The Wondrous Wasp's chosen-creature effect.
+Teferi, Temporal Pilgrim's `activated_01` and The Wondrous Wasp's ETB exercise the reusable
+`StackAbility` role with real activated and triggered abilities, respectively. The countered-source
+receipt is a narrow composition for Tidebinder, not a general-purpose stack-object receipt.
+The card's current-characteristic and duration behavior follows CR 608.2b-c and 611.2b; a returned
+source is a new object under CR 400.7. No protocol or client targeting contract is introduced.
 
 For example, the land-choice tail of Frantic Search is:
 

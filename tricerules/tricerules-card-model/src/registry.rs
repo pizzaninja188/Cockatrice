@@ -4763,3 +4763,147 @@ impl CardRegistry {
         self
     }
 }
+
+#[cfg(test)]
+mod tidebinder_program_owner_tests {
+    use super::*;
+    use crate::primitives::{InstructionKind, ProgramResultCondition, ProgramTargetRole};
+
+    const TIDEBINDER_RON: &str =
+        include_str!("../../tricerules-cards/data/tishanas_tidebinder.ron");
+
+    fn tidebinder_owner() -> ProgramOwnerId {
+        ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: "tishanas_tidebinder".into(),
+            face_id: crate::CardFaceId::new("tishanas_tidebinder").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        })
+    }
+
+    fn assert_tidebinder_owner_shape(card: &CardDefinition) -> Result<(), &'static str> {
+        if card.id != "tishanas_tidebinder" {
+            return Err("card identity");
+        }
+        let [face] = card.faces.as_slice() else {
+            return Err("single printed face");
+        };
+        if face.face_id.as_str() != "tishanas_tidebinder" {
+            return Err("face identity");
+        }
+        let [ability] = face.triggered_abilities.as_slice() else {
+            return Err("single printed trigger");
+        };
+        if ability.ability_id.as_str() != "triggered_01"
+            || ability.trigger != TriggerCondition::WhenSelfEntersBattlefield
+            || !ability.effect.is_empty()
+        {
+            return Err("printed trigger owner and empty legacy effect list");
+        }
+        let Some(program) = ability.program.as_ref() else {
+            return Err("authored Program");
+        };
+        let Some(targeting) = ability.targeting.as_ref() else {
+            return Err("explicit target group");
+        };
+        let [group] = targeting.groups.as_slice() else {
+            return Err("one target group");
+        };
+        if group.min != 0 || group.max != 1 || !group.effect_indices.is_empty() {
+            return Err("optional-single group with no legacy effect indices");
+        }
+        let [binding] = program.target_bindings.as_slice() else {
+            return Err("one target binding");
+        };
+        if binding.role != ProgramTargetRole::StackAbility || binding.target_group_index != 0 {
+            return Err("StackAbility binding in group zero");
+        }
+        let [counter, condition] = program.body.steps.as_slice() else {
+            return Err("counter followed by source-result condition");
+        };
+        let [receipt] = counter.bind.as_slice() else {
+            return Err("single optional counter receipt");
+        };
+        if counter.id != binding.instruction_id
+            || counter.input.is_some()
+            || !matches!(
+                &counter.kind,
+                InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::CounterTargetAbility)
+            )
+        {
+            return Err("bound CounterTargetAbility first");
+        }
+        let InstructionKind::IfResult {
+            condition: ProgramResultCondition::CounteredAbilitySourceMatches { result },
+            yes,
+            no,
+        } = &condition.kind
+        else {
+            return Err("exact source-result condition second");
+        };
+        if result != receipt || condition.input.is_some() || !condition.bind.is_empty() {
+            return Err("source-result condition consumes counter receipt");
+        }
+        let [remove] = yes.steps.as_slice() else {
+            return Err("one true-branch ability-removal operation");
+        };
+        if !yes.yields.is_empty()
+            || !no.steps.is_empty()
+            || !no.yields.is_empty()
+            || remove.input.as_deref() != Some(receipt.as_str())
+            || !remove.bind.is_empty()
+            || !matches!(
+                &remove.kind,
+                InstructionKind::Perform(effect)
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::RemoveAllAbilities {
+                            subject: crate::primitives::EffectSubject::PreviousEffectObject,
+                            duration: crate::primitives::ResolvingEffectDuration::WhileSourceOnBattlefield,
+                        }
+                    )
+            )
+            || !program.body.yields.is_empty()
+        {
+            return Err("typed source input to the exact RemoveAllAbilities operation");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn registered_tidebinder_has_the_complete_printed_typed_program_shape() {
+        let registry = CardRegistry::from_chunks_and_tokens(&[TIDEBINDER_RON], &[])
+            .expect("the actual Tidebinder RON compiles under generic operation contracts");
+        let card = registry
+            .get("tishanas_tidebinder")
+            .expect("the exact card loads");
+        assert_tidebinder_owner_shape(card)
+            .expect("the actual card data retains its full printed counter-and-disable sequence");
+        let compiled = registry
+            .compiled_program_for_owner(&tidebinder_owner())
+            .expect("the exact triggered ability owner has a compiled Program");
+        assert_eq!(compiled.slots.len(), 1);
+    }
+
+    #[test]
+    fn tidebinder_owner_conformance_rejects_a_legacy_target_group() {
+        let registry = CardRegistry::from_chunks_and_tokens(&[TIDEBINDER_RON], &[])
+            .expect("the authored fixture itself is valid");
+        let mut card = registry
+            .get("tishanas_tidebinder")
+            .expect("the exact card loads")
+            .clone();
+        card.faces[0].triggered_abilities[0]
+            .targeting
+            .as_mut()
+            .expect("printed trigger targeting")
+            .groups[0]
+            .effect_indices
+            .push(0);
+        assert_eq!(
+            assert_tidebinder_owner_shape(&card)
+                .expect_err("owner conformance rejects legacy target-group ownership"),
+            "optional-single group with no legacy effect indices"
+        );
+    }
+}

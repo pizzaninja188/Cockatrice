@@ -12,27 +12,32 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [
-      CounterTargetAbility,
-      Conditional(
-        condition: ObjectMatches(
-          object: PreviousEffectObject,
-          filter: (
-            kind: AnyPermanent,
-            permanent_types: [Artifact, Creature, Planeswalker],
-          ),
-        ),
-        effect: RemoveAllAbilities(
-          subject: PreviousEffectObject,
-          duration: WhileSourceOnBattlefield,
-        ),
-      ),
-    ],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "counter", bind: ["countered_source"], input: None,
+        kind: Perform(CounterTargetAbility)),
+      (id: "remove_if_artifact_creature_or_planeswalker", bind: [], input: None,
+        kind: IfResult(
+          condition: CounteredAbilitySourceMatches(result: "countered_source"),
+          yes: (steps: [
+            (id: "remove_abilities", bind: [], input: Some("countered_source"),
+              kind: Perform(RemoveAllAbilities(
+                subject: PreviousEffectObject,
+                duration: WhileSourceOnBattlefield,
+              ))),
+          ], yields: []),
+          no: (steps: [], yields: []),
+        )),
+    ], yields: []), target_bindings: [(
+      instruction_id: "counter",
+      role: StackAbility,
+      target_group_index: 0,
+    )])),
     targeting: Some((groups: [(
       min: 0,
       max: 1,
       prompt: "Choose up to one target activated or triggered ability",
-      effect_indices: [0],
+      effect_indices: [],
     )])),
   )],
 )

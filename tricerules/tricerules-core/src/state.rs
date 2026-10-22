@@ -1431,6 +1431,8 @@ pub(crate) struct ProgramFrame {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ProgramValue {
     CounterPaymentOutcome(CounterPaymentOutcome),
+    /// Optional exact generation-bound source permanent from one countered stack ability.
+    CounteredAbilitySource(Option<TriggerObjectRef>),
     DrawReceipt(Vec<TriggerObjectRef>),
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),

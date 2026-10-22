@@ -3314,6 +3314,48 @@ impl SpellEffectKind {
         }
     }
 
+    /// Find the retired implicit previous-object receipt path through legacy flat effect wrappers.
+    /// Programs must bind a typed result instead of relying on the preceding effect list item.
+    pub(crate) fn contains_legacy_flat_previous_object_ability_removal(&self) -> bool {
+        match self {
+            Self::RemoveAllAbilities {
+                subject: EffectSubject::PreviousEffectObject,
+                ..
+            } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_legacy_flat_previous_object_ability_removal()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_ability_removal),
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_ability_removal),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(Self::contains_legacy_flat_previous_object_ability_removal)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::contains_legacy_flat_previous_object_ability_removal)
+            }
+            Self::ApplyPermanentModifier {
+                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => ability
+                .effect
+                .iter()
+                .any(Self::contains_legacy_flat_previous_object_ability_removal),
+            _ => false,
+        }
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3866,6 +3908,15 @@ impl SpellEffectKind {
                     .into(),
             );
         }
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_flat_previous_object_ability_removal)
+        {
+            return Err(
+                "legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"
+                    .into(),
+            );
+        }
 
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum ProducedObjectCardinality {
@@ -3945,10 +3996,6 @@ impl SpellEffectKind {
                 } => Some(PreviousObjectRequirement::TokenCreationBatch),
                 SpellEffectKind::ReturnToOwnersHand {
                     subject: EffectSubject::PreviousEffectObject,
-                }
-                | SpellEffectKind::RemoveAllAbilities {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
                 }
                 | SpellEffectKind::CreateDelayedTrigger {
                     subject: Some(EffectSubject::PreviousEffectObject),

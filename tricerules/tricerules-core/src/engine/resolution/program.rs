@@ -16,8 +16,8 @@ use tricerules_card_model::primitives::{
     ChooseDeparturePolicy, CompiledBlock, CompiledChooseBranch, CompiledChooseRequirement,
     CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
     CompiledProgramResultCondition, HandCardAction, HandCardChooser, HandChoiceVisibility,
-    ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType, SpellEffectKind, TargetFilter,
-    TargetKind,
+    PermanentTypeFilter, ProgramRequiredInput, ResolutionCost, ResultSlotId, ResultType,
+    SpellEffectKind, TargetFilter, TargetKind,
 };
 
 #[cfg(test)]
@@ -228,7 +228,7 @@ mod source_sacrifice_receipt_tests {
         };
         let count_matches = |card_type| {
             program_result_condition_holds(
-                &engine.state,
+                &engine,
                 &top,
                 &run,
                 &CompiledProgramResultCondition::CardResultCount {
@@ -969,12 +969,7 @@ impl GameEngine {
                             self.condition_holds(condition, ConditionContext::for_stack_item(top))
                         }
                         CompiledProgramCondition::Result(condition) => {
-                            program_result_condition_holds(
-                                &self.state,
-                                top,
-                                &program_state,
-                                condition,
-                            )?
+                            program_result_condition_holds(self, top, &program_state, condition)?
                         }
                     };
                     let selected_arm = if holds {
@@ -1297,6 +1292,10 @@ impl GameEngine {
                                 previous.produced_objects.push(*object);
                             }
                             ProgramValue::ManifestedPermanent(None) => {}
+                            ProgramValue::CounteredAbilitySource(Some(object)) => {
+                                previous.produced_objects.push(*object);
+                            }
+                            ProgramValue::CounteredAbilitySource(None) => {}
                             ProgramValue::HandSelection(objects) => {
                                 previous.selected_hand_cards = objects.clone();
                             }
@@ -2183,6 +2182,18 @@ fn capture_program_outputs_inner(
                     ),
                 )?)
             }
+            ResultType::CounteredAbilitySource { cardinality } => {
+                if result.produced_objects.len() < cardinality.min as usize
+                    || cardinality
+                        .max
+                        .is_some_and(|max| result.produced_objects.len() > max as usize)
+                {
+                    return Err(EngineError::ProgramInvariant(
+                        "CounterTargetAbility result exceeded its compiled cardinality",
+                    ));
+                }
+                ProgramValue::CounteredAbilitySource(result.produced_objects.first().copied())
+            }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
             }
@@ -2528,7 +2539,7 @@ fn source_sacrifice_receipt_from_cohort(
 }
 
 fn program_result_condition_holds(
-    state: &crate::state::GameState,
+    engine: &GameEngine,
     top: &StackItem,
     run: &ProgramRunState,
     condition: &CompiledProgramResultCondition,
@@ -2569,6 +2580,47 @@ fn program_result_condition_holds(
             };
             Ok(actual == outcome)
         }
+        CompiledProgramResultCondition::CounteredAbilitySourceMatches { result } => {
+            let Some(ProgramValue::CounteredAbilitySource(Some(source))) =
+                run.slots.get(result.0 as usize).and_then(Option::as_ref)
+            else {
+                return match run.slots.get(result.0 as usize).and_then(Option::as_ref) {
+                    Some(ProgramValue::CounteredAbilitySource(None)) => Ok(false),
+                    _ => Err(EngineError::ProgramInvariant(
+                        "countered ability source condition read an unavailable or wrong-typed slot",
+                    )),
+                };
+            };
+            if engine
+                .state
+                .zone_change_generation
+                .get(&source.object_id)
+                .copied()
+                .unwrap_or(0)
+                != source.zone_change_generation
+                || !engine
+                    .state
+                    .objects
+                    .get(&source.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            {
+                return Ok(false);
+            }
+            let filter = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Artifact,
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker,
+                ],
+                ..TargetFilter::default()
+            };
+            Ok(super::super::targeting::object_matches_mass_filter(
+                engine,
+                source.object_id,
+                &filter,
+            ))
+        }
         CompiledProgramResultCondition::DiscardOutcome { result, outcome } => {
             let Some(ProgramValue::DiscardResult(result)) =
                 run.slots.get(result.0 as usize).and_then(Option::as_ref)
@@ -2598,7 +2650,7 @@ fn program_result_condition_holds(
                 .iter()
                 .filter(|card| {
                     crate::engine::history::relative_player_set_contains(
-                        state,
+                        &engine.state,
                         *players,
                         top.controller,
                         card.affected_player,
@@ -2640,6 +2692,239 @@ fn run_program_only_leaf(
         _ => Err(EngineError::Illegal(
             "operation is not a resolution-program-only leaf",
         )),
+    }
+}
+
+#[cfg(test)]
+mod countered_ability_source_tests {
+    use super::*;
+    use crate::state::{EffectResult, ProgramRunState, TriggerObjectRef};
+    use tricerules_card_model::primitives::{
+        Cardinality, CompiledBlock, CompiledSlot, EffectContext, ProgramTargetProjection,
+    };
+
+    fn ability_owner() -> tricerules_card_model::ProgramOwnerId {
+        tricerules_card_model::ProgramOwnerId::ability(tricerules_card_model::AbilityDefinitionId {
+            card_id: "stack_ability_program_fixture".into(),
+            face_id: tricerules_card_model::CardFaceId::new("stack_ability_program_fixture")
+                .unwrap(),
+            ability_path: vec![tricerules_card_model::AbilityId::new("triggered_01").unwrap()],
+        })
+    }
+
+    fn compiled_counter_program() -> CompiledProgram {
+        CompiledProgram {
+            owner: ability_owner(),
+            context: EffectContext::Ability,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "receipt".into(),
+                result_type: ResultType::CounteredAbilitySource {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                },
+            }],
+        }
+    }
+
+    fn run_with_slot(slot: Option<ProgramValue>) -> ProgramRunState {
+        ProgramRunState {
+            owner: ability_owner(),
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![slot],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        }
+    }
+
+    fn fixture_engine_and_top() -> (GameEngine, StackItem) {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            91_277,
+            &[0, 1],
+            20,
+        )
+        .expect("game engine");
+        engine.state.opening = None;
+        let card = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("default deck dealt a card");
+        engine
+            .state
+            .objects
+            .get_mut(&card)
+            .expect("fixture card object")
+            .card_id = "brainstorm".into();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            card,
+            Zone::Stack,
+            None,
+        )
+        .expect("fixture stack object");
+        let mut top = engine.observer_return_item(card, 0);
+        top.id = card;
+        top.controller = 0;
+        top.card_id = "brainstorm".into();
+        (engine, top)
+    }
+
+    fn put_card_on_battlefield(
+        engine: &mut GameEngine,
+        object_id: ObjectId,
+        card_id: &str,
+    ) -> TriggerObjectRef {
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture permanent object")
+            .card_id = card_id.into();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("fixture permanent enters battlefield");
+        TriggerObjectRef {
+            object_id,
+            zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            controller_at_event: 0,
+        }
+    }
+
+    #[test]
+    fn countered_ability_source_capture_preserves_optional_exact_receipt_and_checks_cardinality() {
+        let compiled = compiled_counter_program();
+        let mut run = run_with_slot(None);
+        let source = TriggerObjectRef {
+            object_id: 91_278,
+            zone_change_generation: 7,
+            controller_at_event: 0,
+        };
+        let mut result = EffectResult::default();
+        result.produced_objects.push(source);
+        capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
+            .expect("the handler's exact source reference is captured");
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::CounteredAbilitySource(Some(actual))) if actual == source
+        ));
+
+        run.slots[0] = None;
+        result.produced_objects.clear();
+        capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
+            .expect("a completed counter with no permanent source writes a completed None result");
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::CounteredAbilitySource(None))
+        ));
+
+        result.produced_objects = vec![source, source];
+        assert!(matches!(
+            capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result),
+            Err(EngineError::ProgramInvariant(
+                "CounterTargetAbility result exceeded its compiled cardinality"
+            ))
+        ));
+    }
+
+    #[test]
+    fn countered_ability_source_condition_uses_current_generation_and_live_permanent_types() {
+        use tricerules_card_model::primitives::CompiledProgramResultCondition;
+
+        let (mut engine, top) = fixture_engine_and_top();
+        let objects = engine.state.players[0]
+            .library
+            .iter()
+            .take(4)
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(objects.len(), 4);
+        let artifact = put_card_on_battlefield(&mut engine, objects[0], "sol_ring");
+        let creature = put_card_on_battlefield(&mut engine, objects[1], "grizzly_bears");
+        let planeswalker =
+            put_card_on_battlefield(&mut engine, objects[2], "teferi,_temporal_pilgrim");
+        let enchantment = put_card_on_battlefield(&mut engine, objects[3], "curiosity");
+        let holds = |engine: &GameEngine, receipt: Option<TriggerObjectRef>| {
+            program_result_condition_holds(
+                engine,
+                &top,
+                &run_with_slot(Some(ProgramValue::CounteredAbilitySource(receipt))),
+                &CompiledProgramResultCondition::CounteredAbilitySourceMatches {
+                    result: ResultSlotId(0),
+                },
+            )
+        };
+
+        for receipt in [artifact, creature, planeswalker] {
+            assert!(
+                holds(&engine, Some(receipt)).unwrap(),
+                "current source {:?}, zone {:?}, generation {:?}, characteristics {:?}, card id {:?}, registry {:?}",
+                receipt,
+                engine.state.objects.get(&receipt.object_id).map(|object| object.zone),
+                engine.state.zone_change_generation.get(&receipt.object_id),
+                engine.characteristics(receipt.object_id),
+                engine
+                    .state
+                    .objects
+                    .get(&receipt.object_id)
+                    .map(|object| object.card_id.as_str()),
+                engine
+                    .state
+                    .objects
+                    .get(&receipt.object_id)
+                    .and_then(|object| engine.registry.get(&object.card_id))
+            );
+        }
+        assert!(!holds(&engine, Some(enchantment)).unwrap());
+        assert!(!holds(&engine, None).unwrap());
+        assert!(matches!(
+            program_result_condition_holds(
+                &engine,
+                &top,
+                &run_with_slot(None),
+                &CompiledProgramResultCondition::CounteredAbilitySourceMatches {
+                    result: ResultSlotId(0),
+                }
+            ),
+            Err(EngineError::ProgramInvariant(
+                "countered ability source condition read an unavailable or wrong-typed slot"
+            ))
+        ));
+
+        let mut stale = artifact;
+        stale.zone_change_generation = stale.zone_change_generation.saturating_sub(1);
+        assert!(!holds(&engine, Some(stale)).unwrap());
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature.object_id,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("creature leaves battlefield");
+        assert!(!holds(&engine, Some(creature)).unwrap());
     }
 }
 
@@ -3538,7 +3823,7 @@ mod invariant_rollback_tests {
         };
 
         assert!(program_result_condition_holds(
-            &engine.state,
+            &engine,
             &top,
             &run,
             &CompiledProgramResultCondition::DiscardOutcome {
@@ -3548,7 +3833,7 @@ mod invariant_rollback_tests {
         )
         .expect("outcome condition evaluates"));
         assert!(!program_result_condition_holds(
-            &engine.state,
+            &engine,
             &top,
             &run,
             &CompiledProgramResultCondition::DiscardCount {
@@ -3596,7 +3881,7 @@ mod invariant_rollback_tests {
                 in_flight_produced_object_provenance: None,
             };
             program_result_condition_holds(
-                &engine.state,
+                &engine,
                 &top,
                 &run,
                 &CompiledProgramResultCondition::CardResultCount {
@@ -3673,7 +3958,7 @@ mod invariant_rollback_tests {
         };
         let evaluate = |card_type| {
             program_result_condition_holds(
-                &engine.state,
+                &engine,
                 &top,
                 &run,
                 &CompiledProgramResultCondition::CardResultCount {

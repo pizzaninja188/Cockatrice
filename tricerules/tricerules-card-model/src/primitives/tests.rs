@@ -5452,8 +5452,9 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
         ]"#,
     )
     .expect("Tidebinder effect sequence parses");
-    SpellEffectKind::validate_list(&tidebinder)
-        .expect("a successful ability counter is a compatible object producer");
+    assert!(SpellEffectKind::validate_list(&tidebinder)
+        .expect_err("Tidebinder's previous-object receipt is now typed in its Program")
+        .contains("legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"));
 
     let orphan = tidebinder[1..].to_vec();
     assert!(SpellEffectKind::validate_list(&orphan).is_err());
@@ -5464,6 +5465,47 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     .expect("source-linked removal parses");
     assert!(remove.validate(EffectContext::Spell).is_err());
     assert!(remove.validate(EffectContext::Ability).is_ok());
+
+    let wasp: Vec<SpellEffectKind> = ron::from_str(
+        r#"[
+            Tap(subject: Chosen((kind: Creature))),
+            RemoveAllAbilities(
+                subject: Chosen((kind: Creature)),
+                duration: WhileSourceOnBattlefield,
+            ),
+        ]"#,
+    )
+    .expect("The Wondrous Wasp's chosen-creature flat effects parse");
+    SpellEffectKind::validate_list(&wasp)
+        .expect("chosen-target Wasp removal stays on the valid legacy list path");
+}
+
+#[test]
+fn issue_207_flat_previous_object_ability_removal_requires_a_typed_program() {
+    let tidebinder: Vec<SpellEffectKind> = ron::from_str(
+        r#"[
+            CounterTargetAbility,
+            Conditional(
+                condition: ObjectMatches(
+                    object: PreviousEffectObject,
+                    filter: (kind: AnyPermanent, permanent_types: [Artifact, Creature, Planeswalker]),
+                ),
+                effect: RemoveAllAbilities(
+                    subject: PreviousEffectObject,
+                    duration: WhileSourceOnBattlefield,
+                ),
+            ),
+        ]"#,
+    )
+    .expect("legacy flat-list removal fixture parses");
+    let error = SpellEffectKind::validate_list(&tidebinder)
+        .expect_err("an implicit previous-object removal receipt now requires a typed Program");
+    assert!(
+        error.contains(
+            "legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"
+        ),
+        "{error}"
+    );
 }
 #[test]
 fn coveted_jewel_control_change_requires_its_post_blocker_player_attack_group() {
@@ -17081,5 +17123,413 @@ mod combustible_gearhulk_program_compiler_tests {
             zero_damage_error.contains("positive fixed amount"),
             "{zero_damage_error}"
         );
+    }
+}
+mod tidebinder_program_compiler_tests {
+    use crate::primitives::{
+        AuthoredBlock, CardProgram, Cardinality, CompiledProgram, EffectContext,
+        ProgramTargetReference, ProgramTargetRole, ResultSlotId, ResultType, TargetChooser,
+        TargetGroupDef, TargetingDef,
+    };
+
+    fn owner() -> crate::ProgramOwnerId {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "stack_ability_program_fixture".into(),
+            face_id: crate::CardFaceId::new("stack_ability_program_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        })
+    }
+
+    fn tidebinder_owner() -> crate::ProgramOwnerId {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "tishanas_tidebinder".into(),
+            face_id: crate::CardFaceId::new("tishanas_tidebinder").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        })
+    }
+
+    fn owner_for(context: EffectContext) -> crate::ProgramOwnerId {
+        match context {
+            EffectContext::Spell => crate::ProgramOwnerId::face(
+                "stack_ability_spell_fixture",
+                crate::CardFaceId::new("stack_ability_spell_fixture").unwrap(),
+            ),
+            EffectContext::Ability => owner(),
+        }
+    }
+
+    fn group(min: u32, max: u32) -> TargetGroupDef {
+        TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min,
+            max,
+            prompt: "Choose target activated or triggered ability".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }
+    }
+
+    fn single_counter_program(bind: &str) -> CardProgram {
+        CardProgram {
+            body: ron::from_str::<AuthoredBlock>(&format!(
+                r#"(steps: [
+                    (id: "counter", bind: {bind}, input: None,
+                        kind: Perform(CounterTargetAbility)),
+                ], yields: [])"#
+            ))
+            .expect("the targeted ability-counter fixture parses"),
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::StackAbility,
+                target_group_index: 0,
+            }],
+        }
+    }
+
+    fn compile_single_counter(
+        context: EffectContext,
+        bind: &str,
+        min: u32,
+        max: u32,
+    ) -> Result<CompiledProgram, String> {
+        CompiledProgram::compile_with_targeting(
+            owner_for(context),
+            context,
+            &single_counter_program(bind),
+            Some(&TargetingDef {
+                groups: vec![group(min, max)],
+            }),
+        )
+    }
+
+    fn full_tidebinder_program(body: &str) -> CardProgram {
+        CardProgram {
+            body: ron::from_str::<AuthoredBlock>(body)
+                .expect("the Tidebinder typed Program fixture parses"),
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::StackAbility,
+                target_group_index: 0,
+            }],
+        }
+    }
+
+    fn optional_stack_ability_targeting() -> TargetingDef {
+        TargetingDef {
+            groups: vec![group(0, 1)],
+        }
+    }
+
+    const FULL_TIDEBINDER_BODY: &str = r#"(steps: [
+        (id: "counter", bind: ["countered_source"], input: None,
+            kind: Perform(CounterTargetAbility)),
+        (id: "source_matches", bind: [], input: None,
+            kind: IfResult(
+                condition: CounteredAbilitySourceMatches(result: "countered_source"),
+                yes: (steps: [
+                    (id: "remove_abilities", bind: [], input: Some("countered_source"),
+                        kind: Perform(RemoveAllAbilities(
+                            subject: PreviousEffectObject,
+                            duration: WhileSourceOnBattlefield,
+                        ))),
+                ], yields: []),
+                no: (steps: [], yields: []),
+            )),
+    ], yields: [])"#;
+
+    #[test]
+    fn program_compiler_accepts_targeted_ability_counter_with_receipt_output() {
+        let program = CardProgram {
+            body: ron::from_str::<AuthoredBlock>(
+                r#"(steps: [
+                    (id: "counter", bind: ["countered_source"], input: None,
+                        kind: Perform(CounterTargetAbility)),
+                ], yields: [])"#,
+            )
+            .expect("the authored targeted ability-counter Program parses"),
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::StackAbility,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![TargetGroupDef {
+                chooser: TargetChooser::Controller,
+                min: 0,
+                max: 1,
+                prompt: "Choose target activated or triggered ability".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+
+        CompiledProgram::compile_with_targeting(
+            owner(),
+            EffectContext::Ability,
+            &program,
+            Some(&targeting),
+        )
+        .expect("the typed Program compiler admits a targeted ability counter and result output");
+    }
+
+    #[test]
+    fn tidebinder_full_typed_program_compiles_before_semantic_admission() {
+        let program = full_tidebinder_program(FULL_TIDEBINDER_BODY);
+        let targeting = optional_stack_ability_targeting();
+
+        CompiledProgram::compile_with_targeting(
+            tidebinder_owner(),
+            EffectContext::Ability,
+            &program,
+            Some(&targeting),
+        )
+        .expect(
+            "the full Tidebinder typed Program is admitted by per-operation compiler contracts",
+        );
+    }
+
+    #[test]
+    fn countered_source_consumer_requires_exact_ability_context_subject_duration_and_input() {
+        let targeting = optional_stack_ability_targeting();
+        let cases = [
+            (
+                "missing explicit input",
+                FULL_TIDEBINDER_BODY.replace("input: Some(\"countered_source\")", "input: None"),
+                EffectContext::Ability,
+                "requires an explicitly bound input result",
+            ),
+            (
+                "wrong subject",
+                FULL_TIDEBINDER_BODY.replace("subject: PreviousEffectObject", "subject: Source"),
+                EffectContext::Ability,
+                "does not accept an input result",
+            ),
+            (
+                "wrong duration",
+                FULL_TIDEBINDER_BODY.replace(
+                    "duration: WhileSourceOnBattlefield",
+                    "duration: UntilEndOfTurn",
+                ),
+                EffectContext::Ability,
+                "does not accept an input result",
+            ),
+            (
+                "spell consumer context",
+                FULL_TIDEBINDER_BODY.to_owned(),
+                EffectContext::Spell,
+                "not in the resolution-program operation whitelist",
+            ),
+        ];
+
+        for (label, body, context, expected_error) in cases {
+            let result = CompiledProgram::compile_with_targeting(
+                owner_for(context),
+                context,
+                &full_tidebinder_program(&body),
+                Some(&targeting),
+            )
+            .expect_err(label);
+            assert!(
+                result.contains(expected_error),
+                "{label}: expected error containing {expected_error:?}, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn countered_source_consumer_rejects_a_different_result_type() {
+        let body = FULL_TIDEBINDER_BODY
+            .replace(
+                "(id: \"source_matches\"",
+                "(id: \"draw\", bind: [\"wrong_type\"], input: None,\n        kind: Perform(Draw(who: Controller, count: 1))),\n        (id: \"source_matches\"",
+            )
+            .replace(
+                "input: Some(\"countered_source\")",
+                "input: Some(\"wrong_type\")",
+            );
+        let error = CompiledProgram::compile_with_targeting(
+            tidebinder_owner(),
+            EffectContext::Ability,
+            &full_tidebinder_program(&body),
+            Some(&optional_stack_ability_targeting()),
+        )
+        .expect_err("a Draw receipt cannot feed the countered-source consumer");
+        assert!(error.contains("wrong type for this instruction"), "{error}");
+    }
+
+    #[test]
+    fn ability_counter_contract_accepts_spell_and_ability_optional_or_required_groups_and_any_output_name(
+    ) {
+        for context in [EffectContext::Spell, EffectContext::Ability] {
+            for min in [0, 1] {
+                let discarded = compile_single_counter(context, "[]", min, 1)
+                    .expect("the counter receipt may be discarded");
+                assert!(discarded.slot(ResultSlotId(0)).is_none());
+
+                let bound =
+                    compile_single_counter(context, "[\"receipt_with_no_reserved_name\"]", min, 1)
+                        .expect("a counter receipt may use any authored result name");
+                assert!(matches!(
+                    bound.slot(ResultSlotId(0)).map(|slot| &slot.result_type),
+                    Some(ResultType::CounteredAbilitySource {
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1)
+                        }
+                    })
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn ability_counter_contract_rejects_wrong_roles_oversized_groups_and_missing_groups() {
+        let body = single_counter_program("[]").body;
+        let wrong_role = CardProgram {
+            body: body.clone(),
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::Target,
+                target_group_index: 0,
+            }],
+        };
+        let one_group = TargetingDef {
+            groups: vec![group(0, 1)],
+        };
+        assert!(CompiledProgram::compile_with_targeting(
+            owner(),
+            EffectContext::Ability,
+            &wrong_role,
+            Some(&one_group)
+        )
+        .unwrap_err()
+        .contains("StackAbility"));
+
+        assert!(compile_single_counter(EffectContext::Ability, "[]", 0, 2)
+            .unwrap_err()
+            .contains("bounds"));
+
+        let missing_group = CardProgram {
+            body,
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::StackAbility,
+                target_group_index: 1,
+            }],
+        };
+        assert!(CompiledProgram::compile_with_targeting(
+            owner(),
+            EffectContext::Ability,
+            &missing_group,
+            Some(&one_group)
+        )
+        .unwrap_err()
+        .contains("unknown target group"));
+    }
+
+    #[test]
+    fn ability_counter_compiler_allows_other_valid_operations_and_additional_bound_groups() {
+        let program = CardProgram {
+            body: ron::from_str::<AuthoredBlock>(
+                r#"(steps: [
+                    (id: "draw", bind: [], input: None,
+                        kind: Perform(Draw(who: Controller, count: 1))),
+                    (id: "spell_counter", bind: [], input: None,
+                        kind: Perform(CounterTargetSpell(
+                            spell_filter: (), unless_controller_pays: None,
+                            unless_controller_pays_by_cast_cost: None,
+                        ))),
+                    (id: "ability_counter", bind: ["receipt"], input: None,
+                        kind: Perform(CounterTargetAbility)),
+                ], yields: [])"#,
+            )
+            .expect("the additional valid operations parse"),
+            target_bindings: vec![
+                ProgramTargetReference {
+                    instruction_id: "spell_counter".into(),
+                    role: ProgramTargetRole::Spell,
+                    target_group_index: 0,
+                },
+                ProgramTargetReference {
+                    instruction_id: "ability_counter".into(),
+                    role: ProgramTargetRole::StackAbility,
+                    target_group_index: 1,
+                },
+            ],
+        };
+        let targeting = TargetingDef {
+            groups: vec![group(1, 1), group(0, 1)],
+        };
+
+        CompiledProgram::compile_with_targeting(
+            owner(), EffectContext::Ability, &program, Some(&targeting),
+        )
+        .expect("ability-counter support does not whitelist a complete Program or reserve target group zero");
+    }
+
+    #[test]
+    fn ability_counter_result_predicate_requires_a_bound_compatible_receipt() {
+        let missing = CardProgram {
+            body: ron::from_str::<AuthoredBlock>(
+                r#"(steps: [
+                    (id: "counter", bind: [], input: None,
+                        kind: Perform(CounterTargetAbility)),
+                    (id: "condition", bind: [], input: None,
+                        kind: IfResult(
+                            condition: CounteredAbilitySourceMatches(result: "missing"),
+                            yes: (steps: [(id: "noop", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                            no: (steps: [(id: "noop2", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                        )),
+                ], yields: [])"#,
+            )
+            .unwrap(),
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "counter".into(),
+                role: ProgramTargetRole::StackAbility,
+                target_group_index: 0,
+            }],
+        };
+        assert!(CompiledProgram::compile_with_targeting(
+            owner(),
+            EffectContext::Ability,
+            &missing,
+            Some(&TargetingDef {
+                groups: vec![group(0, 1)]
+            })
+        )
+        .unwrap_err()
+        .contains("not in scope"));
+
+        let wrong_type = CardProgram {
+            body: ron::from_str::<AuthoredBlock>(
+                r#"(steps: [
+                    (id: "draw", bind: ["not_a_counter_receipt"], input: None,
+                        kind: Perform(Draw(who: Controller, count: 1))),
+                    (id: "condition", bind: [], input: None,
+                        kind: IfResult(
+                            condition: CounteredAbilitySourceMatches(result: "not_a_counter_receipt"),
+                            yes: (steps: [(id: "noop", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                            no: (steps: [(id: "noop2", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+                        )),
+                ], yields: [])"#,
+            )
+            .unwrap(),
+            target_bindings: vec![],
+        };
+        assert!(
+            CompiledProgram::compile(owner(), EffectContext::Ability, &wrong_type)
+                .unwrap_err()
+                .contains("not a compatible CounteredAbilitySource")
+        );
+
+        assert!(ron::from_str::<crate::primitives::ProgramResultCondition>(
+            r#"CounteredAbilitySourceMatches(result: "receipt", filter: (kind: AnyPermanent))"#
+        )
+        .is_err());
     }
 }

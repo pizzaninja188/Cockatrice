@@ -1,10 +1,64 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
-use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
+use prost::Message;
+use tricerules_cards::primitives::{
+    ContinuousEffectKind, CounterKind, EffectDuration, Keyword, PermanentTypeFilter,
+    TypeLineReplacement,
+};
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::{
-    ruled_command::Cmd, ChooseTriggerTarget, RuledCommand, TargetRef, TargetRefKind,
+    ruled_command::Cmd, ChooseTriggerTarget, RuledCommand, RuledEventBatch, TargetRef,
+    TargetRefKind,
 };
+
+fn set_source_type_to_land(engine: &mut GameEngine, object_id: u32) {
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            card_types: vec![PermanentTypeFilter::Land],
+            creature_types: Vec::new(),
+            land_types: Vec::new(),
+        }),
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: engine.state.command_index + 1,
+    });
+}
+
+fn assert_stack_ability_source(engine: &GameEngine, ability_id: u32, source_id: u32) {
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let ability = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == ability_id)
+        .expect("the activated ability remains on the stack");
+    assert_eq!(ability.source_permanent_id, Some(source_id));
+    assert_eq!(ability.source_zone_change, source_generation);
+}
+
+fn record_tidebinder_command(
+    engine: &mut GameEngine,
+    commands: &mut Vec<(i32, RuledCommand)>,
+    batches: &mut Vec<RuledEventBatch>,
+    actor: i32,
+    command: RuledCommand,
+) {
+    let command = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
+    batches.push(
+        engine
+            .apply_scenario_command(actor, &command)
+            .expect("recorded Tidebinder command is accepted"),
+    );
+    commands.push((actor, command));
+}
 
 fn choose_trigger_target(object_id: u32, kind: TargetRefKind) -> RuledCommand {
     RuledCommand {
@@ -77,6 +131,77 @@ fn setup_tidebinder_over_hellhound(seed: u64) -> (GameEngine, u32, u32, u32) {
     assert_eq!(engine.state.pending_triggers.len(), 1);
 
     (engine, hellhound, ability_id, tidebinder)
+}
+
+fn setup_tidebinder_over_teferi(seed: u64, tidebinder_count: usize) -> (GameEngine, u32, u32) {
+    let decks = Some(vec![
+        deck_with(
+            "island",
+            &[
+                "teferi,_temporal_pilgrim",
+                "tishanas_tidebinder",
+                "tishanas_tidebinder",
+            ],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    let teferi = relocate_to_battlefield(&mut engine, 0, "teferi,_temporal_pilgrim", false);
+    engine
+        .state
+        .objects
+        .get_mut(&teferi)
+        .expect("Teferi")
+        .set_counter(CounterKind::Loyalty, 4);
+
+    while engine.state.players[0]
+        .hand
+        .iter()
+        .filter_map(|object_id| engine.state.objects.get(object_id))
+        .filter(|object| object.card_id == "tishanas_tidebinder")
+        .count()
+        < tidebinder_count
+    {
+        take_card_from_library_to_hand(&mut engine, 0, "tishanas_tidebinder");
+    }
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 4,
+            c: 4,
+            ..Default::default()
+        },
+    );
+
+    let registered_teferi = tricerules_cards::registry::global()
+        .get("teferi,_temporal_pilgrim")
+        .expect("the registered Teferi definition");
+    assert_eq!(
+        registered_teferi.primary_face().activated_abilities[0]
+            .ability_id
+            .as_str(),
+        "activated_01"
+    );
+    engine
+        .apply_scenario_command(0, &activate_ability_for(&engine, teferi, 0, Vec::new()))
+        .expect("activate Teferi's registered activated_01 loyalty-zero draw");
+    let ability_id = engine
+        .state
+        .stack
+        .last()
+        .expect("Teferi activation on stack")
+        .id;
+    (engine, teferi, ability_id)
 }
 
 #[test]
@@ -353,35 +478,215 @@ fn issue_207_tidebinder_can_counter_a_triggered_ability_and_affect_its_source() 
 }
 
 #[test]
-fn issue_207_tidebinder_checks_the_countered_sources_current_types() {
-    let (mut engine, _, ability_id, tidebinder) = setup_tidebinder_over_hellhound(207_021);
-    let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
-    let generation = engine
-        .state
-        .zone_change_generation
-        .get(&land)
-        .copied()
-        .unwrap_or(0);
-    let ability = engine
-        .state
-        .stack
-        .iter_mut()
-        .find(|item| item.id == ability_id)
-        .expect("activated ability");
-    ability.source_permanent_id = Some(land);
-    ability.source_zone_change = generation;
-    ability.card_id = "forest".into();
-
+fn issue_207_tidebinder_counters_teferis_registered_zero_ability_and_removes_its_abilities() {
+    let (mut engine, teferi, ability_id) = setup_tidebinder_over_teferi(207_030, 1);
+    let starting_library = engine.state.players[0].library.len();
+    let tidebinder_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    let tidebinder = engine.state.players[0].hand[tidebinder_slot];
+    engine
+        .apply_scenario_command(0, &cast_spell(tidebinder_slot, Vec::new()))
+        .expect("cast Tidebinder over Teferi's registered activated_01");
+    pass_both_players(&mut engine);
     engine
         .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
-        .expect("target the land-sourced ability");
-    pass_both_players(&mut engine);
+        .expect("target the real Teferi activation");
+
+    let resolved = pass_both_players_with_batch(&mut engine);
+    assert!(resolved.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+    )));
     assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
-    assert!(!engine.state.continuous_effects.iter().any(|effect| {
-        matches!(effect.affected, AffectedScope::Single(object) if object == land)
+    assert_eq!(
+        engine.state.players[0].library.len(),
+        starting_library,
+        "the countered registered draw ability does not draw"
+    );
+    assert!(
+        zone_view_ability_flags(&mut engine, 0, teferi).is_empty(),
+        "Tidebinder removes the registered planeswalker's abilities after countering its activation"
+    );
+    assert!(engine.state.continuous_effects.iter().any(|effect| {
+        matches!(effect.affected, AffectedScope::Single(object) if object == teferi)
             && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
             && effect.source_id == Some(tidebinder)
     }));
+}
+
+#[test]
+fn issue_207_no_tidebinder_target_produces_no_counter_receipt_and_teferis_ability_resolves() {
+    let (mut engine, teferi, ability_id) = setup_tidebinder_over_teferi(207_031, 1);
+    let starting_library = engine.state.players[0].library.len();
+    let tidebinder_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    let tidebinder = engine.state.players[0].hand[tidebinder_slot];
+    engine
+        .apply_scenario_command(0, &cast_spell(tidebinder_slot, Vec::new()))
+        .expect("cast Tidebinder with a real ability on the stack");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_no_trigger_targets())
+        .expect("choose zero targets for Tidebinder's optional target group");
+    pass_both_players(&mut engine);
+
+    assert!(engine.state.stack.iter().any(|item| item.id == ability_id));
+    assert!(!engine.state.continuous_effects.iter().any(|effect| {
+        matches!(effect.affected, AffectedScope::Single(object) if object == teferi)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+            && effect.source_id == Some(tidebinder)
+    }));
+    assert!(!zone_view_ability_flags(&mut engine, 0, teferi).is_empty());
+
+    pass_both_players(&mut engine);
+    assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
+    assert_eq!(
+        engine.state.players[0].library.len(),
+        starting_library - 1,
+        "the ability resolves and draws when the counter trigger had no target receipt"
+    );
+}
+
+#[test]
+fn issue_207_later_tidebinder_trigger_counters_shared_activation_and_earlier_trigger_fizzles() {
+    let (mut engine, teferi, ability_id) = setup_tidebinder_over_teferi(207_032, 2);
+    let starting_library = engine.state.players[0].library.len();
+
+    let first_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    let first_tidebinder = engine.state.players[0].hand[first_slot];
+    engine
+        .apply_scenario_command(0, &cast_spell(first_slot, Vec::new()))
+        .expect("cast the earlier Tidebinder");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .expect("the earlier Tidebinder ETB targets Teferi's still-stacked activation");
+
+    let second_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    let second_tidebinder = engine.state.players[0].hand[second_slot];
+    engine
+        .apply_scenario_command(0, &cast_spell(second_slot, Vec::new()))
+        .expect("cast a second Tidebinder before the first trigger resolves");
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .expect("the later Tidebinder ETB targets the same activation");
+
+    let later_resolution = pass_both_players_with_batch(&mut engine);
+    assert!(later_resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+    )));
+    assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
+    assert_eq!(engine.state.players[0].library.len(), starting_library);
+    assert!(engine.state.continuous_effects.iter().any(|effect| {
+        matches!(effect.affected, AffectedScope::Single(object) if object == teferi)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+            && effect.source_id == Some(second_tidebinder)
+    }));
+    assert!(!engine.state.continuous_effects.iter().any(|effect| {
+        effect.source_id == Some(first_tidebinder)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+    }));
+
+    let earlier_resolution = pass_both_players_with_batch(&mut engine);
+    assert!(!earlier_resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+    )));
+    assert!(!engine.state.continuous_effects.iter().any(|effect| {
+        effect.source_id == Some(first_tidebinder)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+    }));
+    assert!(zone_view_ability_flags(&mut engine, 0, teferi).is_empty());
+}
+
+#[test]
+fn issue_207_tidebinder_checks_the_countered_sources_current_types() {
+    let (mut engine, hellhound, ability_id, tidebinder) = setup_tidebinder_over_hellhound(207_021);
+    let generation = engine.state.zone_change_generation.get(&hellhound).copied();
+
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .expect("target the ability while its source is a creature");
+
+    // Prepared-state fixture: after target selection, before counter resolution, the source changes type.
+    set_source_type_to_land(&mut engine, hellhound);
+    assert!(engine
+        .characteristics(hellhound)
+        .expect("live source characteristics")
+        .has_type("Land"));
+    assert_stack_ability_source(&engine, ability_id, hellhound);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&hellhound).copied(),
+        generation
+    );
+
+    let resolution = pass_both_players_with_batch(&mut engine);
+    assert!(resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+    )));
+    assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
+    assert!(
+        !engine.state.continuous_effects.iter().any(|effect| {
+            matches!(effect.affected, AffectedScope::Single(object) if object == hellhound)
+                && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+                && effect.source_id == Some(tidebinder)
+        }),
+        "the source is no longer an artifact, creature, or planeswalker at resolution"
+    );
+    assert_eq!(
+        engine.state.zone_change_generation.get(&hellhound).copied(),
+        generation
+    );
+}
+
+#[test]
+fn issue_207_tidebinder_uses_live_creature_type_after_target_selection() {
+    let (mut engine, hellhound, ability_id, tidebinder) = setup_tidebinder_over_hellhound(207_023);
+    let generation = engine.state.zone_change_generation.get(&hellhound).copied();
+
+    // This prepared-state fixture starts with an ineligible source, then changes it after target
+    // selection and before counter resolution.
+    set_source_type_to_land(&mut engine, hellhound);
+    assert!(engine
+        .characteristics(hellhound)
+        .expect("land-layered source characteristics")
+        .has_type("Land"));
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .expect("target the still-stacked ability from a currently nonqualifying source");
+
+    // Remove only the fixture layer effect; the same battlefield object now evaluates as its
+    // printed creature type before Tidebinder's result condition is checked.
+    engine.state.continuous_effects.retain(|effect| {
+        !(matches!(effect.affected, AffectedScope::Single(object) if object == hellhound)
+            && matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)))
+    });
+    assert!(engine
+        .characteristics(hellhound)
+        .expect("restored source characteristics")
+        .is_creature());
+    assert_stack_ability_source(&engine, ability_id, hellhound);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&hellhound).copied(),
+        generation
+    );
+
+    let resolution = pass_both_players_with_batch(&mut engine);
+    assert!(resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+    )));
+    assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
+    assert!(engine.state.continuous_effects.iter().any(|effect| {
+        matches!(effect.affected, AffectedScope::Single(object) if object == hellhound)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities
+            && effect.source_id == Some(tidebinder)
+    }));
+    assert_eq!(
+        engine.state.zone_change_generation.get(&hellhound).copied(),
+        generation
+    );
 }
 
 #[test]
@@ -405,4 +710,108 @@ fn issue_207_countered_ability_source_zone_change_does_not_affect_its_new_incarn
     assert_eq!(returned, hellhound);
     assert!(engine.state.zone_change_generation[&returned] >= departed_generation);
     assert!(!zone_view_ability_flags(&mut engine, 0, returned).is_empty());
+}
+
+#[test]
+fn issue_207_prepared_state_tidebinder_command_tail_replays_identically() {
+    // The shared fixture prefix prepares the game, activated ability, and pending ETB trigger.
+    // This test replays only the serialized, accepted command tail; it is not a full legal-session
+    // replay claim for the fixture setup.
+    let (mut original, hellhound, ability_id, tidebinder) =
+        setup_tidebinder_over_hellhound(207_024);
+    let (mut replay, replay_hellhound, replay_ability_id, replay_tidebinder) =
+        setup_tidebinder_over_hellhound(207_024);
+    assert_eq!(replay_hellhound, hellhound);
+    assert_eq!(replay_ability_id, ability_id);
+    assert_eq!(replay_tidebinder, tidebinder);
+    assert_eq!(
+        replay.diagnostic_snapshot().unwrap(),
+        original.diagnostic_snapshot().unwrap(),
+        "both engines begin from the same prepared fixture state"
+    );
+
+    let mut commands = Vec::new();
+    let mut batches = Vec::new();
+    record_tidebinder_command(
+        &mut original,
+        &mut commands,
+        &mut batches,
+        0,
+        choose_trigger_target(ability_id, TargetRefKind::Stack),
+    );
+    for _ in 0..original.state.players.len() {
+        let actor = original.state.priority_player_id();
+        record_tidebinder_command(&mut original, &mut commands, &mut batches, actor, pass());
+    }
+
+    assert!(!original
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == ability_id));
+    assert!(original.state.pending_triggers.is_empty());
+    assert!(original.state.pending_trigger_order.is_none());
+    assert_eq!(
+        original
+            .state
+            .zone_change_generation
+            .get(&hellhound)
+            .copied(),
+        replay.state.zone_change_generation.get(&hellhound).copied()
+    );
+    assert_eq!(
+        batches
+            .iter()
+            .flat_map(|batch| &batch.events)
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability_id
+            ))
+            .count(),
+        1,
+        "the accepted Tidebinder tail counters the activation exactly once"
+    );
+    assert_eq!(
+        original
+            .state
+            .continuous_effects
+            .iter()
+            .filter(|effect| {
+                effect.source_id == Some(tidebinder)
+                    && matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+            })
+            .count(),
+        1,
+        "the accepted Tidebinder tail creates one source ability-removal effect"
+    );
+
+    let replayed_batches = commands
+        .iter()
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(replayed_batches, batches);
+    assert_eq!(replay.state.command_index, original.state.command_index);
+    assert_eq!(
+        replay.diagnostic_snapshot().unwrap(),
+        original.diagnostic_snapshot().unwrap()
+    );
+    assert!(replay.state.pending_triggers.is_empty());
+    assert!(replay.state.pending_trigger_order.is_none());
+    assert!(!replay
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == replay_ability_id));
+    assert_eq!(
+        replay
+            .state
+            .continuous_effects
+            .iter()
+            .filter(|effect| {
+                effect.source_id == Some(replay_tidebinder)
+                    && matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+            })
+            .count(),
+        1
+    );
 }

@@ -19,9 +19,9 @@ use super::{
     CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
     EffectSubject, GameCondition, GraveyardDestination, LibraryBottomOrder, LifeAmount,
     PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost,
-    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
-    SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
-    ZoneCardFilter,
+    ResolvingEffectDuration, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
+    SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
+    TokenCopySource, ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -49,6 +49,7 @@ pub enum ProgramTargetRole {
     Spell,
     Source,
     Subject,
+    StackAbility,
 }
 
 /// Stable source reference from a target group to one authored program instruction.
@@ -203,6 +204,9 @@ pub enum ProgramResultCondition {
         result: String,
         outcome: CounterPaymentOutcome,
     },
+    CounteredAbilitySourceMatches {
+        result: String,
+    },
 }
 
 /// The semantic outcome of one typed discard operation. Empty selection is a decline only for an
@@ -256,6 +260,9 @@ pub enum CompiledProgramResultCondition {
         result: ResultSlotId,
         outcome: CounterPaymentOutcome,
     },
+    CounteredAbilitySourceMatches {
+        result: ResultSlotId,
+    },
 }
 
 /// Program leaves deliberately share the ordinary effect schema. The compiler below admits only
@@ -274,6 +281,10 @@ pub struct Cardinality {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultType {
     CounterPaymentOutcome,
+    /// Optional generation-bound source permanent from a successfully countered ability.
+    CounteredAbilitySource {
+        cardinality: Cardinality,
+    },
     DrawReceipt {
         who: PlayerRecipient,
         cardinality: Cardinality,
@@ -914,6 +925,37 @@ fn ability_graveyard_exile_target_group(
     Ok((target_group_index, group.max))
 }
 
+fn counter_target_ability_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+) -> Result<(u32, u32), String> {
+    let mut matches = references
+        .iter()
+        .filter(|reference| reference.instruction_id == instruction_id);
+    let Some(reference) = matches.next() else {
+        return Err(format!(
+            "CounterTargetAbility instruction '{instruction_id}' requires one explicit StackAbility target binding"
+        ));
+    };
+    if reference.role != ProgramTargetRole::StackAbility || matches.next().is_some() {
+        return Err(format!(
+            "CounterTargetAbility instruction '{instruction_id}' requires exactly one StackAbility target binding"
+        ));
+    }
+    let targeting = targeting.ok_or_else(|| {
+        "CounterTargetAbility requires an authored StackAbility target group".to_string()
+    })?;
+    let group = targeting
+        .groups
+        .get(reference.target_group_index as usize)
+        .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
+    if !matches!(group.min, 0 | 1) || group.max != 1 {
+        return Err("CounterTargetAbility target group must have bounds 0..1 or 1..1".into());
+    }
+    Ok((reference.target_group_index, group.max))
+}
+
 fn validate_target_card_result_groups(
     program: &CompiledProgram,
     schema: &TargetSchema<'_, '_>,
@@ -982,6 +1024,7 @@ fn authored_target_role_index(
             ProgramTargetRole::Target,
         )
         | (SpellEffectKind::CounterTargetSpell { .. }, ProgramTargetRole::Spell)
+        | (SpellEffectKind::CounterTargetAbility, ProgramTargetRole::StackAbility)
         | (
             SpellEffectKind::CreateTokenCopies {
                 source: TokenCopySource::Chosen(_),
@@ -1378,54 +1421,63 @@ impl Compiler<'_> {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let mut target_group_max = None;
-                    let target_group_index = if self.context == EffectContext::Spell {
-                        match effect.as_ref() {
-                            SpellEffectKind::Destroy {
-                                subject: EffectSubject::Chosen(_),
-                            } => Some(spell_destroy_target_group(
+                    let target_group_index =
+                        if matches!(effect.as_ref(), SpellEffectKind::CounterTargetAbility) {
+                            let (group_index, group_max) = counter_target_ability_target_group(
                                 &instruction.id,
                                 &self.target_references,
-                            )?),
-                            SpellEffectKind::Exile {
-                                subject: EffectSubject::Chosen(_),
-                                linked_exile_id: None,
-                            } => {
-                                let (group_index, group_max) = spell_exile_target_group(
+                                self.targeting,
+                            )?;
+                            target_group_max = Some(group_max);
+                            Some(group_index)
+                        } else if self.context == EffectContext::Spell {
+                            match effect.as_ref() {
+                                SpellEffectKind::Destroy {
+                                    subject: EffectSubject::Chosen(_),
+                                } => Some(spell_destroy_target_group(
                                     &instruction.id,
                                     &self.target_references,
-                                    self.targeting,
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::ChooseHandCards { .. } => {
-                                Some(spell_hand_discard_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                )?)
-                            }
-                            _ => None,
-                        }
-                    } else if self.context == EffectContext::Ability {
-                        match effect.as_ref() {
-                            SpellEffectKind::MoveGraveyardCards {
-                                destination: GraveyardDestination::Exile,
-                                ..
-                            } => {
-                                let (group_index, group_max) =
-                                    ability_graveyard_exile_target_group(
+                                )?),
+                                SpellEffectKind::Exile {
+                                    subject: EffectSubject::Chosen(_),
+                                    linked_exile_id: None,
+                                } => {
+                                    let (group_index, group_max) = spell_exile_target_group(
                                         &instruction.id,
                                         &self.target_references,
                                         self.targeting,
                                     )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
+                                SpellEffectKind::ChooseHandCards { .. } => {
+                                    Some(spell_hand_discard_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                    )?)
+                                }
+                                _ => None,
                             }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
+                        } else if self.context == EffectContext::Ability {
+                            match effect.as_ref() {
+                                SpellEffectKind::MoveGraveyardCards {
+                                    destination: GraveyardDestination::Exile,
+                                    ..
+                                } => {
+                                    let (group_index, group_max) =
+                                        ability_graveyard_exile_target_group(
+                                            &instruction.id,
+                                            &self.target_references,
+                                            self.targeting,
+                                        )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
                     if self.allow_vow_equipment_choice
                         && is_vow_chosen_target_effect(effect)
                         && !self.target_references.iter().any(|reference| {
@@ -2276,6 +2328,27 @@ fn compile_program_condition(
                 },
             ))
         }
+        ProgramCondition::Result(ProgramResultCondition::CounteredAbilitySourceMatches {
+            result,
+        }) => {
+            let slot = result_slot(result, names, slots)?;
+            if !matches!(
+                &slots[slot.0 as usize].result_type,
+                ResultType::CounteredAbilitySource {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }
+            ) {
+                return Err(format!(
+                    "result '{result}' is not a compatible CounteredAbilitySource"
+                ));
+            }
+            Ok(CompiledProgramCondition::Result(
+                CompiledProgramResultCondition::CounteredAbilitySourceMatches { result: slot },
+            ))
+        }
     }
 }
 
@@ -2392,6 +2465,10 @@ fn compile_input(
             creature: EffectSubject::Chosen(_),
         } => Some("PermanentSelection"),
         EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
+        EffectOp::RemoveAllAbilities {
+            subject: EffectSubject::PreviousEffectObject,
+            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
+        } => Some("CounteredAbilitySource"),
         EffectOp::ChooseCard {
             source: ChooseCardSource::CardResultCohort { .. },
             ..
@@ -2457,6 +2534,18 @@ fn compile_input(
                         },
                     } if receipt_producer == producer_ability_id
                         && receipt_link == linked_exile_id
+                ),
+                EffectOp::RemoveAllAbilities {
+                    subject: EffectSubject::PreviousEffectObject,
+                    duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
+                } => matches!(
+                    &actual.result_type,
+                    ResultType::CounteredAbilitySource {
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    }
                 ),
                 EffectOp::AttachEquipment {
                     equipment: EffectSubject::Source,
@@ -2792,6 +2881,12 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             ResultType::CounterPaymentOutcome
         }
         (
+            ResultType::CounteredAbilitySource { cardinality: a },
+            ResultType::CounteredAbilitySource { cardinality: b },
+        ) => ResultType::CounteredAbilitySource {
+            cardinality: union(*a, *b),
+        },
+        (
             ResultType::DrawReceipt {
                 who: a,
                 cardinality: ac,
@@ -2954,6 +3049,27 @@ fn validate_and_result_types(
     compiler: &Compiler<'_>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
+        SpellEffectKind::CounterTargetAbility
+            if matches!(context, EffectContext::Spell | EffectContext::Ability) =>
+        {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err(
+                    "CounterTargetAbility requires one optional or required single-target group"
+                        .into(),
+                );
+            }
+            effect.validate(context)?;
+            Ok(vec![ResultType::CounteredAbilitySource {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
+        }
+        SpellEffectKind::CounterTargetAbility => Err(
+            "CounterTargetAbility in a resolution program requires a spell or ability owner"
+                .into(),
+        ),
         SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
             effect.validate(context)?;
             Ok(vec![ResultType::ManifestedPermanent {
@@ -3206,6 +3322,13 @@ fn validate_and_result_types(
                     "GrantKeywordsAll in a resolution program does not support TargetedPlayer scopes without a target-role binding".into(),
                 );
             }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::RemoveAllAbilities {
+            subject: EffectSubject::PreviousEffectObject,
+            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::GrantKeywords {
