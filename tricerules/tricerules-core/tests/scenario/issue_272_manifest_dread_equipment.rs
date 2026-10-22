@@ -3,8 +3,11 @@
 use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
-use tricerules_cards::primitives::{AbilityCost, EffectSubject};
-use tricerules_cards::{AbilityPresentation, Keyword, SpellEffectKind};
+use tricerules_cards::primitives::{AbilityCost, CompiledInstructionKind, EffectSubject};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityPresentation, Cardinality, Keyword, ProgramOwnerId, ResultType,
+    SpellEffectKind,
+};
 use tricerules_core::{AttachmentRecipient, Zone};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind, RuledEventBatch};
 
@@ -81,16 +84,40 @@ fn equipment_manifest_dread_recipes_have_exact_registry_semantics() {
             trigger.presentation,
             AbilityPresentation::OracleLines(vec![1])
         );
+        assert!(trigger.effect.is_empty());
+        let program = trigger
+            .program
+            .as_ref()
+            .expect("Manifest Dread's exact attachment tail is an authored Program");
+        assert_eq!(program.body.steps.len(), 2);
+        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: id.to_owned(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![trigger.ability_id.clone()],
+        });
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the exact card-face ability owner compiles");
+        assert_eq!(compiled.body.steps.len(), 2);
+        let manifest_output = compiled.body.steps[0].outputs[0];
         assert_eq!(
-            trigger.effect,
-            vec![
-                SpellEffectKind::ManifestDread,
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObject
+            compiled.slot(manifest_output).unwrap().result_type,
+            ResultType::ManifestedPermanent {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
                 },
-            ]
+            }
         );
+        assert_eq!(compiled.body.steps[1].input, Some(manifest_output));
+        assert!(matches!(
+            &compiled.body.steps[1].kind,
+            CompiledInstructionKind::Perform(effect)
+                if **effect == SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObject,
+                }
+        ));
         let AbilityCost::Mana(cost) = &face.activated_abilities[0].costs[0] else {
             panic!("mana equip cost")
         };
@@ -177,5 +204,121 @@ fn replacement_completion_preserves_result_but_rejects_stale_source() {
         .expect("finish entry");
     assert_eq!(engine.state.objects[&top[0]].zone, Zone::Battlefield);
     assert!(engine.state.objects[&top[0]].tapped);
+    assert_eq!(engine.state.objects[&equipment].attached_to, None);
+}
+
+#[test]
+fn one_card_replacement_completion_resumes_manifest_dread_program_tail() {
+    let mut engine = engine(272_007);
+    let top = seat_on_top(&mut engine, &["hill_giant"]);
+    engine.state.players[0].library.clear();
+    engine.state.players[0].library.push_front(top[0]);
+    let equipment = cast_equipment(&mut engine, "conductive_machete");
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+
+    let replacement_batch = reach_manifest_choice(&mut engine);
+    let replacement = find_resolution_choice(&replacement_batch)
+        .expect("the one-card battlefield entry parks for replacement ordering");
+    assert_eq!(replacement.choice_kind(), ChoiceKind::ReplacementEffect);
+    let public_log = replacement_batch
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::Log(log)) if log.visible_to_player_id.is_none() => Some(log.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let replacement_prompt = replacement_batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref()? {
+            Ev::ResolutionChoiceRequired(choice)
+                if choice.choice_kind == ChoiceKind::ReplacementEffect as i32 =>
+            {
+                Some(choice.prompt_text.as_str())
+            }
+            _ => None,
+        })
+        .expect("replacement choice prompt");
+    assert_eq!(public_log, replacement_prompt);
+    assert!(
+        public_log.contains("a card in a library") || public_log.contains("Face-down object"),
+        "the public replacement text uses a generic concealed label: {public_log}"
+    );
+    assert!(
+        !public_log.contains("Hill Giant"),
+        "the public replacement text cannot reveal the concealed entrant: {public_log}"
+    );
+    let completed = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice(vec![replacement.candidate_object_ids[0]]),
+        )
+        .expect("commit the one-card entry and resume the exact Program tail");
+
+    assert_eq!(engine.state.objects[&top[0]].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&top[0]].face_down);
+    assert!(engine.state.objects[&top[0]].tapped);
+    assert_eq!(
+        engine.state.objects[&equipment].attached_to,
+        Some(AttachmentRecipient::Object(top[0]))
+    );
+    assert_eq!(engine.effective_power(top[0]), Some(4));
+    assert_eq!(engine.effective_toughness(top[0]), Some(3));
+    let public_log = completed
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::Log(log)) if log.visible_to_player_id.is_none() => Some(log.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(public_log.contains("Face-down creature"));
+    assert!(!public_log.contains("Hill Giant"));
+}
+
+#[test]
+fn manifest_dread_trigger_resolves_after_its_equipment_source_leaves() {
+    let mut engine = engine(272_008);
+    let top = seat_on_top(&mut engine, &["grizzly_bears", "lightning_bolt"]);
+    let equipment = cast_equipment(&mut engine, "conductive_machete");
+
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent priority while the entry trigger is on the stack");
+    inject_card_into_hand(&mut engine, 1, "disenchant");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            w: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let disenchant = hand_index_for_card(&engine, 1, "disenchant");
+    engine
+        .apply_scenario_command(1, &cast_spell(disenchant, target_object(equipment)))
+        .expect("remove the Equipment while its entry trigger is on the stack");
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.objects[&equipment].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the ETB trigger remains on the stack"
+    );
+
+    let choice = find_resolution_choice(&reach_manifest_choice(&mut engine))
+        .expect("the source-independent trigger still offers Manifest Dread");
+    assert_eq!(choice.choice_kind(), ChoiceKind::ManifestDread);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
+        .expect("resolve Manifest Dread after the Equipment leaves");
+
+    assert_eq!(engine.state.objects[&top[0]].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&top[0]].face_down);
     assert_eq!(engine.state.objects[&equipment].attached_to, None);
 }

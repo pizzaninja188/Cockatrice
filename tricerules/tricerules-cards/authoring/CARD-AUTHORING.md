@@ -176,6 +176,17 @@ owners are all-authored or all-legacy: when any sibling declares a program, ever
 declare one; otherwise their effects stay on ordinary effect-list dispatch. Each authored mode keeps
 its own targeting groups and group indices. Do not add a face-level `spell_program` to a modal spell.
 
+The exact triggered Equipment ETB profile used by Conductive Machete, Cursed Windbreaker, and
+Killer's Mask is `ManifestDread` bound as an optional `ManifestedPermanent` result with cardinality
+`0..1`, followed immediately by `AttachEquipment(input: manifested, equipment: Source,
+creature: PreviousEffectObject)`. This binding carries the exact permanent incarnation produced by
+the entry, so a skipped or empty manifest yields no attach target and a stale Equipment source is a
+no-op. This admission does not generalize to other trigger shapes, attach recipients, or the legacy
+`Attach` effect. Preserve each owner's printed Equipment modifier and equip cost in its owner
+assertions. The runtime has a direct skipped-entry disposition, but the current admitted cards do
+not provide a scenario that produces that disposition; report that evidence as deferred rather
+than treating ordinary successful entry coverage as proof of it.
+
 The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser
 is `Controller`, with `SourceController` also admitted for ability Programs and captured

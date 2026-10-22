@@ -288,6 +288,11 @@ pub enum ResultType {
         filter: Box<TargetFilter>,
         cardinality: Cardinality,
     },
+    /// Exact face-down permanent committed by one Manifest Dread instruction. `None` is a
+    /// completed empty result; the typed slot remains distinct from an unwritten output.
+    ManifestedPermanent {
+        cardinality: Cardinality,
+    },
     HandSelection {
         cardinality: Cardinality,
         ordered: bool,
@@ -2316,6 +2321,10 @@ fn compile_input(
     let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
     let expected = match effect {
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
+        EffectOp::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObject,
+        } => Some("ManifestedPermanent"),
         EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
         EffectOp::ChooseCard {
             source: ChooseCardSource::CardResultCohort { .. },
@@ -2382,6 +2391,18 @@ fn compile_input(
                         },
                     } if receipt_producer == producer_ability_id
                         && receipt_link == linked_exile_id
+                ),
+                EffectOp::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObject,
+                } => matches!(
+                    actual.result_type,
+                    ResultType::ManifestedPermanent {
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    }
                 ),
                 EffectOp::CreateReflexiveTrigger { .. }
                     if is_source_sacrifice_reflexive_consumer(effect) =>
@@ -2645,6 +2666,28 @@ fn validate_and_result_types(
     allow_mosswort_linked_play: bool,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
+        SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::ManifestedPermanent {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
+        }
+        SpellEffectKind::ManifestDread => Err(
+            "ManifestDread in a resolution program requires an ability-owned trigger".into(),
+        ),
+        SpellEffectKind::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObject,
+        } => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::AttachEquipment { .. } => Err(
+            "AttachEquipment in a resolution program requires Source and PreviousEffectObject".into(),
+        ),
         SpellEffectKind::MoveGraveyardCards {
             filter,
             destination: GraveyardDestination::Exile,

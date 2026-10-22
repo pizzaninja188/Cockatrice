@@ -1119,6 +1119,7 @@ impl GameEngine {
         self.refresh_program_permanent_choice_departure(events)?;
         self.refresh_program_library_cohort_departure(events)?;
         self.refresh_program_hand_library_return_departure(events)?;
+        self.refresh_manifest_dread_graveyard_order_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
         self.refresh_departed_ward_payment(events)?;

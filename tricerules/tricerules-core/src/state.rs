@@ -1247,6 +1247,24 @@ pub struct ParkedStackResolution {
     pub(crate) program: Option<ProgramRunState>,
 }
 
+/// One exact physical card looked at by Manifest Dread before any entry replacements run.
+/// Object IDs alone are insufficient if a card leaves and returns to the Library (CR 400.7).
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ManifestDreadLibraryRef {
+    pub(crate) object_id: ObjectId,
+    pub(crate) zone_change_generation: u64,
+    pub(crate) library_position: u32,
+}
+
+/// The skipped two-card Manifest Dread completion retains its private ordered cohort and the
+/// exact Program stack until its owner orders both graveyard arrivals.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingManifestDreadGraveyardOrder {
+    pub(crate) stack: ParkedStackResolution,
+    pub(crate) owner: PlayerId,
+    pub(crate) cohort: [ManifestDreadLibraryRef; 2],
+}
+
 impl ParkedStackResolution {
     pub fn new(item: StackItem) -> Self {
         Self {
@@ -1416,6 +1434,9 @@ pub(crate) enum ProgramValue {
     DrawReceipt(Vec<TriggerObjectRef>),
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),
+    /// The exact manifested permanent committed by one Manifest Dread instruction. `None` is a
+    /// completed empty result and cannot be confused with an unwritten output slot.
+    ManifestedPermanent(Option<TriggerObjectRef>),
     HandSelection(Vec<TriggerObjectRef>),
     CardResultCohort(CardResultCohort),
     FoundLibraryCohort(Vec<ProgramCardRef>),
@@ -1946,7 +1967,10 @@ pub enum ResolutionContinuation {
     },
     ManifestDread {
         stack: ParkedStackResolution,
-        looked_at: Vec<ObjectId>,
+        looked_at: Vec<ManifestDreadLibraryRef>,
+    },
+    ManifestDreadGraveyardOrder {
+        order: Box<PendingManifestDreadGraveyardOrder>,
     },
     EntryCopySource {
         stack: ParkedStackResolution,
@@ -2242,6 +2266,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::BattlefieldReturn { pending } => Some(&pending.stack),
+            Self::ManifestDreadGraveyardOrder { order } => Some(&order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_ref(),
@@ -2312,6 +2337,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::BattlefieldReturn { pending } => Some(&mut pending.stack),
+            Self::ManifestDreadGraveyardOrder { order } => Some(&mut order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(&mut progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_mut(),
@@ -2892,8 +2918,7 @@ pub(crate) enum BattlefieldEntryCompletion {
     },
     ManifestDread {
         owner: PlayerId,
-        other_object_id: Option<ObjectId>,
-        chosen_library_position: u32,
+        library_refs: Vec<ManifestDreadLibraryRef>,
     },
     TokenBatch(Box<PendingTokenEntryBatch>),
     ZoneEntryBatch(Box<PendingZoneEntryBatch>),

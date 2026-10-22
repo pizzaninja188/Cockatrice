@@ -1293,6 +1293,10 @@ impl GameEngine {
                             ProgramValue::PermanentSelection(objects) => {
                                 previous.produced_objects = objects.clone();
                             }
+                            ProgramValue::ManifestedPermanent(Some(object)) => {
+                                previous.produced_objects.push(*object);
+                            }
+                            ProgramValue::ManifestedPermanent(None) => {}
                             ProgramValue::HandSelection(objects) => {
                                 previous.selected_hand_cards = objects.clone();
                             }
@@ -2010,6 +2014,16 @@ fn capture_program_outputs_inner(
             }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
+            }
+            ResultType::ManifestedPermanent { cardinality } => {
+                if result.produced_objects.len() > cardinality.max.unwrap_or(u32::MAX) as usize
+                    || result.produced_objects.len() < cardinality.min as usize
+                {
+                    return Err(EngineError::ProgramInvariant(
+                        "Manifest Dread result exceeded its compiled cardinality",
+                    ));
+                }
+                ProgramValue::ManifestedPermanent(result.produced_objects.first().copied())
             }
             ResultType::HandSelection { .. } => {
                 ProgramValue::HandSelection(result.selected_hand_cards.clone())

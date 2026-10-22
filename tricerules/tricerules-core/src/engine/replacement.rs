@@ -5196,35 +5196,14 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ManifestDread {
                 owner,
-                other_object_id,
-                ..
-            } => {
-                if let Some(object) = self.state.objects.get_mut(&event.object_id) {
-                    object.face_down = false;
-                }
-                if let Some(other) = other_object_id {
-                    move_object_to_zone(
-                        &mut self.state,
-                        self.registry,
-                        other,
-                        Zone::Graveyard,
-                        None,
-                    )?;
-                    events.push(permanent_moved_event_with_library_position(
-                        &self.state,
-                        other,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                        0,
-                    ));
-                }
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    events,
-                )
-            }
+                library_refs,
+            } => self.finish_manifest_dread_skipped_entry(
+                stack,
+                event.object_id,
+                owner,
+                library_refs,
+                events,
+            ),
             BattlefieldEntryCompletion::LandPlay { resume_stack, .. } => {
                 self.state.passes_since_stack_change = 0;
                 if let Some(stack) = resume_stack {
@@ -5863,12 +5842,10 @@ impl GameEngine {
                     }
                     let prompt = format!(
                         "Choose the next replacement effect for {} entering the battlefield.",
-                        self.state
-                            .objects
-                            .get(&event.object_id)
-                            .and_then(|object| self.registry.get(&object.card_id))
-                            .map(|definition| definition.name.as_str())
-                            .unwrap_or("this permanent")
+                        self.replacement_object_display_name(
+                            event.object_id,
+                            Some(event.face_index),
+                        )
                     );
                     events.push(rv1::RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -6778,32 +6755,51 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ManifestDread {
                 owner,
-                other_object_id,
-                chosen_library_position,
+                library_refs,
             } => {
                 let object_id = event.object_id;
+                if !self.manifest_dread_library_cohort_current(owner, &library_refs) {
+                    self.restore_skipped_battlefield_entry(&event)?;
+                    if let Some(object) = self.state.objects.get_mut(&object_id) {
+                        object.face_down = false;
+                    }
+                    return self.complete_parked_stack_with_previous(
+                        stack,
+                        EffectResult::default(),
+                        events,
+                    );
+                }
+                let chosen_reference = library_refs
+                    .iter()
+                    .find(|reference| reference.object_id == object_id)
+                    .copied()
+                    .ok_or(EngineError::Illegal("manifested library ref is missing"))?;
                 self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(permanent_moved_event_with_library_position(
                     &self.state,
                     object_id,
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
-                    chosen_library_position,
+                    chosen_reference.library_position,
                 ));
-                if let Some(other) = other_object_id {
+                if let Some(other) = library_refs
+                    .iter()
+                    .find(|reference| reference.object_id != object_id)
+                    .copied()
+                {
                     move_object_to_zone(
                         &mut self.state,
                         self.registry,
-                        other,
+                        other.object_id,
                         Zone::Graveyard,
                         None,
                     )?;
                     events.push(permanent_moved_event_with_library_position(
                         &self.state,
-                        other,
+                        other.object_id,
                         owner,
                         rv1::permanent_moved::Destination::Graveyard,
-                        0,
+                        other.library_position,
                     ));
                 }
                 events.push(ev_log(format!("P{owner} manifests dread.")));

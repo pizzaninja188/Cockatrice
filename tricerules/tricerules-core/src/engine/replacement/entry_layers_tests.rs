@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::ManifestDreadLibraryRef;
 
 #[test]
 fn prototyped_entry_uses_selected_color_for_battlefield_counter_replacements() {
@@ -155,10 +156,14 @@ fn devotion_actual_nylea_excludes_own_pip_for_entry_replacement_and_includes_it_
 }
 
 fn engine() -> GameEngine {
+    engine_with_players(&[0, 1])
+}
+
+fn engine_with_players(players: &[PlayerId]) -> GameEngine {
     let mut engine = GameEngine::new_with_default_decks(
         tricerules_cards::registry::global(),
         305_030,
-        &[0, 1],
+        players,
         20,
     )
     .unwrap();
@@ -167,6 +172,701 @@ fn engine() -> GameEngine {
     engine.state.turn_step = TurnStep::Main1;
     engine.state.command_index = 5;
     engine
+}
+
+fn suspended_conductive_machete_manifest_dread() -> (
+    GameEngine,
+    ParkedStackResolution,
+    [ObjectId; 2],
+    [ManifestDreadLibraryRef; 2],
+) {
+    suspended_conductive_machete_manifest_dread_for_players(&[0, 1])
+}
+
+fn suspended_conductive_machete_manifest_dread_for_players(
+    players: &[PlayerId],
+) -> (
+    GameEngine,
+    ParkedStackResolution,
+    [ObjectId; 2],
+    [ManifestDreadLibraryRef; 2],
+) {
+    let mut engine = engine_with_players(players);
+    let equipment = engine.state.players[0].hand[0];
+    engine.state.objects.get_mut(&equipment).unwrap().card_id = "conductive_machete".into();
+    engine.state.players[0].mana_pool.colorless = 10;
+    engine
+        .cast_spell(
+            0,
+            &rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::HandIndex(0)),
+                    expected_zone_change_generation: None,
+                }),
+                ..Default::default()
+            },
+        )
+        .expect("cast Conductive Machete");
+    engine
+        .resolve_top_of_stack(&mut Vec::new())
+        .expect("resolve Equipment spell and trigger its ability");
+    engine.flush_staged_triggers(&mut Vec::new());
+    engine
+        .resolve_top_of_stack(&mut Vec::new())
+        .expect("begin the triggered Manifest Dread Program");
+    let pending = engine
+        .state
+        .pending_resolution
+        .take()
+        .expect("two-card Manifest Dread choice");
+    let [first, second] = pending
+        .presentation
+        .candidates
+        .as_slice()
+        .try_into()
+        .expect("top two cards are offered");
+    let (stack, refs) = match &pending.continuation {
+        ResolutionContinuation::ManifestDread { stack, looked_at } => {
+            (stack.clone(), looked_at.clone())
+        }
+        _ => panic!("Manifest Dread retains its Program frame"),
+    };
+    let refs: [ManifestDreadLibraryRef; 2] = refs.try_into().expect("two exact library refs");
+    (engine, stack, [first, second], refs)
+}
+
+fn skipped_manifest_dread_order_prompt() -> (
+    GameEngine,
+    [ObjectId; 2],
+    [ManifestDreadLibraryRef; 2],
+    RuledEventBatch,
+) {
+    skipped_manifest_dread_order_prompt_for_players(&[0, 1])
+}
+
+fn skipped_manifest_dread_order_prompt_for_players(
+    players: &[PlayerId],
+) -> (
+    GameEngine,
+    [ObjectId; 2],
+    [ManifestDreadLibraryRef; 2],
+    RuledEventBatch,
+) {
+    let (mut engine, stack, looked_at, library_refs) =
+        suspended_conductive_machete_manifest_dread_for_players(players);
+    let skipped_entry = event(&engine, looked_at[0]);
+    engine
+        .state
+        .objects
+        .get_mut(&looked_at[0])
+        .unwrap()
+        .face_down = true;
+    let completion = BattlefieldEntryCompletion::ManifestDread {
+        owner: 0,
+        library_refs: library_refs.to_vec(),
+    };
+    let completed = engine
+        .finish_entry_copy_without_recipient(stack, skipped_entry, completion, Vec::new())
+        .expect("complete skipped Manifest Dread entry");
+    (engine, looked_at, library_refs, completed)
+}
+
+#[test]
+fn manifest_dread_skipped_two_card_completion_offers_private_owner_order() {
+    let (engine, looked_at, _library_refs, completed) = skipped_manifest_dread_order_prompt();
+    assert!(looked_at
+        .iter()
+        .all(|object_id| engine.state.objects[object_id].zone == Zone::Library));
+    assert!(!looked_at
+        .iter()
+        .any(|object_id| engine.state.players[0].graveyard.contains(object_id)));
+    assert!(!completed.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+            if looked_at.contains(&moved.object_id)
+    )));
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("two-card skip must ask its owner to order the private graveyard cohort");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.presentation.candidates, looked_at);
+    assert_eq!(pending.presentation.min, 2);
+    assert_eq!(pending.presentation.max, 2);
+    assert!(pending.presentation.ordered);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        rv1::ChoiceKind::SimultaneousEntryOrder
+    );
+    assert!(completed.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.deciding_player_id == 0
+                && choice.choice_kind == rv1::ChoiceKind::SimultaneousEntryOrder as i32
+                && choice.candidate_object_ids == looked_at
+                && choice.min == 2
+                && choice.max == 2
+                && choice.ordered
+                && choice.public_reveal.is_none()
+    )));
+}
+
+#[test]
+fn manifest_dread_skipped_two_card_order_commits_both_permutations_with_original_library_positions()
+{
+    for reverse in [false, true] {
+        let (mut engine, looked_at, library_refs, _) = skipped_manifest_dread_order_prompt();
+        let next_library_card = engine.state.players[0].library[2];
+        let mut order = looked_at.to_vec();
+        if reverse {
+            order.reverse();
+        }
+        let batch = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: order.clone(),
+                    ..Default::default()
+                },
+            )
+            .expect("owner orders both skipped cards");
+
+        let ordered_graveyard_moves = batch
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.destination == rv1::permanent_moved::Destination::Graveyard as i32 =>
+                {
+                    Some((moved.object_id, moved.source_library_position))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let expected_positions = order
+            .iter()
+            .map(|object_id| {
+                (
+                    *object_id,
+                    Some(
+                        library_refs
+                            .iter()
+                            .find(|reference| reference.object_id == *object_id)
+                            .unwrap()
+                            .library_position,
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(ordered_graveyard_moves, expected_positions);
+        assert_eq!(engine.state.players[0].graveyard.last(), order.last());
+        assert!(looked_at
+            .iter()
+            .all(|object_id| engine.state.objects[object_id].zone == Zone::Graveyard));
+        assert_eq!(engine.state.players[0].library[0], next_library_card);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+}
+
+#[test]
+fn manifest_dread_one_card_skipped_completion_moves_only_its_exact_current_ref() {
+    let (mut engine, stack, looked_at, library_refs) =
+        suspended_conductive_machete_manifest_dread();
+    let skipped_entry = event(&engine, looked_at[0]);
+    engine
+        .state
+        .objects
+        .get_mut(&looked_at[0])
+        .unwrap()
+        .face_down = true;
+    let completed = engine
+        .finish_entry_copy_without_recipient(
+            stack,
+            skipped_entry,
+            BattlefieldEntryCompletion::ManifestDread {
+                owner: 0,
+                library_refs: vec![library_refs[0]],
+            },
+            Vec::new(),
+        )
+        .expect("complete one-card skipped entry directly");
+    assert_eq!(engine.state.objects[&looked_at[0]].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&looked_at[1]].zone, Zone::Library);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(completed.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+            if moved.object_id == looked_at[0]
+                && moved.source_library_position == Some(0)
+                && moved.destination == rv1::permanent_moved::Destination::Graveyard as i32
+    )));
+    assert!(!completed.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+    )));
+}
+
+#[test]
+fn manifest_dread_skipped_commander_resumes_none_tail_before_903_9a_choice() {
+    const TAIL_FIXTURE: &str = r#"(
+        id: "manifest_dread_tail_fixture",
+        name: "Manifest Dread Tail Fixture",
+        face_id: "manifest_dread_tail_fixture",
+        mana_cost: "",
+        types: ["Artifact", "Equipment"],
+        triggered_abilities: [(
+            ability_id: "triggered_01",
+            presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "manifest_dread", bind: ["manifested"], input: None,
+                    kind: Perform(ManifestDread)),
+                (id: "attach_equipment", bind: [], input: Some("manifested"),
+                    kind: Perform(AttachEquipment(
+                        equipment: Source,
+                        creature: PreviousEffectObject,
+                    ))),
+                (id: "tail_choice", bind: [], input: None, kind: Choose(
+                    choice: "tail_observer",
+                    chooser: Controller,
+                    optional: false,
+                    branches: [
+                        (branch_id: "tail_gain_a", presentation: Fallback, cost: None,
+                            requirement: Always, body: (steps: [
+                                (id: "tail_gain_a", bind: [], input: None,
+                                    kind: Perform(GainLife(amount: 1))),
+                            ], yields: [])),
+                        (branch_id: "tail_gain_b", presentation: Fallback, cost: None,
+                            requirement: Always, body: (steps: [
+                                (id: "tail_gain_b", bind: [], input: None,
+                                    kind: Perform(GainLife(amount: 1))),
+                            ], yields: [])),
+                    ],
+                    otherwise: (steps: [], yields: []),
+                )),
+            ], yields: []))),
+        )],
+    )"#;
+
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                TAIL_FIXTURE,
+                include_str!("../../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../../tricerules-cards/data/kami_of_the_crescent_moon.ron"),
+            ],
+            &[],
+        )
+        .expect("test-only Manifest Dread fixture registry"),
+    ));
+    let deck = |commanders: Vec<String>| crate::engine::EngineDeck {
+        mainboard: vec!["forest".to_owned(); 12],
+        commanders,
+    };
+    let mut engine = GameEngine::new_with_commander_decks(
+        registry,
+        305_031,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck(vec!["kami_of_the_crescent_moon".into()]),
+            deck(Vec::new()),
+        ]),
+        true,
+    )
+    .expect("Commander engine with test-only Program fixture");
+    engine.state.priority_idx = 0;
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.command_index = 5;
+
+    let commander = engine.state.players[0].command_zone[0];
+    engine.state.players[0]
+        .command_zone
+        .retain(|object_id| *object_id != commander);
+    let commander_object = engine.state.objects.get_mut(&commander).unwrap();
+    commander_object.zone = Zone::Library;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(commander)
+        .or_default() += 1;
+    engine.state.players[0].library.push_front(commander);
+
+    let creature = object(
+        &mut engine,
+        "kami_of_the_crescent_moon",
+        Zone::Battlefield,
+        0,
+    );
+    let equipment = engine.state.players[0].hand[0];
+    engine.state.objects.get_mut(&equipment).unwrap().card_id =
+        "manifest_dread_tail_fixture".into();
+    engine.state.players[0].mana_pool.colorless = 10;
+    engine
+        .cast_spell(
+            0,
+            &rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::HandIndex(0)),
+                    expected_zone_change_generation: None,
+                }),
+                ..Default::default()
+            },
+        )
+        .expect("cast test-only Equipment fixture");
+    engine
+        .resolve_top_of_stack(&mut Vec::new())
+        .expect("resolve test Equipment and stage its trigger");
+    engine.flush_staged_triggers(&mut Vec::new());
+    engine
+        .resolve_top_of_stack(&mut Vec::new())
+        .expect("park the test Program on its real Manifest Dread choice");
+    let pending = engine
+        .state
+        .pending_resolution
+        .take()
+        .expect("Manifest Dread offers its top two cards");
+    let [commander, other] = pending
+        .presentation
+        .candidates
+        .as_slice()
+        .try_into()
+        .expect("the Commander and next Library card are offered");
+    assert_eq!(commander, engine.state.players[0].library[0]);
+    let (stack, library_refs) = match pending.continuation {
+        ResolutionContinuation::ManifestDread { stack, looked_at } => (stack, looked_at),
+        _ => panic!("Manifest Dread retains the exact parked Program"),
+    };
+    assert_eq!(library_refs[0].object_id, commander);
+
+    let skipped_entry = event(&engine, commander);
+    engine.state.objects.get_mut(&commander).unwrap().face_down = true;
+    let completed = engine
+        .finish_entry_copy_without_recipient(
+            stack,
+            skipped_entry,
+            BattlefieldEntryCompletion::ManifestDread {
+                owner: 0,
+                library_refs: library_refs.clone(),
+            },
+            Vec::new(),
+        )
+        .expect("synthetic skipped-entry seam retains the private two-card cohort");
+    assert!(completed.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.choice_kind == rv1::ChoiceKind::SimultaneousEntryOrder as i32
+                && choice.public_reveal.is_none()
+    )));
+    assert!(engine.state.players[0].library.contains(&commander));
+    assert!(engine.state.players[0].library.contains(&other));
+
+    let order = vec![other, commander];
+    let ordered = engine
+        .submit_resolution_choice(
+            0,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: order,
+                ..Default::default()
+            },
+        )
+        .expect("owner privately orders both cards into the graveyard");
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&other].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&equipment].attached_to, None);
+    assert_eq!(engine.state.objects[&creature].attached_to, None);
+    assert_eq!(engine.state.players[0].life, 20);
+
+    let tail_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the same Program reaches its observable tail choice");
+    assert_eq!(
+        tail_pending.presentation.choice_kind,
+        rv1::ChoiceKind::ResolutionBranch
+    );
+    let ResolutionContinuation::ProgramChoose { stack, .. } = &tail_pending.continuation else {
+        panic!("the tail choice retains the Program cursor");
+    };
+    let program = stack.program.as_ref().expect("parked Program state");
+    let compiled = engine
+        .registry
+        .compiled_program_for_owner(&program.owner)
+        .expect("test fixture Program remains compiled");
+    let manifested_slot = compiled
+        .slots
+        .iter()
+        .find(|slot| slot.name == "manifested")
+        .expect("Manifest Dread output slot");
+    assert!(matches!(
+        program.slots.get(manifested_slot.id.0 as usize),
+        Some(Some(crate::state::ProgramValue::ManifestedPermanent(None)))
+    ));
+    assert!(engine.state.players[0].graveyard.contains(&commander));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    assert!(!ordered.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::StackResolved(_))
+    )));
+
+    let tail_prompt_id = tail_pending.resolution_prompt_id.get();
+    let tail_batch = engine
+        .submit_resolution_choice(
+            0,
+            &rv1::SubmitResolutionChoice {
+                resolution_prompt_id: tail_prompt_id,
+                decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                selected_branch_index: 0,
+                ..Default::default()
+            },
+        )
+        .expect("complete the observable Program tail exactly once");
+    let life_deltas = tail_batch
+        .events
+        .iter()
+        .filter_map(|event| match event.ev.as_ref() {
+            Some(rv1::ruled_event::Ev::LifeChanged(change)) if change.player_id == 0 => {
+                Some(change.delta)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(life_deltas, vec![1]);
+    assert_eq!(engine.state.players[0].life, 21);
+    let stack_resolved_index = tail_batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::StackResolved(_))
+            )
+        })
+        .expect("the triggered Program resolves after its tail");
+    let commander_choice_index = tail_batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                    if choice.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32
+                        && choice.prompt_text.contains("903.9a")
+            )
+        })
+        .expect("Commander state-based choice follows completed resolution");
+    assert!(stack_resolved_index < commander_choice_index);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Commander choice pending")
+            .deciding_player,
+        0
+    );
+
+    let commander_prompt_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    let commander_answer = engine
+        .submit_resolution_choice(
+            0,
+            &rv1::SubmitResolutionChoice {
+                resolution_prompt_id: commander_prompt_id,
+                decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                selected_branch_index: 0,
+                ..Default::default()
+            },
+        )
+        .expect("owner chooses the command zone for the declared Commander");
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
+    assert_eq!(engine.state.players[0].life, 21);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 0);
+    assert_eq!(
+        commander_answer
+            .events
+            .iter()
+            .filter(|event| matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::LifeChanged(_))
+                    | Some(rv1::ruled_event::Ev::StackResolved(_))
+            ))
+            .count(),
+        0,
+        "answering the later Commander choice cannot rerun the completed Program tail"
+    );
+}
+
+#[test]
+fn manifest_dread_skipped_order_rejects_wrong_actor_malformed_and_stale_answers_atomically() {
+    let (mut engine, looked_at, _, _) = skipped_manifest_dread_order_prompt();
+    let before = engine.state.players[0].graveyard.clone();
+    let valid = rv1::SubmitResolutionChoice {
+        chosen_object_ids: looked_at.to_vec(),
+        ..Default::default()
+    };
+    assert!(engine.submit_resolution_choice(1, &valid).is_err());
+    assert_eq!(engine.state.players[0].graveyard, before);
+    assert!(engine.state.pending_resolution.is_some());
+
+    let duplicate = rv1::SubmitResolutionChoice {
+        chosen_object_ids: vec![looked_at[0], looked_at[0]],
+        ..Default::default()
+    };
+    assert!(engine.submit_resolution_choice(0, &duplicate).is_err());
+    assert_eq!(engine.state.players[0].graveyard, before);
+    assert!(engine.state.pending_resolution.is_some());
+
+    let unrelated = rv1::SubmitResolutionChoice {
+        chosen_object_ids: looked_at.to_vec(),
+        selected_branch_index: 1,
+        ..Default::default()
+    };
+    assert!(engine.submit_resolution_choice(0, &unrelated).is_err());
+    assert_eq!(engine.state.players[0].graveyard, before);
+    assert!(engine.state.pending_resolution.is_some());
+
+    let (mut stale, stale_ids, _, _) = skipped_manifest_dread_order_prompt();
+    *stale
+        .state
+        .zone_change_generation
+        .entry(stale_ids[0])
+        .or_insert(0) += 1;
+    let stale_before = stale.state.players[0].graveyard.clone();
+    assert!(stale
+        .submit_resolution_choice(
+            0,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: stale_ids.to_vec(),
+                ..Default::default()
+            },
+        )
+        .is_err());
+    assert_eq!(stale.state.players[0].graveyard, stale_before);
+    assert!(stale.state.pending_resolution.is_some());
+
+    let (mut wrong_zone, wrong_zone_ids, _, _) = skipped_manifest_dread_order_prompt();
+    move_object_to_zone(
+        &mut wrong_zone.state,
+        wrong_zone.registry,
+        wrong_zone_ids[0],
+        Zone::Hand,
+        None,
+    )
+    .unwrap();
+    let wrong_zone_before = wrong_zone.state.players[0].graveyard.clone();
+    assert!(wrong_zone
+        .submit_resolution_choice(
+            0,
+            &rv1::SubmitResolutionChoice {
+                chosen_object_ids: wrong_zone_ids.to_vec(),
+                ..Default::default()
+            },
+        )
+        .is_err());
+    assert_eq!(wrong_zone.state.players[0].graveyard, wrong_zone_before);
+    assert_eq!(
+        wrong_zone.state.objects[&wrong_zone_ids[1]].zone,
+        Zone::Library
+    );
+    assert!(wrong_zone.state.pending_resolution.is_some());
+}
+
+#[test]
+fn manifest_dread_skipped_order_owner_departure_retires_without_moving_partial_cohort() {
+    let (mut engine, looked_at, _, _) = skipped_manifest_dread_order_prompt_for_players(&[0, 1, 2]);
+    engine.state.players[0].has_lost = true;
+    let mut events = Vec::new();
+    engine
+        .reconcile_departed_players(&mut events)
+        .expect("retire unavailable owner cohort");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(looked_at.iter().all(|object_id| {
+        !engine.state.players[0].graveyard.contains(object_id)
+            && engine
+                .state
+                .objects
+                .get(object_id)
+                .is_none_or(|object| object.zone != Zone::Graveyard)
+    }));
+    assert!(!events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+            if looked_at.contains(&moved.object_id)
+    )));
+}
+
+#[test]
+fn manifest_dread_skipped_order_preserves_live_cohort_across_source_and_unrelated_departures() {
+    let (mut engine, looked_at, _, _) = skipped_manifest_dread_order_prompt_for_players(&[0, 1, 2]);
+    let source = engine
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "conductive_machete" && object.zone == Zone::Battlefield)
+        .expect("Equipment source remains on the battlefield")
+        .id;
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        source,
+        Zone::Graveyard,
+        None,
+    )
+    .unwrap();
+    let mut source_departure_events = Vec::new();
+    engine
+        .refresh_manifest_dread_graveyard_order_departure(&mut source_departure_events)
+        .expect("source departure preserves the live owner cohort");
+    assert!(matches!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation),
+        Some(ResolutionContinuation::ManifestDreadGraveyardOrder { .. })
+    ));
+    assert!(looked_at
+        .iter()
+        .all(|object_id| engine.state.objects[object_id].zone == Zone::Library));
+
+    engine.state.players[1].has_lost = true;
+    let mut unrelated_departure_events = Vec::new();
+    engine
+        .reconcile_departed_players(&mut unrelated_departure_events)
+        .expect("unrelated player departure preserves the live owner cohort");
+    assert!(matches!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation),
+        Some(ResolutionContinuation::ManifestDreadGraveyardOrder { .. })
+    ));
+    assert!(looked_at
+        .iter()
+        .all(|object_id| engine.state.objects[object_id].zone == Zone::Library));
 }
 
 #[test]

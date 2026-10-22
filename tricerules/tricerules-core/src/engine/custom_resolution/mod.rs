@@ -992,6 +992,30 @@ impl GameEngine {
                 "targeted hand-discard Program choice has unrelated resolution data",
             ));
         }
+        let manifest_dread_graveyard_order =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    matches!(
+                        pending.continuation,
+                        ResolutionContinuation::ManifestDreadGraveyardOrder { .. }
+                    )
+                });
+        if manifest_dread_graveyard_order
+            && (answer.decision != rv1::ResolutionChoiceDecision::Unspecified as i32
+                || answer.selected_branch_index != 0
+                || !answer.chosen_player_ids.is_empty()
+                || answer.cast_spell.is_some()
+                || answer.spell_cast_announcement.is_some()
+                || answer.chosen_combat_defender.is_some()
+                || answer.payment.is_some()
+                || !answer.restricted_mana.is_empty())
+        {
+            return Err(EngineError::Illegal(
+                "Manifest Dread graveyard order contains unrelated resolution data",
+            ));
+        }
         if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
             &self.state.pending_replacement_event
         {
@@ -1450,6 +1474,9 @@ impl GameEngine {
             ResolutionContinuation::Explore { .. } => self.finish_explore_choice(pending, chosen),
             ResolutionContinuation::ManifestDread { .. } => {
                 self.finish_manifest_dread(pending, chosen[0])
+            }
+            ResolutionContinuation::ManifestDreadGraveyardOrder { .. } => {
+                self.finish_manifest_dread_graveyard_order(pending, chosen)
             }
             ResolutionContinuation::HandChoice { .. } => self.finish_hand_choice(pending, chosen),
             ResolutionContinuation::PlayerSetDiscard { .. } => {

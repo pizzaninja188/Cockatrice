@@ -9441,6 +9441,57 @@ fn registry_compiles_nested_delayed_program_under_its_exact_child_owner() {
 }
 
 #[test]
+fn manifest_dread_can_bind_its_exact_optional_object_for_attach_equipment() {
+    use crate::primitives::{
+        AuthoredBlock, CardProgram, Cardinality, CompiledProgram, EffectContext, EffectSubject,
+        Instruction, InstructionKind, ResultType, SpellEffectKind,
+    };
+
+    let program = CardProgram {
+        body: AuthoredBlock {
+            steps: vec![
+                Instruction {
+                    id: "manifest".into(),
+                    bind: vec!["manifested".into()],
+                    input: None,
+                    kind: InstructionKind::Perform(Box::new(SpellEffectKind::ManifestDread)),
+                },
+                Instruction {
+                    id: "attach".into(),
+                    bind: vec![],
+                    input: Some("manifested".into()),
+                    kind: InstructionKind::Perform(Box::new(SpellEffectKind::AttachEquipment {
+                        equipment: EffectSubject::Source,
+                        creature: EffectSubject::PreviousEffectObject,
+                    })),
+                },
+            ],
+            yields: vec![],
+        },
+        target_bindings: vec![],
+    };
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "conductive_machete".into(),
+        face_id: crate::CardFaceId::new("conductive_machete").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = CompiledProgram::compile(owner, EffectContext::Ability, &program);
+    let compiled =
+        compiled.expect("Manifest Dread can bind its optional exact object to AttachEquipment");
+    let manifest_output = compiled.body.steps[0].outputs[0];
+    assert_eq!(
+        compiled.slot(manifest_output).unwrap().result_type,
+        ResultType::ManifestedPermanent {
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        },
+    );
+    assert_eq!(compiled.body.steps[1].input, Some(manifest_output));
+}
+
+#[test]
 fn program_compiler_resolves_only_dominating_discard_result_conditions() {
     let definition = program_fixture(
         r#"(steps: [

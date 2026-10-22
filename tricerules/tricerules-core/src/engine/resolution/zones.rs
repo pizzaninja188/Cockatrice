@@ -6,7 +6,7 @@ use super::super::presentation::{
 use super::candidate_identities;
 use super::*;
 use crate::state::{
-    EntryCounterPlacement, EntryCounterSource, PendingLinkedExileAction,
+    EntryCounterPlacement, EntryCounterSource, ManifestDreadLibraryRef, PendingLinkedExileAction,
     PendingLinkedExileChoiceStage, SpecialCastCompletion,
 };
 
@@ -6079,6 +6079,7 @@ fn begin_library_partition(
 /// The two-card branch parks behind the existing private library image picker; short libraries
 /// complete deterministically without asking a meaningless question.
 pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let program_stack = cx.program_state.as_ref().map(|_| cx.parked_stack());
     let engine = &mut *cx.engine;
     let controller = cx.controller;
     let Some(player_idx) = engine.state.player_idx(controller) else {
@@ -6090,6 +6091,20 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         .take(2)
         .copied()
         .collect();
+    let library_refs = candidates
+        .iter()
+        .enumerate()
+        .map(|(position, &object_id)| ManifestDreadLibraryRef {
+            object_id,
+            zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            library_position: position as u32,
+        })
+        .collect::<Vec<_>>();
     if candidates.is_empty() {
         cx.events.push(ev_log(format!(
             "P{controller} manifests dread with an empty library ({}).",
@@ -6099,6 +6114,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     }
     if candidates.len() == 1 {
         let object_id = candidates[0];
+        let library_position = 0;
         engine
             .state
             .objects
@@ -6139,12 +6155,14 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             },
             BattlefieldEntryCompletion::ManifestDread {
                 owner: controller,
-                other_object_id: None,
-                chosen_library_position: 0,
+                library_refs: library_refs.clone(),
             },
             cx.events,
         )? {
             super::super::replacement::BattlefieldEntryProgress::Parked => {
+                if let Some(stack) = program_stack.as_ref() {
+                    engine.transfer_entry_choice_resume(stack);
+                }
                 return Ok(EffectOutcome::Suspended);
             }
             super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
@@ -6152,6 +6170,26 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 if let Some(object) = engine.state.objects.get_mut(&entry.object_id) {
                     object.face_down = false;
                 }
+                let owner = engine
+                    .state
+                    .objects
+                    .get(&object_id)
+                    .map(|object| object.owner)
+                    .ok_or(EngineError::Illegal("manifested card is missing"))?;
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    object_id,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                cx.events.push(permanent_moved_event_with_library_position(
+                    &engine.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                    library_position,
+                ));
                 return Ok(EffectOutcome::Continue);
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
@@ -6181,7 +6219,11 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         }
     }
 
-    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let candidate_ids = library_refs
+        .iter()
+        .map(|reference| reference.object_id)
+        .collect::<Vec<_>>();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidate_ids);
     let prompt =
         "Choose one of the top two cards to manifest. The other will be put into your graveyard."
             .to_string();
@@ -6197,7 +6239,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
                 choice_kind: custom::ChoiceKind::ManifestDread as i32,
-                candidate_object_ids: candidates.clone(),
+                candidate_object_ids: candidate_ids.clone(),
                 candidate_card_ids,
                 candidate_names: candidate_names.clone(),
                 min: 1,
@@ -6235,7 +6277,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
-            candidates: candidates.clone(),
+            candidates: candidate_ids,
             min: 1,
             max: 1,
             ordered: false,
@@ -6244,8 +6286,8 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             choice_kind: custom::ChoiceKind::ManifestDread,
         },
         continuation: ResolutionContinuation::ManifestDread {
-            stack: ParkedStackResolution::new(cx.top.clone()),
-            looked_at: candidates,
+            stack: program_stack.unwrap_or_else(|| ParkedStackResolution::new(cx.top.clone())),
+            looked_at: library_refs,
         },
     });
     Ok(EffectOutcome::Suspended)

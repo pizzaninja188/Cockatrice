@@ -45,6 +45,16 @@ Source-owner-only departure leaves the live controller's choice in place. A chos
 resumes only for the captured object incarnation; a missing or later incarnation is a no-op. Existing
 typed Program `Choose` departure behavior is retained through the shared delegation helpers.
 
+Card-specific update (2026-10-22): Conductive Machete, Cursed Windbreaker, and Killer's Mask now
+author their exact ETB `ManifestDread` result as an optional `ManifestedPermanent` (`0..1`) and
+bind that result to `AttachEquipment`'s creature input. The engine publishes the exact entered
+object only after entry commits; an empty library or skipped entry publishes no object, and a stale
+Equipment source makes the attach operation a no-op. Existing modifiers, equip costs, and
+presentation remain under exact owner assertions. This admits no general attachment resolver or
+new effect-list forms. The runtime has a skipped-entry path, but these three owners cannot currently
+produce an actual skipped-entry scenario, so that specific scenario evidence remains deferred.
+No protobuf, relay, or client contract changed.
+
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are
 `Paid`, `Declined`, `NotOffered` and `ForcedUnpaid`. `Paid` follows an accepted, committed payment;

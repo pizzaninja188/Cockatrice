@@ -4813,16 +4813,15 @@ fn match_equipment_etb_manifest_dread_attach(
     (context.source_is_equipment
         && text == "When this Equipment enters, manifest dread, then attach this Equipment to that creature.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![
-                    SpellEffectKind::ManifestDread,
-                    SpellEffectKind::AttachEquipment {
-                        equipment: EffectSubject::Source,
-                        creature: EffectSubject::PreviousEffectObject,
-                    },
-                ],
+                authored_program(
+                    "(id: \"manifest_dread\", bind: [\"manifested\"], kind: Perform(ManifestDread)), \
+                     (id: \"attach_equipment\", input: Some(\"manifested\"), kind: Perform(AttachEquipment( \
+                       equipment: Source, creature: PreviousEffectObject)))",
+                    "",
+                ),
             )
         })
 }
@@ -29969,16 +29968,17 @@ mod tests {
             Some(RecipeMatch {
                 emission: RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
                     effect,
+                    trigger: TriggerCondition::WhenSelfEntersBattlefield,
+                    program: Some(program),
                     ..
                 }),
                 ..
-            }) if effect == vec![
-                SpellEffectKind::ManifestDread,
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObject,
-                }
-            ]
+            }) if effect.is_empty() && program == authored_program(
+                "(id: \"manifest_dread\", bind: [\"manifested\"], kind: Perform(ManifestDread)), \
+                 (id: \"attach_equipment\", input: Some(\"manifested\"), kind: Perform(AttachEquipment( \
+                   equipment: Source, creature: PreviousEffectObject)))",
+                "",
+            )
         ));
         for near_miss in [
             "When this Equipment enters, manifest dread, then attach this Equipment to a creature.",
