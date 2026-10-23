@@ -7,7 +7,7 @@
   // CR 701.22: the Scry decision finishes before the following draw.
   spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 1))),
-    (id: "draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
-  ], yields: []), target_bindings: [])),
+    (id: "scry", kind: Perform(Scry(count: 1))),
+    (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+  ]))),
 )

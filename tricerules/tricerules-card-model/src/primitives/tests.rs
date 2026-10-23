@@ -3308,6 +3308,7 @@ fn issue_165_quantities_reject_unsupported_shapes_and_source_contexts() {
         "Affine(terms: [(coefficient: 0, quantity: SourcePower)])",
         "Affine(terms: [(coefficient: 1, quantity: Affine(terms: [(coefficient: 1, quantity: SourcePower)]))])",
         "Affine(terms: [(coefficient: 1, quantity: CardsMatchingResult(filter: (source: Payment, action: Discard, players: Controller)))])",
+        "Affine(terms: [(coefficient: 1, quantity: CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All)))])",
     ] {
         let expression: super::CountExpression = ron::from_str(source).unwrap();
         assert!(expression.validate().is_err(), "{source}");
@@ -11378,6 +11379,371 @@ fn spell_targeted_hand_discard_program_captures_target_group_result_for_card_typ
             "unsupported targeted hand-discard profile must fail closed: {case}"
         );
     }
+}
+
+fn program_gain_life_result_fixture(
+    id: &str,
+    steps: &str,
+    target_bindings: &str,
+    targeting: &str,
+) -> String {
+    format!(
+        r#"(id: "{id}", name: "Gain Life Result Fixture", face_id: "{id}",
+            mana_cost: "{{W}}", types: ["Sorcery"],
+            spell_program: Some((body: (steps: [{steps}], yields: []), target_bindings: {target_bindings})),
+            targeting: {targeting})"#
+    )
+}
+
+#[test]
+fn program_gain_life_result_count_rejects_wrong_scope_shape_and_overflow() {
+    const TARGET_BINDINGS: &str =
+        r#"[(instruction_id: "discard", role: Target, target_group_index: 0)]"#;
+    const TARGETING: &str =
+        r#"Some((groups: [(min: 1, max: 1, prompt: "Choose target player", effect_indices: [])]))"#;
+    const DISCARD: &str = r#"(id: "discard", bind: ["discarded"], input: None,
+        kind: Perform(ChooseHandCards(action: Discard, count: 3,
+            target: (kind: AnyPlayer), chooser: AffectedPlayer,
+            card_filter: None, optional: false)))"#;
+    const MILL: &str = r#"(id: "mill", bind: ["milled"], input: None,
+        kind: Perform(Mill(count: 4, who: Controller)))"#;
+    const MILL_COUNT: &str = r#"Count(CardsMatchingResult(filter: (
+        source: PreviousEffect, action: Mill, players: Controller,
+        card_type: Some(Creature))))"#;
+    const MILL_RESULT_LEAF: &str = r#"CardsMatchingResult(filter: (
+        source: PreviousEffect, action: Mill, players: Controller,
+        card_type: Some(Creature)))"#;
+
+    let wrong_type = program_gain_life_result_fixture(
+        "gain_life_result_wrong_type",
+        r#"(id: "draw", bind: ["drawn"], input: None,
+              kind: Perform(Draw(count: 1, who: Controller))),
+            (id: "gain", bind: [], input: Some("drawn"),
+              kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
+                source: PreviousEffect, action: Mill, players: Controller,
+                card_type: Some(Creature)))))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_type], &[])
+        .expect_err("a DrawReceipt is not a card-result cohort");
+    assert!(error.to_string().contains("wrong type"), "{error}");
+
+    let unbound = program_gain_life_result_fixture(
+        "gain_life_result_unbound",
+        &format!(
+            r#"{MILL}, (id: "gain", bind: [], input: None,
+                  kind: Perform(GainLife(amount: {MILL_COUNT})))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unbound], &[])
+        .expect_err("a result count must bind its producer slot explicitly");
+    assert!(
+        error.to_string().contains("explicitly bound input result"),
+        "{error}"
+    );
+
+    let forward = program_gain_life_result_fixture(
+        "gain_life_result_forward",
+        &format!(
+            r#"(id: "gain", bind: [], input: Some("milled"),
+                  kind: Perform(GainLife(amount: {MILL_COUNT}))), {MILL}"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&forward], &[])
+        .expect_err("a forward result reference is out of scope");
+    assert!(error.to_string().contains("is not in scope"), "{error}");
+
+    let branch_local = program_gain_life_result_fixture(
+        "gain_life_result_branch_local",
+        &format!(
+            r#"(id: "branch", bind: [], input: None,
+                  kind: If(condition: Void,
+                    yes: (steps: [{MILL}], yields: []),
+                    no: (steps: [], yields: []))),
+                (id: "gain", bind: [], input: Some("milled"),
+                  kind: Perform(GainLife(amount: {MILL_COUNT})))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&branch_local], &[])
+        .expect_err("a result not yielded from its branch is out of scope");
+    assert!(error.to_string().contains("is not in scope"), "{error}");
+
+    let non_immediate = program_gain_life_result_fixture(
+        "gain_life_result_non_immediate",
+        &format!(
+            r#"{MILL}, (id: "scry", bind: [], input: None,
+                  kind: Perform(Scry(count: 1))),
+                (id: "gain", bind: [], input: Some("milled"),
+                  kind: Perform(GainLife(amount: {MILL_COUNT})))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&non_immediate], &[])
+        .expect_err("a prior but non-immediate result is unsupported");
+    assert!(
+        error.to_string().contains("immediately preceding"),
+        "{error}"
+    );
+
+    let mismatched_input = program_gain_life_result_fixture(
+        "gain_life_result_mismatched_input",
+        &format!(
+            r#"(id: "first_mill", bind: ["first"], input: None,
+                  kind: Perform(Mill(count: 4, who: Controller))),
+                (id: "current_mill", bind: ["current"], input: None,
+                  kind: Perform(Mill(count: 4, who: Controller))),
+                (id: "gain", bind: [], input: Some("first"),
+                  kind: Perform(GainLife(amount: {MILL_COUNT})))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_input], &[]).expect_err(
+        "the consumer cannot bind an older cohort when a different receipt is immediate",
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("immediately preceding instruction"),
+        "{error}"
+    );
+
+    let unbounded = program_gain_life_result_fixture(
+        "gain_life_result_unbounded",
+        &format!(
+            r#"(id: "mill", bind: ["milled"], input: None,
+                  kind: Perform(Mill(count: Count(CardsInHand(players: Relative(Controller))), who: Controller))),
+                (id: "gain", bind: [], input: Some("milled"),
+                  kind: Perform(GainLife(amount: {MILL_COUNT})))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unbounded], &[])
+        .expect_err("the producer receipt must have a finite upper bound");
+    assert!(error.to_string().contains("finite matching"), "{error}");
+
+    let mismatched_filter = program_gain_life_result_fixture(
+        "gain_life_result_mismatched_filter",
+        &format!(
+            r#"{DISCARD}, (id: "gain", bind: [], input: Some("discarded"),
+                  kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
+                    source: PreviousEffect, action: Mill, players: Controller,
+                    card_type: Some(Creature)))))))"#
+        ),
+        TARGET_BINDINGS,
+        TARGETING,
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_filter], &[])
+        .expect_err("the filter action and player set must match the Discard receipt");
+    assert!(error.to_string().contains("must match"), "{error}");
+
+    let unsupported_affine = program_gain_life_result_fixture(
+        "gain_life_result_unsupported_affine",
+        &format!(
+            r#"{MILL}, (id: "gain", bind: [], input: Some("milled"),
+                  kind: Perform(GainLife(amount: Count(Affine(constant: 1, terms: [
+                    (coefficient: 1, quantity: CardsMatchingResult(filter: (
+                      source: PreviousEffect, action: Mill, players: Controller,
+                      card_type: Some(Creature))))])))))"#
+        ),
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_affine], &[])
+        .expect_err("nonzero affine constants remain unsupported");
+    assert!(
+        error
+            .to_string()
+            .contains("one positive zero-constant affine term"),
+        "{error}"
+    );
+
+    for (suffix, amount) in [
+        (
+            "zero_coefficient",
+            format!(
+                "Count(Affine(constant: 0, terms: [(coefficient: 0, quantity: {MILL_RESULT_LEAF})]))"
+            ),
+        ),
+        (
+            "negative_coefficient",
+            format!(
+                "Count(Affine(constant: 0, terms: [(coefficient: -1, quantity: {MILL_RESULT_LEAF})]))"
+            ),
+        ),
+        (
+            "nested_affine",
+            format!(
+                "Count(Affine(constant: 0, terms: [(coefficient: 1, quantity: Affine(constant: 0, terms: [(coefficient: 1, quantity: {MILL_RESULT_LEAF})]))]))"
+            ),
+        ),
+        (
+            "multiple_terms",
+            format!(
+                "Count(Affine(constant: 0, terms: [(coefficient: 1, quantity: {MILL_RESULT_LEAF}), (coefficient: 1, quantity: {MILL_RESULT_LEAF})]))"
+            ),
+        ),
+    ] {
+        let card = program_gain_life_result_fixture(
+            &format!("gain_life_result_{suffix}"),
+            &format!(
+                r#"{MILL}, (id: "gain", bind: [], input: Some("milled"),
+                      kind: Perform(GainLife(amount: {amount})))"#
+            ),
+            "[]",
+            "None",
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+            .expect_err("only one positive result term is supported");
+        assert!(
+            error
+                .to_string()
+                .contains("one positive zero-constant affine term"),
+            "{suffix}: {error}"
+        );
+    }
+
+    let overflow = program_gain_life_result_fixture(
+        "gain_life_result_overflow",
+        r#"(id: "mill", bind: ["milled"], input: None,
+              kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "gain", bind: [], input: Some("milled"),
+              kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
+                (coefficient: 2147483647, quantity: CardsMatchingResult(filter: (
+                  source: PreviousEffect, action: Mill, players: Controller,
+                  card_type: Some(Creature))))])))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&overflow], &[])
+        .expect_err("the affine result bound must fit u32");
+    assert!(error.to_string().contains("can exceed u32::MAX"), "{error}");
+}
+
+#[test]
+fn program_gain_life_accepts_gerrards_typed_discard_result_count() {
+    let verdict = r#"(id: "gerrard_gain_life_result_fixture", name: "Gerrard Gain Life Result Fixture",
+        face_id: "gerrard_gain_life_result_fixture", mana_cost: "{W}{B}", types: ["Sorcery"],
+        spell_program: Some((body: (steps: [
+            (id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(ChooseHandCards(action: Discard, count: 2,
+                    target: (kind: AnyPlayer), chooser: AffectedPlayer,
+                    card_filter: None, optional: false))),
+            (id: "gain_life", bind: [], input: Some("discarded"),
+                kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
+                    (coefficient: 3, quantity: CardsMatchingResult(filter: (
+                        source: PreviousEffect, action: Discard, players: All,
+                        card_type: Some(Land),
+                    )))
+                ])))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "discard", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target player", effect_indices: [],
+        )])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[verdict], &[]).expect(
+        "Program GainLife accepts the immediate targeted Discard receipt and 3x Land count",
+    );
+    let owner = crate::ProgramOwnerId::face(
+        "gerrard_gain_life_result_fixture",
+        crate::CardFaceId::new("gerrard_gain_life_result_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the Gerrard fixture owns its compiled spell Program");
+    let [discard, gain_life] = compiled.body.steps.as_slice() else {
+        panic!("the fixture keeps one producer immediately followed by its consumer");
+    };
+    let [discard_result] = discard.outputs.as_slice() else {
+        panic!("the targeted Discard produces exactly one typed cohort");
+    };
+    assert_eq!(gain_life.input, Some(*discard_result));
+    assert!(matches!(
+        &compiled
+            .slot(*discard_result)
+            .expect("typed Discard slot")
+            .result_type,
+        crate::primitives::ResultType::TargetCardResultCohort {
+            action: crate::primitives::CardResultAction::Discard,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(2)
+            },
+            target_group_index: 0,
+        }
+    ));
+    assert!(matches!(
+        &gain_life.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife { .. })
+    ));
+}
+
+#[test]
+fn program_gain_life_accepts_vultures_typed_mill_result_count() {
+    let vulture = r#"(id: "vulture_gain_life_result_fixture", name: "Vulture Gain Life Result Fixture",
+        face_id: "vulture_gain_life_result_fixture", types: ["Creature", "Bird"],
+        power: 2, toughness: 2,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield, effect: [],
+            program: Some((body: (steps: [
+                (id: "mill", bind: ["milled"], input: None,
+                    kind: Perform(Mill(count: 4, who: Controller))),
+                (id: "gain_life", bind: [], input: Some("milled"),
+                    kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
+                        source: PreviousEffect, action: Mill, players: Controller,
+                        card_type: Some(Creature),
+                    ))))))
+            ], yields: []))), modal: None, targeting: None,
+            may: false, intervening_if: None, triggers_only_once: false,
+            max_triggers_per_turn: None)])"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[vulture], &[]).expect(
+        "Program GainLife accepts the immediate Controller Mill receipt and Creature count",
+    );
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "vulture_gain_life_result_fixture".into(),
+        face_id: crate::CardFaceId::new("vulture_gain_life_result_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the Vulture fixture owns its compiled triggered Program");
+    let [mill, gain_life] = compiled.body.steps.as_slice() else {
+        panic!("the fixture keeps one producer immediately followed by its consumer");
+    };
+    let [mill_result] = mill.outputs.as_slice() else {
+        panic!("the Controller Mill produces exactly one typed cohort");
+    };
+    assert_eq!(gain_life.input, Some(*mill_result));
+    assert!(matches!(
+        &compiled
+            .slot(*mill_result)
+            .expect("typed Mill slot")
+            .result_type,
+        crate::primitives::ResultType::CardResultCohort {
+            action: crate::primitives::CardResultAction::Mill,
+            who: crate::primitives::PlayerRecipient::Controller,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(4)
+            },
+        }
+    ));
+    assert!(matches!(
+        &gain_life.kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife { .. })
+    ));
 }
 
 #[test]

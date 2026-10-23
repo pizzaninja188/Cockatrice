@@ -9266,4 +9266,49 @@ mod invariant_rollback_tests {
             draws_before + 1
         );
     }
+
+    #[test]
+    fn gain_life_rejects_an_unwritten_typed_result_without_mutating_state() {
+        let mut engine = program_resolution_fixture();
+        let object_id = engine.state.stack.last().expect("fixture spell").id;
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture card object")
+            .card_id = "gerrards_verdict".into();
+        let top = engine.state.stack.last_mut().expect("fixture stack item");
+        top.card_id = "gerrards_verdict".into();
+        top.face_index = 0;
+        let top = top.clone();
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "gerrards_verdict",
+            tricerules_card_model::CardFaceId::new("gerrard_s_verdict").unwrap(),
+        );
+        let mut run = engine
+            .begin_program_run(&top, vec![owner])
+            .expect("actual Gerrard Program starts with an unwritten discard result slot");
+        run.frames[0].next_instruction = 1;
+
+        let before = command_snapshot(&engine);
+        let life_before = engine.state.players[0].life;
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine.run_program_with_previous(
+                &top,
+                run,
+                crate::state::EffectResult::default(),
+                &mut events,
+            ),
+            Err(EngineError::ProgramInvariant(
+                "resolution program input is unavailable"
+            ))
+        ));
+        assert_eq!(engine.state.players[0].life, life_before);
+        assert!(events.is_empty());
+        assert!(
+            command_snapshot(&engine) == before,
+            "an unwritten result rejection preserves the command snapshot"
+        );
+    }
 }

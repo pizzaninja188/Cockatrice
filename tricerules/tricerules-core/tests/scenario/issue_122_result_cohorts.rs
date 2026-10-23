@@ -762,22 +762,26 @@ fn gerrards_verdict_counts_only_visible_library_of_leng_discard_types_and_replay
             }
         }
 
+        let mut final_order_answer = None;
         if hidden_count == 2 {
-            let order = engine
+            let pending = engine
                 .state
                 .pending_resolution
                 .as_ref()
-                .expect("two cards placed on top need an order")
-                .presentation
-                .clone();
+                .expect("two cards placed on top need an order");
+            let order = pending.presentation.clone();
+            let order_prompt_id = pending.resolution_prompt_id.get();
+            assert_ne!(order_prompt_id, 0);
             assert!(order.ordered);
             assert_eq!(order.candidates, chosen);
-            accepted_step(
-                &mut engine,
-                &mut accepted,
-                1,
-                submit_resolution_choice(order.candidates.clone()),
-            );
+            let mut answer = submit_resolution_choice(order.candidates.clone());
+            let Some(Cmd::SubmitResolutionChoice(answer_data)) = answer.cmd.as_mut() else {
+                unreachable!("the Library of Leng order is a resolution choice");
+            };
+            answer_data.resolution_prompt_id = order_prompt_id;
+            accepted_step(&mut engine, &mut accepted, 1, answer.clone());
+            assert_eq!(accepted.last().unwrap().1, answer);
+            final_order_answer = Some(answer);
         }
 
         assert!(engine.state.pending_resolution.is_none());
@@ -789,6 +793,31 @@ fn gerrards_verdict_counts_only_visible_library_of_leng_discard_types_and_replay
         );
         assert_eq!(engine.state.players[1].life, 20);
         assert_eq!(engine.state.players[2].life, 20);
+        if let Some(answer) = final_order_answer {
+            let accepted_prompt_id = match answer.cmd.as_ref() {
+                Some(Cmd::SubmitResolutionChoice(answer)) => answer.resolution_prompt_id,
+                _ => unreachable!("the accepted Library of Leng order is a resolution choice"),
+            };
+            assert_ne!(
+                accepted_prompt_id, 0,
+                "the accepted answer retains its prompt ID"
+            );
+            let expected_life = engine.state.players[0].life;
+            assert_eq!(expected_life, 20);
+            let before = engine.diagnostic_snapshot().unwrap();
+            let command_index = engine.state.command_index;
+            assert!(
+                engine.apply_command(1, &answer).is_err(),
+                "the exact accepted Library of Leng answer is stale after resolution"
+            );
+            assert_eq!(engine.state.players[0].life, expected_life);
+            assert_eq!(engine.state.command_index, command_index);
+            assert_eq!(
+                engine.diagnostic_snapshot().unwrap(),
+                before,
+                "a rejected exact retry emits no batch or log and preserves the complete state"
+            );
+        }
         let public_name_events = accepted
             .iter()
             .flat_map(|(_, _, batch)| batch.events.iter())

@@ -15,13 +15,13 @@
 //! Widening these rules needs a separately typed context/result contract.
 
 use super::{
-    Amount, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
-    CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection, EffectContext,
-    EffectSubject, GameCondition, GraveyardDestination, LibraryBottomOrder, LifeAmount,
-    PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost,
-    ResolvingEffectDuration, SearchDestination, SearchSelectionBounds, SearchSelectionConstraint,
-    SearchZoneSelection, SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef,
-    TokenCopySource, ZoneCardFilter,
+    Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
+    CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
+    CountExpression, EffectContext, EffectSubject, GameCondition, GraveyardDestination,
+    LibraryBottomOrder, LifeAmount, PlayerRecipient, QuantityTerm, RelativePlayerSet,
+    ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
+    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
+    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -1415,6 +1415,12 @@ impl Compiler<'_> {
                         &self.slots,
                         self.allow_koya_outer_exile_result,
                     )?;
+                    validate_program_gain_life_result_count_input(
+                        effect,
+                        input,
+                        steps.last(),
+                        &self.slots,
+                    )?;
                     validate_previous_mill_mana_value_sum_input(
                         effect,
                         input,
@@ -2416,6 +2422,139 @@ fn is_targeted_opponent_previous_mill_damage(effect: &EffectOp) -> bool {
     )
 }
 
+fn program_gain_life_result_count_profile(amount: &Amount) -> Option<(&CardResultFilter, u32)> {
+    match amount {
+        Amount::Count(CountExpression::CardsMatchingResult { filter }) => Some((filter, 1)),
+        Amount::Count(CountExpression::Affine { constant: 0, terms }) => match terms.as_slice() {
+            [QuantityTerm {
+                coefficient,
+                quantity: CountExpression::CardsMatchingResult { filter },
+            }] if *coefficient > 0 => Some((filter, u32::try_from(*coefficient).ok()?)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn validate_program_gain_life_result_count_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    previous: Option<&CompiledInstruction>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    let EffectOp::GainLife { amount } = effect else {
+        return Ok(());
+    };
+    let Some(filter) = amount.card_result_filter() else {
+        return Ok(());
+    };
+    let Some((profile_filter, coefficient)) = program_gain_life_result_count_profile(amount) else {
+        return Err(
+            "Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into(),
+        );
+    };
+    debug_assert_eq!(filter, profile_filter);
+
+    let input = input.ok_or_else(|| {
+        "Program GainLife result count requires an explicitly bound input result".to_string()
+    })?;
+    let previous = previous.ok_or_else(|| {
+        "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".to_string()
+    })?;
+    let [previous_output] = previous.outputs.as_slice() else {
+        return Err(
+            "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
+        );
+    };
+    if *previous_output != input {
+        return Err(
+            "Program GainLife input must be the result of the immediately preceding instruction"
+                .into(),
+        );
+    }
+
+    let (action, players, producer_max) = match &previous.kind {
+        CompiledInstructionKind::Perform(producer) => match producer.as_ref() {
+            SpellEffectKind::ChooseHandCards {
+                action: super::HandCardAction::Discard,
+                count,
+                ..
+            } => (
+                CardResultAction::Discard,
+                RelativePlayerSet::All,
+                Some(*count),
+            ),
+            SpellEffectKind::Mill {
+                count,
+                who: PlayerRecipient::Controller,
+            } => (
+                CardResultAction::Mill,
+                RelativePlayerSet::Controller,
+                amount_upper_bound(count),
+            ),
+            _ => {
+                return Err(
+                    "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
+                );
+            }
+        },
+        _ => {
+            return Err(
+                "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
+            );
+        }
+    };
+
+    if filter.source != CardResultSource::PreviousEffect
+        || filter.action != action
+        || filter.players != players
+    {
+        return Err(
+            "Program GainLife result count must match the immediately preceding Discard or Controller Mill action and player set".into(),
+        );
+    }
+
+    let slot = slots
+        .get(input.0 as usize)
+        .ok_or_else(|| "Program GainLife input result slot is unavailable".to_string())?;
+    let result_max = match (&slot.result_type, action) {
+        (
+            ResultType::TargetCardResultCohort {
+                action: CardResultAction::Discard,
+                cardinality:
+                    Cardinality {
+                        min: 0,
+                        max: Some(max),
+                    },
+                ..
+            },
+            CardResultAction::Discard,
+        ) => Some(*max),
+        (
+            ResultType::CardResultCohort {
+                action: CardResultAction::Mill,
+                who: PlayerRecipient::Controller,
+                cardinality:
+                    Cardinality {
+                        min: 0,
+                        max: Some(max),
+                    },
+            },
+            CardResultAction::Mill,
+        ) => Some(*max),
+        _ => None,
+    };
+    let Some(max) = result_max.filter(|max| producer_max == Some(*max)) else {
+        return Err(
+            "Program GainLife result count requires a finite matching Discard or Controller Mill result".into(),
+        );
+    };
+    if coefficient.checked_mul(max).is_none() {
+        return Err("Program GainLife result count can exceed u32::MAX".into());
+    }
+    Ok(())
+}
+
 fn validate_previous_mill_mana_value_sum_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
@@ -2564,6 +2703,9 @@ fn compile_input(
             source: ChooseCardSource::CardResultCohort { .. },
             ..
         } => Some("CardResultCohort"),
+        EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
+            Some("CardResultCohort")
+        }
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
@@ -2605,6 +2747,18 @@ fn compile_input(
                         ..
                     }
                 ),
+                EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort {
+                            action: CardResultAction::Mill,
+                            ..
+                        } | ResultType::TargetCardResultCohort {
+                            action: CardResultAction::Discard,
+                            ..
+                        }
+                    )
+                }
                 EffectOp::RevealCohort => {
                     matches!(actual.result_type, ResultType::FoundLibraryCohort)
                 }
@@ -3396,6 +3550,20 @@ fn validate_and_result_types(
                 return Err(
                     "LookChooseToHand in spell_program requires an exact positive unfiltered, unrevealed, chosen-order selection".into(),
                 );
+            }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::GainLife { amount } if amount.card_result_filter().is_some() => {
+            if program_gain_life_result_count_profile(amount).is_none() {
+                return Err(
+                    "Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into(),
+                );
+            }
+            // The direct leaf retains ordinary effect validation. The one-term affine form is
+            // checked by the Program's immediate producer contract; global CountExpression
+            // affine validation remains closed to result leaves.
+            if matches!(amount, Amount::Count(CountExpression::CardsMatchingResult { .. })) {
+                effect.validate(context)?;
             }
             Ok(Vec::new())
         }

@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "67330f45-d08c-4fe2-8ae3-8d18939c512a",
+  "spans": [
+    {
+      "face_id": "gorging_vulture",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "gorging_vulture",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/bind",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Mill",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/input",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/CardsMatchingResult"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Mill",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Mill"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife"
+    },
+    {
+      "symbol": "CountExpression::CardsMatchingResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/CardsMatchingResult"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::authored_operation_reuse::authored_gorging_vulture_uses_typed_mill_result_gain_life_program",
+      "covers": "the actual Gorging Vulture ability owner has a Mill result bound to the immediately following Creature-count GainLife"
+    },
+    {
+      "test": "scenario mill_results::gorging_vulture_counts_only_creatures_milled_by_its_trigger",
+      "covers": "only creatures among the four cards milled by this trigger count; an older creature already in the graveyard is excluded"
+    },
+    {
+      "test": "scenario mill_results::gorging_vulture_mills_as_many_as_possible_and_counts_that_short_cohort",
+      "covers": "a two-card library mills only its two available cards and gains life for the one creature in that short cohort"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

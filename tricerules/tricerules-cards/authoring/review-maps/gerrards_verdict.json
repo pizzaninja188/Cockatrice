@@ -11,12 +11,10 @@
         "/faces/0/targeting/groups/0",
         "/faces/0/spell_program/body/steps/0/kind/Perform/ChooseHandCards",
         "/faces/0/spell_program/target_bindings/0",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/GainLife",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/condition/CardResultCount",
-        "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+        "/faces/0/spell_program/body/steps/1/input",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/CardsMatchingResult"
       ]
     }
   ],
@@ -35,24 +33,16 @@
       "typed_path": "/faces/0/spell_program/target_bindings/0/role"
     },
     {
-      "symbol": "InstructionKind::IfResult",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult"
-    },
-    {
-      "symbol": "ProgramResultCondition::CardResultCount",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/condition/CardResultCount"
-    },
-    {
       "symbol": "SpellEffectKind::GainLife",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife"
     },
     {
-      "symbol": "ProgramResultCondition::CardResultCount",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/condition/CardResultCount"
+      "symbol": "CountExpression::Affine",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine"
     },
     {
-      "symbol": "SpellEffectKind::GainLife",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/IfResult/no/steps/0/kind/IfResult/yes/steps/0/kind/Perform/GainLife"
+      "symbol": "CountExpression::CardsMatchingResult",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/CardsMatchingResult"
     }
   ],
   "semantic_fixtures": [

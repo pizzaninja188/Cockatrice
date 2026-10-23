@@ -1,14 +1,15 @@
-//! Exact authored owners for the reusable Scry, search, and Proliferate operations.
+//! Exact authored owners for reusable Scry, search, Proliferate, and result-count operations.
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef,
-    CastTriggerPlayer, CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction,
-    CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
-    CompiledProgramResultCondition, DiscardQuantity, DiscardResultOutcome, EntersTappedAffected,
-    GameCondition, GraveyardAggregate, LibraryBottomOrder, LifeAmount, ManaAmount,
-    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost, ResultType,
-    SearchDestination, SearchSelectionBounds, SearchZoneSelection, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
+    AbilityCost, Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone,
+    CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer, CompiledChooseBranch,
+    CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind, CompiledProgram,
+    CompiledProgramCondition, CompiledProgramResultCondition, CountExpression, DiscardQuantity,
+    DiscardResultOutcome, EntersTappedAffected, GameCondition, GraveyardAggregate,
+    LibraryBottomOrder, LifeAmount, ManaAmount, PermanentTypeFilter, PlayerRecipient,
+    RelativePlayerSet, ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds,
+    SearchZoneSelection, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
+    TargetKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
 
@@ -417,6 +418,75 @@ fn authored_opt_is_scry_then_draw_program() {
         SpellEffectKind::Draw {
             who: PlayerRecipient::Controller,
             count: Amount::Fixed(1),
+        },
+    );
+}
+
+#[test]
+fn authored_gorging_vulture_uses_typed_mill_result_gain_life_program() {
+    let face = tricerules_cards::registry::global()
+        .get("gorging_vulture")
+        .expect("Gorging Vulture is registered")
+        .primary_face();
+    let [trigger] = face.triggered_abilities.as_slice() else {
+        panic!("Gorging Vulture has one ETB trigger");
+    };
+    assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+    assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert_eq!(
+        trigger.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(vec![2])
+    );
+
+    let program = ability_program("gorging_vulture", 0, false);
+    assert_eq!(program.context, EffectContext::Ability);
+    assert!(program.required_inputs.is_empty());
+    assert!(program.target_bindings.is_empty());
+    assert!(program.body.yields.is_empty());
+    let [mill, gain_life] = program.body.steps.as_slice() else {
+        panic!("the actual owner performs Mill then counts that result for life");
+    };
+    assert_eq!(mill.id, "mill");
+    assert!(mill.input.is_none());
+    let [mill_result] = mill.outputs.as_slice() else {
+        panic!("Mill binds its typed card-result cohort");
+    };
+    assert_eq!(
+        program.slot(*mill_result).unwrap().result_type,
+        ResultType::CardResultCohort {
+            action: CardResultAction::Mill,
+            who: PlayerRecipient::Controller,
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(4),
+            },
+        }
+    );
+    assert_perform_effect(
+        mill,
+        SpellEffectKind::Mill {
+            count: Amount::Fixed(4),
+            who: PlayerRecipient::Controller,
+        },
+    );
+
+    assert_eq!(gain_life.id, "gain_life");
+    assert_eq!(gain_life.input, Some(*mill_result));
+    assert!(gain_life.outputs.is_empty());
+    let CompiledInstructionKind::Perform(gain_effect) = &gain_life.kind else {
+        panic!("the bound consumer is a GainLife operation");
+    };
+    assert_eq!(
+        gain_effect.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+            }),
         },
     );
 }

@@ -1,5 +1,5 @@
-// Oracle and rulings checked 2026-08-11. The life gain counts only creature cards in the exact
-// cohort produced by the preceding mill instruction (CR 608.2c, 701.17c).
+// Oracle and rulings rechecked 2026-10-22. The life gain counts only creatures in the exact
+// preceding Mill cohort; a short library mills as many as possible (CR 608.2c, 701.17b, 701.17c).
 (
   id: "gorging_vulture",
   name: "Gorging Vulture",
@@ -14,15 +14,18 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [
-        Mill(count: 4),
-        GainLife(amount: Count(CardsMatchingResult(filter: (
-          source: PreviousEffect,
-          action: Mill,
-          players: Controller,
-          card_type: Some(Creature),
-        )))),
-      ],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "mill", bind: ["milled"], input: None,
+          kind: Perform(Mill(count: 4, who: Controller))),
+        (id: "gain_life", bind: [], input: Some("milled"),
+          kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
+            source: PreviousEffect,
+            action: Mill,
+            players: Controller,
+            card_type: Some(Creature),
+          )))))),
+      ], yields: []))),
     ),
   ],
 )

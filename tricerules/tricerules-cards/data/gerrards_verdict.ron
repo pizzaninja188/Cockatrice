@@ -1,5 +1,5 @@
-// Oracle checked 2026-10-20. The target discards two cards; count the exact visible discard
-// result (CR 608.2c, 701.9b) so hidden Library of Leng cards do not contribute card types.
+// Oracle checked 2026-10-22. The target discards two cards; count the exact visible discard
+// result (CR 608.2c, 701.9c) so hidden Library of Leng cards do not contribute card types.
 (
   id: "gerrards_verdict",
   name: "Gerrard's Verdict",
@@ -12,17 +12,13 @@
       kind: Perform(ChooseHandCards(action: Discard, count: 2,
         target: (kind: AnyPlayer), chooser: AffectedPlayer,
         card_filter: None, optional: false))),
-    (id: "gain_six", bind: [], input: None,
-      kind: IfResult(condition: CardResultCount(result: "discarded",
-        card_type: Some(Land), min: Some(2)),
-        yes: (steps: [(id: "six_life", bind: [], input: None,
-          kind: Perform(GainLife(amount: 6)))], yields: []),
-        no: (steps: [(id: "gain_three", bind: [], input: None,
-          kind: IfResult(condition: CardResultCount(result: "discarded",
-            card_type: Some(Land), min: Some(1)),
-            yes: (steps: [(id: "three_life", bind: [], input: None,
-              kind: Perform(GainLife(amount: 3)))], yields: []),
-            no: (steps: [], yields: [])))], yields: []))),
+    (id: "gain_life", bind: [], input: Some("discarded"),
+      kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
+        (coefficient: 3, quantity: CardsMatchingResult(filter: (
+          source: PreviousEffect, action: Discard, players: All,
+          card_type: Some(Land),
+        )))
+      ])))))
   ], yields: []), target_bindings: [
     (instruction_id: "discard", role: Target, target_group_index: 0),
   ])),
