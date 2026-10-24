@@ -15,9 +15,11 @@ current request; carry forward authorization and acceptance deferrals. Planning 
   Rust and C++. Preserve freeform gating.
 - Reuse valid final verification on unchanged content, dependencies and environment. A later commit
   request alone does not require another run. Fix material defects; defer optional polish after green.
-- Give reproducible manual steps when interaction, networking, privacy or physical identity matters.
-  Distinguish automated, agent-operated GUI, user-confirmed, deferred and N/A evidence. Explicit manual
-  deferral permits applicable automated work and already-authorized delivery to proceed.
+- Default GUI acceptance to the user; provide concise setup, actions and expected results for affected
+  interaction, networking, privacy or physical identity cases. Run agent-operated GUI checks only when
+  explicitly requested. Keep acceptance pending until the user confirms it, or record explicit deferral.
+  Distinguish automated, agent-operated GUI, user-confirmed, deferred and N/A evidence. Manual deferral
+  permits applicable automated work and already-authorized delivery; it does not establish acceptance.
 
 ## Authority and architecture
 
@@ -62,7 +64,8 @@ If a running executable blocks linking, stop only its exact process and rebuild.
 
 ## Manual Windows interaction
 
-Use trusted `node_repl` → `@oai/sky`: initialize, enumerate apps/windows, select returned windows,
+When agent-operated GUI checks are requested, use trusted `node_repl` → `@oai/sky`: initialize,
+enumerate apps/windows, select returned windows,
 and refresh state after actions. Do not use browser-only `cua_repl` for native control. Launch
 `scripts/launch-ruled-game.ps1 -Dev` in the interactive user context; clients owned by
 `CodexSandboxOffline` do not establish visible acceptance. See the game guide for launch/stop steps.

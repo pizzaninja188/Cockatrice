@@ -37,7 +37,7 @@ For touched interaction paths, verify the actual context-menu action, target-arr
 
 ## Manual verification on Windows
 
-Automated tests cover view-model, widget, and headless end-to-end behavior, but do not establish hands-on GUI acceptance. For interaction, networking, hidden-information, or cross-zone identity behavior, use a real ruled game to check the remaining visible interaction paths, or specify those steps when manual testing is deferred. Launch from the repository root:
+Automated tests cover view-model, widget, and headless end-to-end behavior, but do not establish hands-on GUI acceptance. Default to user-operated testing: provide concise real-game setup, actions and expected results for affected interaction, networking, hidden-information or cross-zone identity paths. Record acceptance as pending/deferred until the user confirms it; run agent-operated GUI checks only when explicitly requested. For user instructions or requested agent execution, launch from the repository root:
 
 ```powershell
 ./scripts/launch-ruled-game.ps1

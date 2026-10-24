@@ -10,7 +10,13 @@ The active agent workflow assumes Windows and PowerShell. Existing Linux/macOS s
 2. **Green:** make one coherent implementation increment and rerun the regression.
 3. **Stabilize:** run the affected package or targeted CTest group after each subsequent coherent increment.
 4. **Finish:** once stable, run the full build and full suite for every affected side. Run lint, format, generated-data gates, and `git diff --check` as applicable.
-5. **Manual:** use the real two-client flow when behavior depends on Qt interaction, networking, hidden information, or physical identity.
+5. **Manual:** give the user concise real two-client steps and expected results when behavior depends on Qt interaction, networking, hidden information, or physical identity. User-operated GUI acceptance is the default; run it as an agent only when explicitly requested.
+
+Keep manual acceptance pending until the user confirms the applicable checks, or record their explicit
+deferral. Supply only the affected cases, once per compatible batch, with exact setup and observable
+results. Automated gates remain required; passing them does not mark unperformed GUI checks passed.
+Do not launch clients or collect GUI screenshots as routine preparation. Explicit manual deferral
+permits already-authorized delivery under the root instructions while retaining the deferred status.
 
 “After every code change” means after every coherent implementation increment that can be meaningfully compiled or tested. Batch inseparable edits needed to establish one compilable state; do not postpone all verification until the end.
 
