@@ -619,10 +619,16 @@ impl GameEngine {
         Ok(None)
     }
 
-    pub(in crate::engine) fn current_program_perform(
+    fn current_compiled_perform_instruction(
         &self,
         program_state: &ProgramRunState,
-    ) -> Result<SpellEffectKind, EngineError> {
+    ) -> Result<
+        (
+            &tricerules_card_model::primitives::CompiledInstruction,
+            &SpellEffectKind,
+        ),
+        EngineError,
+    > {
         let compiled = self
             .registry
             .compiled_program_for_owner(&program_state.owner)
@@ -655,7 +661,15 @@ impl GameEngine {
                 "resolution program choice was not a leaf operation",
             ));
         };
-        Ok(effect.as_ref().clone())
+        Ok((instruction, effect.as_ref()))
+    }
+
+    pub(in crate::engine) fn current_program_perform(
+        &self,
+        program_state: &ProgramRunState,
+    ) -> Result<SpellEffectKind, EngineError> {
+        let (_, effect) = self.current_compiled_perform_instruction(program_state)?;
+        Ok(effect.clone())
     }
 
     pub(in crate::engine) fn run_program_with_previous(
@@ -8323,9 +8337,11 @@ mod invariant_rollback_tests {
             let chosen = islands[0];
             nested_select_objects(&mut engine, vec![chosen]);
             let (_, _, run) = parked_program(&engine);
-            assert!(
-                matches!(nested_slot(run, parent_slot), Some(ProgramValue::PermanentSelection(cards)) if cards.len() == 1 && cards[0].object_id == chosen)
-            );
+            assert!(matches!(
+                nested_slot(run, parent_slot),
+                Some(ProgramValue::PermanentSelection(cards))
+                    if cards.len() == 1 && cards[0].object_id == chosen
+            ));
             nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
             assert_eq!(
                 engine.state.turn_history.current.player(0).cards_drawn,

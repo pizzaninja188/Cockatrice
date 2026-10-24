@@ -1931,6 +1931,7 @@ impl GameEngine {
             pending_observer_return_batch: None,
             pending_trigger_order: None,
             pending_resolution: None,
+            departed_targeted_player_control_cohorts: HashMap::new(),
             next_resolution_prompt_id: BTreeMap::new(),
             pending_replacement_event: None,
             draw_step_progress: None,

@@ -232,7 +232,7 @@ impl GameEngine {
         )
     }
 
-    fn program_for_activation_occurrence(
+    pub(super) fn program_for_activation_occurrence(
         &self,
         occurrence: &crate::state::ActivatedAbilityOccurrence,
     ) -> Option<&tricerules_card_model::primitives::CompiledProgram> {

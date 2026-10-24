@@ -929,6 +929,24 @@ impl GameEngine {
             return Ok(());
         }
         let departed_set: HashSet<_> = departed.iter().copied().collect();
+        let newly_departed_cohorts = departed
+            .iter()
+            .filter_map(|&player_id| {
+                if self
+                    .state
+                    .departed_targeted_player_control_cohorts
+                    .contains_key(&player_id)
+                {
+                    return None;
+                }
+                let cohort =
+                    super::resolution::current_targeted_player_control_cohort(self, player_id);
+                self.state
+                    .departed_targeted_player_control_cohorts
+                    .insert(player_id, cohort.clone());
+                Some((player_id, cohort))
+            })
+            .collect::<Vec<_>>();
         self.reconcile_spell_cast_departure(&departed_set)?;
         // Preserve actual owner removals across deletion; entry controllers/deciders may survive.
         let departed_objects: HashSet<_> = self
@@ -938,28 +956,10 @@ impl GameEngine {
             .filter(|object| departed.contains(&object.owner))
             .map(|object| object.id)
             .collect();
-        let targeted_player_lki_cohort = self
-            .state
-            .pending_resolution
-            .as_ref()
-            .and_then(|pending| match &pending.continuation {
-                ResolutionContinuation::TargetedPlayerPermanentChoice { target_player, .. }
-                    if departed.contains(target_player) =>
-                {
-                    Some(*target_player)
-                }
-                _ => None,
-            })
-            .map(|target_player| {
-                (
-                    target_player,
-                    super::resolution::current_targeted_player_control_cohort(self, target_player),
-                )
-            });
-        // Capture actual owner removals and the targeted player's current control information
-        // before deleting objects or ending the effects that grant control.
+        // Capture actual owner removals and every newly departed player's control cohort before
+        // deleting objects or ending the effects that grant control.
         let mut source_snapshot_objects = departed_objects.clone();
-        if let Some((_, cohort)) = &targeted_player_lki_cohort {
+        for (_, cohort) in &newly_departed_cohorts {
             source_snapshot_objects.extend(
                 cohort
                     .permanents
@@ -991,33 +991,6 @@ impl GameEngine {
                 generation,
                 characteristics,
             );
-        }
-        if let Some((target_player, cohort)) = targeted_player_lki_cohort {
-            if let Some(PendingResolution {
-                presentation,
-                continuation:
-                    ResolutionContinuation::TargetedPlayerPermanentChoice {
-                        target_player: pending_target,
-                        cohort: saved_cohort,
-                        candidate_generations,
-                        ..
-                    },
-                ..
-            }) = self.state.pending_resolution.as_mut()
-            {
-                if *pending_target == target_player {
-                    *saved_cohort = cohort.clone();
-                    *candidate_generations = cohort
-                        .permanents
-                        .iter()
-                        .map(|permanent| (permanent.object_id, permanent.zone_change_generation))
-                        .collect();
-                    presentation.candidates = candidate_generations
-                        .iter()
-                        .map(|(object_id, _)| *object_id)
-                        .collect();
-                }
-            }
         }
         let mut moved_stack_to_exile = HashSet::new();
         let mut parked_stack_removal_ids = HashSet::new();

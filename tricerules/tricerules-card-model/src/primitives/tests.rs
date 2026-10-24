@@ -2564,7 +2564,7 @@ fn flat_koya_exile_to_delayed_trigger_signature_requires_an_authored_program() {
 }
 
 #[test]
-fn teferi_flat_single_previous_object_return_remains_admitted() {
+fn teferi_flat_choose_return_shuffle_requires_an_authored_program() {
     let effects: Vec<super::SpellEffectKind> = ron::from_str(
         r#"[
             ChoosePermanents(
@@ -2582,8 +2582,128 @@ fn teferi_flat_single_previous_object_return_remains_admitted() {
     )
     .expect("Teferi's live flat choose-return-shuffle sequence parses");
 
-    super::SpellEffectKind::validate_list(&effects)
-        .expect("the legacy single-object Teferi return remains valid");
+    let error = super::SpellEffectKind::validate_list(&effects)
+        .expect_err("the legacy flat list cannot express the targeted-player shuffle contract");
+    assert!(
+        error.contains("ShuffleNonlandPermanentsIntoOwnersLibraries requires an authored Program"),
+        "unexpected flat shuffle rejection: {error}"
+    );
+}
+
+#[test]
+fn teferi_ultimate_uses_the_selection_slot_only_for_the_return() {
+    let definition = r#"(id: "teferi_program_fixture", name: "Teferi Program Fixture",
+        face_id: "teferi_program_fixture", types: ["Legendary", "Planeswalker", "Teferi"],
+        loyalty: 4,
+        activated_abilities: [(
+            ability_id: "ultimate", presentation: Fallback, costs: [Loyalty(-12)],
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "choose_permanent", bind: ["selected"], input: None,
+                    kind: Perform(ChoosePermanents(
+                        chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                        filter: (kind: AnyPermanent, controller: You),
+                        min: 1, max: 1, constraints: [],
+                    ))),
+                (id: "gain_life", kind: Perform(GainLife(amount: 1))),
+                (id: "return_chosen", bind: [], input: Some("selected"),
+                    kind: Perform(ReturnToOwnersHand(subject: PreviousEffectObject))),
+                (id: "shuffle_target", bind: [], input: None,
+                    kind: Perform(ShuffleNonlandPermanentsIntoOwnersLibraries(
+                        players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+                    ))),
+            ], yields: []), target_bindings: [
+                (instruction_id: "choose_permanent", role: Target, target_group_index: 0),
+                (instruction_id: "shuffle_target", role: Target, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(
+                min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [],
+            )])),
+            timing: Normal, conditions: [], activation_limit: None,
+        )])"#;
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("Teferi's target-bound choose-return-shuffle Program compiles");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "teferi_program_fixture".into(),
+        face_id: crate::CardFaceId::new("teferi_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("ultimate").unwrap()],
+    });
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact ability owns its compiled Program");
+    assert_eq!(compiled.body.steps.len(), 4);
+    assert_eq!(
+        compiled.body.steps[2].input,
+        compiled.body.steps[0].outputs.first().copied()
+    );
+    assert_eq!(
+        compiled.body.steps[3].input, None,
+        "the shuffle uses its target binding and departure cohort, not the selected-object result"
+    );
+
+    let two_target_groups = definition.replace(
+        "(groups: [(\n                min: 1, max: 1, prompt: \"Choose target opponent\", effect_indices: [],\n            )])",
+        "(groups: [(\n                min: 1, max: 1, prompt: \"Choose target opponent\", effect_indices: [],\n            ), (\n                min: 1, max: 1, prompt: \"Choose another target opponent\", effect_indices: [],\n            )])",
+    );
+    assert_ne!(
+        two_target_groups, definition,
+        "second target group fixture was not added"
+    );
+
+    for (label, fixture, original, replacement) in [
+        (
+            "return without a typed input",
+            definition,
+            "(id: \"return_chosen\", bind: [], input: Some(\"selected\"),",
+            "(id: \"return_chosen\", bind: [], input: None,",
+        ),
+        (
+            "chooser group differs from its valid target binding",
+            two_target_groups.as_str(),
+            "chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer)",
+            "chooser: TargetedPlayer(group_index: 1, kind: OpponentPlayer)",
+        ),
+        (
+            "shuffle group differs from its valid target binding",
+            two_target_groups.as_str(),
+            "players: TargetedPlayer(group_index: 0, kind: OpponentPlayer)",
+            "players: TargetedPlayer(group_index: 1, kind: OpponentPlayer)",
+        ),
+        (
+            "wrong targeted-player kind",
+            definition,
+            "chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer)",
+            "chooser: TargetedPlayer(group_index: 0, kind: AnyPlayer)",
+        ),
+        (
+            "unbound chooser target role",
+            definition,
+            "(instruction_id: \"choose_permanent\", role: Target, target_group_index: 0),\n                ",
+            "",
+        ),
+    ] {
+        let invalid = fixture.replace(original, replacement);
+        assert_ne!(invalid, fixture, "negative case '{label}' was not applied");
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err(),
+            "unsupported Program contract accepted for '{label}'"
+        );
+    }
+
+    let unused_shuffle_input = definition.replace(
+        "id: \"shuffle_target\", bind: [], input: None",
+        "id: \"shuffle_target\", bind: [], input: Some(\"selected\")",
+    );
+    assert_ne!(unused_shuffle_input, definition);
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unused_shuffle_input], &[])
+        .expect_err("Shuffle does not consume a selection result");
+    assert!(
+        error
+            .to_string()
+            .contains("instruction does not accept an input result"),
+        "unexpected Shuffle input rejection: {error}"
+    );
 }
 
 #[test]
@@ -10516,7 +10636,7 @@ fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
         (
             "ReturnToOwnersHand(subject: PreviousEffectObject)",
             super::EffectContext::Spell,
-            "owner-local chosen target",
+            "instruction requires an explicitly bound input result",
         ),
         (
             "CreateTokenCopies(count: 1, source: Source)",

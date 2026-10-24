@@ -36,6 +36,7 @@ pub(in crate::engine) use choices::{
 };
 pub(in crate::engine) use choices::{
     current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,
+    targeted_player_control_cohort_candidates,
 };
 
 pub(super) fn optional_triggered_ability_branch(

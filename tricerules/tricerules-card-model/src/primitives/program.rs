@@ -743,6 +743,42 @@ fn chosen_single_target_group(
     Ok((reference.target_group_index, group.max))
 }
 
+fn targeted_opponent_singleton_choice_group(effect: &SpellEffectKind) -> Option<u32> {
+    let SpellEffectKind::ChoosePermanents {
+        chooser:
+            PlayerRecipient::TargetedPlayer {
+                group_index,
+                kind: TargetKind::OpponentPlayer,
+            },
+        filter,
+        min: 1,
+        max: 1,
+        constraints,
+    } = effect
+    else {
+        return None;
+    };
+    let expected_filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: super::TargetController::You,
+        ..TargetFilter::default()
+    };
+    (filter == &expected_filter && constraints.is_empty()).then_some(*group_index)
+}
+
+fn targeted_opponent_nonland_shuffle_group(effect: &SpellEffectKind) -> Option<u32> {
+    match effect {
+        SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+            players:
+                RelativePlayerSet::TargetedPlayer {
+                    group_index,
+                    kind: TargetKind::OpponentPlayer,
+                },
+        } => Some(*group_index),
+        _ => None,
+    }
+}
+
 fn single_source_chosen_shuffle_filter(subjects: &[EffectSubject]) -> Option<&TargetFilter> {
     match subjects {
         [EffectSubject::Source, EffectSubject::Chosen(filter)]
@@ -1067,6 +1103,27 @@ fn authored_target_role_index(
                 subject: EffectSubject::Chosen(_),
             },
             ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::ChoosePermanents {
+                chooser:
+                    PlayerRecipient::TargetedPlayer {
+                        kind: TargetKind::OpponentPlayer,
+                        ..
+                    },
+                ..
+            },
+            ProgramTargetRole::Target,
+        )
+        | (
+            SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+                players:
+                    RelativePlayerSet::TargetedPlayer {
+                        kind: TargetKind::OpponentPlayer,
+                        ..
+                    },
+            },
+            ProgramTargetRole::Target,
         )
         | (
             SpellEffectKind::PutInOwnersLibrary {
@@ -1495,153 +1552,194 @@ impl Compiler<'_> {
                         &self.slots,
                         self.allow_koya_outer_exile_result,
                     )?;
+                    validate_return_to_owners_hand_input(effect, input, &self.slots)?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                     }
                     let mut target_group_max = None;
-                    let target_group_index =
-                        if matches!(effect.as_ref(), SpellEffectKind::CounterTargetAbility) {
-                            let (group_index, group_max) = counter_target_ability_target_group(
+                    let target_group_index = if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CounterTargetAbility
+                    ) {
+                        let (group_index, group_max) = counter_target_ability_target_group(
+                            &instruction.id,
+                            &self.target_references,
+                            self.targeting,
+                        )?;
+                        target_group_max = Some(group_max);
+                        Some(group_index)
+                    } else if self.context == EffectContext::Spell {
+                        match effect.as_ref() {
+                            SpellEffectKind::Destroy {
+                                subject: EffectSubject::Chosen(_),
+                            } => Some(spell_destroy_target_group(
                                 &instruction.id,
                                 &self.target_references,
-                                self.targeting,
-                            )?;
-                            target_group_max = Some(group_max);
-                            Some(group_index)
-                        } else if self.context == EffectContext::Spell {
-                            match effect.as_ref() {
-                                SpellEffectKind::Destroy {
-                                    subject: EffectSubject::Chosen(_),
-                                } => Some(spell_destroy_target_group(
+                            )?),
+                            SpellEffectKind::Exile {
+                                subject: EffectSubject::Chosen(_),
+                                linked_exile_id: None,
+                            } => {
+                                let (group_index, group_max) = spell_exile_target_group(
                                     &instruction.id,
                                     &self.target_references,
-                                )?),
-                                SpellEffectKind::Exile {
-                                    subject: EffectSubject::Chosen(_),
-                                    linked_exile_id: None,
-                                } => {
-                                    let (group_index, group_max) = spell_exile_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::ChooseHandCards { .. } => {
-                                    Some(spell_hand_discard_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                    )?)
-                                }
-                                SpellEffectKind::PutInOwnersLibrary {
-                                    subject: EffectSubject::Chosen(_),
-                                    ..
-                                } => {
-                                    let (group_index, group_max) = chosen_single_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                        ProgramTargetRole::Subject,
-                                        "PutInOwnersLibrary",
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::PutCounters {
-                                    subject: EffectSubject::Chosen(_),
-                                    ..
-                                } => {
-                                    let (group_index, group_max) = chosen_single_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                        ProgramTargetRole::Target,
-                                        "PutCounters",
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::ApplyCombatRestriction {
-                                    scope: super::CombatRestrictionScope::Chosen(_),
-                                    ..
-                                } => {
-                                    let (group_index, group_max) = chosen_single_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                        ProgramTargetRole::Target,
-                                        "ApplyCombatRestriction",
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                _ => None,
+                                    self.targeting,
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
                             }
-                        } else if self.context == EffectContext::Ability {
-                            match effect.as_ref() {
-                                SpellEffectKind::Tap {
-                                    subject: EffectSubject::Chosen(_),
-                                }
-                                | SpellEffectKind::PutCounters {
-                                    counter: super::CounterKind::Stun,
-                                    count: Amount::Fixed(1),
-                                    subject: EffectSubject::Chosen(_),
-                                } => {
-                                    let (group_index, group_max) = chosen_single_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                        ProgramTargetRole::Target,
-                                        "chosen permanent effect",
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
-                                    subjects,
-                                } if single_source_chosen_shuffle_filter(subjects).is_some() => {
-                                    let (group_index, group_max) = chosen_single_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                        ProgramTargetRole::Target,
-                                        "ShufflePermanentsIntoOwnersLibraries",
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::Exile {
-                                    subject: EffectSubject::Chosen(_),
-                                    linked_exile_id: None,
-                                } if self.allow_koya_outer_exile_result => {
-                                    let (group_index, group_max) = koya_outer_exile_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                    )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                SpellEffectKind::MoveGraveyardCards {
-                                    destination: GraveyardDestination::Exile,
-                                    ..
-                                } => {
-                                    let (group_index, group_max) =
-                                        ability_graveyard_exile_target_group(
-                                            &instruction.id,
-                                            &self.target_references,
-                                            self.targeting,
-                                        )?;
-                                    target_group_max = Some(group_max);
-                                    Some(group_index)
-                                }
-                                _ => None,
+                            SpellEffectKind::ChooseHandCards { .. } => {
+                                Some(spell_hand_discard_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                )?)
                             }
-                        } else {
-                            None
-                        };
+                            SpellEffectKind::PutInOwnersLibrary {
+                                subject: EffectSubject::Chosen(_),
+                                ..
+                            } => {
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Subject,
+                                    "PutInOwnersLibrary",
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::PutCounters {
+                                subject: EffectSubject::Chosen(_),
+                                ..
+                            } => {
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "PutCounters",
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::ApplyCombatRestriction {
+                                scope: super::CombatRestrictionScope::Chosen(_),
+                                ..
+                            } => {
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "ApplyCombatRestriction",
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            _ => None,
+                        }
+                    } else if self.context == EffectContext::Ability {
+                        match effect.as_ref() {
+                            SpellEffectKind::Tap {
+                                subject: EffectSubject::Chosen(_),
+                            }
+                            | SpellEffectKind::PutCounters {
+                                counter: super::CounterKind::Stun,
+                                count: Amount::Fixed(1),
+                                subject: EffectSubject::Chosen(_),
+                            } => {
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "chosen permanent effect",
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
+                                if single_source_chosen_shuffle_filter(subjects).is_some() =>
+                            {
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "ShufflePermanentsIntoOwnersLibraries",
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::ChoosePermanents { .. }
+                                if targeted_opponent_singleton_choice_group(effect).is_some() =>
+                            {
+                                let expected_group =
+                                    targeted_opponent_singleton_choice_group(effect)
+                                        .expect("guarded above");
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "ChoosePermanents targeted-opponent choice",
+                                )?;
+                                if group_index != expected_group {
+                                    return Err("ChoosePermanents targeted-opponent choice must use its chooser target group".into());
+                                }
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+                                ..
+                            } if targeted_opponent_nonland_shuffle_group(effect).is_some() => {
+                                let expected_group =
+                                    targeted_opponent_nonland_shuffle_group(effect)
+                                        .expect("guarded above");
+                                let (group_index, group_max) = chosen_single_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                    ProgramTargetRole::Target,
+                                    "ShuffleNonlandPermanentsIntoOwnersLibraries",
+                                )?;
+                                if group_index != expected_group {
+                                    return Err("ShuffleNonlandPermanentsIntoOwnersLibraries must use its targeted-player group".into());
+                                }
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::Exile {
+                                subject: EffectSubject::Chosen(_),
+                                linked_exile_id: None,
+                            } if self.allow_koya_outer_exile_result => {
+                                let (group_index, group_max) = koya_outer_exile_target_group(
+                                    &instruction.id,
+                                    &self.target_references,
+                                    self.targeting,
+                                )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::MoveGraveyardCards {
+                                destination: GraveyardDestination::Exile,
+                                ..
+                            } => {
+                                let (group_index, group_max) =
+                                    ability_graveyard_exile_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                    )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
                     if self.allow_vow_equipment_choice
                         && is_vow_chosen_target_effect(effect)
                         && !self.target_references.iter().any(|reference| {
@@ -2802,6 +2900,33 @@ fn validate_koya_exile_delayed_input(
     Ok(())
 }
 
+fn validate_return_to_owners_hand_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    let invalid = || {
+        "library resolution requires a compatible singleton PermanentSelection input".to_string()
+    };
+    let selection_input = match effect {
+        EffectOp::ReturnToOwnersHand {
+            subject: EffectSubject::PreviousEffectObject,
+        } => input.ok_or_else(invalid)?,
+        _ => return Ok(()),
+    };
+
+    let Some(ResultType::PermanentSelection {
+        cardinality: Cardinality { max: Some(1), .. },
+        ..
+    }) = slots
+        .get(selection_input.0 as usize)
+        .map(|slot| &slot.result_type)
+    else {
+        return Err(invalid());
+    };
+    Ok(())
+}
+
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
@@ -2815,6 +2940,9 @@ fn compile_input(
         EffectOp::GrantKeywords {
             subject: EffectSubject::PreviousEffectObject,
             ..
+        } => Some("PermanentSelection"),
+        EffectOp::ReturnToOwnersHand {
+            subject: EffectSubject::PreviousEffectObject,
         } => Some("PermanentSelection"),
         EffectOp::AttachEquipment {
             equipment: EffectSubject::Source,
@@ -3822,7 +3950,21 @@ fn validate_and_result_types(
             ..
         } => {
             effect.validate(context)?;
-            validate_program_controller(*chooser, "ChoosePermanents chooser")?;
+            let targeted_group = targeted_opponent_singleton_choice_group(effect);
+            if targeted_group.is_some() && context != EffectContext::Ability {
+                return Err(
+                    "targeted-opponent ChoosePermanents is supported only on an ability program"
+                        .into(),
+                );
+            }
+            if targeted_group.is_none() {
+                validate_program_controller(*chooser, "ChoosePermanents chooser")?;
+            } else if target_group_index != targeted_group {
+                return Err(
+                    "targeted-opponent ChoosePermanents must bind its player target to the authored target group"
+                        .into(),
+                );
+            }
             validate_program_choice_filter(filter)?;
             if !(constraints.is_empty()
                 || compiler.allow_vow_equipment_choice && is_exact_vow_equipment_choice(effect))
@@ -4079,13 +4221,31 @@ fn validate_and_result_types(
         }
         SpellEffectKind::ReturnToOwnersHand { subject } => {
             effect.validate(context)?;
-            let super::EffectSubject::Chosen(filter) = subject else {
+            match subject {
+                super::EffectSubject::Chosen(filter) => {
+                    validate_program_target_filter(filter, "ReturnToOwnersHand target")?;
+                }
+                super::EffectSubject::PreviousEffectObject => {}
+                _ => {
+                    return Err(
+                        "ReturnToOwnersHand requires an owner-local chosen target or its exact typed selection input in a resolution program"
+                            .into(),
+                    );
+                }
+            }
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
+            effect.validate(context)?;
+            if context != EffectContext::Ability
+                || targeted_opponent_nonland_shuffle_group(effect).is_none()
+                || target_group_index != targeted_opponent_nonland_shuffle_group(effect)
+            {
                 return Err(
-                    "ReturnToOwnersHand requires an owner-local chosen target in a resolution program"
+                    "ShuffleNonlandPermanentsIntoOwnersLibraries supports only its authored targeted-opponent ability group in a resolution program"
                         .into(),
                 );
-            };
-            validate_program_target_filter(filter, "ReturnToOwnersHand target")?;
+            }
             Ok(Vec::new())
         }
         SpellEffectKind::ReturnAllToOwnersHand { .. } => {

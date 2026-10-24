@@ -246,9 +246,6 @@ pub(crate) struct EffectResult {
     pub sacrificed_objects: Vec<TriggerObjectRef>,
     /// Controller of a legal stack target at the counter instruction, before any stack exit.
     pub targeted_spell_controller: Option<PlayerId>,
-    /// Teferi's choice retains a control-membership receipt for 800.4i LKI if the target leaves.
-    /// While the target remains in the game, later instructions read current battlefield state.
-    pub targeted_player_control_cohort: Option<TargetedPlayerControlCohort>,
     /// Typed library cohort/partition output from one composable resolution-program operation.
     /// This remains private to the engine and is never reconstructed from display data.
     pub program_value: Option<ProgramValue>,
@@ -306,7 +303,6 @@ impl From<CardResultCohort> for EffectResult {
             counter_placements: Vec::new(),
             sacrificed_objects: Vec::new(),
             targeted_spell_controller: None,
-            targeted_player_control_cohort: None,
             program_value: None,
         }
     }
@@ -3884,6 +3880,10 @@ pub struct GameState {
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
     /// deciding player submits their choice. See [`PendingResolution`].
     pub pending_resolution: Option<PendingResolution>,
+    /// Pre-cleanup control information for each departed targeted player, retained for later
+    /// instructions that resolve after their control effects have ended (CR 800.4i).
+    pub(crate) departed_targeted_player_control_cohorts:
+        HashMap<PlayerId, TargetedPlayerControlCohort>,
     /// Next nonzero prompt ID for each chooser. Monotonic and per player for deterministic replay.
     #[serde(skip_serializing)]
     pub(crate) next_resolution_prompt_id: BTreeMap<PlayerId, u64>,

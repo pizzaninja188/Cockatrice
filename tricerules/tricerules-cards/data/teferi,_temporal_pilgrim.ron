@@ -32,24 +32,30 @@
       ability_id: "activated_03",
       presentation: OracleLines([4]),
       costs: [Loyalty(-12)],
-      effect: [
-        ChoosePermanents(
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "choose_permanent", bind: ["selected"], kind: Perform(ChoosePermanents(
           chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
           filter: (kind: AnyPermanent, controller: You),
           min: 1,
           max: 1,
           constraints: [],
-        ),
-        ReturnToOwnersHand(subject: PreviousEffectObject),
-        ShuffleNonlandPermanentsIntoOwnersLibraries(
-          players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
-        ),
-      ],
+        ))),
+        (id: "return_chosen", input: Some("selected"), kind: Perform(
+          ReturnToOwnersHand(subject: PreviousEffectObject))),
+        (id: "shuffle_target", kind: Perform(
+          ShuffleNonlandPermanentsIntoOwnersLibraries(
+            players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+          ))),
+      ], yields: []), target_bindings: [
+        (instruction_id: "choose_permanent", role: Target, target_group_index: 0),
+        (instruction_id: "shuffle_target", role: Target, target_group_index: 0),
+      ])),
       targeting: Some((groups: [(
         min: 1,
         max: 1,
         prompt: "Choose target opponent",
-        effect_indices: [0, 2],
+        effect_indices: [],
         distinct_from: [],
         same_graveyard: false,
         cast_cost_expansion: None,

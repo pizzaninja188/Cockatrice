@@ -778,6 +778,18 @@ Stun-counter form is ability-only; spell Programs retain only their existing nar
 `PutCounters(PlusOnePlusOne, 1, Chosen(Creature))` form. These bindings reuse the existing target
 and Program-choice protocol; no wire or client choice type is added.
 
+Ability Programs also admit Teferi, Temporal Pilgrim's targeted-opponent profile: bind
+`ChoosePermanents(chooser: TargetedPlayer(group_index: g, kind: OpponentPlayer),
+filter: (kind: AnyPermanent, controller: You), min: 1, max: 1, constraints: [])` as role `Target`
+to one explicit required single-target group with empty `effect_indices`. Its following
+`ReturnToOwnersHand(PreviousEffectObject)` consumes that exact singleton `PermanentSelection`
+result. `ShuffleNonlandPermanentsIntoOwnersLibraries(TargetedPlayer(group_index: g,
+kind: OpponentPlayer))` is resultless and independently binds role `Target` to the same group; it has
+no selection-result input. At resolution it uses the target's current control set while that player
+is in the game, or the captured pre-cleanup control cohort when the player leaves during the pending
+resolution (CR 800.4i). If the chooser has left, the existing delegated-choice rule applies (CR
+800.4g). Keep this profile in an ability Program; the legacy flat-list shuffle form remains rejected.
+
 The ability-only `ShufflePermanentsIntoOwnersLibraries` profile requires exactly `Source` and one
 `Chosen(filter)` permanent, bound with role `Target` to one required single-target group (`min: 1`,
 `max: 1`). The Program group has an empty `effect_indices` list, and the ordinary effect and target

@@ -2364,16 +2364,7 @@ impl GameEngine {
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
         let target_source = TargetSourceIdentity::captured(permanent_id, source_zone_change);
-        let program = match &effective.occurrence {
-            ActivatedAbilityOccurrence::Printed(definition)
-            | ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
-                definition,
-                ..
-            }) => self.registry.compiled_program_for_owner(
-                &tricerules_card_model::ProgramOwnerId::ability(definition.clone()),
-            ),
-            _ => None,
-        };
+        let program = self.program_for_activation_occurrence(&effective.occurrence);
         validate_ability_targets_with_context_and_program(
             self,
             player,

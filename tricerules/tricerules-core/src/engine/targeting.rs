@@ -1039,9 +1039,51 @@ pub(super) fn permanent_choice_filter_legal(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> bool {
+    permanent_choice_filter_legal_inner(
+        engine,
+        filter,
+        oid,
+        chooser,
+        source,
+        trigger_context,
+        false,
+    )
+}
+
+/// Legality for a permanent in a departed targeted player's captured control cohort. Cohort
+/// membership supplies the former controller predicate; all other current choice restrictions
+/// still apply.
+pub(super) fn permanent_choice_filter_legal_for_control_cohort(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    oid: ObjectId,
+    chooser: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> bool {
+    permanent_choice_filter_legal_inner(engine, filter, oid, chooser, source, trigger_context, true)
+}
+
+fn permanent_choice_filter_legal_inner(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    oid: ObjectId,
+    chooser: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+    controller_is_in_cohort: bool,
+) -> bool {
     if let Some(branches) = &filter.any_of {
         return branches.iter().any(|branch| {
-            permanent_choice_filter_legal(engine, branch, oid, chooser, source, trigger_context)
+            permanent_choice_filter_legal_inner(
+                engine,
+                branch,
+                oid,
+                chooser,
+                source,
+                trigger_context,
+                controller_is_in_cohort,
+            )
         });
     }
     if filter.is_player()
@@ -1062,13 +1104,14 @@ pub(super) fn permanent_choice_filter_legal(
         return false;
     };
     target_owner_matches(&engine.state, filter.owner, chooser, oid)
-        && target_controller_matches(
-            &engine.state,
-            filter.controller,
-            chooser,
-            characteristics.controller,
-            trigger_context.defending_player,
-        )
+        && (controller_is_in_cohort
+            || target_controller_matches(
+                &engine.state,
+                filter.controller,
+                chooser,
+                characteristics.controller,
+                trigger_context.defending_player,
+            ))
 }
 
 fn target_filter_legal_with_context(
@@ -1889,27 +1932,6 @@ fn validate_effect_targets(
     Ok(())
 }
 
-/// Target validation for an activated or triggered ability's compiled target schema (CR 608.2).
-/// The same role checker publishes candidates and validates spells, abilities, and triggers.
-pub(super) fn validate_ability_targets(
-    engine: &GameEngine,
-    caster: PlayerId,
-    source: TargetSourceIdentity,
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-    targets: &[rv1::TargetRef],
-) -> Result<(), EngineError> {
-    validate_ability_targets_with_context(
-        engine,
-        caster,
-        source,
-        effects,
-        targeting,
-        targets,
-        TriggerContext::default(),
-    )
-}
-
 pub(super) fn x_target_group_indices(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
@@ -1966,29 +1988,6 @@ pub(super) fn validate_x_target_mana_value(
         }
     }
     Ok(())
-}
-
-pub(super) fn validate_ability_targets_with_context(
-    engine: &GameEngine,
-    caster: PlayerId,
-    source: TargetSourceIdentity,
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-    targets: &[rv1::TargetRef],
-    trigger_context: TriggerContext,
-) -> Result<(), EngineError> {
-    validate_ability_targets_with_context_and_program(
-        engine,
-        caster,
-        source,
-        targets,
-        TargetResolutionContext {
-            effects,
-            targeting,
-            trigger_context,
-            program: None,
-        },
-    )
 }
 
 pub(super) fn validate_ability_targets_with_context_and_program(

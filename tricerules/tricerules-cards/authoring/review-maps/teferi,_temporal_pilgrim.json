@@ -39,9 +39,7 @@
       "typed_paths": [
         "/faces/0/activated_abilities/2",
         "/faces/0/activated_abilities/2/costs/0",
-        "/faces/0/activated_abilities/2/effect/0",
-        "/faces/0/activated_abilities/2/effect/1",
-        "/faces/0/activated_abilities/2/effect/2",
+        "/faces/0/activated_abilities/2/program",
         "/faces/0/activated_abilities/2/targeting"
       ]
     }
@@ -69,15 +67,15 @@
     },
     {
       "symbol": "SpellEffectKind::ChoosePermanents",
-      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+      "typed_path": "/faces/0/activated_abilities/2/program/body/steps/0/kind/Perform/ChoosePermanents"
     },
     {
       "symbol": "SpellEffectKind::ReturnToOwnersHand",
-      "typed_path": "/faces/0/activated_abilities/2/effect/1"
+      "typed_path": "/faces/0/activated_abilities/2/program/body/steps/1/kind/Perform/ReturnToOwnersHand"
     },
     {
       "symbol": "SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries",
-      "typed_path": "/faces/0/activated_abilities/2/effect/2"
+      "typed_path": "/faces/0/activated_abilities/2/program/body/steps/2/kind/Perform/ShuffleNonlandPermanentsIntoOwnersLibraries"
     },
     {
       "symbol": "TargetingDef",

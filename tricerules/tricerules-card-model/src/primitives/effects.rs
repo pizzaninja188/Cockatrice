@@ -4324,45 +4324,14 @@ impl SpellEffectKind {
                         .into(),
                 );
             }
-            if let SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
-                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
-            } = effect
-            {
-                let previous_previous = index
-                    .checked_sub(2)
-                    .and_then(|previous| effects.get(previous));
-                let expected_filter = TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    controller: TargetController::You,
-                    ..TargetFilter::default()
-                };
-                let has_teferi_sequence = matches!(
-                    (previous_previous, previous),
-                    (
-                        Some(SpellEffectKind::ChoosePermanents {
-                            chooser: PlayerRecipient::TargetedPlayer {
-                                group_index: chooser_group,
-                                kind: chooser_kind,
-                            },
-                            filter,
-                            min: 1,
-                            max: 1,
-                            constraints,
-                        }),
-                        Some(SpellEffectKind::ReturnToOwnersHand {
-                            subject: EffectSubject::PreviousEffectObject,
-                        })
-                    ) if chooser_group == group_index
-                        && chooser_kind == kind
-                        && filter == &expected_filter
-                        && constraints.is_empty()
+            if matches!(
+                effect,
+                SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
+            ) {
+                return Err(
+                    "ShuffleNonlandPermanentsIntoOwnersLibraries requires an authored Program"
+                        .into(),
                 );
-                if !has_teferi_sequence {
-                    return Err(
-                        "ShuffleNonlandPermanentsIntoOwnersLibraries requires the matching targeted-player single-permanent choice and immediate PreviousEffectObject return"
-                            .into(),
-                    );
-                }
             }
             if matches!(
                 effect,

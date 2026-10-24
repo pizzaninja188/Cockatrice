@@ -8,8 +8,8 @@ use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingCounterMove, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
-    ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup, TriggerContext,
-    TriggerObjectRef,
+    ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup,
+    TargetedPlayerControlCohort, TriggerContext, TriggerObjectRef,
 };
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
@@ -142,8 +142,8 @@ pub(super) fn move_one_counter_between_targets(
     Ok(EffectOutcome::Suspended)
 }
 
-/// Capture the current control set for a live targeted player. Teferi uses this as the player
-/// information to preserve if that player later leaves during its parked resolution choice.
+/// Snapshot a player's current control set without consulting departure receipts. Reconciliation
+/// calls this before cleanup even though `has_lost` is already set on the departing player.
 pub(in crate::engine) fn current_targeted_player_control_cohort(
     engine: &GameEngine,
     player_id: PlayerId,
@@ -222,6 +222,71 @@ pub(in crate::engine) fn current_targeted_player_permanent_candidates(
         .collect()
 }
 
+/// Enumerate exact surviving members of a departed targeted player's control cohort that still
+/// satisfy the choice's characteristic, owner, exclusion, and auxiliary constraints.
+pub(in crate::engine) fn targeted_player_control_cohort_candidates(
+    engine: &GameEngine,
+    item: &StackItem,
+    target_player: PlayerId,
+    cohort: &TargetedPlayerControlCohort,
+    filter: &TargetFilter,
+    constraints: &[PermanentChoiceConstraint],
+) -> Vec<(ObjectId, u64)> {
+    if cohort.player_id != target_player {
+        return Vec::new();
+    }
+    let source = TargetSourceIdentity::for_stack_item(engine, item);
+    let condition_context = ConditionContext::for_stack_item(item);
+    cohort
+        .permanents
+        .iter()
+        .filter_map(|member| {
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&member.object_id)
+                .copied()
+                .unwrap_or(0);
+            if current_generation != member.zone_change_generation
+                || !engine
+                    .state
+                    .objects
+                    .get(&member.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                || !crate::engine::targeting::permanent_choice_filter_legal_for_control_cohort(
+                    engine,
+                    filter,
+                    member.object_id,
+                    target_player,
+                    source,
+                    item.trigger_context,
+                )
+            {
+                return None;
+            }
+            let constraints_hold = constraints.iter().all(|constraint| match constraint {
+                PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => engine
+                    .condition_object_identity(*recipient, condition_context)
+                    .is_some_and(|(recipient_id, expected_generation)| {
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&recipient_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == expected_generation
+                            && crate::engine::targeting::equipment_attachment_legal(
+                                engine,
+                                member.object_id,
+                                recipient_id,
+                            )
+                    }),
+            });
+            constraints_hold.then_some((member.object_id, member.zone_change_generation))
+        })
+        .collect()
+}
+
 pub(in crate::engine) fn permanent_choice_prompt(
     filter: &TargetFilter,
     min: u32,
@@ -288,17 +353,53 @@ pub(super) fn choose_permanents(
         ));
     };
     let deciding_player = *deciding_player;
-    let targeted_player_cohort = targeted_player
-        .map(|player_id| current_targeted_player_control_cohort(cx.engine, player_id));
-    cx.effect_result.targeted_player_control_cohort = targeted_player_cohort.clone();
-    let candidates = if targeted_player.is_some() {
-        current_targeted_player_permanent_candidates(
-            cx.engine,
-            cx.top,
-            deciding_player,
-            &filter,
-            &constraints,
-        )
+    let targeted_player_live = targeted_player.is_none_or(|player_id| {
+        cx.engine
+            .state
+            .player_idx(player_id)
+            .is_some_and(|index| !cx.engine.state.players[index].has_lost)
+    });
+    let targeted_player_cohort = if let Some(player_id) = targeted_player {
+        Some(if targeted_player_live {
+            current_targeted_player_control_cohort(cx.engine, player_id)
+        } else {
+            cx.engine
+                .state
+                .departed_targeted_player_control_cohorts
+                .get(&player_id)
+                .filter(|cohort| cohort.player_id == player_id)
+                .cloned()
+                .ok_or(EngineError::ProgramInvariant(
+                    "departed targeted player is missing its control cohort",
+                ))?
+        })
+    } else {
+        None
+    };
+    let candidates = if let Some(target_player) = targeted_player {
+        if targeted_player_live {
+            current_targeted_player_permanent_candidates(
+                cx.engine,
+                cx.top,
+                target_player,
+                &filter,
+                &constraints,
+            )
+        } else {
+            targeted_player_control_cohort_candidates(
+                cx.engine,
+                cx.top,
+                target_player,
+                targeted_player_cohort
+                    .as_ref()
+                    .expect("targeted-player cohort was captured"),
+                &filter,
+                &constraints,
+            )
+            .into_iter()
+            .map(|(object_id, _)| object_id)
+            .collect()
+        }
     } else {
         let source =
             crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
@@ -347,8 +448,9 @@ pub(super) fn choose_permanents(
     if candidates.is_empty() && min == 0 {
         return Ok(EffectOutcome::Continue);
     }
+    let departed_target_choice = targeted_player.is_some() && !targeted_player_live;
     let max = max.min(candidates.len() as u32);
-    if min == max && candidates.len() == min as usize {
+    if min == max && candidates.len() == min as usize && !departed_target_choice {
         cx.effect_result.produced_objects = candidates
             .iter()
             .map(|oid| TriggerObjectRef {
@@ -394,26 +496,28 @@ pub(super) fn choose_permanents(
         })
         .collect::<Vec<_>>();
     let prompt = permanent_choice_prompt(&filter, min, max);
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                resolution_prompt_id: 0,
-                variable_mana_contribution: false,
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: deciding_player,
-                source_object_id: cx.top.id,
-                prompt_text: prompt.clone(),
-                choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
-                candidate_object_ids: candidates.clone(),
-                candidate_card_ids,
-                candidate_names,
-                min,
-                max,
-                ..Default::default()
-            },
-        )),
-    });
-    cx.events.push(ev_log(prompt.clone()));
+    if !departed_target_choice {
+        cx.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
+                    variable_mana_contribution: false,
+                    candidate_player_ids: Vec::new(),
+                    deciding_player_id: deciding_player,
+                    source_object_id: cx.top.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
+                    candidate_object_ids: candidates.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    min,
+                    max,
+                    ..Default::default()
+                },
+            )),
+        });
+        cx.events.push(ev_log(prompt.clone()));
+    }
     let candidate_generations = candidates
         .iter()
         .map(|oid| {
@@ -461,6 +565,10 @@ pub(super) fn choose_permanents(
             }
         },
     });
+    if departed_target_choice {
+        cx.engine
+            .refresh_targeted_player_permanent_choice_departure(cx.events)?;
+    }
     Ok(EffectOutcome::Suspended)
 }
 

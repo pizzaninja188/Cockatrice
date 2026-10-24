@@ -650,6 +650,16 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
 
             let mut bindings = Vec::new();
             for binding in group_program_bindings {
+                if effects_by_address
+                    .get(&binding.instruction_address)
+                    .and_then(|effect| effect.targeted_mass_scope())
+                    .is_some_and(|(scope_group, _)| scope_group as usize != group_index)
+                {
+                    return Err(
+                        "targeted-player program instruction must bind its target role to the referenced player group"
+                            .into(),
+                    );
+                }
                 let roles = roles_by_address
                     .get(&binding.instruction_address)
                     .ok_or_else(|| {
@@ -2275,7 +2285,7 @@ mod tests {
     }
 
     #[test]
-    fn targeted_player_permanent_choice_and_teferi_shuffle_share_one_player_group() {
+    fn targeted_player_permanent_choice_and_shuffle_are_not_flat_list_operations() {
         let effects = vec![
             SpellEffectKind::ChoosePermanents {
                 chooser: PlayerRecipient::TargetedPlayer {
@@ -2314,7 +2324,7 @@ mod tests {
             }],
         };
         assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_ok());
-        assert!(SpellEffectKind::validate_list(&effects).is_ok());
+        assert!(SpellEffectKind::validate_list(&effects).is_err());
 
         let mut mismatched = effects.clone();
         mismatched[2] = SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {

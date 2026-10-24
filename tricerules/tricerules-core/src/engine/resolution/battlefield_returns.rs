@@ -16,9 +16,8 @@ fn completion_result(stack: &ParkedStackResolution) -> EffectResult {
         // already stored on the stack and must remain separate from this operation result.
         EffectResult::default()
     } else {
-        // Legacy effect lists publish their just-completed result on the parked stack when the
-        // executor stamps the resume cursor. Preserve it for the next effect (for example
-        // Teferi's TargetedPlayerControlCohort consumed by its following library-shuffle effect).
+        // Legacy effect lists publish the suspended operation's result on the parked stack when
+        // the executor stamps the resume cursor. Preserve that generic result for the next effect.
         stack.previous_result.clone()
     }
 }
@@ -37,17 +36,6 @@ pub(super) fn return_to_owners_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    if matches!(
-        &effect,
-        SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::PreviousEffectObject
-        }
-    ) {
-        cx.effect_result.targeted_player_control_cohort = cx
-            .previous_effect_result
-            .targeted_player_control_cohort
-            .clone();
-    }
     let subjects = match effect {
         SpellEffectKind::ReturnAllToOwnersHand { kind } => {
             battlefield_objects_matching(cx.engine, &kind)

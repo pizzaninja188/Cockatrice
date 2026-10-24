@@ -48,7 +48,10 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::ActivateAbility,
     ) -> Result<PreparedPaymentCosts, EngineError> {
-        use super::super::targeting::{validate_ability_targets, TargetSourceIdentity};
+        use super::super::targeting::{
+            validate_ability_targets_with_context_and_program, TargetResolutionContext,
+            TargetSourceIdentity,
+        };
         let source = command.source_object_id;
         let resolving_mana_payment = self.resolving_mana_payment_for(player);
         let casting_mana_payment = self
@@ -116,19 +119,27 @@ impl GameEngine {
         {
             return Err(EngineError::Illegal("stale activation source"));
         }
-        let ability = match source_zone {
+        let effective = match source_zone {
             AbilitySourceZone::Battlefield => self
                 .effective_activated_abilities(source)
                 .into_iter()
-                .find(|effective| effective.slot == command.ability_index)
-                .map(|effective| effective.definition),
+                .find(|effective| effective.slot == command.ability_index),
             AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => self
                 .authored_zone_activated_abilities(source, source_zone)
                 .into_iter()
                 .find(|(index, _, _)| *index == command.ability_index as usize)
-                .map(|(_, ability, _)| ability),
+                .map(|(_, ability, face_index)| {
+                    let definition = self.ability_definition(
+                        source,
+                        face_index,
+                        vec![ability.ability_id.clone()],
+                    );
+                    EffectiveActivatedAbility::authored(command.ability_index, ability, definition)
+                }),
         }
         .ok_or(EngineError::Illegal("missing activated ability"))?;
+        let ability = effective.definition;
+        let program = self.program_for_activation_occurrence(&effective.occurrence);
         if ability.requires_opponent_target_choice() {
             return Err(EngineError::Illegal(
                 "opponent target choices require staged activation before payment",
@@ -150,13 +161,17 @@ impl GameEngine {
         if !self.ability_activatable(source, command.ability_index as usize, &ability) {
             return Err(EngineError::Illegal("activation restrictions not met"));
         }
-        validate_ability_targets(
+        validate_ability_targets_with_context_and_program(
             self,
             player,
             TargetSourceIdentity::captured(source, command.expected_zone_change_generation),
-            &ability.effect,
-            ability.targeting.as_ref(),
             &command.targets,
+            TargetResolutionContext {
+                effects: &ability.effect,
+                targeting: ability.targeting.as_ref(),
+                trigger_context: TriggerContext::default(),
+                program,
+            },
         )?;
         let prepared = self.prepare_ability_costs(
             player,

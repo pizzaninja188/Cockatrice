@@ -1721,9 +1721,10 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
     let cohort_permanents = if target_live {
         super::current_targeted_player_control_cohort(cx.engine, target_player).permanents
     } else {
-        cx.previous_effect_result
-            .targeted_player_control_cohort
-            .as_ref()
+        cx.engine
+            .state
+            .departed_targeted_player_control_cohorts
+            .get(&target_player)
             .filter(|cohort| cohort.player_id == target_player)
             .ok_or(EngineError::Illegal(
                 "nonland library shuffle is missing its departed targeted-player cohort",
@@ -1733,7 +1734,7 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
     };
 
     let mut affected_owners = Vec::new();
-    let mut moves = Vec::new();
+    let mut object_ids = Vec::new();
     for member in &cohort_permanents {
         let current_generation = cx
             .engine
@@ -1769,62 +1770,18 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
         if !current_battlefield_object {
             continue;
         }
-
-        let movement = prepare_zone_move(
-            &cx.engine.state,
-            cx.engine.registry,
-            member.object_id,
-            Zone::Library,
-            None,
-        )?
-        .ok_or(EngineError::Illegal(
-            "targeted nonland permanent disappeared during library shuffle preparation",
-        ))?;
-        let name = object_display_name(&cx.engine.state, cx.engine.registry, member.object_id);
-        let leave_event = cx.engine.battlefield_leave_event(member.object_id);
-        moves.push((movement, member.object_id, member.owner, name, leave_event));
+        object_ids.push(member.object_id);
     }
 
-    // All selected movements and LTB snapshots are prepared against one battlefield state,
-    // then committed as one instruction before any represented library is shuffled.
-    let zone_snapshot = cx.engine.snapshot_zone_event();
-    let mut leave_events = Vec::new();
-    for (movement, object_id, owner, name, leave_event) in moves {
-        commit_zone_move(&mut cx.engine.state, cx.engine.registry, movement)?;
-        leave_events.extend(leave_event);
-        cx.events.push(permanent_moved_event(
-            &cx.engine.state,
-            object_id,
-            owner,
-            rv1::permanent_moved::Destination::Library,
-        ));
-        cx.events.push(ev_log(format!(
-            "{} puts {name} into its owner's library.",
-            cx.spell_label
-        )));
-    }
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_events, cx.events);
-
-    let player_order = cx
-        .engine
-        .state
-        .players
-        .iter()
-        .map(|player| player.id)
-        .collect::<Vec<_>>();
-    for owner in player_order {
-        if affected_owners.contains(&owner) {
-            // CR 701.24c still requires this specific owner's library to shuffle when the
-            // departed target's LKI object was already moved by 800.4a or the prior return
-            // instruction. A live target instead contributed only its current battlefield set.
-            crate::engine::shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
-            cx.events
-                .push(ev_log(format!("P{owner} shuffles their library.")));
-        }
-    }
-
-    Ok(EffectOutcome::Continue)
+    // The shared transaction performs each qualifying move, all Commander replacements, and
+    // every surviving library shuffle at one boundary. Stale/departed cohort entries retain only
+    // their owner receipts, so they still contribute the required surviving-owner shuffle.
+    super::battlefield_returns::begin_battlefield_cohort_move(
+        cx,
+        object_ids,
+        Zone::Library,
+        affected_owners,
+    )
 }
 
 pub(super) fn choose_hand_cards(

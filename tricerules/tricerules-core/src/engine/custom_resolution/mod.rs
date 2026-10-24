@@ -2687,24 +2687,21 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, target_player, cohort, candidate_generations, stage) =
-            match &pending.continuation {
-                ResolutionContinuation::TargetedPlayerPermanentChoice {
-                    stack,
-                    target_player,
-                    cohort,
-                    candidate_generations,
-                    stage,
-                    ..
-                } => (
-                    stack.clone(),
-                    *target_player,
-                    cohort.clone(),
-                    candidate_generations.clone(),
-                    stage.clone(),
-                ),
-                _ => unreachable!("targeted-player permanent-choice continuation"),
-            };
+        let (stack, target_player, candidate_generations, stage) = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                stack,
+                target_player,
+                candidate_generations,
+                stage,
+                ..
+            } => (
+                stack.clone(),
+                *target_player,
+                candidate_generations.clone(),
+                stage.clone(),
+            ),
+            _ => unreachable!("targeted-player permanent-choice continuation"),
+        };
         if !matches!(stage, PendingTargetedPlayerChoiceStage::ChoosingPermanent) {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
@@ -2758,12 +2755,10 @@ impl GameEngine {
                 names.join(", ")
             ))]
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
+        self.complete_parked_stack_with_previous(
+            stack,
             EffectResult {
                 produced_objects,
-                targeted_player_control_cohort: Some(cohort),
                 ..Default::default()
             },
             events,
@@ -2775,19 +2770,13 @@ impl GameEngine {
         pending: PendingResolution,
         message: &str,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, cohort) = match &pending.continuation {
-            ResolutionContinuation::TargetedPlayerPermanentChoice { stack, cohort, .. } => {
-                (stack.clone(), cohort.clone())
-            }
+        let stack = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice { stack, .. } => stack.clone(),
             _ => unreachable!("targeted-player permanent-choice continuation"),
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            EffectResult {
-                targeted_player_control_cohort: Some(cohort),
-                ..Default::default()
-            },
+        self.complete_parked_stack_with_previous(
+            stack,
+            EffectResult::default(),
             vec![ev_log(message.to_string())],
         )
     }
@@ -2845,6 +2834,18 @@ impl GameEngine {
             .state
             .player_idx(target_player)
             .is_some_and(|index| !self.state.players[index].has_lost);
+        let cohort = if target_live {
+            cohort
+        } else {
+            self.state
+                .departed_targeted_player_control_cohorts
+                .get(&target_player)
+                .filter(|saved| saved.player_id == target_player)
+                .cloned()
+                .ok_or(EngineError::ProgramInvariant(
+                    "departed targeted player is missing its control cohort",
+                ))?
+        };
         let current_decider_live = self
             .state
             .player_idx(pending.deciding_player)
@@ -2874,24 +2875,14 @@ impl GameEngine {
             })
             .collect::<Vec<_>>()
         } else {
-            cohort
-                .permanents
-                .iter()
-                .map(|member| (member.object_id, member.zone_change_generation))
-                .filter(|(object_id, generation)| {
-                    self.state
-                        .zone_change_generation
-                        .get(object_id)
-                        .copied()
-                        .unwrap_or(0)
-                        == *generation
-                        && self
-                            .state
-                            .objects
-                            .get(object_id)
-                            .is_some_and(|object| object.zone == Zone::Battlefield)
-                })
-                .collect::<Vec<_>>()
+            resolution::targeted_player_control_cohort_candidates(
+                self,
+                &stack.item,
+                target_player,
+                &cohort,
+                &filter,
+                &constraints,
+            )
         };
         if candidates.len() < pending.presentation.min as usize {
             let completed = self.complete_targeted_player_choice_without_selection(
@@ -2970,6 +2961,7 @@ impl GameEngine {
             .collect::<Vec<_>>();
         let ResolutionContinuation::TargetedPlayerPermanentChoice {
             candidate_generations,
+            cohort: saved_cohort,
             stage,
             ..
         } = &mut pending.continuation
@@ -2977,6 +2969,7 @@ impl GameEngine {
             unreachable!("validated targeted-player continuation")
         };
         *candidate_generations = candidates;
+        *saved_cohort = cohort;
         if let Some(delegate) = delegate {
             pending.deciding_player = delegate;
             pending.presentation.candidates = candidate_ids;
