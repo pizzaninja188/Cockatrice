@@ -824,6 +824,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch) if branch.branch_id == branch_id && branch.cost == cost => branch,
@@ -1016,6 +1017,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch)
@@ -1160,6 +1162,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch)
@@ -1412,6 +1415,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch)
@@ -1534,6 +1538,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         )?;
         if branch.branch_id != branch_id || branch.cost != cost {
@@ -1643,6 +1648,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch) if branch.branch_id == branch_id => branch,
@@ -1775,6 +1781,7 @@ impl GameEngine {
             &stack,
             &choose.occurrence,
             choose.original_chooser,
+            &choose.frozen_game_condition_results,
             selected_branch,
         ) {
             Ok(branch)
@@ -1891,6 +1898,7 @@ impl GameEngine {
             &stack,
             &choose_state.occurrence,
             choose_state.original_chooser,
+            &choose_state.frozen_game_condition_results,
             branch_index,
         ) {
             Ok(branch) => branch,

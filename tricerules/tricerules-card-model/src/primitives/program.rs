@@ -511,7 +511,6 @@ struct Compiler<'a> {
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     allow_trigger_object_linked_exile: bool,
     allow_mimic_vat_linked_exile_receipt: bool,
-    allow_mosswort_linked_play: bool,
     allow_equipment_receipt: bool,
     allow_vow_equipment_choice: bool,
     allow_koya_outer_exile_result: bool,
@@ -626,7 +625,6 @@ impl CompiledProgram {
         validate_spell_target_damage_history_profile(&compiled, &schema, targeting)?;
         validate_target_card_result_groups(&compiled, &schema)?;
         compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
-        validate_terminal_linked_play_profile(&compiled)?;
         Ok(compiled)
     }
 
@@ -645,7 +643,6 @@ impl CompiledProgram {
             return Err("program body must contain at least one instruction".into());
         }
         let target_projection = owner.target_projection();
-        let allow_mosswort_linked_play = is_mosswort_bridge_activated_02(&owner);
         let mut compiler = Compiler {
             owner: owner.clone(),
             context,
@@ -671,7 +668,6 @@ impl CompiledProgram {
             required_inputs: std::collections::BTreeSet::new(),
             allow_trigger_object_linked_exile: false,
             allow_mimic_vat_linked_exile_receipt: false,
-            allow_mosswort_linked_play,
             allow_equipment_receipt: is_kyoshi_battle_fan_receipt_owner(&owner),
             allow_vow_equipment_choice: is_vow_to_erebor_face(&owner),
             allow_koya_outer_exile_result: is_koya_outer_program_owner(&owner),
@@ -4502,21 +4498,17 @@ fn validate_and_result_types(
                 .into(),
         ),
         SpellEffectKind::PlayLinkedExiledCard {
-            producer_ability_id,
-            linked_exile_id,
             filter: None,
             play_kind: super::LinkedExiledCardPlayKind::Play,
             return_source_to_owner_hand_if_cast: false,
-        } if context == EffectContext::Ability
-            && compiler.allow_mosswort_linked_play
-            && producer_ability_id.as_str() == "hideaway"
-            && linked_exile_id.as_str() == "exiled_cards" =>
+            ..
+        } if context == EffectContext::Ability =>
         {
             effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::PlayLinkedExiledCard { .. } => Err(
-            "PlayLinkedExiledCard in a resolution program requires the exact Mosswort Bridge activated_02 Play profile"
+            "PlayLinkedExiledCard in a resolution program requires a resultless ability Play profile"
                 .into(),
         ),
         SpellEffectKind::Sacrifice {
@@ -5217,143 +5209,6 @@ fn koya_outer_exile_target_group(
         return Err(invalid());
     }
     Ok((0, 1))
-}
-
-fn is_mosswort_bridge_activated_02(owner: &ProgramOwnerId) -> bool {
-    matches!(
-        owner,
-        ProgramOwnerId::Ability(definition)
-            if definition.card_id == "mosswort_bridge"
-                && definition.face_id.as_str() == "mosswort_bridge"
-                && definition.ability_path.len() == 1
-                && definition.ability_path[0].as_str() == "activated_02"
-    )
-}
-
-fn validate_terminal_linked_play_profile(program: &CompiledProgram) -> Result<(), String> {
-    if !compiled_block_contains_linked_play(&program.body) {
-        return Ok(());
-    }
-
-    let invalid = || {
-        "PlayLinkedExiledCard in a resolution program requires the exact terminal Mosswort Bridge activated_02 Choose profile"
-            .to_string()
-    };
-    if !is_mosswort_bridge_activated_02(&program.owner)
-        || program.context != EffectContext::Ability
-        || !program.required_inputs.is_empty()
-        || !program.target_bindings.is_empty()
-        || !program.group_inputs.is_empty()
-        || !program.slots.is_empty()
-        || !program.body.yields.is_empty()
-    {
-        return Err(invalid());
-    }
-
-    let [choose] = program.body.steps.as_slice() else {
-        return Err(invalid());
-    };
-    if choose.input.is_some() || !choose.outputs.is_empty() {
-        return Err(invalid());
-    }
-    let CompiledInstructionKind::Choose {
-        chooser,
-        optional,
-        branches,
-        otherwise,
-        ..
-    } = &choose.kind
-    else {
-        return Err(invalid());
-    };
-    if *chooser != PlayerRecipient::Controller
-        || !*optional
-        || *otherwise
-            != (CompiledBlock {
-                steps: Vec::new(),
-                yields: Vec::new(),
-            })
-        || branches.len() != 1
-    {
-        return Err(invalid());
-    }
-
-    let branch = &branches[0];
-    if branch.cost != ResolutionCost::None
-        || branch.presentation != AbilityPresentation::Fallback
-        || !is_exact_mosswort_total_power_condition(&branch.requirement)
-        || !branch.body.yields.is_empty()
-        || branch.body.steps.len() != 1
-    {
-        return Err(invalid());
-    }
-    let play = &branch.body.steps[0];
-    if play.input.is_some() || !play.outputs.is_empty() {
-        return Err(invalid());
-    }
-    if !matches!(
-        &play.kind,
-        CompiledInstructionKind::Perform(effect)
-            if matches!(
-                effect.as_ref(),
-                SpellEffectKind::PlayLinkedExiledCard {
-                    producer_ability_id,
-                    linked_exile_id,
-                    filter: None,
-                    play_kind: super::LinkedExiledCardPlayKind::Play,
-                    return_source_to_owner_hand_if_cast: false,
-                } if producer_ability_id.as_str() == "hideaway"
-                    && linked_exile_id.as_str() == "exiled_cards"
-            )
-    ) {
-        return Err(invalid());
-    }
-    Ok(())
-}
-
-fn compiled_block_contains_linked_play(block: &CompiledBlock) -> bool {
-    block
-        .steps
-        .iter()
-        .any(|instruction| match &instruction.kind {
-            CompiledInstructionKind::Perform(effect) => {
-                matches!(
-                    effect.as_ref(),
-                    SpellEffectKind::PlayLinkedExiledCard { .. }
-                )
-            }
-            CompiledInstructionKind::If { yes, no, .. } => {
-                compiled_block_contains_linked_play(yes) || compiled_block_contains_linked_play(no)
-            }
-            CompiledInstructionKind::Choose {
-                branches,
-                otherwise,
-                ..
-            } => {
-                branches
-                    .iter()
-                    .any(|branch| compiled_block_contains_linked_play(&branch.body))
-                    || compiled_block_contains_linked_play(otherwise)
-            }
-            CompiledInstructionKind::ImportCastPayment => false,
-        })
-}
-
-fn is_exact_mosswort_total_power_condition(requirement: &CompiledChooseRequirement) -> bool {
-    matches!(
-        requirement,
-        CompiledChooseRequirement::GameCondition(condition)
-            if matches!(
-                condition,
-                GameCondition::BattlefieldAggregate {
-                    filter,
-                    aggregate: super::BattlefieldAggregate::TotalPower,
-                    min: Some(10),
-                    max: None,
-                    exclude_observed_object: false,
-                } if validate_program_total_power_filter(filter).is_ok()
-            )
-    )
 }
 
 fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {

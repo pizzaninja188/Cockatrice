@@ -8926,18 +8926,6 @@ fn compile_mosswort_terminal_program(
     crate::primitives::CompiledProgram::compile(owner, context, &program)
 }
 
-fn mosswort_terminal_play_step(body: &str) -> &str {
-    let start = body
-        .find("body: (steps: [")
-        .expect("fixture has a branch body")
-        + "body: (steps: [".len();
-    let end = body[start..]
-        .find("], yields: [])")
-        .expect("fixture has a branch body yield list")
-        + start;
-    &body[start..end]
-}
-
 fn replace_mosswort_fixture_last(text: &str, needle: &str, replacement: &str) -> String {
     let index = text
         .rfind(needle)
@@ -9003,90 +8991,83 @@ fn mosswort_activated_program_accepts_exact_terminal_linked_play() {
 }
 
 #[test]
-fn mosswort_terminal_linked_play_profile_rejects_near_misses() {
-    use crate::primitives::EffectContext;
+fn ability_program_accepts_generic_linked_play_before_a_root_tail() {
+    use crate::primitives::{CompiledInstructionKind, EffectContext};
 
-    let branch_start = MOSSWORT_LINKED_PLAY_BODY
-        .find("branches: [")
-        .expect("fixture has one branch list")
-        + "branches: [".len();
-    let branch_end = MOSSWORT_LINKED_PLAY_BODY[branch_start..]
-        .find("],\n    otherwise:")
-        .expect("fixture has one Otherwise block")
-        + branch_start;
-    let original_branch = &MOSSWORT_LINKED_PLAY_BODY[branch_start..branch_end];
-    let second_branch = original_branch.replace("play_linked_card", "second_branch");
-    let multiple_branches = format!(
-        "{} , {}{}",
-        &MOSSWORT_LINKED_PLAY_BODY[..branch_end],
-        second_branch,
-        &MOSSWORT_LINKED_PLAY_BODY[branch_end..],
-    );
-    let terminal_play = mosswort_terminal_play_step(MOSSWORT_LINKED_PLAY_BODY);
-    let nested_if = MOSSWORT_LINKED_PLAY_BODY.replace(
-        &format!("body: (steps: [{terminal_play}], yields: [])"),
-        &format!(
-            "body: (steps: [(id: \"nested_if\", kind: If(condition: Void, yes: (steps: [{terminal_play}], yields: []), no: (steps: [], yields: [])))], yields: [])"
-        ),
-    );
-    let nested_choose = MOSSWORT_LINKED_PLAY_BODY.replace(
-        &format!("body: (steps: [{terminal_play}], yields: [])"),
-        &format!(
-            "body: (steps: [(id: \"nested_choose\", kind: Choose(choice: \"nested_choice\", chooser: Controller, optional: true, branches: [(branch_id: \"nested_branch\", presentation: Fallback, cost: None, body: (steps: [{terminal_play}], yields: []))], otherwise: (steps: [], yields: [])))], yields: [])"
-        ),
-    );
-    let branch_yield =
-        MOSSWORT_LINKED_PLAY_BODY.replace("))], yields: []))],", "))], yields: [\"missing\"]))],");
-    let root_yield = replace_mosswort_fixture_last(
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "generic_linked_play_fixture".into(),
+        face_id: crate::CardFaceId::new("generic_linked_play_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+    });
+    let body = replace_mosswort_fixture_last(
         MOSSWORT_LINKED_PLAY_BODY,
         "))], yields: [])",
-        "))], yields: [\"missing\"])",
+        ")), (id: \"tail\", kind: Perform(GainLife(amount: 1)))], yields: [])",
+    )
+    .replace(
+        "producer_ability_id: \"hideaway\"",
+        "producer_ability_id: \"producer\"",
+    )
+    .replace(
+        "linked_exile_id: \"exiled_cards\"",
+        "linked_exile_id: \"linked_cards\"",
     );
-    let filtered_linked_play = MOSSWORT_LINKED_PLAY_BODY
-        .replace("filter: None,", "filter: Some((card_type: Some(Land))),");
+
+    let compiled = compile_mosswort_terminal_program(&body, owner, EffectContext::Ability)
+        .unwrap_or_else(|error| panic!("generic resultless linked Play should compile: {error}"));
+
+    assert_eq!(
+        compiled.body.steps.len(),
+        2,
+        "the root tail remains after Choose"
+    );
+    assert!(matches!(
+        compiled.body.steps.last().map(|instruction| &instruction.kind),
+        Some(CompiledInstructionKind::Perform(effect))
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife { .. })
+    ));
+}
+
+#[test]
+fn registry_matches_program_linked_play_to_its_recursive_producer() {
+    let card = include_str!("../../../tricerules-cards/data/mosswort_bridge.ron")
+        .replace("mosswort_bridge", "generic_linked_play_fixture")
+        .replace("Mosswort Bridge", "Generic Linked Play Fixture")
+        .replace("activated_02", "linked_play")
+        .replace(
+            "        ))\n      ], yields: []), target_bindings: [])),",
+            "        )),\n        (id: \"program_tail\", kind: Perform(GainLife(amount: 1))),\n      ], yields: []), target_bindings: [])),",
+        );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+        .expect("a generic nonterminal Program Play matches its Hideaway producer");
+    let _ = registry;
+
+    let unmatched = card.replace(
+        "producer_ability_id: \"hideaway\"",
+        "producer_ability_id: \"missing_producer\"",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unmatched], &[])
+        .expect_err("Program leaves retain exact producer ability/link matching");
+    assert!(
+        error
+            .to_string()
+            .contains("linked Exile choice must name its matching"),
+        "the recursive linked-exile producer walk reports an unmatched Program leaf: {error}"
+    );
+}
+
+#[test]
+fn linked_play_compiler_rejects_unsupported_context_and_shapes() {
+    use crate::primitives::EffectContext;
 
     let cases = [
         (
-            "wrong aggregate",
-            MOSSWORT_LINKED_PLAY_BODY.replace("aggregate: TotalPower", "aggregate: MaximumPower"),
+            "filtered linked play",
+            MOSSWORT_LINKED_PLAY_BODY
+                .replace("filter: None,", "filter: Some((card_type: Some(Land))),"),
         ),
         (
-            "wrong threshold",
-            MOSSWORT_LINKED_PLAY_BODY.replace("min: Some(10)", "min: Some(9)"),
-        ),
-        (
-            "wrong cohort",
-            MOSSWORT_LINKED_PLAY_BODY.replace(
-                "controllers: Controller",
-                "controllers: Opponents",
-            ),
-        ),
-        (
-            "noncreature filter",
-            MOSSWORT_LINKED_PLAY_BODY.replace("Some(Creature)", "Some(Land)"),
-        ),
-        (
-            "bounded aggregate",
-            MOSSWORT_LINKED_PLAY_BODY.replace("max: None", "max: Some(20)"),
-        ),
-        (
-            "nonoptional choice",
-            MOSSWORT_LINKED_PLAY_BODY.replace("optional: true", "optional: false"),
-        ),
-        (
-            "paid branch",
-            MOSSWORT_LINKED_PLAY_BODY.replace("cost: None", "cost: DiscardCard(filter: None)"),
-        ),
-        (
-            "wrong producer ability",
-            MOSSWORT_LINKED_PLAY_BODY.replace("producer_ability_id: \"hideaway\"", "producer_ability_id: \"other\""),
-        ),
-        (
-            "wrong linked-exile id",
-            MOSSWORT_LINKED_PLAY_BODY.replace("linked_exile_id: \"exiled_cards\"", "linked_exile_id: \"other\""),
-        ),
-        (
-            "cast instead of Play",
+            "Cast instead of Play",
             MOSSWORT_LINKED_PLAY_BODY.replace("play_kind: Play", "play_kind: Cast"),
         ),
         (
@@ -9096,106 +9077,33 @@ fn mosswort_terminal_linked_play_profile_rejects_near_misses() {
                 "return_source_to_owner_hand_if_cast: true",
             ),
         ),
-        (
-            "nonempty Otherwise",
-            MOSSWORT_LINKED_PLAY_BODY.replace(
-                "otherwise: (steps: [], yields: [])",
-                "otherwise: (steps: [(id: \"otherwise_tail\", kind: Perform(GainLife(amount: 1)))], yields: [])",
-            ),
-        ),
-        (
-            "branch tail",
-            MOSSWORT_LINKED_PLAY_BODY.replace(
-                "))], yields: []))],",
-                ")), (id: \"branch_tail\", kind: Perform(GainLife(amount: 1)))], yields: []))],",
-            ),
-        ),
-        (
-            "root tail",
-            replace_mosswort_fixture_last(
-                MOSSWORT_LINKED_PLAY_BODY,
-                "))], yields: [])",
-                ")), (id: \"root_tail\", kind: Perform(GainLife(amount: 1)))], yields: [])",
-            ),
-        ),
-        ("nested If", nested_if),
-        ("nested Choose", nested_choose),
-        ("branch yield", branch_yield),
-        ("root yield", root_yield),
-        ("filtered linked play", filtered_linked_play),
-        ("multiple branches", multiple_branches),
-        (
-            "result binding",
-            MOSSWORT_LINKED_PLAY_BODY.replace(
-                "id: \"choose_linked_play\", kind:",
-                "id: \"choose_linked_play\", bind: [\"unused\"], kind:",
-            ),
-        ),
-        (
-            "result input",
-            MOSSWORT_LINKED_PLAY_BODY.replace(
-                "id: \"choose_linked_play\", kind:",
-                "id: \"choose_linked_play\", input: Some(\"missing\"), kind:",
-            ),
-        ),
     ];
 
     for (label, body) in cases {
-        assert_ne!(
-            body, MOSSWORT_LINKED_PLAY_BODY,
-            "fixture mutation for {label}"
-        );
         parse_mosswort_terminal_program(&format!("(body: {body})")).unwrap_or_else(|error| {
             panic!("the {label} negative fixture must be valid RON: {error}")
         });
-        let error = compile_mosswort_terminal_program(
-            &body,
-            mosswort_terminal_program_owner(),
-            EffectContext::Ability,
-        )
-        .expect_err("near-miss linked-Play profile must be rejected");
-        if label == "root tail" || label == "branch tail" {
-            assert!(
-                error.contains("exact terminal Mosswort Bridge activated_02 Choose profile"),
-                "{label} case should fail at the terminal-profile guard, got: {error}"
-            );
-        }
+        assert!(
+            compile_mosswort_terminal_program(
+                &body,
+                mosswort_terminal_program_owner(),
+                EffectContext::Ability,
+            )
+            .is_err(),
+            "the resultless ability Play compiler must reject {label}"
+        );
     }
 
-    let target_bound = format!(
-        "(body: {MOSSWORT_LINKED_PLAY_BODY}, target_bindings: [(instruction_id: \"choose_linked_play\", role: Target, target_group_index: 0)])"
-    );
-    let program = parse_mosswort_terminal_program(&target_bound)
-        .expect("the target-bound negative fixture must be valid RON");
     assert!(
-        crate::primitives::CompiledProgram::compile(
+        compile_mosswort_terminal_program(
+            MOSSWORT_LINKED_PLAY_BODY,
             mosswort_terminal_program_owner(),
-            EffectContext::Ability,
-            &program,
+            EffectContext::Spell,
         )
         .is_err(),
-        "nonempty target bindings are outside the terminal profile"
+        "linked Play remains ability-only"
     );
-
-    let wrong_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "other_card".into(),
-        face_id: crate::CardFaceId::new("other_card").unwrap(),
-        ability_path: vec![crate::AbilityId::new("activated_02").unwrap()],
-    });
-    assert!(compile_mosswort_terminal_program(
-        MOSSWORT_LINKED_PLAY_BODY,
-        wrong_owner,
-        EffectContext::Ability,
-    )
-    .is_err());
-    assert!(compile_mosswort_terminal_program(
-        MOSSWORT_LINKED_PLAY_BODY,
-        mosswort_terminal_program_owner(),
-        EffectContext::Spell,
-    )
-    .is_err());
 }
-
 #[test]
 fn program_if_rejects_unsupported_maximum_power_shapes() {
     let cases = [

@@ -7,7 +7,7 @@ use tricerules_cards::registry;
 use tricerules_cards::{
     primitives::*, AbilityDefinitionId, AbilityId, CardFaceId, Keyword, Layout, ProgramOwnerId,
 };
-use tricerules_core::Zone;
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, CastSource, CostObjectRef, CostObjectRefs,
     CostSelection, LandSource, PaymentMana, PaymentSelection, ResolutionChoiceDecision,
@@ -29,6 +29,63 @@ fn game(seed: u64) -> GameEngine {
     .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
+}
+
+fn four_player_game(seed: u64) -> GameEngine {
+    let deck = deck_with("forest", &[MOSSWORT, BUGGY, "opt", "grizzly_bears"]);
+    let mut engine = GameEngine::new(
+        registry::global(),
+        seed,
+        &[0, 1, 2, 3],
+        20,
+        Some(vec![deck.clone(), deck.clone(), deck.clone(), deck]),
+        true,
+    )
+    .expect("new four-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn give_control_to(engine: &mut GameEngine, object_id: u32, controller: i32) {
+    let owner = engine.state.objects[&object_id].owner;
+    engine
+        .state
+        .objects
+        .get_mut(&object_id)
+        .expect("stolen permanent")
+        .base_controller = owner;
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(controller),
+        },
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: engine.state.command_index,
+    });
+    // Keep the fixture's controller cache and battlefield index aligned with the derived effect.
+    let owner_index = engine
+        .state
+        .player_idx(owner)
+        .expect("permanent owner seat");
+    engine.state.players[owner_index]
+        .battlefield
+        .retain(|candidate| *candidate != object_id);
+    let controller_index = engine
+        .state
+        .player_idx(controller)
+        .expect("temporary controller seat");
+    engine.state.players[controller_index]
+        .battlefield
+        .push(object_id);
+    engine
+        .state
+        .objects
+        .get_mut(&object_id)
+        .expect("stolen permanent")
+        .controller = controller;
 }
 
 fn resolve_hideaway_look(engine: &mut GameEngine, chooser: i32, chosen_card: u32) {
@@ -176,6 +233,17 @@ fn assert_linked_play_root_retired_once_without_moving_source(
         &event.ev,
         Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(revealed))
             if revealed.cards.iter().any(|card| card.object_id == source_object_id)
+    )));
+}
+
+fn assert_linked_card_not_revealed(
+    events: &[tricerules_proto::ruled::v1::RuledEvent],
+    linked_card: u32,
+) {
+    assert!(!events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(revealed))
+            if revealed.cards.iter().any(|card| card.object_id == linked_card)
     )));
 }
 
@@ -542,6 +610,413 @@ fn mosswort_bridge_checks_power_when_its_ability_resolves_then_plays_the_linked_
         replay.diagnostic_snapshot().unwrap(),
         "the accepted branch, linked selection and PlayLand stream replays to identical state"
     );
+}
+
+#[test]
+fn mosswort_controller_departure_keeps_applied_branch_without_offering_linked_land() {
+    let mut engine = four_player_game(20_261_024);
+    let bridge = move_ready_to_battlefield(&mut engine, 1, MOSSWORT);
+    let linked_land = put_hideaway_card_on_top(&mut engine, 1, "mountain");
+    resolve_hideaway_look(&mut engine, 1, linked_land);
+    assert_eq!(engine.state.objects[&linked_land].zone, Zone::Exile);
+    assert!(engine.state.objects[&linked_land].face_down);
+    let linked_land_generation = engine.state.zone_change_generation[&linked_land];
+    let bridge_generation = engine.state.zone_change_generation[&bridge];
+
+    give_control_to(&mut engine, bridge, 0);
+    assert_eq!(engine.state.objects[&bridge].owner, 1);
+    assert_eq!(
+        engine
+            .characteristics(bridge)
+            .expect("derived stolen Bridge characteristics")
+            .controller,
+        0
+    );
+    engine.state.objects.get_mut(&bridge).unwrap().tapped = false;
+    for _ in 0..5 {
+        inject_permanent_on_battlefield(&mut engine, 0, "grizzly_bears");
+    }
+    engine.state.players[0].mana_pool.green = 1;
+    engine
+        .apply_scenario_command(0, &activate_ability_for(&engine, bridge, 1, Vec::new()))
+        .expect("activate Mosswort Bridge with ten power on the battlefield");
+
+    let mut resolution_batch = None;
+    for _ in 0..4 {
+        let actor = engine.state.priority_player_id();
+        resolution_batch = Some(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .expect("the four-player table passes the activation"),
+        );
+    }
+    let initial_choice = find_resolution_choice(
+        resolution_batch
+            .as_ref()
+            .expect("the final pass returns the activation's resolution event"),
+    )
+    .expect("the qualifying branch is initially offered while its controller is live");
+    assert_eq!(initial_choice.deciding_player_id, 0);
+    assert!(initial_choice
+        .resolution_branches
+        .iter()
+        .any(|branch| branch.branch_index == 0 && branch.selectable));
+    let ability_stack_item_id = match &engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the initial branch offer is pending")
+        .continuation
+    {
+        tricerules_core::state::ResolutionContinuation::ProgramChoose { stack, .. } => {
+            assert_eq!(stack.item.source_permanent_id, Some(bridge));
+            stack.item.id
+        }
+        _ => panic!("Mosswort retains its exact activation beneath the branch offer"),
+    };
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the original controller concedes with the branch offer pending");
+    assert!(engine.state.players[0].has_lost);
+    assert_eq!(engine.state.objects[&bridge].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&bridge].owner, 1);
+    assert_eq!(engine.state.objects[&bridge].controller, 1);
+    assert_eq!(
+        engine.state.zone_change_generation[&bridge],
+        bridge_generation
+    );
+    assert_eq!(engine.state.objects[&linked_land].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&linked_land].owner, 1);
+    assert!(engine.state.objects[&linked_land].face_down);
+    assert_eq!(
+        engine.state.zone_change_generation[&linked_land],
+        linked_land_generation
+    );
+    let delegate_offer = find_resolution_choice(&departure)
+        .expect("the next live player is offered delegation for the applied branch");
+    assert_eq!(delegate_offer.deciding_player_id, 1);
+    assert_eq!(delegate_offer.resolution_branches.len(), 3);
+    assert!(delegate_offer.candidate_object_ids.is_empty());
+    assert!(delegate_offer.candidate_card_ids.is_empty());
+    assert!(delegate_offer.candidate_names.is_empty());
+    assert_linked_card_not_revealed(&departure.events, linked_land);
+
+    let mut select_delegate = submit_resolution_decision_at(
+        delegate_offer.resolution_prompt_id,
+        ResolutionChoiceDecision::SelectBranch,
+    );
+    let Some(Cmd::SubmitResolutionChoice(answer)) = select_delegate.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.selected_branch_index = 1; // P1 delegates to P2.
+    let delegated = engine
+        .apply_scenario_command(1, &select_delegate)
+        .expect("P1 selects P2 as delegate");
+    let branch_offer = find_resolution_choice(&delegated)
+        .expect("P2 receives the original resolution branch menu");
+    assert_eq!(branch_offer.deciding_player_id, 2);
+    assert!(branch_offer
+        .resolution_branches
+        .iter()
+        .any(|branch| branch.branch_index == 0 && branch.selectable));
+    assert!(branch_offer.candidate_object_ids.is_empty());
+    assert!(branch_offer.candidate_card_ids.is_empty());
+    assert!(branch_offer.candidate_names.is_empty());
+    assert_linked_card_not_revealed(&delegated.events, linked_land);
+
+    let completion = engine
+        .apply_scenario_command(
+            2,
+            &submit_resolution_decision_at(
+                branch_offer.resolution_prompt_id,
+                ResolutionChoiceDecision::SelectBranch,
+            ),
+        )
+        .expect("P2 selects the saved qualifying branch");
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "departed controller must not receive or delegate the inner linked Play choice"
+    );
+    let completed = engine
+        .diagnostic_snapshot()
+        .expect("completed game snapshot");
+    assert!(completed["state"]["pending_linked_exile_play"].is_null());
+    assert_eq!(completed["state"]["stack"], serde_json::json!([]));
+    assert_eq!(engine.state.objects[&bridge].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&bridge].owner, 1);
+    assert_eq!(engine.state.objects[&bridge].controller, 1);
+    assert_eq!(
+        engine.state.zone_change_generation[&bridge],
+        bridge_generation
+    );
+    assert_linked_card_not_revealed(&completion.events, linked_land);
+    assert_linked_play_root_retired_once_without_moving_source(
+        &completion.events,
+        ability_stack_item_id,
+        bridge,
+    );
+    assert_eq!(engine.state.lands_played_this_turn, 0);
+
+    let response = engine.initial_response_batch();
+    for player in [1, 2, 3] {
+        let legal = &response.legal_by_player[&player];
+        assert!(!legal
+            .zone_cast_actions
+            .iter()
+            .any(|action| action.object_id == linked_land));
+        assert!(!legal
+            .zone_land_actions
+            .iter()
+            .any(|action| action.object_id == linked_land));
+    }
+    assert!(!completion.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(_))
+    )));
+}
+
+#[test]
+fn mosswort_linked_play_choice_departure_preserves_owned_hidden_card_without_delegation() {
+    let mut engine = four_player_game(20_261_026);
+    let bridge = move_ready_to_battlefield(&mut engine, 1, MOSSWORT);
+    let linked_land = put_hideaway_card_on_top(&mut engine, 1, "mountain");
+    resolve_hideaway_look(&mut engine, 1, linked_land);
+    let bridge_generation = engine.state.zone_change_generation[&bridge];
+    let linked_land_generation = engine.state.zone_change_generation[&linked_land];
+
+    give_control_to(&mut engine, bridge, 0);
+    assert_eq!(engine.state.objects[&bridge].owner, 1);
+    assert_eq!(engine.state.objects[&linked_land].owner, 1);
+    engine.state.objects.get_mut(&bridge).unwrap().tapped = false;
+    for _ in 0..5 {
+        inject_permanent_on_battlefield(&mut engine, 0, "grizzly_bears");
+    }
+    engine.state.players[0].mana_pool.green = 1;
+    engine
+        .apply_scenario_command(0, &activate_ability_for(&engine, bridge, 1, Vec::new()))
+        .expect("P0 activates P1's Mosswort Bridge");
+    pass_priority_round(&mut engine);
+
+    let branch = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the qualifying branch is offered to P0")
+        .clone();
+    assert_eq!(branch.deciding_player, 0);
+    let ability_stack_item_id = match &branch.continuation {
+        tricerules_core::state::ResolutionContinuation::ProgramChoose { stack, .. } => {
+            assert_eq!(stack.item.source_permanent_id, Some(bridge));
+            assert_eq!(stack.item.source_zone_change, bridge_generation);
+            stack.item.id
+        }
+        _ => panic!("the outer prompt retains Mosswort's exact Program stack item"),
+    };
+    let linked_choice_batch = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision_at(
+                branch.resolution_prompt_id.get(),
+                ResolutionChoiceDecision::SelectBranch,
+            ),
+        )
+        .expect("P0 selects the qualifying branch");
+    assert_linked_card_not_revealed(&linked_choice_batch.events, linked_land);
+
+    let linked_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the actual linked Play choice is pending for P0")
+        .clone();
+    assert_eq!(linked_choice.deciding_player, 0);
+    assert_eq!(
+        linked_choice.presentation.choice_kind,
+        ChoiceKind::LinkedExileCards
+    );
+    assert_eq!(linked_choice.presentation.candidates, [linked_land]);
+    assert_eq!(linked_choice.presentation.min, 0);
+    assert_eq!(linked_choice.presentation.max, 1);
+    match &linked_choice.continuation {
+        tricerules_core::state::ResolutionContinuation::LinkedExileChoice {
+            stack,
+            candidate_generations,
+            ..
+        } => {
+            assert_eq!(stack.item.id, ability_stack_item_id);
+            assert_eq!(stack.item.controller, 0);
+            assert_eq!(stack.item.source_permanent_id, Some(bridge));
+            assert_eq!(
+                candidate_generations,
+                &[(linked_land, linked_land_generation)]
+            );
+        }
+        _ => panic!("the pending step must be LinkedExileChoice::Play in Selecting stage"),
+    }
+    assert_eq!(engine.state.objects[&linked_land].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&linked_land].owner, 1);
+    assert!(engine.state.objects[&linked_land].face_down);
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("P0 leaves while the inner linked Play choice is pending");
+    assert!(engine.state.players[0].has_lost);
+    assert!(!engine.state.players[1].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.diagnostic_snapshot().unwrap()["state"]["pending_linked_exile_play"].is_null());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&bridge].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&bridge].owner, 1);
+    assert_eq!(engine.state.objects[&bridge].controller, 1);
+    assert_eq!(
+        engine.state.zone_change_generation[&bridge],
+        bridge_generation
+    );
+    assert_eq!(engine.state.objects[&linked_land].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&linked_land].owner, 1);
+    assert!(engine.state.objects[&linked_land].face_down);
+    assert_eq!(
+        engine.state.zone_change_generation[&linked_land],
+        linked_land_generation
+    );
+    assert_linked_card_not_revealed(&departure.events, linked_land);
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(_))
+    )));
+    assert_linked_play_root_retired_once_without_moving_source(
+        &departure.events,
+        ability_stack_item_id,
+        bridge,
+    );
+
+    let response = engine.initial_response_batch();
+    for player in [1, 2, 3] {
+        let legal = &response.legal_by_player[&player];
+        assert!(!legal
+            .zone_cast_actions
+            .iter()
+            .any(|action| action.object_id == linked_land));
+        assert!(!legal
+            .zone_land_actions
+            .iter()
+            .any(|action| action.object_id == linked_land));
+    }
+}
+
+#[test]
+fn mosswort_departure_during_uncommitted_linked_cast_retires_program_once() {
+    let mut engine = four_player_game(20_261_025);
+    let bridge = move_ready_to_battlefield(&mut engine, 0, MOSSWORT);
+    let linked_spell = put_hideaway_card_on_top(&mut engine, 0, "lightning_bolt");
+    resolve_hideaway_look(&mut engine, 0, linked_spell);
+
+    engine.state.objects.get_mut(&bridge).unwrap().tapped = false;
+    let target_bear = inject_permanent_on_battlefield(&mut engine, 0, "grizzly_bears");
+    for _ in 1..5 {
+        inject_permanent_on_battlefield(&mut engine, 0, "grizzly_bears");
+    }
+    engine.state.players[0].mana_pool.green = 1;
+    engine
+        .apply_scenario_command(0, &activate_ability_for(&engine, bridge, 1, Vec::new()))
+        .expect("activate Mosswort Bridge");
+    pass_priority_round(&mut engine);
+
+    let branch = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Mosswort offers its optional branch")
+        .clone();
+    assert_eq!(branch.deciding_player, 0);
+    assert_eq!(
+        branch.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    let branch_prompt_id = branch.resolution_prompt_id.get();
+    let tricerules_core::state::ResolutionContinuation::ProgramChoose { stack, .. } =
+        &branch.continuation
+    else {
+        panic!("the qualifying branch is the migrated Mosswort Program");
+    };
+    let ability_stack_item_id = stack.item.id;
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision_at(
+                branch_prompt_id,
+                ResolutionChoiceDecision::SelectBranch,
+            ),
+        )
+        .expect("choose the qualifying linked-play branch");
+
+    let linked_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Mosswort asks for the exact linked card")
+        .clone();
+    assert_eq!(linked_choice.deciding_player, 0);
+    assert_eq!(linked_choice.presentation.candidates, [linked_spell]);
+    let linked_prompt_id = linked_choice.resolution_prompt_id.get();
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice_at(linked_prompt_id, vec![linked_spell]),
+        )
+        .expect("select the face-down linked instant");
+
+    let special = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Mosswort offers to cast the linked instant")
+        .clone();
+    assert_eq!(special.presentation.choice_kind, ChoiceKind::SpecialCast);
+    let special_prompt_id = special.resolution_prompt_id.get();
+    let announcement = linked_exile_cast_announcement(&mut engine, 0, linked_spell, target_bear);
+    let begun = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_cast_at(special_prompt_id, announcement),
+        )
+        .expect("begin the linked cast without committing its payment");
+    assert!(!begun.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::StackPushed(pushed))
+            if pushed.object_id == linked_spell && pushed.card_id == "lightning_bolt"
+    )));
+    let pending_cast = engine
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .expect("the linked cast proposal awaits an explicit commit");
+    assert!(pending_cast.resolution_time_offer);
+    assert_eq!(pending_cast.caster, 0);
+    assert_eq!(pending_cast.reserved_object_id, linked_spell);
+    assert_ne!(pending_cast.transaction_id, 0);
+
+    let departure = engine
+        .apply_scenario_command(0, &concede())
+        .expect("the controller leaves while the linked cast is uncommitted");
+    assert!(engine.state.players[0].has_lost);
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.diagnostic_snapshot().unwrap()["state"]["pending_linked_exile_play"].is_null());
+    assert!(engine.state.stack.is_empty());
+    assert!(!engine.state.objects.contains_key(&bridge));
+    assert!(!engine.state.objects.contains_key(&linked_spell));
+    assert_linked_play_root_retired_once_without_moving_source(
+        &departure.events,
+        ability_stack_item_id,
+        bridge,
+    );
+    assert!(!departure.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::StackPushed(pushed))
+            if pushed.object_id == linked_spell && pushed.card_id == "lightning_bolt"
+    )));
 }
 
 #[test]

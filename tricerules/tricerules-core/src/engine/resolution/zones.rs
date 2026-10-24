@@ -3040,6 +3040,25 @@ fn choose_linked_exiled_card_action(
     if stack.program.is_none() {
         stack.resume_effect_index = Some(cx.effect_index + 1);
     }
+    let controller_is_live = cx
+        .engine
+        .state
+        .player_idx(cx.controller)
+        .is_some_and(|index| !cx.engine.state.players[index].has_lost);
+    if stack.program.is_some()
+        && !controller_is_live
+        && matches!(
+            &action,
+            PendingLinkedExileAction::Play {
+                kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+                ..
+            }
+        )
+    {
+        // A departed Program controller cannot choose a linked card or transfer the permission
+        // to a surviving player. Completing this resultless leaf lets the saved Program tail run.
+        return Ok(EffectOutcome::Continue);
+    }
     let public_program_profile = cx
         .engine
         .is_mandatory_program_linked_owner_graveyard_choice(&stack, &key, action);
@@ -3601,16 +3620,17 @@ impl GameEngine {
         Ok(())
     }
 
-    /// Continue a linked play occurrence after a card's play/cast transaction or an explicit
-    /// decline. The cohort is a snapshot for this resolving occurrence; linked records remain
-    /// available to later trigger occurrences. Exceptional observer/departure cleanup retains
-    /// the legacy resolution finalizer.
+    /// Continue a linked play occurrence after a card's play/cast transaction, an explicit
+    /// decline, or departure cleanup. An authored Program Play resumes through its saved stack
+    /// cursor; legacy Cast and effect-list paths keep the legacy resolution finalizer.
     pub(in crate::engine) fn advance_pending_linked_exile_play(
         &mut self,
         cohort: crate::state::PendingLinkedExilePlay,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, false)
+        let complete_parked_stack = cohort.stack.program.is_some()
+            && cohort.kind == tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play;
+        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, complete_parked_stack)
     }
 
     /// Finish a normal linked-play root continuation through its complete parked-stack cursor.
@@ -7585,22 +7605,62 @@ mod tests {
                 ability_id: "exile_cards", presentation: Fallback,
                 trigger: WheneverPlayerDiscardsCard(player: Controller),
                 effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_cards"))],
+            ), (
+                ability_id: "exile_play_cards", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsCard(player: Controller),
+                effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_play_cards"))],
+            ), (
+                ability_id: "exile_departure_play_cards", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsCard(player: Controller),
+                effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_departure_play_cards"))],
             )],
-            activated_abilities: [(
-                ability_id: "return_linked_card", presentation: Fallback,
-                source_zone: Battlefield, costs: [Tap], effect: [],
-                program: Some((body: (steps: [
-                    (id: "choose", bind: ["chosen"], input: None, kind: Perform(
-                        ChooseLinkedExiledCard(
-                            producer_ability_id: "exile_cards",
-                            linked_exile_id: "linked_cards",
-                            filter: (card_type: Some(Creature)),
-                            destination: OwnerGraveyard,
-                            optional: false,
-                        )
-                    )),
-                ], yields: []), target_bindings: [])),
-            )],
+            activated_abilities: [
+                (
+                    ability_id: "return_linked_card", presentation: Fallback,
+                    source_zone: Battlefield, costs: [Tap], effect: [],
+                    program: Some((body: (steps: [
+                        (id: "choose", bind: ["chosen"], input: None, kind: Perform(
+                            ChooseLinkedExiledCard(
+                                producer_ability_id: "exile_cards",
+                                linked_exile_id: "linked_cards",
+                                filter: (card_type: Some(Creature)),
+                                destination: OwnerGraveyard,
+                                optional: false,
+                            )
+                        )),
+                    ], yields: []), target_bindings: [])),
+                ),
+                (
+                    ability_id: "play_linked_with_tail", presentation: Fallback,
+                    source_zone: Battlefield, costs: [], effect: [],
+                    program: Some((body: (steps: [
+                        (id: "play_linked", kind: Perform(PlayLinkedExiledCard(
+                            producer_ability_id: "exile_play_cards",
+                            linked_exile_id: "linked_play_cards",
+                            filter: None,
+                            play_kind: Play,
+                            return_source_to_owner_hand_if_cast: false,
+                        ))),
+                        (id: "tail_gain_life", kind: Perform(GainLife(who: Controller, amount: 3))),
+                    ], yields: []), target_bindings: [])),
+                ),
+                (
+                    ability_id: "play_linked_with_departure_tail", presentation: Fallback,
+                    source_zone: Battlefield, costs: [], effect: [],
+                    program: Some((body: (steps: [
+                        (id: "play_linked", kind: Perform(PlayLinkedExiledCard(
+                            producer_ability_id: "exile_departure_play_cards",
+                            linked_exile_id: "linked_departure_play_cards",
+                            filter: None,
+                            play_kind: Play,
+                            return_source_to_owner_hand_if_cast: false,
+                        ))),
+                        (id: "tail_lose_life", kind: Perform(LoseLife(
+                            amount: Fixed(1), who: EachOpponent,
+                        ))),
+                    ], yields: []), target_bindings: [])),
+                ),
+            ],
         )"#;
         let hidden = r#"(
             id: "linked_hidden_secret", name: "Hidden Secret",
@@ -7621,6 +7681,8 @@ mod tests {
         ));
         let mut owner_deck = vec![HIDDEN_ID.into(); 8];
         owner_deck.push(AURA_ID.into());
+        let mut source_owner_deck = vec![SOURCE_ID.into(); 8];
+        source_owner_deck.push(HIDDEN_ID.into());
         let mut engine = GameEngine::new(
             registry,
             90_301,
@@ -7628,7 +7690,7 @@ mod tests {
             20,
             Some(vec![
                 owner_deck,
-                vec![SOURCE_ID.into(); 8],
+                source_owner_deck,
                 vec![HIDDEN_ID.into(); 8],
             ]),
             true,
@@ -7788,6 +7850,383 @@ mod tests {
         assert!(
             !format!("{events:?}").contains("Hidden Secret"),
             "event logs must not reveal the face-down linked card identity"
+        );
+    }
+
+    #[test]
+    fn linked_program_play_completion_runs_tail_when_its_source_owner_leaves() {
+        let (mut engine, mut top, _old_key, _old_linked_object) =
+            synthetic_hidden_linked_program_fixture(false);
+        let key = linked_exile_key(
+            &engine,
+            &top,
+            tricerules_card_model::AbilityLinkId::new("linked_play_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_play_cards").unwrap(),
+        )
+        .expect("separate exact linked-play producer/source incarnation");
+        let source_object = top.source_permanent_id.expect("linked Program source");
+        let hidden_object = engine.state.players[1]
+            .library
+            .iter()
+            .copied()
+            .find(|object_id| engine.state.objects[object_id].card_id == "linked_hidden_secret")
+            .expect("P1 owns a second hidden-card fixture for the source-owner departure");
+        engine
+            .commit_observed_zone_move(hidden_object, Zone::Exile, None, &mut Vec::new())
+            .expect("place P1's exact candidate into linked Exile");
+        let hidden_generation = engine.state.zone_change_generation[&hidden_object];
+        engine.state.linked_exile_records.insert(
+            key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: hidden_object,
+                zone_change_generation: hidden_generation,
+            }],
+        );
+        engine
+            .state
+            .hideaway_look_permissions
+            .entry((key, hidden_object, hidden_generation))
+            .or_default()
+            .insert(0);
+
+        let source_face = engine
+            .registry
+            .get("linked_program_source")
+            .and_then(|definition| definition.face(0))
+            .expect("source face");
+        let ability_index = source_face
+            .activated_abilities
+            .iter()
+            .position(|ability| ability.ability_id.as_str() == "play_linked_with_tail")
+            .expect("synthetic Program ability with a trailing life instruction");
+        let ability = source_face.activated_abilities[ability_index].clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: "linked_program_source".into(),
+            face_id: source_face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        top.controller = 0;
+        top.ability_index = Some(ability_index);
+        top.activated_ability = Some(ability);
+        top.activated_ability_occurrence = Some(crate::state::ActivatedAbilityOccurrence::Printed(
+            definition,
+        ));
+        top.is_triggered = false;
+        let source_generation = engine.state.zone_change_generation[&source_object];
+        top.source_owner = Some(1);
+        top.source_zone_change = source_generation;
+        *engine.state.stack.last_mut().expect("parked Program item") = top.clone();
+
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(source_object),
+                kind: tricerules_card_model::primitives::ContinuousEffectKind::Layer2Control {
+                    controller: tricerules_card_model::primitives::ControllerReference::Fixed(0),
+                },
+                condition: None,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index,
+            });
+        engine.reindex_battlefield_control(&mut Vec::new());
+        assert_eq!(engine.state.objects[&source_object].owner, 1);
+        assert_eq!(engine.state.objects[&source_object].controller, 0);
+
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("exact synthetic Program owner lookup")
+            .expect("captured Program ability has an exact owner");
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("synthetic linked-play Program starts");
+        let mut initial_events = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(&top, run, EffectResult::default(), &mut initial_events,)
+                .expect("Program parks at its linked-play instruction"),
+            ResolutionProgress::Parked
+        ));
+        let initial_choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("live controller receives the linked-card choice");
+        assert_eq!(initial_choice.deciding_player, 0);
+        assert_eq!(initial_choice.presentation.candidates, [hidden_object]);
+        let choice_stack = match &initial_choice.continuation {
+            crate::state::ResolutionContinuation::LinkedExileChoice {
+                stack,
+                action:
+                    crate::state::PendingLinkedExileAction::Play {
+                        kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+                        ..
+                    },
+                ..
+            } => stack,
+            _ => panic!("the test must park at its resultless linked Play action"),
+        };
+        assert!(matches!(
+            engine.current_program_perform(
+                choice_stack.program.as_ref().expect("parked Program frame"),
+            ),
+            Ok(SpellEffectKind::PlayLinkedExiledCard {
+                play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+                ..
+            })
+        ));
+
+        let life_before = engine.state.players[0].life;
+        assert_eq!(
+            life_before, 20,
+            "the Program tail is still pending before departure"
+        );
+        let departure = engine
+            .concede_batch(1)
+            .expect("source and linked-card owner leave while P0 controls the resolving ability");
+        assert!(engine.state.players[1].has_lost);
+        assert!(!engine.state.objects.contains_key(&source_object));
+        assert!(!engine.state.objects.contains_key(&hidden_object));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(
+            engine.diagnostic_snapshot().expect("post-departure state")["state"]
+                ["pending_linked_exile_play"]
+                .is_null()
+        );
+        assert_eq!(engine.state.players[0].life, life_before + 3);
+        assert!(
+            engine.state.stack.is_empty(),
+            "the Program root must retire once"
+        );
+        assert_eq!(
+            departure
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == top.id
+                ))
+                .count(),
+            1,
+            "the through-stack completion retires the exact Program once"
+        );
+    }
+
+    #[test]
+    fn linked_program_play_completion_runs_tail_once_when_its_controller_leaves() {
+        use crate::state::PendingLinkedExileChoiceStage;
+
+        let (mut engine, mut top, _old_key, _old_linked_object) =
+            synthetic_hidden_linked_program_fixture(true);
+        let key = linked_exile_key(
+            &engine,
+            &top,
+            tricerules_card_model::AbilityLinkId::new("linked_departure_play_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_departure_play_cards").unwrap(),
+        )
+        .expect("separate exact linked-play producer/source incarnation");
+        let source_object = top.source_permanent_id.expect("linked Program source");
+        let source_generation = engine.state.zone_change_generation[&source_object];
+        let hidden_object = engine.state.players[1]
+            .library
+            .iter()
+            .copied()
+            .find(|object_id| engine.state.objects[object_id].card_id == "linked_hidden_secret")
+            .expect("P1 owns a hidden candidate for the controller-departure test");
+        engine
+            .commit_observed_zone_move(hidden_object, Zone::Exile, None, &mut Vec::new())
+            .expect("place P1's exact candidate into linked Exile");
+        engine
+            .state
+            .objects
+            .get_mut(&hidden_object)
+            .expect("hidden linked object")
+            .face_down = true;
+        let hidden_generation = engine.state.zone_change_generation[&hidden_object];
+        engine.state.linked_exile_records.insert(
+            key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: hidden_object,
+                zone_change_generation: hidden_generation,
+            }],
+        );
+        engine
+            .state
+            .hideaway_look_permissions
+            .entry((key.clone(), hidden_object, hidden_generation))
+            .or_default()
+            .insert(0);
+
+        let source_face = engine
+            .registry
+            .get("linked_program_source")
+            .and_then(|definition| definition.face(0))
+            .expect("source face");
+        let ability_index = source_face
+            .activated_abilities
+            .iter()
+            .position(|ability| ability.ability_id.as_str() == "play_linked_with_departure_tail")
+            .expect("synthetic Program with a tail visible to surviving opponents");
+        let ability = source_face.activated_abilities[ability_index].clone();
+        let definition = tricerules_card_model::AbilityDefinitionId {
+            card_id: "linked_program_source".into(),
+            face_id: source_face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        top.controller = 0;
+        top.ability_index = Some(ability_index);
+        top.activated_ability = Some(ability);
+        top.activated_ability_occurrence = Some(crate::state::ActivatedAbilityOccurrence::Printed(
+            definition,
+        ));
+        top.is_triggered = false;
+        top.source_owner = Some(1);
+        top.source_zone_change = source_generation;
+        *engine.state.stack.last_mut().expect("parked Program item") = top.clone();
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(source_object),
+                kind: tricerules_card_model::primitives::ContinuousEffectKind::Layer2Control {
+                    controller: tricerules_card_model::primitives::ControllerReference::Fixed(0),
+                },
+                condition: None,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index,
+            });
+        engine.reindex_battlefield_control(&mut Vec::new());
+        assert_eq!(engine.state.objects[&source_object].owner, 1);
+        assert_eq!(engine.state.objects[&source_object].controller, 0);
+        assert_eq!(engine.state.objects[&hidden_object].owner, 1);
+
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("exact synthetic Program owner lookup")
+            .expect("captured Program ability has an exact owner");
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("synthetic linked-play Program starts");
+        let mut initial_events = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(&top, run, EffectResult::default(), &mut initial_events)
+                .expect("Program parks at its linked-play instruction"),
+            ResolutionProgress::Parked
+        ));
+        let initial_choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("live P0 receives the linked Play choice");
+        assert_eq!(initial_choice.deciding_player, 0);
+        assert_eq!(initial_choice.presentation.candidates, [hidden_object]);
+        assert_eq!(
+            initial_choice.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        let choice_stack = match &initial_choice.continuation {
+            crate::state::ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key: pending_key,
+                action:
+                    crate::state::PendingLinkedExileAction::Play {
+                        kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+                        ..
+                    },
+                candidate_generations,
+                stage: PendingLinkedExileChoiceStage::Selecting { .. },
+                ..
+            } => {
+                assert_eq!(pending_key, &key);
+                assert_eq!(candidate_generations, &[(hidden_object, hidden_generation)]);
+                stack
+            }
+            _ => panic!("the test must park at the original actor's linked Play choice"),
+        };
+        let root_item_id = choice_stack.item.id;
+        assert_eq!(choice_stack.item.controller, 0);
+        assert_eq!(choice_stack.item.source_permanent_id, Some(source_object));
+        assert!(matches!(
+            engine.current_program_perform(
+                choice_stack.program.as_ref().expect("parked Program frame"),
+            ),
+            Ok(SpellEffectKind::PlayLinkedExiledCard {
+                play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+                ..
+            })
+        ));
+        let live_life_before = [1, 2]
+            .map(|player| engine.state.players[engine.state.player_idx(player).unwrap()].life);
+
+        let departure = engine
+            .concede_batch(0)
+            .expect("reconcile the pending Play choice after P0 leaves");
+        let departure_events = departure.events;
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(engine.state.players[1].life, live_life_before[0] - 1);
+        assert_eq!(engine.state.players[2].life, live_life_before[1] - 1);
+        for player in [1, 2] {
+            assert_eq!(
+                departure_events
+                    .iter()
+                    .filter(|event| matches!(
+                        &event.ev,
+                        Some(rv1::ruled_event::Ev::LifeChanged(change))
+                            if change.player_id == player && change.delta == -1
+                    ))
+                    .count(),
+                1,
+                "the surviving opponent receives the Program tail once"
+            );
+        }
+        assert_eq!(
+            departure_events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == root_item_id
+                ))
+                .count(),
+            1,
+            "the exact Program root completes through its saved stack cursor once"
+        );
+        assert_no_hidden_linked_identity(&departure_events, hidden_object);
+        assert!(!departure_events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(engine.state.objects[&source_object].zone, Zone::Battlefield);
+        assert_eq!(engine.state.objects[&source_object].owner, 1);
+        assert_eq!(engine.state.objects[&source_object].controller, 1);
+        assert_eq!(
+            engine.state.zone_change_generation[&source_object],
+            source_generation
+        );
+        assert_eq!(engine.state.objects[&hidden_object].zone, Zone::Exile);
+        assert_eq!(engine.state.objects[&hidden_object].owner, 1);
+        assert!(engine.state.objects[&hidden_object].face_down);
+        assert_eq!(
+            engine.state.zone_change_generation[&hidden_object],
+            hidden_generation
+        );
+        assert_eq!(
+            engine.state.linked_exile_records[&key][0].object_id,
+            hidden_object
+        );
+        assert_eq!(
+            engine.state.linked_exile_records[&key][0].zone_change_generation,
+            hidden_generation
         );
     }
 

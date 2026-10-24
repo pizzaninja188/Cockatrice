@@ -54,6 +54,18 @@
       "covers": "The optional non-cost choice is declined with its exact live prompt; the linked card remains hidden and unchanged."
     },
     {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_controller_departure_keeps_applied_branch_without_offering_linked_land",
+      "covers": "In a four-player game, P0 controls P1's Bridge and activates the qualifying ability; after P0 concedes with the branch pending, P1 selects P2 to apply the saved branch. The linked card remains hidden, the departed controller receives no inner Play choice or land action, and the exact Bridge root retires once without changing the physical Bridge generation."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_linked_play_choice_departure_preserves_owned_hidden_card_without_delegation",
+      "covers": "P0 leaves while the actual LinkedExileChoice::Play is pending for P0, with P1 still owning the Bridge and face-down linked land. The pending step is not delegated or republished, source and linked-card generations remain unchanged, no identity or Play action is exposed, and the exact Bridge root retires once."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_departure_during_uncommitted_linked_cast_retires_program_once",
+      "covers": "After choosing the qualifying branch and linked Lightning Bolt, the controller leaves during the uncommitted resolution-time cast proposal. The cast is not put on the stack, pending transaction state clears, and the exact Mosswort Program root retires once."
+    },
+    {
       "test": "scenario deck_coverage_hideaway_four::mosswort_linked_choice_decline_clears_occurrence_before_second_bridge_play",
       "covers": "Declining the direct linked-card prompt clears the exact pending Play occurrence while preserving both hidden linked records; the exact first Bridge root emits one StackResolved event without moving or revealing its physical source. A second Bridge offers only its own linked land and plays it with the live prompt and generation-bound PlayLand command."
     },

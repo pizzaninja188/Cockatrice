@@ -1083,6 +1083,19 @@ impl GameEngine {
                         });
                         continue;
                     }
+                    let frozen_game_condition_results = branches
+                        .iter()
+                        .filter_map(|branch| match &branch.requirement {
+                            CompiledChooseRequirement::GameCondition(condition) => Some((
+                                branch.branch_id.clone(),
+                                self.condition_holds(
+                                    condition,
+                                    ConditionContext::for_stack_item(top),
+                                ),
+                            )),
+                            _ => None,
+                        })
+                        .collect::<std::collections::BTreeMap<_, _>>();
                     let live_branches = branches
                         .iter()
                         .enumerate()
@@ -1093,7 +1106,13 @@ impl GameEngine {
                                     chooser_player,
                                     &branch.cost,
                                 )
-                                && self.program_choose_requirement_holds(top, &branch.requirement)
+                                && self.program_choose_requirement_holds(
+                                    top,
+                                    &branch.requirement,
+                                    frozen_game_condition_results
+                                        .get(&branch.branch_id)
+                                        .copied(),
+                                )
                                 && self.program_choose_draw_is_selectable(
                                     top,
                                     &previous_result,
@@ -1268,6 +1287,7 @@ impl GameEngine {
                                 optional: *optional,
                                 departure_policy: *departure_policy,
                                 delegate_selected,
+                                frozen_game_condition_results,
                                 stage: choose_stage,
                             },
                         },
@@ -1579,12 +1599,14 @@ impl GameEngine {
         &self,
         top: &StackItem,
         requirement: &CompiledChooseRequirement,
+        frozen_game_condition_result: Option<bool>,
     ) -> bool {
         match requirement {
             CompiledChooseRequirement::Always => true,
-            CompiledChooseRequirement::GameCondition(condition) => {
-                self.condition_holds(condition, ConditionContext::for_stack_item(top))
-            }
+            CompiledChooseRequirement::GameCondition(condition) => frozen_game_condition_result
+                .unwrap_or_else(|| {
+                    self.condition_holds(condition, ConditionContext::for_stack_item(top))
+                }),
             CompiledChooseRequirement::CastCostReceipt(condition) => {
                 top.cast_cost_condition_matches(condition)
             }
@@ -1703,6 +1725,7 @@ impl GameEngine {
         stack: &ParkedStackResolution,
         occurrence: &crate::state::ProgramChooseOccurrence,
         original_chooser: PlayerId,
+        frozen_game_condition_results: &std::collections::BTreeMap<ChoiceId, bool>,
         branch_index: usize,
     ) -> Result<CompiledChooseBranch, EngineError> {
         let branch = self.program_choose_branch_at_occurrence(stack, occurrence, branch_index)?;
@@ -1711,7 +1734,13 @@ impl GameEngine {
             .player_idx(original_chooser)
             .is_some_and(|idx| !self.state.players[idx].has_lost);
         if (!original_chooser_live && branch.cost != ResolutionCost::None)
-            || !self.program_choose_requirement_holds(&stack.item, &branch.requirement)
+            || !self.program_choose_requirement_holds(
+                &stack.item,
+                &branch.requirement,
+                frozen_game_condition_results
+                    .get(&branch.branch_id)
+                    .copied(),
+            )
             || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
             || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
         {
@@ -1809,7 +1838,14 @@ impl GameEngine {
                                 &branch.cost,
                             )
                             && self
-                                .program_choose_requirement_holds(&stack.item, &branch.requirement)
+                                .program_choose_requirement_holds(
+                                    &stack.item,
+                                    &branch.requirement,
+                                    choose
+                                        .frozen_game_condition_results
+                                        .get(&branch.branch_id)
+                                        .copied(),
+                                )
                             && self.program_choose_draw_is_selectable(
                                 &stack.item,
                                 &stack.previous_result,
@@ -4549,8 +4585,6 @@ mod invariant_rollback_tests {
             ResolutionProgress::Parked
         ));
 
-        // Model the source/controller leaving after its stack ability began. The next live
-        // player selects a delegate, and a repeated lifecycle refresh must remain a no-op.
         engine.state.players[0].has_lost = true;
         let mut departed = Vec::new();
         engine
@@ -4585,7 +4619,7 @@ mod invariant_rollback_tests {
             .resolution_branches
             .iter()
             .find(|branch| branch.branch_index == 1)
-            .expect("second branch remains at its authored index");
+            .expect("second delegate remains at its authored index");
         assert_eq!(second.label, "P2 makes the choice");
         let second_presentation = second
             .presentation
@@ -4616,6 +4650,273 @@ mod invariant_rollback_tests {
             } if candidates == &[Some(1), Some(2), Some(3)]
         ));
         assert_eq!(engine.program_choose_choice_event(), Some(published));
+    }
+
+    #[test]
+    fn program_choose_delegate_preserves_initial_game_condition_after_departure() {
+        use crate::state::PendingProgramChooseStage;
+
+        let card = r#"(id: "program_choose_delegate_fixture", name: "Program Choose Delegate Fixture",
+            face_id: "program_choose_delegate_fixture", mana_cost: "{0}", types: ["Instant"],
+            spell_program: Some((body: (steps: [
+                (id: "choose", bind: [], input: None, kind: Choose(
+                    choice: "choose", chooser: Controller, optional: true,
+                    branches: [(branch_id: "eligible", presentation: Fallback, cost: None,
+                        requirement: GameCondition(BattlefieldAggregate(
+                            filter: (controllers: Controller, card_type: Some(Creature)),
+                            aggregate: TotalPower, min: Some(10), max: None,
+                            exclude_observed_object: false,
+                        )), body: (steps: [], yields: []))],
+                    otherwise: (steps: [], yields: []),
+                )),
+                (id: "tail", kind: Perform(LoseLife(amount: Fixed(1), who: EachOpponent)))
+            ], yields: []))))"#;
+        let creature = r#"(id: "program_choose_creature_fixture", name: "Program Choose Creature Fixture",
+            face_id: "program_choose_creature_fixture", types: ["Creature"], power: 10, toughness: 10)"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[card, creature], &[])
+                .expect("conditioned Choose fixture compiles"),
+        ));
+        let decks = Some(
+            (0..4)
+                .map(|_| {
+                    let mut deck = vec!["program_choose_delegate_fixture".to_string(); 29];
+                    deck.push("program_choose_creature_fixture".to_string());
+                    deck
+                })
+                .collect(),
+        );
+        let mut engine = GameEngine::new(registry, 91_205, &[0, 1, 2, 3], 20, decks, true)
+            .expect("four-player program Choose fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let creature = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == 0 && object.card_id == "program_choose_creature_fixture")
+            .map(|object| object.id)
+            .expect("the controller's deck has a creature fixture");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("the creature establishes the initial GameCondition result");
+        let spell = *engine.state.players[0]
+            .hand
+            .iter()
+            .find(|object_id| {
+                engine.state.objects[object_id].card_id == "program_choose_delegate_fixture"
+            })
+            .expect("fixture deck dealt a spell");
+        move_object_to_zone(&mut engine.state, engine.registry, spell, Zone::Stack, None)
+            .expect("fixture spell moves to stack");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&spell)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(spell, 0);
+        top.id = spell;
+        top.controller = 0;
+        top.card_id = "program_choose_delegate_fixture".into();
+        top.ability_text = None;
+        top.is_copy = false;
+        top.cast_by = Some(0);
+        top.cast_occurrence = Some(crate::state::StackObjectRef {
+            object_id: spell,
+            zone_change_generation: Some(generation),
+        });
+        engine.state.stack.push(top.clone());
+        let owners = engine
+            .compiled_resolution_program_owners(&top)
+            .expect("fixture owner lookup")
+            .expect("fixture program owner");
+        let run = engine
+            .begin_program_run(&top, owners)
+            .expect("fixture program starts");
+        let mut initial = Vec::new();
+        assert!(matches!(
+            engine
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    crate::state::EffectResult::default(),
+                    &mut initial,
+                )
+                .expect("program reaches Choose"),
+            ResolutionProgress::Parked
+        ));
+        let initial_offer = engine
+            .program_choose_choice_event()
+            .expect("the live controller initially receives the qualifying branch");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(initial_menu)) =
+            initial_offer.ev.as_ref()
+        else {
+            panic!("the initial condition result is offered as a branch choice")
+        };
+        assert!(initial_menu
+            .resolution_branches
+            .iter()
+            .any(|branch| branch.branch_index == 0 && branch.selectable));
+
+        // Model the source/controller leaving after its stack ability began. The next live
+        // player selects a delegate after the condition's qualifying creature leaves too.
+        engine.state.players[0].has_lost = true;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the departed controller's creature leaves the battlefield");
+        let mut departed = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut departed)
+            .expect("first refresh offers delegate selection");
+        engine
+            .publish_resolution_prompt_ids(&mut departed)
+            .expect("delegate prompt gets its stable ID");
+        assert!(matches!(
+            &engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the already-applied qualifying branch remains available for delegation")
+                .continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingDelegate { candidates },
+                    ..
+                },
+                ..
+            } if candidates == &[Some(1), Some(2), Some(3)]
+        ));
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the already-applied qualifying branch remains available for delegation")
+            .clone();
+        let prompt_id = pending.resolution_prompt_id;
+        let deciding_player = pending.deciding_player;
+        let prompt_text = pending.presentation.prompt.clone();
+        let published = engine
+            .program_choose_choice_event()
+            .expect("delegate offer renders");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(original_menu)) =
+            published.ev.as_ref()
+        else {
+            panic!("delegate offer contains the candidate menu")
+        };
+        assert_eq!(original_menu.resolution_branches.len(), 3);
+
+        let mut selecting_probe = pending.clone();
+        let ResolutionContinuation::ProgramChoose { choose, .. } =
+            &mut selecting_probe.continuation
+        else {
+            panic!("delegate prompt retains the Program Choose frame")
+        };
+        choose.stage = PendingProgramChooseStage::Selecting;
+        engine.state.pending_resolution = Some(selecting_probe);
+        let branch_menu = engine
+            .program_choose_choice_event()
+            .expect("saved condition renders the delegated branch menu");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(branch_menu)) =
+            branch_menu.ev.as_ref()
+        else {
+            panic!("delegated branch offer contains its branch menu")
+        };
+        let eligible = branch_menu
+            .resolution_branches
+            .iter()
+            .find(|branch| branch.branch_index == 0)
+            .expect("the initially eligible branch remains available by its authored index");
+        assert!(eligible.selectable);
+        engine.state.pending_resolution = Some(pending.clone());
+
+        let mut repeated = Vec::new();
+        engine
+            .refresh_program_choose_departure(&mut repeated)
+            .expect("unchanged lifecycle refresh succeeds");
+        assert!(
+            repeated.is_empty(),
+            "no-op refresh emits no replacement offer"
+        );
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.resolution_prompt_id, prompt_id);
+        assert_eq!(pending.deciding_player, deciding_player);
+        assert_eq!(pending.presentation.prompt, prompt_text);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ProgramChoose {
+                choose: crate::state::PendingProgramChoose {
+                    stage: PendingProgramChooseStage::ChoosingDelegate { candidates },
+                    ..
+                },
+                ..
+            } if candidates == &[Some(1), Some(2), Some(3)]
+        ));
+        assert_eq!(engine.program_choose_choice_event(), Some(published));
+
+        nested_answer(
+            &mut engine,
+            rv1::ResolutionChoiceDecision::SelectBranch,
+            1,
+            Vec::new(),
+        );
+        let delegated = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the chosen delegate receives the original branch choice");
+        assert_eq!(delegated.deciding_player, 2);
+        let branch_offer = engine
+            .program_choose_choice_event()
+            .expect("the delegate receives the saved qualifying branch");
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(branch_menu)) =
+            branch_offer.ev.as_ref()
+        else {
+            panic!("the delegate branch menu contains the saved condition result")
+        };
+        assert!(branch_menu
+            .resolution_branches
+            .iter()
+            .any(|branch| branch.branch_index == 0 && branch.selectable));
+        let completion = nested_answer(
+            &mut engine,
+            rv1::ResolutionChoiceDecision::SelectBranch,
+            0,
+            Vec::new(),
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        for player in [1, 2, 3] {
+            assert_eq!(
+                engine.state.players[player].life, 19,
+                "the post-Choose tail resolves exactly once for each live opponent"
+            );
+        }
+        assert_eq!(
+            completion
+                .events
+                .iter()
+                .filter(|event| matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::StackResolved(resolved))
+                        if resolved.object_id == spell
+                ))
+                .count(),
+            1,
+            "the resumed Program finalizes its exact stack item once"
+        );
     }
 
     #[test]

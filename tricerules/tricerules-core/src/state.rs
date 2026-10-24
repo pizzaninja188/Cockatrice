@@ -1400,6 +1400,7 @@ pub(crate) struct PendingProgramChoose {
     pub optional: bool,
     pub departure_policy: tricerules_card_model::primitives::ChooseDeparturePolicy,
     pub delegate_selected: bool,
+    pub frozen_game_condition_results: BTreeMap<ChoiceId, bool>,
     pub stage: PendingProgramChooseStage,
 }
 

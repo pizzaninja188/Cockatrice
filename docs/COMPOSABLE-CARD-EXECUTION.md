@@ -1,16 +1,16 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-21): the `DrawDiscard` compatibility family and flat `ChooseResolutionBranch`
+Status (2026-10-24): the `DrawDiscard` compatibility family and flat `ChooseResolutionBranch`
 grammar/runtime are retired. After the Trade Route Envoy port, flat-variant validation/traversal,
 selection/dispatch, and expansion paths were removed. The shared internal
 `EffectOutcome::RestartResolutionBranch` remains for MayBehold's no-candidate path; typed Program
 `Choose` and shared cost, requirement, and branch-selection helpers remain. The broader composable-card execution
-migration remains incomplete: receipt composition, library-return transactions, and Mosswort Bridge
-departure handling remain open.
+migration remains incomplete: receipt composition and library search/selection transactions remain open.
 The target design also established cross-component resolution-prompt identity, exact compiled owner
-identities, and immutable ability binding. The runner supports
-targetless program operations and four targetful role signatures on spell faces, modal modes,
-activated abilities and triggered abilities. The original migration census was 41 existing card
+identities, and immutable ability binding. Supported finite profiles, accepted syntax, and
+restrictions are maintained in the
+[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs).
+The original migration census was 41 existing card
 identities, 42 `DrawDiscard` bodies and three additional modal siblings: 45 compiled owners, not 45
 card admissions. All 45 owners now use authored programs, and the migration added no card
 admissions. The `DrawDiscard` variant, source lowerer, and draw-after continuation are removed; registry
@@ -18,9 +18,8 @@ admission rejects old `DrawDiscard` RON and requires every sibling to be authore
 container uses programs. Typed discard outcomes and replacement/entry/payment continuations retain
 the owning frame. Authored-owner conversions include Calamitous Tide's face, Agna Qel'a's
 activation, Uthros Scanship's ETB, all three Three Steps Ahead modes, and the exact Recruit
-generator pair for Long Lake Nuisance and Patient Instructor. The
-[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
-owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
+generator pair for Long Lake Nuisance and Patient Instructor. Broader operations and contexts remain
+migration targets.
 Resolution prompt IDs are scoped to the deciding player for both legacy and Program choices; answer
 validation checks the actor and that actor's prompt identity. This does not widen accepted syntax.
 
@@ -36,8 +35,8 @@ added no protocol/client changes. The subsequent flat-branch retirement removed 
 the protobuf, relay, or client contract. Trade Route Envoy
 was outside the original `DrawDiscard` migration census. Following this port, the flat
 `ChooseResolutionBranch` schema/runtime was retired; typed Program `Choose` and shared branch/cost
-helpers remain. This does not complete the broader migration: receipt composition, library-return
-transactions, and Mosswort Bridge departure handling remain open. The bounded 2026-10-21
+helpers remain. This does not complete the broader migration: receipt composition and library
+search/selection transactions remain open. The bounded 2026-10-21
 optional-trigger continuation correction retains a begun choice after its original controller
 leaves, lets a surviving player select who will apply or decline it, and preserves the original
 stack controller, source, target IDs, and target generations (CR 400.7, 608.2m, 800.4a, 800.4g–h).
@@ -367,14 +366,17 @@ source leave does not rebind the begun occurrence to a later source incarnation;
 no current candidates completes with an empty result.
 This is a narrow owner-graveyard profile, not a new rule for other begun abilities. Nautiloid Ship's
 optional `ChooseLinkedExiledCard` return-to-controller-battlefield path remains unchanged.
-`PlayLinkedExiledCard` remains a separate legacy path for Hideaway play permissions, except for
-Mosswort Bridge `activated_02`'s exact terminal optional ability-Program profile: one root
-Controller `Choose`, one branch guarded by Controller-creature `TotalPower` of at least 10 with no
-maximum, and one resultless terminal `PlayLinkedExiledCard` leaf with `Play`, no filter, and no
-source return. Other optional linked-play variants and continuations remain excluded. The optional
-linked-play chooser-departure gap remains deferred. This existing-card Program owner migration uses
-existing linked-card and resolution-choice events, with no new wire, relay or client contract. Its
-card mechanics follow CR 400.7, 603.2c, 603.5, 607.2a, 608.2d, 608.2m and 800.4a-b/g-h; it adds no
+An ability Program may use `PlayLinkedExiledCard` as a resultless leaf only with `Play`, no filter,
+and no source return to its owner's hand if cast. It may be followed by later Program instructions;
+linked-play completion resumes the saved Program cursor so that the tail resolves once. Mosswort
+Bridge `activated_02` uses this generic profile inside its optional Controller `Choose`, whose
+branch checks Controller-creature total power of at least 10 with no maximum. Program `Cast`,
+filtered Play, and source-return forms remain excluded. Four-player scenarios cover its departed
+controller, hidden linked card, linked-land play, and uncommitted linked-cast paths; a focused core
+regression covers a live controller retaining the tail after the source owner and candidate leave.
+This existing-card Program owner migration uses existing linked-card and resolution-choice events,
+with no new wire, relay or client contract. Its mechanics use CR 608.2m for a begun ability's
+continued resolution and CR 800.4a and 800.4g for player departure and delegated choices; it adds no
 card admission.
 
 The bounded 2026-10-19 Ward migration moves the exact 17 existing triggered-ability owners to a
