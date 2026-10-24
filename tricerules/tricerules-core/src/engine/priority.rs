@@ -529,7 +529,7 @@ impl GameEngine {
                     // entrant/chooser and completes the search boundary.
                     preserve = true;
                 }
-                ResolutionContinuation::BattlefieldReturn { .. } => {
+                ResolutionContinuation::BattlefieldCohortMove { .. } => {
                     // This object cohort belongs to one begun instruction. Preserve the complete
                     // parked cursor until concession removes exact departed-owner members and
                     // the simultaneous hand replacements can be refreshed (CR 608.2m).
@@ -1122,7 +1122,11 @@ impl GameEngine {
         self.refresh_optional_triggered_ability_departure(events)?;
         self.refresh_program_proliferate_departure(events)?;
         self.refresh_program_proliferate_replacement_departure(events)?;
-        self.refresh_owner_hand_return_departure(&departed_objects, &stranded_objects, events)?;
+        self.refresh_battlefield_cohort_move_departure(
+            &departed_objects,
+            &stranded_objects,
+            events,
+        )?;
         self.refresh_blight_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.refresh_equipment_receipt_attach_departure(events)?;

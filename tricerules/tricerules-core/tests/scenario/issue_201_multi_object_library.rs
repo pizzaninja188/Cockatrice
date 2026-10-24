@@ -1,9 +1,65 @@
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
+use tricerules_cards::primitives::{ContinuousEffectKind, ControllerReference, EffectDuration};
 use tricerules_cards::CounterKind;
 use tricerules_core::state::CopiableValues;
-use tricerules_core::Zone;
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+// A private continuation fixture derived from Floodpits Drowner's actual activated ability.
+// The trailing life gain exists only to make exactly-once Program-tail resumption observable.
+#[cfg(feature = "authoring")]
+const FLOODPITS_TAIL_FIXTURE: &str = r#"(
+    id: "issue_201_floodpits_tail_fixture",
+    name: "Floodpits Drowner Tail Fixture",
+    face_id: "issue_201_floodpits_tail_fixture",
+    mana_cost: "{1}{U}",
+    supertypes: ["Legendary"],
+    types: ["Creature", "Merfolk"],
+    power: 2,
+    toughness: 1,
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: Fallback,
+        source_zone: Battlefield,
+        costs: [Mana("{1}{U}"), Tap],
+        effect: [],
+        program: Some((body: (steps: [
+            (id: "shuffle_source_and_target", bind: [], input: None,
+                kind: Perform(ShufflePermanentsIntoOwnersLibraries(subjects: [
+                    Source,
+                    Chosen((kind: Creature, required_counter: Stun)),
+                ]))),
+            (id: "test_only_tail_gain_life", bind: [], input: None,
+                kind: Perform(GainLife(amount: 1))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "shuffle_source_and_target", role: Target,
+                target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1,
+            max: 1,
+            prompt: "Choose target creature with a stun counter on it",
+            effect_indices: [],
+        )])),
+    )],
+)"#;
+
+#[cfg(feature = "authoring")]
+fn floodpits_program_fixture_registry() -> &'static tricerules_cards::CardRegistry {
+    Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                FLOODPITS_TAIL_FIXTURE,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/kami_of_the_crescent_moon.ron"),
+            ],
+            &[],
+        )
+        .expect("synthetic Floodpits composition plus official deck cards"),
+    ))
+}
 
 fn engine_with_drowner(seed: u64) -> GameEngine {
     let decks = Some(vec![
@@ -100,6 +156,32 @@ fn shuffle_log_count(batch: &RuledEventBatch, player: i32) -> usize {
         .count()
 }
 
+fn library_branch(index: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
+            decision: ResolutionChoiceDecision::SelectBranch as i32,
+            selected_branch_index: index,
+            ..Default::default()
+        })),
+    }
+}
+
+#[cfg(feature = "authoring")]
+fn assert_library_choice_rejection_is_atomic(
+    engine: &mut GameEngine,
+    actor: i32,
+    command: &RuledCommand,
+) {
+    let before = engine.diagnostic_snapshot().expect("diagnostic snapshot");
+    assert!(engine.apply_scenario_command(actor, command).is_err());
+    assert_eq!(
+        engine.diagnostic_snapshot().expect("diagnostic snapshot"),
+        before,
+        "an invalid library destination answer must preserve the pending cohort"
+    );
+}
+
 #[test]
 fn issue_201_counter_filter_publishes_and_resolves_atomic_shuffle() {
     let (mut engine, source, target, unstunned) = setup_activation(201_001, 1);
@@ -134,6 +216,562 @@ fn issue_201_counter_filter_publishes_and_resolves_atomic_shuffle() {
     assert_eq!(
         engine.state.zone_change_generation[&target],
         target_generation + 1
+    );
+}
+
+#[test]
+fn issue_201_etb_program_taps_and_stuns_its_chosen_opponent_creature() {
+    let mut engine = engine_with_drowner(201_012);
+    let target = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
+    let other = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+
+    dev_move(&mut engine, 0, "Floodpits Drowner", DevZone::Battlefield);
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    targets: target_object(target),
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("choose one opposing creature for the ETB Program");
+    pass_both_players(&mut engine);
+
+    assert!(engine.state.objects[&target].tapped);
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::Stun),
+        1
+    );
+    assert!(!engine.state.objects[&other].tapped);
+    assert_eq!(
+        engine.state.objects[&other].counter_count(CounterKind::Stun),
+        0
+    );
+}
+
+#[test]
+fn issue_201_declared_commander_owner_chooses_library_even_when_controlled_by_source_owner() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &["floodpits_drowner"]),
+            commanders: Vec::new(),
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &[]),
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        201_000,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("legal two-player Commander fixture");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = relocate_to_battlefield(&mut engine, 0, "floodpits_drowner", false);
+    let target = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 1,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Kami of the Crescent Moon".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("move the exact declared commander to the battlefield");
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("commander target")
+        .set_counter(CounterKind::Stun, 1);
+    let owner = engine.state.objects[&target].owner;
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("commander target")
+        .base_controller = owner;
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(target),
+        kind: ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(0),
+        },
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: engine.state.command_index,
+    });
+    assert_eq!(owner, 1);
+    assert_eq!(engine.state.objects[&target].base_controller, owner);
+    assert_eq!(
+        engine
+            .characteristics(target)
+            .expect("the target's effective characteristics")
+            .controller,
+        0,
+        "layer-2 control gives the source owner control of the target"
+    );
+    assert!(matches!(
+        engine
+            .state
+            .continuous_effects
+            .last()
+            .map(|effect| &effect.kind),
+        Some(ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(0)
+        })
+    ));
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or(0);
+    let target_generation = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or(0);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    apply_ability(&mut engine, 0, source, 0, target_object(target)).expect("activate");
+
+    let batch = resolve_top(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&source].zone,
+        Zone::Battlefield,
+        "the source must remain in place until the target's owner decides"
+    );
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&source].owner, 0);
+    assert_eq!(engine.state.objects[&target].owner, 1);
+    assert_eq!(
+        engine
+            .characteristics(target)
+            .expect("the target remains on the battlefield pending its owner's choice")
+            .controller,
+        0
+    );
+    assert!(!batch
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::PermanentMoved(_)))));
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the declared commander owner must receive a replacement choice");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::ResolutionBranch
+    );
+    assert_eq!(pending.deciding_player, 1);
+    assert!(batch.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::ResolutionChoiceRequired(required))
+            if required.deciding_player_id == 1
+                && required.resolution_branches.len() == 2
+                && required.resolution_branches[0].label == "Command zone"
+                && required.resolution_branches[1].label.to_lowercase().contains("library")
+    )));
+
+    let completion = engine
+        .apply_scenario_command(1, &library_branch(1))
+        .expect("the commander owner chooses the library destination");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&source].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Library);
+    assert!(engine.state.players[0].library.contains(&source));
+    assert!(engine.state.players[1].library.contains(&target));
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        source_generation + 1
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        target_generation + 1
+    );
+    assert_eq!(shuffle_log_count(&completion, 0), 1);
+    assert_eq!(shuffle_log_count(&completion, 1), 1);
+}
+
+#[test]
+fn issue_201_empty_departed_cohort_shuffles_live_source_owner_and_finishes_once() {
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &["floodpits_drowner"]),
+            commanders: Vec::new(),
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &[]),
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("forest", &[]),
+            commanders: Vec::new(),
+        },
+    ]);
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        201_009,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("legal three-player Commander fixture");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let source = relocate_to_battlefield(&mut engine, 0, "floodpits_drowner", false);
+    let source_face = tricerules_cards::registry::global()
+        .get("floodpits_drowner")
+        .expect("Floodpits Drowner")
+        .primary_face()
+        .clone();
+    engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
+        source_card_id: "floodpits_drowner".into(),
+        source_face_index: 0,
+        face: source_face,
+        room_faces: None,
+        display_name: "Floodpits Drowner".into(),
+    });
+
+    let commander = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    dev_move(
+        &mut engine,
+        1,
+        "Kami of the Crescent Moon",
+        DevZone::Battlefield,
+    );
+    engine
+        .state
+        .objects
+        .get_mut(&commander)
+        .expect("exact declared Commander")
+        .set_counter(CounterKind::Stun, 1);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+
+    apply_ability(&mut engine, 0, source, 0, target_object(commander)).expect("activate");
+    dev_move(&mut engine, 0, "Floodpits Drowner", DevZone::Graveyard);
+    assert!(
+        !engine.state.objects.contains_key(&source),
+        "the token source has ceased"
+    );
+
+    let live_players = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count();
+    for _ in 0..live_players {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass priority toward the activated ability");
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+    }
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the Commander owner receives the library replacement choice");
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Battlefield);
+
+    let departure = engine
+        .apply_scenario_command(1, &concede())
+        .expect("the Commander owner leaves during their replacement choice");
+    assert!(engine.state.players[1].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(
+        !engine.state.objects.contains_key(&commander),
+        "all objects owned by the departed Commander owner cease to exist"
+    );
+    assert_eq!(shuffle_log_count(&departure, 0), 1);
+    assert_eq!(shuffle_log_count(&departure, 1), 0);
+    assert_eq!(shuffle_log_count(&departure, 2), 0);
+}
+
+#[cfg(feature = "authoring")]
+#[test]
+fn issue_201_empty_departed_cohort_resumes_synthetic_floodpits_tail_once() {
+    let registry = floodpits_program_fixture_registry();
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &["issue_201_floodpits_tail_fixture"]),
+            commanders: Vec::new(),
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &[]),
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("forest", &[]),
+            commanders: Vec::new(),
+        },
+    ]);
+    let mut engine =
+        GameEngine::new_with_commander_decks(registry, 201_010, &[0, 1, 2], 20, decks, true)
+            .expect("legal three-player Commander fixture");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let source = relocate_to_battlefield(&mut engine, 0, "issue_201_floodpits_tail_fixture", false);
+    let source_face = registry
+        .get("issue_201_floodpits_tail_fixture")
+        .expect("synthetic Floodpits-derived ability")
+        .primary_face()
+        .clone();
+    engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
+        source_card_id: "issue_201_floodpits_tail_fixture".into(),
+        source_face_index: 0,
+        face: source_face,
+        room_faces: None,
+        display_name: "Floodpits Drowner Tail Fixture".into(),
+    });
+
+    let commander = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    dev_move(
+        &mut engine,
+        1,
+        "Kami of the Crescent Moon",
+        DevZone::Battlefield,
+    );
+    engine
+        .state
+        .objects
+        .get_mut(&commander)
+        .expect("exact declared Commander")
+        .set_counter(CounterKind::Stun, 1);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+
+    apply_ability(&mut engine, 0, source, 0, target_object(commander)).expect("activate");
+    dev_move(
+        &mut engine,
+        0,
+        "Floodpits Drowner Tail Fixture",
+        DevZone::Graveyard,
+    );
+    assert!(
+        !engine.state.objects.contains_key(&source),
+        "the token source has ceased"
+    );
+
+    let live_players = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count();
+    for _ in 0..live_players {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass priority toward the activated ability");
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+    }
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the Commander owner receives the library replacement choice");
+    assert_eq!(pending.deciding_player, 1);
+    let departure = engine
+        .apply_scenario_command(1, &concede())
+        .expect("the Commander owner leaves during their replacement choice");
+
+    assert!(engine.state.players[1].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(!engine.state.objects.contains_key(&commander));
+    assert_eq!(shuffle_log_count(&departure, 0), 1);
+    assert_eq!(shuffle_log_count(&departure, 1), 0);
+    assert_eq!(shuffle_log_count(&departure, 2), 0);
+    assert_eq!(
+        engine.state.players[0].life, 21,
+        "Program tail resolves exactly once"
+    );
+}
+
+#[cfg(feature = "authoring")]
+#[test]
+fn issue_201_library_commander_choices_are_apnap_atomic_and_commit_mixed_destinations_together() {
+    // This test-only legendary fixture uses Floodpits Drowner's exact Source + Chosen Program
+    // shape; legendary status exists only to exercise Commander replacements, not the real card.
+    let registry = floodpits_program_fixture_registry();
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &[]),
+            commanders: vec!["issue_201_floodpits_tail_fixture".into()],
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("island", &[]),
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+        tricerules_core::EngineDeck {
+            mainboard: deck_with("forest", &[]),
+            commanders: Vec::new(),
+        },
+    ]);
+    let mut engine =
+        GameEngine::new_with_commander_decks(registry, 201_011, &[0, 1, 2], 20, decks, true)
+            .expect("legal three-player Commander fixture");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let source = engine.state.players[0].command_zone[0];
+    let target = engine.state.players[1].command_zone[0];
+    engine.enable_dev_commands();
+    dev_move(
+        &mut engine,
+        0,
+        "Floodpits Drowner Tail Fixture",
+        DevZone::Battlefield,
+    );
+    dev_move(
+        &mut engine,
+        1,
+        "Kami of the Crescent Moon",
+        DevZone::Battlefield,
+    );
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("exact declared target commander")
+        .set_counter(CounterKind::Stun, 1);
+    let source_generation = engine.state.zone_change_generation[&source];
+    let target_generation = engine.state.zone_change_generation[&target];
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    apply_ability(&mut engine, 0, source, 0, target_object(target)).expect("activate");
+
+    for _ in 0..engine
+        .state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .count()
+    {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass priority toward the Commander replacements");
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+    }
+    let first = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the active player's Commander replacement is first under APNAP");
+    assert_eq!(first.deciding_player, 0);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert_library_choice_rejection_is_atomic(&mut engine, 1, &library_branch(0));
+    assert_library_choice_rejection_is_atomic(&mut engine, 0, &library_branch(2));
+
+    let first_answer = engine
+        .apply_scenario_command(0, &library_branch(0))
+        .expect("source owner diverts their Commander to the command zone");
+    assert!(!first_answer
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::PermanentMoved(_)))));
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    let second = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the target owner chooses after the active player");
+    assert_eq!(second.deciding_player, 1);
+    assert_library_choice_rejection_is_atomic(&mut engine, 0, &library_branch(1));
+    assert_library_choice_rejection_is_atomic(&mut engine, 1, &library_branch(2));
+
+    let completion = engine
+        .apply_scenario_command(1, &library_branch(1))
+        .expect("target owner chooses the library");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&source].zone, Zone::Command);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Library);
+    assert!(engine.state.players[0].command_zone.contains(&source));
+    assert!(engine.state.players[1].library.contains(&target));
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        source_generation + 1
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        target_generation + 1
+    );
+    assert_eq!(shuffle_log_count(&completion, 0), 1);
+    assert_eq!(shuffle_log_count(&completion, 1), 1);
+    assert_eq!(shuffle_log_count(&completion, 2), 0);
+    assert_eq!(
+        completion
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::PermanentMoved(_))))
+            .count(),
+        2,
+        "both owners' replacements finish before the shared move batch"
     );
 }
 

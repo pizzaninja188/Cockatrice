@@ -721,7 +721,7 @@ fn spell_hand_discard_target_group(
     Ok(reference.target_group_index)
 }
 
-fn spell_chosen_single_target_group(
+fn chosen_single_target_group(
     instruction_id: &str,
     references: &[ProgramTargetReference],
     targeting: Option<&TargetingDef>,
@@ -741,6 +741,14 @@ fn spell_chosen_single_target_group(
         ));
     }
     Ok((reference.target_group_index, group.max))
+}
+
+fn single_source_chosen_shuffle_filter(subjects: &[EffectSubject]) -> Option<&TargetFilter> {
+    match subjects {
+        [EffectSubject::Source, EffectSubject::Chosen(filter)]
+        | [EffectSubject::Chosen(filter), EffectSubject::Source] => Some(filter),
+        _ => None,
+    }
 }
 
 fn spell_exile_target_group(
@@ -1075,6 +1083,12 @@ fn authored_target_role_index(
             ProgramTargetRole::Target,
         )
         | (
+            SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(_),
+            },
+            ProgramTargetRole::Target,
+        )
+        | (
             SpellEffectKind::ApplyCombatRestriction {
                 scope: super::CombatRestrictionScope::Chosen(_),
                 ..
@@ -1109,6 +1123,10 @@ fn authored_target_role_index(
             ProgramTargetRole::Target,
         )
         | (SpellEffectKind::ChooseHandCards { .. }, ProgramTargetRole::Target) => Some(0),
+        (
+            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects },
+            ProgramTargetRole::Target,
+        ) if single_source_chosen_shuffle_filter(subjects).is_some() => Some(0),
         _ if allow_vow_equipment_choice
             && role == ProgramTargetRole::Target
             && is_vow_chosen_target_effect(effect) =>
@@ -1521,14 +1539,13 @@ impl Compiler<'_> {
                                     subject: EffectSubject::Chosen(_),
                                     ..
                                 } => {
-                                    let (group_index, group_max) =
-                                        spell_chosen_single_target_group(
-                                            &instruction.id,
-                                            &self.target_references,
-                                            self.targeting,
-                                            ProgramTargetRole::Subject,
-                                            "PutInOwnersLibrary",
-                                        )?;
+                                    let (group_index, group_max) = chosen_single_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                        ProgramTargetRole::Subject,
+                                        "PutInOwnersLibrary",
+                                    )?;
                                     target_group_max = Some(group_max);
                                     Some(group_index)
                                 }
@@ -1536,14 +1553,13 @@ impl Compiler<'_> {
                                     subject: EffectSubject::Chosen(_),
                                     ..
                                 } => {
-                                    let (group_index, group_max) =
-                                        spell_chosen_single_target_group(
-                                            &instruction.id,
-                                            &self.target_references,
-                                            self.targeting,
-                                            ProgramTargetRole::Target,
-                                            "PutCounters",
-                                        )?;
+                                    let (group_index, group_max) = chosen_single_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                        ProgramTargetRole::Target,
+                                        "PutCounters",
+                                    )?;
                                     target_group_max = Some(group_max);
                                     Some(group_index)
                                 }
@@ -1551,14 +1567,13 @@ impl Compiler<'_> {
                                     scope: super::CombatRestrictionScope::Chosen(_),
                                     ..
                                 } => {
-                                    let (group_index, group_max) =
-                                        spell_chosen_single_target_group(
-                                            &instruction.id,
-                                            &self.target_references,
-                                            self.targeting,
-                                            ProgramTargetRole::Target,
-                                            "ApplyCombatRestriction",
-                                        )?;
+                                    let (group_index, group_max) = chosen_single_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                        ProgramTargetRole::Target,
+                                        "ApplyCombatRestriction",
+                                    )?;
                                     target_group_max = Some(group_max);
                                     Some(group_index)
                                 }
@@ -1566,6 +1581,37 @@ impl Compiler<'_> {
                             }
                         } else if self.context == EffectContext::Ability {
                             match effect.as_ref() {
+                                SpellEffectKind::Tap {
+                                    subject: EffectSubject::Chosen(_),
+                                }
+                                | SpellEffectKind::PutCounters {
+                                    counter: super::CounterKind::Stun,
+                                    count: Amount::Fixed(1),
+                                    subject: EffectSubject::Chosen(_),
+                                } => {
+                                    let (group_index, group_max) = chosen_single_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                        ProgramTargetRole::Target,
+                                        "chosen permanent effect",
+                                    )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
+                                SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
+                                    subjects,
+                                } if single_source_chosen_shuffle_filter(subjects).is_some() => {
+                                    let (group_index, group_max) = chosen_single_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                        ProgramTargetRole::Target,
+                                        "ShufflePermanentsIntoOwnersLibraries",
+                                    )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
                                 SpellEffectKind::Exile {
                                     subject: EffectSubject::Chosen(_),
                                     linked_exile_id: None,
@@ -4118,6 +4164,50 @@ fn validate_and_result_types(
             } else {
                 Vec::new()
             })
+        }
+        SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(filter),
+        } if context == EffectContext::Ability => {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err("Tap requires one required single-target group".into());
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Tap target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::PutCounters {
+            counter: super::CounterKind::Stun,
+            count: Amount::Fixed(1),
+            subject: EffectSubject::Chosen(filter),
+        } if context == EffectContext::Ability
+            && filter.kind == TargetKind::Creature
+            && filter.any_of.is_none() =>
+        {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err("Stun PutCounters requires one required single-target group".into());
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "Stun PutCounters target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
+            if context == EffectContext::Ability =>
+        {
+            let Some(filter) = single_source_chosen_shuffle_filter(subjects) else {
+                return Err(
+                    "ShufflePermanentsIntoOwnersLibraries in a resolution program requires exactly Source and one Chosen permanent"
+                        .into(),
+                );
+            };
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err(
+                    "ShufflePermanentsIntoOwnersLibraries requires one required single-target group"
+                        .into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "ShufflePermanentsIntoOwnersLibraries target")?;
+            Ok(Vec::new())
         }
         SpellEffectKind::PutCounters {
             counter,

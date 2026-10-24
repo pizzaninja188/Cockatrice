@@ -1234,14 +1234,16 @@ impl GameEngine {
         ) {
             return self.finish_program_choose_discard_card_cost(pending, answer, decision);
         }
-        if let ResolutionContinuation::BattlefieldReturn { pending: plan } = &pending.continuation {
+        if let ResolutionContinuation::BattlefieldCohortMove { pending: plan } =
+            &pending.continuation
+        {
             if matches!(
                 plan.stage.as_ref(),
                 Some(
-                    crate::state::PendingBattlefieldReturnStage::ChoosingCommanderDestination { .. }
+                    crate::state::PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. }
                 )
             ) {
-                return self.finish_owner_hand_return_branch(pending, answer, decision);
+                return self.finish_battlefield_cohort_move_branch(pending, answer, decision);
             }
         }
         if matches!(
@@ -1478,8 +1480,8 @@ impl GameEngine {
             ResolutionContinuation::ProgramHandLibraryReturn { .. } => {
                 unreachable!("commander replacement handled before object-choice validation")
             }
-            ResolutionContinuation::BattlefieldReturn { .. } => {
-                self.finish_owner_hand_return_order(pending, chosen)
+            ResolutionContinuation::BattlefieldCohortMove { .. } => {
+                self.finish_battlefield_cohort_move_order(pending, chosen)
             }
             ResolutionContinuation::LibraryLook { .. } => {
                 self.finish_look_choose_bottom(pending, chosen)

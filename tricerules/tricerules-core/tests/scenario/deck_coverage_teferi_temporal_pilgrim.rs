@@ -524,7 +524,7 @@ fn commander_return_after_targeted_player_choice_preserves_the_lki_shuffle_tail(
     assert_eq!(replacement.deciding_player, 20);
     assert!(matches!(
         replacement.continuation,
-        ResolutionContinuation::BattlefieldReturn { .. }
+        ResolutionContinuation::BattlefieldCohortMove { .. }
     ));
 
     let departure = engine

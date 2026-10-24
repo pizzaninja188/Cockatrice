@@ -5401,6 +5401,31 @@ fn multi_permanent_library_shuffle_has_general_but_bounded_subjects() {
 }
 
 #[test]
+fn legacy_flat_multi_permanent_library_shuffle_requires_an_authored_program() {
+    let definition = r#"(id: "legacy_flat_library_shuffle_fixture",
+        name: "Legacy Flat Library Shuffle Fixture",
+        face_id: "legacy_flat_library_shuffle_fixture",
+        types: ["Creature"], power: 2, toughness: 2,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [Tap],
+            effect: [ShufflePermanentsIntoOwnersLibraries(subjects: [
+                Source,
+                Chosen((kind: Creature, required_counter: Stun)),
+            ])],
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose target creature with a stun counter",
+                effect_indices: [0])])),
+            timing: Normal, conditions: [], activation_limit: None
+        )])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect_err("the legacy flat owner-library shuffle path is retired");
+    assert!(
+        error.to_string().contains("require an authored Program"),
+        "legacy flat shuffle rejection should identify the Program requirement, got {error}"
+    );
+}
+
+#[test]
 fn chosen_subject_defaults_to_creature_target() {
     assert_eq!(
         EffectSubject::default(),
@@ -17169,6 +17194,37 @@ mod combustible_gearhulk_program_compiler_tests {
         target_bindings: Vec<ProgramTargetReference>,
     ) -> Result<CompiledProgram, String> {
         compile_with_targeting(body, target_bindings, &opponent_targeting())
+    }
+
+    #[test]
+    fn program_compiler_binds_tap_and_stun_to_one_ability_target_group() {
+        let body = r#"(steps: [
+            (id: "tap", bind: [], input: None,
+                kind: Perform(Tap(subject: Chosen((kind: Creature, controller: Opponent))))),
+            (id: "stun", bind: [], input: None,
+                kind: Perform(PutCounters(counter: Stun, count: 1,
+                    subject: Chosen((kind: Creature, controller: Opponent))))),
+        ], yields: [])"#;
+        let bindings = vec![
+            target_binding("tap", ProgramTargetRole::Target, 0),
+            target_binding("stun", ProgramTargetRole::Target, 0),
+        ];
+        let compiled = compile_with_targeting(body, bindings, &opponent_targeting())
+            .expect("bounded ability tap and stun instructions share one required target group");
+
+        assert_eq!(compiled.target_bindings.len(), 2);
+        assert_eq!(
+            compiled
+                .target_bindings
+                .iter()
+                .map(|binding| binding.target_group_index)
+                .collect::<Vec<_>>(),
+            [0, 0]
+        );
+        assert_eq!(
+            compiled.target_bindings[0].role_index, compiled.target_bindings[1].role_index,
+            "both instructions must address the same single target role"
+        );
     }
 
     fn targeted_choose_damage_body(

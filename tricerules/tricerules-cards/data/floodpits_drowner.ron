@@ -12,30 +12,43 @@
     ability_id: "triggered_01",
     presentation: OracleLines([3]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [
-      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
-      PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, controller: Opponent))),
-    ],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "tap_target", bind: [], input: None,
+        kind: Perform(Tap(subject: Chosen((kind: Creature, controller: Opponent))))),
+      (id: "put_stun_counter", bind: [], input: None,
+        kind: Perform(PutCounters(counter: Stun, count: 1,
+          subject: Chosen((kind: Creature, controller: Opponent))))),
+    ], yields: []), target_bindings: [
+      (instruction_id: "tap_target", role: Target, target_group_index: 0),
+      (instruction_id: "put_stun_counter", role: Target, target_group_index: 0),
+    ])),
     targeting: Some((groups: [(
       min: 1,
       max: 1,
       prompt: "Choose target creature an opponent controls",
-      effect_indices: [0, 1],
+      effect_indices: [],
     )])),
   )],
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: OracleLines([4]),
     costs: [Mana("{1}{U}"), Tap],
-    effect: [ShufflePermanentsIntoOwnersLibraries(subjects: [
-      Source,
-      Chosen((kind: Creature, required_counter: Stun)),
-    ])],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "shuffle_source_and_target", bind: [], input: None,
+        kind: Perform(ShufflePermanentsIntoOwnersLibraries(subjects: [
+          Source,
+          Chosen((kind: Creature, required_counter: Stun)),
+        ]))),
+    ], yields: []), target_bindings: [
+      (instruction_id: "shuffle_source_and_target", role: Target, target_group_index: 0),
+    ])),
     targeting: Some((groups: [(
       min: 1,
       max: 1,
       prompt: "Choose target creature with a stun counter on it",
-      effect_indices: [0],
+      effect_indices: [],
     )])),
   )],
 )

@@ -3367,6 +3367,14 @@ impl SpellEffectKind {
         })
     }
 
+    /// The multi-object owner-library shuffle now requires a typed Program operation so its
+    /// exact object cohort and applicable owner receipts survive replacement choices.
+    pub(crate) fn contains_legacy_flat_owner_library_shuffle(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| {
+            matches!(effect, Self::ShufflePermanentsIntoOwnersLibraries { .. })
+        })
+    }
+
     /// Visit only legacy flat-effect wrappers; authored Program bodies keep their own typed edges.
     fn contains_legacy_flat_signature(&self, matches_leaf: fn(&Self) -> bool) -> bool {
         if matches_leaf(self) {
@@ -3988,7 +3996,15 @@ impl SpellEffectKind {
                 "legacy PutInOwnersLibrary effect-list entries require an authored Program".into(),
             );
         }
-
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_flat_owner_library_shuffle)
+        {
+            return Err(
+                "ShufflePermanentsIntoOwnersLibraries effect-list entries require an authored Program"
+                    .into(),
+            );
+        }
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum ProducedObjectCardinality {
             None,

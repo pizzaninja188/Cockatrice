@@ -1689,61 +1689,12 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
         }
     }
 
-    // Snapshot every departure before moving anything so all LTB observers see one simultaneous
-    // event boundary. Generation-bound ObjectIds are deduplicated above before this snapshot.
-    let zone_snapshot = cx.engine.snapshot_zone_event();
-    let moves = object_ids
-        .into_iter()
-        .filter_map(|object_id| {
-            let object = cx.engine.state.objects.get(&object_id)?;
-            let owner = object.owner;
-            let name = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
-            let leave_event = cx.engine.battlefield_leave_event(object_id);
-            Some((object_id, owner, name, leave_event))
-        })
-        .collect::<Vec<_>>();
-    let mut leave_events = Vec::new();
-    for (object_id, owner, name, leave_event) in moves {
-        move_object_to_zone(
-            &mut cx.engine.state,
-            cx.engine.registry,
-            object_id,
-            Zone::Library,
-            None,
-        )?;
-        leave_events.extend(leave_event);
-        cx.events.push(permanent_moved_event(
-            &cx.engine.state,
-            object_id,
-            owner,
-            rv1::permanent_moved::Destination::Library,
-        ));
-        cx.events.push(ev_log(format!(
-            "{} puts {name} into its owner's library.",
-            cx.spell_label
-        )));
-    }
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_events, cx.events);
-
-    // GameState player order is stable, so it provides deterministic shuffle ordering even when
-    // subjects name permanents controlled or owned in a different order.
-    let player_order = cx
-        .engine
-        .state
-        .players
-        .iter()
-        .map(|player| player.id)
-        .collect::<Vec<_>>();
-    for owner in player_order {
-        if affected_owners.contains(&owner) {
-            crate::engine::shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
-            cx.events
-                .push(ev_log(format!("P{owner} shuffles their library.")));
-        }
-    }
-
-    Ok(EffectOutcome::Continue)
+    super::battlefield_returns::begin_battlefield_cohort_move(
+        cx,
+        object_ids,
+        Zone::Library,
+        affected_owners,
+    )
 }
 
 pub(super) fn shuffle_nonland_permanents_into_owners_libraries(

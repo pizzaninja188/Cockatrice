@@ -759,13 +759,35 @@ for applicable counter-replacement choices, but it cannot bind or yield an outpu
 choices finish, execution continues at the next instruction in the same program block. If the
 controller has no creature, it records Blight without a creature prompt and continues immediately.
 
-Targetful leaves currently accepted are `DamageTarget` with role `Target`, `CounterTargetSpell` with
-role `Spell`, `CounterTargetAbility` with role `StackAbility`,
-`CreateTokenCopies(Chosen(...))` with role `Source`, and
-`ReturnToOwnersHand(Chosen(...))` and `PutInOwnersLibrary(Chosen(...))` with role `Subject`. These
-are the target-role signatures accepted in authored programs. `CounterTargetAbility` has one
-explicit group with bounds `0..1` or `1..1`; its optional bound result may be discarded. A copied
-permanent source requires exactly one target (`min: 1`, `max: 1`).
+Targetful leaves currently accepted include `DamageTarget` with role `Target`, `CounterTargetSpell`
+with role `Spell`, `CounterTargetAbility` with role `StackAbility`,
+`CreateTokenCopies(Chosen(...))` with role `Source`, and `ReturnToOwnersHand(Chosen(...))` and
+`PutInOwnersLibrary(Chosen(...))` with role `Subject`. Ability Programs additionally admit
+`Tap(Chosen(...))`, `PutCounters(Stun, 1, Chosen(Creature))`, and
+`ShufflePermanentsIntoOwnersLibraries([Source, Chosen(...)])` with role `Target`; see their exact
+profiles below. `CounterTargetAbility` has one explicit group with bounds `0..1` or `1..1`; its
+optional bound result may be discarded. A copied permanent source requires exactly one target
+(`min: 1`, `max: 1`).
+
+Ability Programs may use resultless `Tap(Chosen(filter))` and
+`PutCounters(Stun, count: 1, subject: Chosen(Creature filter))` leaves when each is bound as
+`Target` to one required single-target group (`min: 1`, `max: 1`). Both leaves use ordinary permanent
+filter validation. The same group may bind both instructions so they resolve against the same
+selected permanent; Floodpits Drowner's ETB does this for its opponent-controlled creature. The
+Stun-counter form is ability-only; spell Programs retain only their existing narrow
+`PutCounters(PlusOnePlusOne, 1, Chosen(Creature))` form. These bindings reuse the existing target
+and Program-choice protocol; no wire or client choice type is added.
+
+The ability-only `ShufflePermanentsIntoOwnersLibraries` profile requires exactly `Source` and one
+`Chosen(filter)` permanent, bound with role `Target` to one required single-target group (`min: 1`,
+`max: 1`). The Program group has an empty `effect_indices` list, and the ordinary effect and target
+filter validators still apply. Floodpits Drowner's activated ability uses this shape. The engine
+captures the exact source and chosen-object incarnations, gathers any declared-Commander
+Command-zone decisions before moving the cohort, then commits the selected destinations together.
+It shuffles each applicable live owner's library once, including when a named object is no longer
+in its expected zone or a Commander is diverted to Command (CR 701.24c, 903.9b). Legacy
+`ShufflePermanentsIntoOwnersLibraries` effect-list entries are rejected; author this operation in
+an ability Program.
 
 For `PutInOwnersLibrary(Chosen(filter), placement)`, bind the instruction's `Subject` role to one
 target group whose `max` is 1, and leave `effect_indices` empty for that Program group. The ordinary

@@ -1281,11 +1281,11 @@ impl ParkedStackResolution {
     }
 }
 
-/// Exact battlefield incarnation retained while an owner answers the Commander hand replacement
-/// for one simultaneous return instruction. Controller is deliberately absent: CR 800.4a may
+/// Exact battlefield incarnation retained while owners answer Commander replacements for one
+/// simultaneous hand or library instruction. Controller is deliberately absent: CR 800.4a may
 /// end a control effect during concession while the owned permanent itself survives.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct OwnerHandReturnRef {
+pub(crate) struct BattlefieldCohortMember {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub owner: PlayerId,
@@ -1293,7 +1293,7 @@ pub(crate) struct OwnerHandReturnRef {
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PendingBattlefieldReturnStage {
+pub(crate) enum PendingBattlefieldCohortMoveStage {
     OrderingCommanders {
         owner: PlayerId,
         candidates: Vec<ObjectId>,
@@ -1304,13 +1304,17 @@ pub(crate) enum PendingBattlefieldReturnStage {
     },
 }
 
-/// Full precommit plan for one simultaneous battlefield-to-owner-hand instruction. The outer
+/// Full precommit plan for one simultaneous battlefield-to-owner-zone instruction. The outer
 /// continuation stores this behind a Box so a large cohort does not enlarge every GameState.
 #[derive(serde::Serialize, Debug, Clone)]
-pub(crate) struct PendingBattlefieldReturn {
+pub(crate) struct PendingBattlefieldCohortMove {
     pub stack: ParkedStackResolution,
     pub spell_label: String,
-    pub cohort: Vec<OwnerHandReturnRef>,
+    pub destination: Zone,
+    /// Live library owners named by CR 701.24c, including a captured source owner whose source
+    /// may no longer be a current object. Retained independently of movement/Commander choices.
+    pub library_owners: Vec<PlayerId>,
+    pub cohort: Vec<BattlefieldCohortMember>,
     /// (owner, exact commander object IDs), in APNAP order.
     pub commander_groups: Vec<(PlayerId, Vec<ObjectId>)>,
     pub next_commander_group: usize,
@@ -1322,7 +1326,7 @@ pub(crate) struct PendingBattlefieldReturn {
     /// Owner-controlled objects explicitly removed during post-concession reconciliation.
     pub removed_cohort_ids: Vec<ObjectId>,
     /// `None` while the internal cursor advances; set only while a choice is parked.
-    pub stage: Option<PendingBattlefieldReturnStage>,
+    pub stage: Option<PendingBattlefieldCohortMoveStage>,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -1810,10 +1814,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         plan: ProgramHandLibraryReturnPlan,
     },
-    /// Owner choices for one simultaneous battlefield-to-hand cohort, parked intact until the
-    /// exact Command/Hand destinations can be committed together.
-    BattlefieldReturn {
-        pending: Box<PendingBattlefieldReturn>,
+    /// Owner choices for one simultaneous battlefield-to-owner-zone cohort, parked intact until
+    /// the exact Command/Hand/Library destinations can be committed together.
+    BattlefieldCohortMove {
+        pending: Box<PendingBattlefieldCohortMove>,
     },
     BeholdChoice {
         stack: ParkedStackResolution,
@@ -2297,7 +2301,7 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
-            Self::BattlefieldReturn { pending } => Some(&pending.stack),
+            Self::BattlefieldCohortMove { pending } => Some(&pending.stack),
             Self::EquipmentReceiptAttach { attachment } => Some(&attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
@@ -2369,7 +2373,7 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
-            Self::BattlefieldReturn { pending } => Some(&mut pending.stack),
+            Self::BattlefieldCohortMove { pending } => Some(&mut pending.stack),
             Self::EquipmentReceiptAttach { attachment } => Some(&mut attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&mut order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),

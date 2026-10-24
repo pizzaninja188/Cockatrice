@@ -1,23 +1,35 @@
-//! CR 903.9b hand replacements for one frozen simultaneous return-to-owner-hand cohort.
+//! CR 903.9b replacements for one frozen simultaneous battlefield-to-owner-zone cohort.
 
 use super::*;
-use crate::state::{OwnerHandReturnRef, PendingBattlefieldReturn, PendingBattlefieldReturnStage};
+use crate::state::{
+    BattlefieldCohortMember, PendingBattlefieldCohortMove, PendingBattlefieldCohortMoveStage,
+};
 
-enum ReturnProgress {
+enum CohortMoveProgress {
     Committed(Box<ParkedStackResolution>),
     Parked,
 }
 
 fn completion_result(stack: &ParkedStackResolution) -> EffectResult {
     if stack.program.is_some() {
-        // ReturnAllToOwnersHand is a resultless program instruction. The parked run-level context
-        // is already stored on the stack and must remain separate from this operation result.
+        // Cohort moves are resultless Program instructions. The parked run-level context is
+        // already stored on the stack and must remain separate from this operation result.
         EffectResult::default()
     } else {
         // Legacy effect lists publish their just-completed result on the parked stack when the
         // executor stamps the resume cursor. Preserve it for the next effect (for example
         // Teferi's TargetedPlayerControlCohort consumed by its following library-shuffle effect).
         stack.previous_result.clone()
+    }
+}
+
+fn owner_destination_label(destination: Zone) -> Result<&'static str, EngineError> {
+    match destination {
+        Zone::Hand => Ok("hand"),
+        Zone::Library => Ok("library"),
+        _ => Err(EngineError::ProgramInvariant(
+            "battlefield cohort move has an unsupported owner destination",
+        )),
     }
 }
 
@@ -54,17 +66,47 @@ pub(super) fn return_to_owners_hand(
         }
         _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
-    if subjects.is_empty() {
-        return Ok(EffectOutcome::Continue);
+    begin_battlefield_cohort_move(cx, subjects, Zone::Hand, Vec::new())
+}
+
+/// Begin one simultaneous battlefield-to-owner-zone instruction. Library-owner receipts are
+/// independent of the moving cohort so a stale source can still name its owner's library under
+/// CR 701.24c; live cohort owners are added automatically for library destinations.
+pub(super) fn begin_battlefield_cohort_move(
+    cx: &mut EffectCx<'_>,
+    object_ids: Vec<ObjectId>,
+    destination: Zone,
+    mut library_owners: Vec<PlayerId>,
+) -> Result<EffectOutcome, EngineError> {
+    if !matches!(destination, Zone::Hand | Zone::Library) {
+        return Err(EngineError::ProgramInvariant(
+            "battlefield cohort move supports only Hand or Library destinations",
+        ));
+    }
+    if destination != Zone::Library && !library_owners.is_empty() {
+        return Err(EngineError::ProgramInvariant(
+            "only a library cohort move may retain shuffle-owner receipts",
+        ));
+    }
+    if destination == Zone::Library {
+        let mut seen_owners = HashSet::new();
+        library_owners.retain(|owner| seen_owners.insert(*owner));
+        for &owner in &library_owners {
+            if cx.engine.state.player_idx(owner).is_none() {
+                return Err(EngineError::ProgramInvariant(
+                    "library shuffle owner receipt has no player",
+                ));
+            }
+        }
     }
 
     let mut seen = HashSet::new();
-    let cohort = subjects
+    let cohort = object_ids
         .into_iter()
         .map(|object_id| {
             if !seen.insert(object_id) {
                 return Err(EngineError::ProgramInvariant(
-                    "owner-hand return cohort contains a duplicate physical object",
+                    "battlefield cohort move contains a duplicate physical object",
                 ));
             }
             let object = cx
@@ -72,8 +114,11 @@ pub(super) fn return_to_owners_hand(
                 .state
                 .objects
                 .get(&object_id)
-                .ok_or(EngineError::Illegal("no return-to-hand object"))?;
-            Ok(OwnerHandReturnRef {
+                .ok_or(EngineError::Illegal("no battlefield cohort object"))?;
+            if destination == Zone::Library && !library_owners.contains(&object.owner) {
+                library_owners.push(object.owner);
+            }
+            Ok(BattlefieldCohortMember {
                 object_id,
                 zone_change_generation: cx
                     .engine
@@ -88,11 +133,15 @@ pub(super) fn return_to_owners_hand(
         })
         .collect::<Result<Vec<_>, EngineError>>()?;
 
+    if cohort.is_empty() && library_owners.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+
     let mut groups = BTreeMap::<usize, (PlayerId, Vec<ObjectId>)>::new();
     for card in &cohort {
         let Some(owner_index) = cx.engine.state.player_idx(card.owner) else {
             return Err(EngineError::ProgramInvariant(
-                "owner-hand return cohort has no live owner",
+                "battlefield cohort move has no live owner",
             ));
         };
         let player = &cx.engine.state.players[owner_index];
@@ -110,9 +159,11 @@ pub(super) fn return_to_owners_hand(
             .push(card.object_id);
     }
     let commander_groups = groups.into_values().collect::<Vec<_>>();
-    let mut plan = PendingBattlefieldReturn {
+    let mut plan = PendingBattlefieldCohortMove {
         stack: cx.parked_stack(),
         spell_label: cx.spell_label.to_owned(),
+        destination,
+        library_owners,
         cohort,
         commander_groups,
         next_commander_group: 0,
@@ -123,13 +174,13 @@ pub(super) fn return_to_owners_hand(
         stage: None,
     };
 
-    match advance_return_plan(cx.engine, &mut plan, cx.events)? {
-        ReturnProgress::Committed(_) => Ok(EffectOutcome::Continue),
-        ReturnProgress::Parked => Ok(EffectOutcome::Suspended),
+    match advance_cohort_move(cx.engine, &mut plan, cx.events)? {
+        CohortMoveProgress::Committed(_) => Ok(EffectOutcome::Continue),
+        CohortMoveProgress::Parked => Ok(EffectOutcome::Suspended),
     }
 }
 
-fn ref_is_current(engine: &GameEngine, card: &OwnerHandReturnRef) -> bool {
+fn ref_is_current(engine: &GameEngine, card: &BattlefieldCohortMember) -> bool {
     engine
         .state
         .zone_change_generation
@@ -144,7 +195,7 @@ fn ref_is_current(engine: &GameEngine, card: &OwnerHandReturnRef) -> bool {
             .is_some_and(|object| object.owner == card.owner && object.zone == card.origin)
 }
 
-fn cohort_is_current(engine: &GameEngine, cohort: &[OwnerHandReturnRef]) -> bool {
+fn cohort_is_current(engine: &GameEngine, cohort: &[BattlefieldCohortMember]) -> bool {
     let mut seen = HashSet::new();
     cohort
         .iter()
@@ -153,14 +204,17 @@ fn cohort_is_current(engine: &GameEngine, cohort: &[OwnerHandReturnRef]) -> bool
 
 fn publish_order_choice(
     engine: &mut GameEngine,
-    mut plan: PendingBattlefieldReturn,
+    mut plan: PendingBattlefieldCohortMove,
     owner: PlayerId,
     candidates: Vec<ObjectId>,
     events: &mut Vec<rv1::RuledEvent>,
 ) {
-    let prompt =
-        format!("P{owner}: order your commanders before their simultaneous return to hand.");
-    plan.stage = Some(PendingBattlefieldReturnStage::OrderingCommanders {
+    let destination = owner_destination_label(plan.destination)
+        .expect("validated battlefield cohort move destination");
+    let prompt = format!(
+        "P{owner}: order your commanders before their simultaneous move to their owners' {destination}."
+    );
+    plan.stage = Some(PendingBattlefieldCohortMoveStage::OrderingCommanders {
         owner,
         candidates: candidates.clone(),
     });
@@ -192,9 +246,9 @@ fn publish_order_choice(
         presentation: PendingResolutionPresentation {
             source_object_id: plan.stack.item.id,
             candidates: match &plan.stage {
-                Some(PendingBattlefieldReturnStage::OrderingCommanders { candidates, .. }) => {
-                    candidates.clone()
-                }
+                Some(PendingBattlefieldCohortMoveStage::OrderingCommanders {
+                    candidates, ..
+                }) => candidates.clone(),
                 _ => unreachable!(),
             },
             min: count,
@@ -204,7 +258,7 @@ fn publish_order_choice(
             prompt,
             choice_kind: rv1::ChoiceKind::SimultaneousEntryOrder,
         },
-        continuation: ResolutionContinuation::BattlefieldReturn {
+        continuation: ResolutionContinuation::BattlefieldCohortMove {
             pending: Box::new(plan),
         },
     });
@@ -212,26 +266,36 @@ fn publish_order_choice(
 
 fn publish_destination_choice(
     engine: &mut GameEngine,
-    mut plan: PendingBattlefieldReturn,
+    mut plan: PendingBattlefieldCohortMove,
     owner: PlayerId,
     object_id: ObjectId,
     events: &mut Vec<rv1::RuledEvent>,
 ) {
     let label = object_display_name(&engine.state, engine.registry, object_id);
-    let prompt =
-        format!("P{owner}: put {label} into the command zone instead of their hand (CR 903.9b)?");
+    let destination = owner_destination_label(plan.destination)
+        .expect("validated battlefield cohort move destination");
+    let prompt = format!(
+        "P{owner}: put {label} into the command zone instead of their {destination} (CR 903.9b)?"
+    );
     plan.stage =
-        Some(PendingBattlefieldReturnStage::ChoosingCommanderDestination { owner, object_id });
-    let branches = ["Command zone", "Hand"]
-        .into_iter()
-        .enumerate()
-        .map(|(branch_index, label)| rv1::ResolutionBranchOption {
-            branch_index: branch_index as u32,
-            label: label.into(),
-            selectable: true,
-            ..Default::default()
-        })
-        .collect();
+        Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { owner, object_id });
+    let branches = [
+        "Command zone",
+        if plan.destination == Zone::Library {
+            "Library"
+        } else {
+            "Hand"
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(branch_index, label)| rv1::ResolutionBranchOption {
+        branch_index: branch_index as u32,
+        label: label.into(),
+        selectable: true,
+        ..Default::default()
+    })
+    .collect();
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -262,20 +326,20 @@ fn publish_destination_choice(
             prompt,
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
         },
-        continuation: ResolutionContinuation::BattlefieldReturn {
+        continuation: ResolutionContinuation::BattlefieldCohortMove {
             pending: Box::new(plan),
         },
     });
 }
 
-fn advance_return_plan(
+fn advance_cohort_move(
     engine: &mut GameEngine,
-    plan: &mut PendingBattlefieldReturn,
+    plan: &mut PendingBattlefieldCohortMove,
     events: &mut Vec<rv1::RuledEvent>,
-) -> Result<ReturnProgress, EngineError> {
+) -> Result<CohortMoveProgress, EngineError> {
     if !cohort_is_current(engine, &plan.cohort) {
         return Err(EngineError::ProgramInvariant(
-            "owner-hand return cohort changed before its choice or move batch",
+            "battlefield cohort move changed before its choice or move batch",
         ));
     }
     plan.stage = None;
@@ -306,7 +370,7 @@ fn advance_return_plan(
                 plan.ordered_commanders.push((*owner, candidates[0]));
             } else {
                 publish_order_choice(engine, plan.clone(), *owner, candidates.clone(), events);
-                return Ok(ReturnProgress::Parked);
+                return Ok(CohortMoveProgress::Parked);
             }
         } else if ordered_count != candidates.len() {
             return Err(EngineError::ProgramInvariant(
@@ -349,7 +413,7 @@ fn advance_return_plan(
                     ));
                 }
                 publish_destination_choice(engine, plan.clone(), *owner, object_id, events);
-                return Ok(ReturnProgress::Parked);
+                return Ok(CohortMoveProgress::Parked);
             }
         }
 
@@ -365,13 +429,9 @@ fn advance_return_plan(
     {
         if !plan.removed_cohort_ids.contains(&object_id) {
             return Err(EngineError::ProgramInvariant(
-                "commander return has an unprocessed owner group",
+                "battlefield cohort move has an unprocessed owner group",
             ));
         }
-    }
-
-    if plan.cohort.is_empty() {
-        return Ok(ReturnProgress::Committed(Box::new(plan.stack.clone())));
     }
     let command_destinations = plan
         .commander_destinations
@@ -386,7 +446,7 @@ fn advance_return_plan(
             let destination = command_destinations
                 .get(&card.object_id)
                 .copied()
-                .unwrap_or(Zone::Hand);
+                .unwrap_or(plan.destination);
             let label = object_display_name(&engine.state, engine.registry, card.object_id);
             (card, destination, label)
         })
@@ -410,7 +470,7 @@ fn advance_return_plan(
             })
         {
             return Err(EngineError::ProgramInvariant(
-                "owner-hand return batch did not produce every exact incarnation receipt",
+                "battlefield cohort move did not produce every exact incarnation receipt",
             ));
         }
         for (card, destination, label) in planned {
@@ -418,17 +478,25 @@ fn advance_return_plan(
                 Zone::Command => (
                     rv1::permanent_moved::Destination::Command,
                     format!(
-                        "P{} puts {label} into the command zone instead of their hand.",
-                        card.owner
+                        "P{} puts {label} into the command zone instead of their {}.",
+                        card.owner,
+                        owner_destination_label(plan.destination)?
                     ),
                 ),
                 Zone::Hand => (
                     rv1::permanent_moved::Destination::Hand,
                     format!("{} returns {label} to its owner's hand", plan.spell_label),
                 ),
+                Zone::Library => (
+                    rv1::permanent_moved::Destination::Library,
+                    format!(
+                        "{} puts {label} into its owner's library.",
+                        plan.spell_label
+                    ),
+                ),
                 _ => {
                     return Err(EngineError::ProgramInvariant(
-                        "owner-hand return planned an unsupported destination",
+                        "battlefield cohort move planned an unsupported destination",
                     ));
                 }
             };
@@ -441,26 +509,41 @@ fn advance_return_plan(
             events.push(super::super::events::ev_log(message));
         }
     }
-    Ok(ReturnProgress::Committed(Box::new(plan.stack.clone())))
+    if plan.destination == Zone::Library {
+        let shuffle_owners = engine
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost && plan.library_owners.contains(&player.id))
+            .map(|player| player.id)
+            .collect::<Vec<_>>();
+        for owner in shuffle_owners {
+            crate::engine::shuffle_player_library_for_current_command(&mut engine.state, owner);
+            events.push(super::super::events::ev_log(format!(
+                "P{owner} shuffles their library."
+            )));
+        }
+    }
+    Ok(CohortMoveProgress::Committed(Box::new(plan.stack.clone())))
 }
 
 impl GameEngine {
-    pub(in crate::engine) fn finish_owner_hand_return_order(
+    pub(in crate::engine) fn finish_battlefield_cohort_move_order(
         &mut self,
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
         let backup = pending.clone();
         let mut plan = match &pending.continuation {
-            ResolutionContinuation::BattlefieldReturn { pending } => pending.as_ref().clone(),
-            _ => unreachable!("owner-hand return order continuation"),
+            ResolutionContinuation::BattlefieldCohortMove { pending } => pending.as_ref().clone(),
+            _ => unreachable!("battlefield cohort move order continuation"),
         };
-        let Some(PendingBattlefieldReturnStage::OrderingCommanders { owner, candidates }) =
+        let Some(PendingBattlefieldCohortMoveStage::OrderingCommanders { owner, candidates }) =
             plan.stage.clone()
         else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "owner-hand return is not waiting for a commander order",
+                "battlefield cohort move is not waiting for a commander order",
             ));
         };
         if owner != pending.deciding_player
@@ -473,7 +556,7 @@ impl GameEngine {
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "owner-hand return commander order is stale or invalid",
+                "battlefield cohort move commander order is stale or invalid",
             ));
         }
         let group = plan
@@ -483,7 +566,7 @@ impl GameEngine {
         if group.is_none() {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::ProgramInvariant(
-                "owner-hand return order does not match its APNAP owner group",
+                "battlefield cohort move order does not match its APNAP owner group",
             ));
         }
         plan.ordered_commanders
@@ -497,11 +580,11 @@ impl GameEngine {
             "P{owner} orders their simultaneous commander returns: {}.",
             ordered_names.join(", ")
         ))];
-        match advance_return_plan(self, &mut plan, &mut events) {
-            Ok(ReturnProgress::Parked) => {
+        match advance_cohort_move(self, &mut plan, &mut events) {
+            Ok(CohortMoveProgress::Parked) => {
                 Ok(super::super::events::finish_with_events(self, events))
             }
-            Ok(ReturnProgress::Committed(stack)) => {
+            Ok(CohortMoveProgress::Committed(stack)) => {
                 let result = completion_result(&stack);
                 self.complete_parked_stack_with_previous(*stack, result, events)
             }
@@ -512,7 +595,7 @@ impl GameEngine {
         }
     }
 
-    pub(in crate::engine) fn finish_owner_hand_return_branch(
+    pub(in crate::engine) fn finish_battlefield_cohort_move_branch(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
@@ -520,15 +603,17 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let backup = pending.clone();
         let mut plan = match &pending.continuation {
-            ResolutionContinuation::BattlefieldReturn { pending } => pending.as_ref().clone(),
-            _ => unreachable!("owner-hand return branch continuation"),
+            ResolutionContinuation::BattlefieldCohortMove { pending } => pending.as_ref().clone(),
+            _ => unreachable!("battlefield cohort move branch continuation"),
         };
-        let Some(PendingBattlefieldReturnStage::ChoosingCommanderDestination { owner, object_id }) =
-            plan.stage.clone()
+        let Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
+            owner,
+            object_id,
+        }) = plan.stage.clone()
         else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "owner-hand return is not waiting for a Commander destination",
+                "battlefield cohort move is not waiting for a Commander destination",
             ));
         };
         let clean = answer.chosen_object_ids.is_empty()
@@ -552,13 +637,13 @@ impl GameEngine {
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "owner-hand return destination answer is stale or invalid",
+                "battlefield cohort move destination answer is stale or invalid",
             ));
         }
         let destination = if answer.selected_branch_index == 0 {
             Zone::Command
         } else {
-            Zone::Hand
+            plan.destination
         };
         plan.commander_destinations.push((object_id, destination));
         plan.next_commander_destination += 1;
@@ -567,15 +652,17 @@ impl GameEngine {
             "P{owner} chooses {} for their commander.",
             if destination == Zone::Command {
                 "the command zone"
+            } else if plan.destination == Zone::Library {
+                "their library"
             } else {
                 "their hand"
             }
         ))];
-        match advance_return_plan(self, &mut plan, &mut events) {
-            Ok(ReturnProgress::Parked) => {
+        match advance_cohort_move(self, &mut plan, &mut events) {
+            Ok(CohortMoveProgress::Parked) => {
                 Ok(super::super::events::finish_with_events(self, events))
             }
-            Ok(ReturnProgress::Committed(stack)) => {
+            Ok(CohortMoveProgress::Committed(stack)) => {
                 let result = completion_result(&stack);
                 self.complete_parked_stack_with_previous(*stack, result, events)
             }
@@ -588,7 +675,7 @@ impl GameEngine {
 
     /// Remove exact objects that leave under either CR 800.4a cleanup category. A borrowed
     /// permanent whose control reverted remains the same generation and stays in the cohort.
-    pub(in crate::engine) fn refresh_owner_hand_return_departure(
+    pub(in crate::engine) fn refresh_battlefield_cohort_move_departure(
         &mut self,
         departed_objects: &HashSet<ObjectId>,
         stranded_objects: &HashSet<ObjectId>,
@@ -597,14 +684,15 @@ impl GameEngine {
         let Some(pending) = self.state.pending_resolution.take() else {
             return Ok(());
         };
-        let ResolutionContinuation::BattlefieldReturn { pending: boxed } = &pending.continuation
+        let ResolutionContinuation::BattlefieldCohortMove { pending: boxed } =
+            &pending.continuation
         else {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         };
         let mut plan = boxed.as_ref().clone();
         let old_stage = plan.stage.clone().ok_or(EngineError::ProgramInvariant(
-            "parked owner-hand return has no active choice stage",
+            "parked battlefield cohort move has no active choice stage",
         ))?;
         let mut removed_objects = departed_objects.clone();
         removed_objects.extend(stranded_objects.iter().copied());
@@ -630,11 +718,11 @@ impl GameEngine {
         if !cohort_is_current(self, &plan.cohort) {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::ProgramInvariant(
-                "surviving owner-hand return cohort changed during departure cleanup",
+                "surviving battlefield cohort move changed during departure cleanup",
             ));
         }
         plan.stage = match old_stage {
-            PendingBattlefieldReturnStage::OrderingCommanders { owner, candidates } => {
+            PendingBattlefieldCohortMoveStage::OrderingCommanders { owner, candidates } => {
                 let updated = candidates
                     .into_iter()
                     .filter(|object_id| plan.cohort.iter().any(|card| card.object_id == *object_id))
@@ -644,10 +732,10 @@ impl GameEngine {
                     .get(plan.next_commander_group)
                     .map(|(_, candidates)| candidates.clone())
                     .unwrap_or_default();
-                // A singleton no longer needs an order prompt. Let advance_return_plan
+                // A singleton no longer needs an order prompt. Let advance_cohort_move
                 // automatically order it and publish the owner's destination choice.
                 if updated == group && updated.len() > 1 {
-                    Some(PendingBattlefieldReturnStage::OrderingCommanders {
+                    Some(PendingBattlefieldCohortMoveStage::OrderingCommanders {
                         owner,
                         candidates: updated,
                     })
@@ -655,28 +743,27 @@ impl GameEngine {
                     None
                 }
             }
-            PendingBattlefieldReturnStage::ChoosingCommanderDestination { owner, object_id }
-                if plan.cohort.iter().any(|card| card.object_id == object_id) =>
-            {
-                Some(
-                    PendingBattlefieldReturnStage::ChoosingCommanderDestination {
-                        owner,
-                        object_id,
-                    },
-                )
-            }
-            PendingBattlefieldReturnStage::ChoosingCommanderDestination { .. } => None,
+            PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
+                owner,
+                object_id,
+            } if plan.cohort.iter().any(|card| card.object_id == object_id) => Some(
+                PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
+                    owner,
+                    object_id,
+                },
+            ),
+            PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. } => None,
         };
         let mut refresh_events = Vec::new();
         let progress = if plan.stage.is_some() {
             republish_current_choice(self, plan, &mut refresh_events)?;
-            ReturnProgress::Parked
+            CohortMoveProgress::Parked
         } else {
-            advance_return_plan(self, &mut plan, &mut refresh_events)?
+            advance_cohort_move(self, &mut plan, &mut refresh_events)?
         };
         match progress {
-            ReturnProgress::Parked => events.extend(refresh_events),
-            ReturnProgress::Committed(stack) => {
+            CohortMoveProgress::Parked => events.extend(refresh_events),
+            CohortMoveProgress::Committed(stack) => {
                 let result = completion_result(&stack);
                 let completed =
                     self.complete_parked_stack_with_previous(*stack, result, refresh_events)?;
@@ -689,11 +776,11 @@ impl GameEngine {
 
 fn republish_current_choice(
     engine: &mut GameEngine,
-    plan: PendingBattlefieldReturn,
+    plan: PendingBattlefieldCohortMove,
     events: &mut Vec<rv1::RuledEvent>,
 ) -> Result<(), EngineError> {
     match plan.stage.clone() {
-        Some(PendingBattlefieldReturnStage::OrderingCommanders { owner, candidates }) => {
+        Some(PendingBattlefieldCohortMoveStage::OrderingCommanders { owner, candidates }) => {
             if !cohort_is_current(engine, &plan.cohort)
                 || candidates.len() < 2
                 || candidates
@@ -701,12 +788,15 @@ fn republish_current_choice(
                     .any(|object_id| !plan.cohort.iter().any(|card| card.object_id == *object_id))
             {
                 return Err(EngineError::ProgramInvariant(
-                    "owner-hand return order became stale during departure refresh",
+                    "battlefield cohort move order became stale during departure refresh",
                 ));
             }
             publish_order_choice(engine, plan, owner, candidates, events);
         }
-        Some(PendingBattlefieldReturnStage::ChoosingCommanderDestination { owner, object_id }) => {
+        Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
+            owner,
+            object_id,
+        }) => {
             if !cohort_is_current(engine, &plan.cohort)
                 || !plan
                     .ordered_commanders
@@ -716,14 +806,14 @@ fn republish_current_choice(
                     })
             {
                 return Err(EngineError::ProgramInvariant(
-                    "owner-hand return destination became stale during departure refresh",
+                    "battlefield cohort move destination became stale during departure refresh",
                 ));
             }
             publish_destination_choice(engine, plan, owner, object_id, events);
         }
         None => {
             return Err(EngineError::ProgramInvariant(
-                "owner-hand return cannot republish an advancing plan",
+                "battlefield cohort move cannot republish an advancing plan",
             ));
         }
     }
