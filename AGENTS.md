@@ -40,8 +40,10 @@ deferral; other work states “No MTG rules surface area.”
 
 ## Load only the relevant guidance
 
-Read each applicable instruction file once per task; search reference sections as needed. A link
-does not require loading every linked document, example or historical record.
+Read applicable instructions once in a fresh context; reuse instructions already present and read
+changed guidance on continuation. Search reference sections for the current differences. A link
+does not require loading every linked document, example or historical record. Routine card authoring
+defaults to the reuse-first path below; do not repeat preparation already valid for the task.
 
 | Task | Read |
 |---|---|

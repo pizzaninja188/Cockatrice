@@ -2,9 +2,11 @@
 
 Use this short execution path for card campaigns. Scope, models and delivery permissions come
 from current user/campaign policy, not an older checklist. Root/subsystem AGENTS.md retain authority.
-For a new card task, read authoring reference sections 1–3 (sources, authority and tiers),
-then only the applicable definition, presentation and evidence sections. Generator/workbench
-references are needed only when using or changing those tools. Do not reload unchanged guidance.
+Routine cards start with a shipped analogue and its relevant assertions. Reuse instructions already
+present in context; consult the authoring reference for unfamiliar rules and semantic differences,
+not as a mandatory opening-section read for every card. Generator/workbench references are needed
+only when using or changing those tools. A concrete missing semantic contract takes the capability
+path; a missing card file alone does not.
 
 | Requirement | Source of truth |
 |---|---|
@@ -16,20 +18,28 @@ references are needed only when using or changing those tools. Do not reload unc
 | Tool arguments and fixture boundaries | [Workbench reference](../tricerules/tricerules-cards/authoring/BATCH-WORKBENCH.md) |
 | Independent semantic review | [Reviewer contract](CARD-REVIEW.md) |
 
-Reuse these records. A checklist may point to an existing preflight, test or review; it need not
-repeat the narrative. Packets retain mechanical facts, not semantic approval. Optional indexes,
-draft schemas and packet generation are unnecessary when existing evidence supplies the contract.
+Keep one concise record with exact source/rulings, copy-from definition/map, relevant test assertions,
+differences and acceptance command. Supply those paths directly in a handoff instead of making each
+worker rediscover them. Reuse dependency-fresh sources, candidate decisions, checks and prior review
+for unchanged content; refresh affected evidence when its inputs or assumptions change. Packets retain
+mechanical facts, not semantic approval. No new index, schema, packet or timing file is needed for
+routine work; use optional tools only when they save work on the actual batch.
 The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) is the broader migration target;
 its proposed types and operations are not all accepted authoring syntax.
 
-## Reuse-only cards
+## Routine cards: reuse first
 
-1. Confirm exact corpus identity, current registration and live ownership. Reuse dependency-fresh
-   saved source/rulings and candidate decisions. Inspect the closest shipped definition and its
-   assertions. Preflight: **copy from; differences; reused evidence; distinguishing tests; gaps**.
-2. Author complete definitions/maps. Reuse independently expected actual-card scenarios for
-   unchanged patterns; add focused tests for semantic differences. Every clause still needs
-   executed/asserted evidence and relevant illegal paths. Do not audit unrelated cards.
+1. Confirm exact corpus identity, current registration and live ownership; reuse valid saved decisions
+   and source/rulings. Start from the closest shipped definition/map and the assertions in its tests.
+   Stop searching when a suitable analogue is found. Preflight is **copy from; differences; reused
+   evidence; distinguishing tests; gaps**, recorded once rather than in a separate dossier.
+2. Adapt the definition/map, preserving its valid primitive-list or Program form unless the new
+   semantics require a change. Check copied identity, quantities, costs, player/target scope,
+   ordering, choices, tokens, presentation and source comments. Reuse shared actual-card scenarios
+   with independent expected outcomes; add focused coverage for differences and prove intended red
+   before implementation, then green. Every clause and relevant illegal path still needs asserted
+   execution evidence for the new card. Read related APIs only where the analogue/tests leave a gap;
+   do not audit unrelated cards, reload whole API files or migrate an analogue as preparation.
 3. Prepare compatible ready cards together using the verification guide: format, focused tests,
    lint, structural evidence and metadata. Reuse unchanged passing prechecks.
 4. Freeze explicit intended paths/evidence. Obtain independent inspection-only semantic review.

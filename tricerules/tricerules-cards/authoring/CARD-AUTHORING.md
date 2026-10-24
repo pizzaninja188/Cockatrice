@@ -9,13 +9,18 @@ Repository-level authority, architecture, and verification rules still apply. Fo
 [`docs/AGENT-VERIFICATION.md`](../../../docs/AGENT-VERIFICATION.md) as the command source of truth.
 
 Execution order lives in [AUTHORING-WORKFLOW.md](../../../docs/AUTHORING-WORKFLOW.md).
-This document is the card-specific reference. Read source/authority/tier sections for a new task,
-then search the relevant mechanics, presentation, recipe or evidence section as needed. Do not
-load every recipe/example as a mandatory batch step. Current campaign policy owns model settings.
+This document is the card-specific reference. Routine authoring starts from a shipped analogue and
+its assertions; consult only sections needed for unfamiliar rules or the new card's differences.
+Do not reload opening sections, recipes or examples for every card. Current campaign policy owns
+model settings; this reference does not start or resume a migration.
 
 ## 1. Research before editing
 
-Never implement a card from memory.
+Never implement a card from memory. Reuse saved exact Oracle records, rulings (including an empty
+list) and official CR evidence when their provenance, freshness and applicability are established
+for the current task. Do not refetch or rebuild that research solely for a handoff or another card
+in the same batch. Fetch missing/stale records and resolve changed rules or uncertain applicability
+before relying on them. For source research not already covered:
 
 1. Fetch the exact Scryfall card with a descriptive `User-Agent`.
 2. Fetch the card's `rulings_uri`, even when no ruling is expected to change the implementation.
@@ -41,7 +46,9 @@ verification evidence. Do not substitute Oracle Tagger classifications for readi
 
 ### Find implemented analogues
 
-Start with the closest implemented card or ability, preferably a complete matching composition.
+Routine authoring defaults to copying and adapting the closest shipped card or ability, preferably
+a complete matching composition, with its map and relevant test assertions. Keep its valid
+representation; copying does not require converting primitive lists to Programs or the reverse.
 Search local definitions, review maps and tests by card name, effect, cost or target shape. When
 the analogue is not obvious, use [Scryfall](https://scryfall.com/) Oracle-text searches or
 [Scryfall Tagger](https://tagger.scryfall.com/) functional categories to discover candidates, then
@@ -57,11 +64,13 @@ lead, not proof that these details match. The direct-RON review packet's ranked 
 are another navigation aid, not mechanical-equivalence evidence.
 
 Keep routine preflight concise: **copy from; differences; reused evidence; distinguishing tests;
-remaining gaps**. Reuse reviewed evidence for unchanged behavior instead of reconstructing a broad
-primitive audit for every card. Investigate the differences and any uncertainty that could change
-correctness. A missing new-card definition or scenario is ordinary authoring work, not by itself
-an unsupported engine capability; identify a concrete missing semantic contract before declaring
-a runtime blocker. An unassessed composition still needs assessment before admission.
+remaining gaps**, once in the existing task/batch record. Reuse supplied exact source, analogue,
+test and command paths instead of repeating discovery or preparation. Inspect relevant assertions,
+not entire test suites or API files. Reuse reviewed evidence for unchanged behavior; investigate
+differences and material uncertainty. Check copied identity, mappings and source comments as well
+as mechanics. A missing new-card definition or scenario is ordinary authoring work, not by itself
+a runtime blocker; identify a concrete missing semantic contract. An unassessed composition still
+needs assessment, actual-card execution evidence and independent review before admission.
 
 ## 2. Authority boundary
 
@@ -2074,7 +2083,7 @@ guessing missing mechanics, broadening admissions or waiving verification.
 
 #### Short path for reuse-only batches
 
-Use the [reuse-only execution path](../../../docs/AUTHORING-WORKFLOW.md#reuse-only-cards).
+Use the [routine reuse-first execution path](../../../docs/AUTHORING-WORKFLOW.md#routine-cards-reuse-first).
 The exact map/reference requirements below remain authoritative. Routine batches need no separate
 issue, narrative dossier, optional index upkeep or pre-review generated packet. Keep one map per
 handwritten card; optional primitive inventories/empty token arrays may be omitted. Successful new

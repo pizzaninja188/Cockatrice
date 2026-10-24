@@ -17,15 +17,15 @@ Game start is gated on `ValidateDeck`. An unimplemented mainboard card blocks ru
 
 ## Card authoring
 
-Before card or card-capability work, follow [the execution path](../docs/AUTHORING-WORKFLOW.md).
-Read sections 1–3 of [the authoring reference](tricerules-cards/authoring/CARD-AUTHORING.md), then
-search only applicable mechanics, presentation, generation and evidence sections. It owns the
-Scryfall and rulings lookup workflow, implementation-tier decision, RON and custom-Rust shapes,
-stable identity, Oracle presentation mappings, partial-card tracking, generation, and card
-completion checklist. Do not copy nearby legacy RON as a substitute for following the guide.
+Follow [the execution path](../docs/AUTHORING-WORKFLOW.md). Routine cards default to adapting the
+closest shipped definition, map and relevant test assertions. Retain its valid representation;
+investigate semantic differences rather than rediscovering unchanged APIs. Use
+[the authoring reference](tricerules-cards/authoring/CARD-AUTHORING.md) for those differences,
+unfamiliar source/authority/tier rules, or a concrete capability gap. Do not reread its opening
+sections for every card. Similarity alone never establishes correctness or complete-card support.
 
 ## Rust verification
 
-Read `../docs/AGENT-VERIFICATION.md` before running commands. During red/green iteration, run the best matching scenario or registry test through the quiet runner with working directory `tricerules`.
+Use the applicable commands in `../docs/AGENT-VERIFICATION.md`; reuse already-read guidance and supplied exact commands. During red/green iteration, run the best matching scenario or registry test through the quiet runner with working directory `tricerules`.
 
 For final verification, use `scripts/verify.ps1 -Side Rust` from the repository root. Add `-CardData` when card data or registry names changed; use `-Side Both` if the change also affects C++ contracts. The script runs the full Rust test, Clippy, format, and diff gates with exact exit codes. When required by card implementation, regenerate metadata from existing local inputs with `scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly` for handwritten cards (omit `-MetadataOnly` for recipe/generated-RON changes) and review the generated diff before the final gate; this needs no separate approval. Updating external source datasets requires separate authorization.
