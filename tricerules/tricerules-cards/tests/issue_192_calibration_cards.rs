@@ -2,12 +2,12 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    CombatRestrictionScope, EffectSubject, PlayerRecipient, ResolutionCost, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind,
+    CombatRestrictionScope, CompiledInstructionKind, EffectSubject, PlayerRecipient,
+    ResolutionCost, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, Keyword, ManaCost,
-    SearchDestination, TriggerCondition,
+    ProgramOwnerId, SearchDestination, TriggerCondition,
 };
 
 struct ExpectedCard {
@@ -347,10 +347,21 @@ fn issue_192_uses_generic_trigger_combat_and_token_shapes() {
 fn issue_192_uses_generic_spell_equipment_and_turn_shapes() {
     let registry = tricerules_cards::registry::global();
     let return_to_sewers = registry.get("return_to_the_sewers").unwrap().primary_face();
+    assert!(return_to_sewers.spell_effect.is_empty());
+    let program = registry
+        .compiled_program_for_owner(&ProgramOwnerId::face(
+            "return_to_the_sewers",
+            return_to_sewers.face_id.clone(),
+        ))
+        .expect("Return to the Sewers owns its typed placement and token tail");
+    assert_eq!(program.target_bindings.len(), 1);
     assert!(matches!(
-        return_to_sewers.spell_effect.as_slice(),
-        [SpellEffectKind::PutInOwnersLibrary { .. }, SpellEffectKind::CreateTokens { token, .. }]
-            if token == "mutagen"
+        program.body.steps.as_slice(),
+        [place, mutagen]
+            if matches!(&place.kind, CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary { .. }))
+            && matches!(&mutagen.kind, CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::CreateTokens { token, .. } if token == "mutagen"))
     ));
 
     let tenderize = registry.get("tenderize").unwrap().primary_face();

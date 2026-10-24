@@ -1951,7 +1951,12 @@ pub enum ResolutionContinuation {
         object_id: ObjectId,
         owner: PlayerId,
         zone_change_generation: u64,
-        nonbottom_placement: LibraryPlacement,
+        placement: LibraryPlacement,
+        commander_destination_choice: bool,
+        /// CR 608.2m: this exact operation began before the resolving source left the game or
+        /// its controller departed. Only the guarded owner choice may resume from that cursor.
+        #[serde(default)]
+        stack_source_departed: bool,
         spell_label: String,
     },
     ChaosWarpCommander {
@@ -3712,10 +3717,12 @@ pub struct GameState {
     pub(crate) last_known_mana_value_by_generation: HashMap<(ObjectId, u64), u32>,
     pub(crate) last_known_copy_by_generation: HashMap<(ObjectId, u64), TokenCopySnapshot>,
     /// The object an Aura or Equipment source was attached to as that source last left the
-    /// battlefield, keyed by the source generation. The value carries the attached object's
-    /// generation so an old ability cannot affect a card that left and returned under the same
-    /// relay-compatible ObjectId (CR 400.7, 608.2h).
-    pub last_known_attached_object_by_generation: HashMap<(ObjectId, u64), (ObjectId, u64)>,
+    /// battlefield, keyed by the source generation. The record carries exact target incarnation
+    /// and owner so an old ability can still identify the owner's library if the target leaves
+    /// before resolution, without affecting a card that returned under the same ObjectId
+    /// (CR 400.7, 608.2h, 701.24c).
+    pub(crate) last_known_attached_object_by_generation:
+        HashMap<(ObjectId, u64), AttachedObjectLki>,
     /// Monotonic per-object generation incremented on every zone change. ObjectIds remain stable
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
@@ -3930,6 +3937,15 @@ pub struct GameState {
     /// deliberately excluded from snapshots — a reconnecting client learns tap state from the
     /// zone view instead.
     pub untapped_this_command: Vec<ObjectId>,
+}
+
+/// Source-departure last-known attachment identity, captured before a simultaneous zone-change
+/// instruction commits any of its moves.
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AttachedObjectLki {
+    pub(crate) object_id: ObjectId,
+    pub(crate) zone_change_generation: u64,
+    pub(crate) owner: PlayerId,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

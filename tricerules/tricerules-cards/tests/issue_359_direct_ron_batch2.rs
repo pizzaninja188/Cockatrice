@@ -13,11 +13,12 @@
 
 use tricerules_cards::primitives::{
     Amount, CastCostGroupDef, CastCostOptionDef, CombatRestriction, CombatRestrictionScope,
-    EffectSubject, InstructionKind, LibraryPlacement, ManaCostChoiceKind, PermanentTypeFilter,
-    PlayerRecipient, ProgramTargetRole, SearchDestination, SpellEffectKind, StackSpellFilter,
-    TargetController, TargetFilter, TargetKind, TokenCopySource, TriggerCondition,
+    CompiledInstructionKind, EffectSubject, InstructionKind, LibraryPlacement, ManaCostChoiceKind,
+    PermanentTypeFilter, PlayerRecipient, ProgramTargetRole, SearchDestination, SpellEffectKind,
+    StackSpellFilter, TargetController, TargetFilter, TargetKind, TokenCopySource,
+    TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModalDef};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModalDef, ProgramOwnerId};
 
 const THREE_STEPS_AHEAD_FINGERPRINT: &str =
     "a87a5977e3eae7b0288c2a3b5fac03b84a7e500c6bc4026dd011c39939982472";
@@ -333,44 +334,51 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     let [counter_block, library_choice] = modal.modes.as_slice() else {
         panic!("Jailbreak Scheme has two modes");
     };
-    assert_eq!(
-        counter_block.effects,
-        [
-            SpellEffectKind::PutCounters {
-                counter: tricerules_cards::CounterKind::PlusOnePlusOne,
-                count: Amount::Fixed(1),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
-                    kind: TargetKind::Creature,
-                    ..TargetFilter::default()
-                })),
-            },
-            SpellEffectKind::ApplyCombatRestriction {
-                scope: CombatRestrictionScope::Chosen(TargetFilter {
-                    kind: TargetKind::Creature,
-                    ..TargetFilter::default()
-                }),
-                restriction: CombatRestriction {
-                    cant_be_blocked: true,
-                    ..CombatRestriction::default()
-                },
-            },
-        ]
-    );
-    assert_eq!(
-        single_group(counter_block.targeting.as_ref().unwrap()).effect_indices,
-        [0, 1]
-    );
-    assert_eq!(
-        library_choice.effects,
-        [SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                permanent_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
-                ..TargetFilter::default()
-            })),
-            placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-        }]
-    );
+    assert!(counter_block.effects.is_empty());
+    assert!(library_choice.effects.is_empty());
+    let counter_program = registry
+        .compiled_program_for_owner(&ProgramOwnerId::face_mode(
+            "jailbreak_scheme",
+            face.face_id.clone(),
+            counter_block.mode_id.clone(),
+        ))
+        .expect("counter-block mode keeps its typed sibling Program");
+    assert_eq!(counter_program.target_bindings.len(), 2);
+    assert!(matches!(
+        counter_program.body.steps.as_slice(),
+        [put_counter, restrict]
+            if matches!(&put_counter.kind, CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutCounters {
+                    counter: tricerules_cards::CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1), ..
+                }))
+            && matches!(&restrict.kind, CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::ApplyCombatRestriction {
+                    scope: CombatRestrictionScope::Chosen(_),
+                    restriction: CombatRestriction { cant_be_blocked: true, .. },
+                }))
+    ));
+    assert!(single_group(counter_block.targeting.as_ref().unwrap())
+        .effect_indices
+        .is_empty());
+    let library_program = registry
+        .compiled_program_for_owner(&ProgramOwnerId::face_mode(
+            "jailbreak_scheme",
+            face.face_id.clone(),
+            library_choice.mode_id.clone(),
+        ))
+        .expect("library-choice mode owns the typed placement Program");
+    assert_eq!(library_program.target_bindings.len(), 1);
+    assert!(matches!(
+        library_program.body.steps.as_slice(),
+        [step] if matches!(&step.kind, CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(filter),
+                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+            } if filter.kind == TargetKind::AnyPermanent
+                && filter.permanent_types
+                    == [PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature]))
+    ));
 
     // Pyrrhic Strike: optional blight 2 unlocks both destroy modes.
     let pyrrhic = registry.get("pyrrhic_strike").expect("registered");

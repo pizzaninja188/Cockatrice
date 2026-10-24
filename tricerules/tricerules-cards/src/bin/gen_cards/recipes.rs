@@ -8,7 +8,7 @@ use tricerules_cards::primitives::{
     EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
     GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
     HandCardAction, HandCardChooser, HandChoiceVisibility, Instruction, InstructionKind,
-    LibraryPlacement, LifeAmount, LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet,
+    LifeAmount, LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet,
     ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
     PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
     PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
@@ -6548,15 +6548,16 @@ const ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE: &str =
 /// appended-instruction forms stay unsupported.
 fn match_spell_owner_choice_top_or_bottom_target_creature(
     text: &str,
-    _: &RecipeContext,
+    _context: &RecipeContext,
 ) -> Option<RecipeEmission> {
     (text == ISSUE_318_OWNER_CHOICE_PLACEMENT_CLAUSE).then(|| {
-        RecipeEmission::SpellEffectsWithTargeting {
-            effects: vec![SpellEffectKind::PutInOwnersLibrary {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-            }],
-            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        RecipeEmission::SpellProgramWithTargeting {
+            program: authored_program(
+                r#"(id: "put_in_owners_library", kind: Perform(PutInOwnersLibrary(
+                    subject: Chosen((kind: Creature)), placement: OwnerChoiceTopOrBottom)))"#,
+                r#"(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)"#,
+            ),
+            targeting: single_program_targeting("Choose target creature"),
         }
     })
 }
@@ -35236,23 +35237,25 @@ mod tests {
                 matched.id.as_str(),
                 "spell.put_in_owners_library.owner_choice_top_or_bottom.target_creature"
             );
-            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            let RecipeEmission::SpellProgramWithTargeting { program, targeting } = matched.emission
             else {
-                panic!("owner-choice placement must emit an explicitly targeted spell");
+                panic!("owner-choice placement must emit the same typed Program for every card");
             };
             assert_eq!(
-                effects,
-                vec![SpellEffectKind::PutInOwnersLibrary {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-                }]
+                program,
+                authored_program(
+                    r#"(id: "put_in_owners_library", kind: Perform(PutInOwnersLibrary(
+                        subject: Chosen((kind: Creature)), placement: OwnerChoiceTopOrBottom)))"#,
+                    r#"(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)"#,
+                ),
+                "{source_name} emits the exact single-effect Program owner"
             );
             let [group] = targeting.groups.as_slice() else {
                 panic!("owner-choice placement must own exactly one target group");
             };
             assert_eq!((group.min, group.max), (1, 1));
             assert_eq!(group.prompt, "Choose target creature");
-            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.effect_indices.is_empty());
             assert!(group.distinct_from.is_empty());
             assert!(!group.same_graveyard);
             assert!(group.cast_cost_expansion.is_none());

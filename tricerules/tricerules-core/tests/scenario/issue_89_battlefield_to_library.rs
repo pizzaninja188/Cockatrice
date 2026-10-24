@@ -207,6 +207,98 @@ fn deglamer_includes_the_permanent_in_a_deterministic_owner_library_shuffle() {
 }
 
 #[test]
+fn deglamer_fizzles_without_shuffling_when_its_only_target_leaves() {
+    use tricerules_proto::ruled::v1::{
+        permanent_moved::Destination as MoveDestination, ruled_event::Ev,
+    };
+
+    let decks = Some(vec![
+        {
+            let mut deck = vec!["deglamer".to_string()];
+            deck.extend(std::iter::repeat_n("forest".to_string(), 29));
+            deck
+        },
+        {
+            let mut deck = vec!["sol_ring".to_string()];
+            deck.extend(std::iter::repeat_n("island".to_string(), 29));
+            deck
+        },
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8906,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Deglamer sole-target fixture starts");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = deploy_to_battlefield(&mut engine, 1, "sol_ring", false);
+    let library_before: Vec<_> = engine.state.players[1].library.iter().copied().collect();
+    ensure_in_hand(&mut engine, 0, "deglamer");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let spell = hand_index_for_card(&engine, 0, "deglamer");
+    engine
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
+        .expect("Sol Ring is a legal announced target for Deglamer");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes after announcing the target");
+    engine.state.players[1]
+        .battlefield
+        .retain(|&object_id| object_id != target);
+    engine.state.players[1].graveyard.push(target);
+    engine.state.objects.get_mut(&target).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(target)
+        .or_default() += 1;
+
+    let resolution = engine
+        .apply_scenario_command(1, &pass())
+        .expect("Deglamer's sole target is illegal, so the spell fizzles");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
+    assert!(!engine.state.players[1].library.contains(&target));
+    assert_eq!(
+        engine.state.players[1]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "no shuffle changed the target owner's ordered library"
+    );
+    assert!(!resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::Log(log)) if log.text == "P1 shuffles their library."
+    )));
+    assert!(!resolution
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
+    assert!(!resolution.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::PermanentMoved(movement))
+            if movement.object_id == target
+                && movement.destination == MoveDestination::Library as i32
+    )));
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
 fn griptide_fizzles_after_its_target_changes_zones() {
     let decks = Some(vec![
         {

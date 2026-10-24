@@ -762,10 +762,41 @@ controller has no creature, it records Blight without a creature prompt and cont
 Targetful leaves currently accepted are `DamageTarget` with role `Target`, `CounterTargetSpell` with
 role `Spell`, `CounterTargetAbility` with role `StackAbility`,
 `CreateTokenCopies(Chosen(...))` with role `Source`, and
-`ReturnToOwnersHand(Chosen(...))` with role `Subject`. These are the only target-role signatures
-accepted in authored programs. `CounterTargetAbility` has one explicit group with bounds `0..1` or
-`1..1`; its optional bound result may be discarded. A copied permanent source requires exactly one
-target (`min: 1`, `max: 1`).
+`ReturnToOwnersHand(Chosen(...))` and `PutInOwnersLibrary(Chosen(...))` with role `Subject`. These
+are the target-role signatures accepted in authored programs. `CounterTargetAbility` has one
+explicit group with bounds `0..1` or `1..1`; its optional bound result may be discarded. A copied
+permanent source requires exactly one target (`min: 1`, `max: 1`).
+
+For `PutInOwnersLibrary(Chosen(filter), placement)`, bind the instruction's `Subject` role to one
+target group whose `max` is 1, and leave `effect_indices` empty for that Program group. The ordinary
+effect validator checks the filter; the chosen permanent's owner makes any `OwnerChoiceTopOrBottom`
+or `OwnerChoiceSecondFromTopOrBottom` placement choice. The resultless instruction resumes its
+following Program step after the owner finishes that choice. The other existing placements remain
+available: `Top`, `SecondFromTop`, `Bottom`, and `Shuffle`. Keep this operation in the owning
+spell Program, not in its legacy `effects` list; registry validation rejects flat
+`PutInOwnersLibrary` entries. For example, an owner-choice mode is authored as:
+
+```ron
+spell_effect: [],
+spell_program: Some((
+  body: (steps: [
+    (id: "return_to_library", kind: Perform(PutInOwnersLibrary(
+      subject: Chosen((kind: Creature)), placement: OwnerChoiceTopOrBottom
+    )))
+  ], yields: []),
+  target_bindings: [(instruction_id: "return_to_library", role: Subject, target_group_index: 0)],
+)),
+targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])])),
+```
+
+The only admitted ability-Program form is `PutInOwnersLibrary(AttachedObject, Shuffle)`. It uses the
+ability source's current attachment when one remains, or the source incarnation's captured
+departure last-known attachment when the Aura has left. That record retains the attached object's
+owner, ObjectId, and zone-change generation: a stale target is never replaced by the same physical
+card after it changes zones, while its known owner's library still shuffles as instructed. A live
+Aura detached before it leaves has no attached-object choice. For a declared Commander, its owner
+chooses Command zone or Library before the library placement is applied; choosing Command for a
+Shuffle placement still shuffles that owner's library (CR 903.9b, 701.24c).
 
 Ability programs use the ability context. A triggered program may use `AffectedPlayer` for a
 draw/discard recipient or as a `Choose` chooser only when its trigger supplies that event-time

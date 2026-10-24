@@ -1,8 +1,8 @@
 use tricerules_cards::primitives::{
     AbilityCost, CardProgram, CardSearchZone, CardTypeFilter, CompiledChooseRequirement,
-    CompiledInstructionKind, GraveyardDestination, LibraryBottomOrder, LibraryPlacement,
-    PlayerRecipient, PowerComparison, ResolutionCost, SearchDestination, SearchSelectionBounds,
-    SearchZoneSelection, SpellEffectKind, ZoneCardFilter,
+    CompiledInstructionKind, GraveyardDestination, LibraryBottomOrder, LibraryPartitionKind,
+    LibraryPlacement, PlayerRecipient, PowerComparison, ResolutionCost, SearchDestination,
+    SearchSelectionBounds, SearchZoneSelection, SpellEffectKind, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityDefinitionId, ProgramOwnerId};
 
@@ -293,19 +293,31 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
     ));
 
     let voyage = card("uncharted_voyage").primary_face();
+    assert!(voyage.spell_effect.is_empty());
+    let voyage_owner = ProgramOwnerId::face("uncharted_voyage", voyage.face_id.clone());
+    let voyage_program = registry
+        .compiled_program_for_owner(&voyage_owner)
+        .expect("Uncharted Voyage owns its typed owner-placement and surveil program");
+    let [place, surveil] = voyage_program.body.steps.as_slice() else {
+        panic!("Uncharted Voyage places its target before surveilling");
+    };
     assert!(matches!(
-        voyage.spell_effect.as_slice(),
-        [
-            SpellEffectKind::PutInOwnersLibrary {
+        &place.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
                 placement: LibraryPlacement::OwnerChoiceTopOrBottom,
                 ..
-            },
-            SpellEffectKind::LibraryPartition {
+            })
+    ));
+    assert!(matches!(
+        &surveil.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::LibraryPartition {
                 count: 1,
                 top_min: 0,
+                kind: LibraryPartitionKind::Surveil,
                 ..
-            }
-        ]
+            })
     ));
 
     let riverwalk = card("riverwalk_technique").primary_face();
@@ -317,15 +329,39 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
         (modal.min_modes, modal.max_modes, modal.modes.len()),
         (1, 1, 2)
     );
+    for mode in &modal.modes {
+        assert!(mode.effects.is_empty());
+        assert!(mode.program.is_some());
+    }
+    let owner_choice = registry
+        .compiled_program_for_owner(&ProgramOwnerId::face_mode(
+            "riverwalk_technique",
+            riverwalk.face_id.clone(),
+            modal.modes[0].mode_id.clone(),
+        ))
+        .expect("Riverwalk Technique's placement mode compiles independently");
+    assert_eq!(owner_choice.target_bindings.len(), 1);
     assert!(matches!(
-        modal.modes[0].effects.as_slice(),
-        [SpellEffectKind::PutInOwnersLibrary {
-            placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-            ..
-        }]
+        owner_choice.body.steps.as_slice(),
+        [step] if matches!(&step.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
+                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+                    ..
+                }))
     ));
+    let counter = registry
+        .compiled_program_for_owner(&ProgramOwnerId::face_mode(
+            "riverwalk_technique",
+            riverwalk.face_id.clone(),
+            modal.modes[1].mode_id.clone(),
+        ))
+        .expect("Riverwalk Technique's counterspell mode remains available");
+    assert_eq!(counter.target_bindings.len(), 1);
     assert!(matches!(
-        modal.modes[1].effects.as_slice(),
-        [SpellEffectKind::CounterTargetSpell { .. }]
+        counter.body.steps.as_slice(),
+        [step] if matches!(&step.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::CounterTargetSpell { .. }))
     ));
 }

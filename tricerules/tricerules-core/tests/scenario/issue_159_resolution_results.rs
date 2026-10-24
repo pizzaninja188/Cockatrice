@@ -484,6 +484,64 @@ fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
     );
 }
 
+#[test]
+fn issue_159_lost_days_owner_can_put_the_exact_target_on_the_bottom() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        159_009,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["lost_days"]),
+            deck_with("forest", &["grizzly_bears"]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "lost_days");
+    let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 4,
+            ..Default::default()
+        },
+    );
+    let spell = hand_index_for_card(&engine, 0, "lost_days");
+    engine
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        1
+    );
+    let resolved = engine
+        .apply_scenario_command(1, &select_branch(1))
+        .expect("owner chooses bottom");
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Library);
+    assert_eq!(engine.state.players[1].library.back(), Some(&target));
+    let clues = token_created_events(&resolved)
+        .into_iter()
+        .filter(|created| created.card_id == "clue")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        clues.len(),
+        1,
+        "the Clue tail executes once after bottom placement"
+    );
+}
+
 fn kicker_option() -> CastCostGroupSelection {
     CastCostGroupSelection {
         repetitions: None,

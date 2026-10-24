@@ -12,6 +12,17 @@ pub(super) fn attached_object_identity(
     source_id: ObjectId,
     source_generation: u64,
 ) -> Option<(ObjectId, u64)> {
+    attached_object_lki(state, source_id, source_generation)
+        .map(|attachment| (attachment.object_id, attachment.zone_change_generation))
+}
+
+/// CR 608.2b/h and 701.24c: current attached object, or the exact source-departure record.
+/// The captured owner remains available when that target has since changed zones.
+pub(super) fn attached_object_lki(
+    state: &GameState,
+    source_id: ObjectId,
+    source_generation: u64,
+) -> Option<crate::state::AttachedObjectLki> {
     if state
         .zone_change_generation
         .get(&source_id)
@@ -26,10 +37,12 @@ pub(super) fn attached_object_identity(
         let AttachmentRecipient::Object(oid) = state.objects.get(&source_id)?.attached_to? else {
             return None;
         };
-        Some((
-            oid,
-            state.zone_change_generation.get(&oid).copied().unwrap_or(0),
-        ))
+        let target = state.objects.get(&oid)?;
+        (target.zone == Zone::Battlefield).then(|| crate::state::AttachedObjectLki {
+            object_id: oid,
+            zone_change_generation: state.zone_change_generation.get(&oid).copied().unwrap_or(0),
+            owner: target.owner,
+        })
     } else {
         state
             .last_known_attached_object_by_generation

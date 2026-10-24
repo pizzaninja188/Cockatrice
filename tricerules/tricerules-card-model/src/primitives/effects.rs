@@ -3317,7 +3317,7 @@ impl SpellEffectKind {
     /// Find the retired implicit previous-object receipt path through legacy flat effect wrappers.
     /// Programs must bind a typed result instead of relying on the preceding effect list item.
     pub(crate) fn contains_legacy_flat_previous_object_ability_removal(&self) -> bool {
-        self.contains_legacy_flat_previous_object_signature(|effect| {
+        self.contains_legacy_flat_signature(|effect| {
             matches!(
                 effect,
                 Self::RemoveAllAbilities {
@@ -3331,7 +3331,7 @@ impl SpellEffectKind {
     /// Find flat batch consumers of the implicit PreviousEffectObjects receipt. These consumers
     /// need a typed Program input so empty and completed batches remain distinct.
     pub(crate) fn contains_legacy_flat_previous_object_batch_consumer(&self) -> bool {
-        self.contains_legacy_flat_previous_object_signature(|effect| {
+        self.contains_legacy_flat_signature(|effect| {
             matches!(
                 effect,
                 Self::ApplyPermanentModifier {
@@ -3347,7 +3347,7 @@ impl SpellEffectKind {
 
     /// Find the retired Koya single-object delayed consumer through the same flat wrappers.
     pub(crate) fn contains_legacy_flat_previous_object_delayed_trigger(&self) -> bool {
-        self.contains_legacy_flat_previous_object_signature(|effect| {
+        self.contains_legacy_flat_signature(|effect| {
             matches!(
                 effect,
                 Self::CreateDelayedTrigger {
@@ -3358,37 +3358,43 @@ impl SpellEffectKind {
         })
     }
 
+    /// Owner-library movement is only admitted through its typed, generation-bound Program
+    /// operation. The legacy effect list remains available for shared engine callers such as
+    /// replacement processing, but authored lists cannot select that path.
+    pub(crate) fn contains_legacy_flat_owner_library_placement(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| {
+            matches!(effect, Self::PutInOwnersLibrary { .. })
+        })
+    }
+
     /// Visit only legacy flat-effect wrappers; authored Program bodies keep their own typed edges.
-    fn contains_legacy_flat_previous_object_signature(
-        &self,
-        matches_leaf: fn(&Self) -> bool,
-    ) -> bool {
+    fn contains_legacy_flat_signature(&self, matches_leaf: fn(&Self) -> bool) -> bool {
         if matches_leaf(self) {
             return true;
         }
         match self {
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
-                effect.contains_legacy_flat_previous_object_signature(matches_leaf)
+                effect.contains_legacy_flat_signature(matches_leaf)
             }
             Self::MayBehold { if_beheld, .. } => if_beheld
                 .iter()
-                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
+                .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
             Self::CreateReflexiveTrigger { ability, .. } => ability
                 .effect
                 .iter()
-                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
+                .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
             Self::GrantTriggeredAbility { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. } => {
-                ability.effect.iter().any(|nested| {
-                    nested.contains_legacy_flat_previous_object_signature(matches_leaf)
-                }) || ability
-                    .modal
+                ability
+                    .effect
                     .iter()
-                    .flat_map(|modal| &modal.modes)
-                    .flat_map(|mode| &mode.effects)
-                    .any(|nested| {
-                        nested.contains_legacy_flat_previous_object_signature(matches_leaf)
-                    })
+                    .any(|nested| nested.contains_legacy_flat_signature(matches_leaf))
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(|nested| nested.contains_legacy_flat_signature(matches_leaf))
             }
             Self::ApplyPermanentModifier {
                 modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
@@ -3396,7 +3402,7 @@ impl SpellEffectKind {
             } => ability
                 .effect
                 .iter()
-                .any(|nested| nested.contains_legacy_flat_previous_object_signature(matches_leaf)),
+                .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
             _ => false,
         }
     }
@@ -3973,6 +3979,14 @@ impl SpellEffectKind {
             .any(SpellEffectKind::contains_legacy_flat_previous_object_delayed_trigger)
         {
             return Err("PreviousEffectObject delayed triggers require an authored Program".into());
+        }
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_legacy_flat_owner_library_placement)
+        {
+            return Err(
+                "legacy PutInOwnersLibrary effect-list entries require an authored Program".into(),
+            );
         }
 
         #[derive(Clone, Copy, PartialEq, Eq)]

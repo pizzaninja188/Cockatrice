@@ -3902,7 +3902,7 @@ pub(super) struct PreparedZoneMove {
     leaving_battlefield: bool,
     last_known_characteristics: Option<super::characteristics::Characteristics>,
     copy: Option<crate::state::TokenCopySnapshot>,
-    last_known_attached_object: Option<(ObjectId, u64)>,
+    last_known_attached_object: Option<crate::state::AttachedObjectLki>,
     front_face_values: Option<(Option<u32>, Option<u32>, bool, bool)>,
     counters: std::collections::BTreeMap<CounterKind, u32>,
     tapped: bool,
@@ -3978,14 +3978,15 @@ pub(super) fn prepare_zone_move(
                     .get(&target_oid)
                     .is_some_and(|target| target.zone == Zone::Battlefield) =>
             {
-                Some((
-                    target_oid,
-                    state
+                Some(crate::state::AttachedObjectLki {
+                    object_id: target_oid,
+                    zone_change_generation: state
                         .zone_change_generation
                         .get(&target_oid)
                         .copied()
                         .unwrap_or(0),
-                ))
+                    owner: state.objects.get(&target_oid)?.owner,
+                })
             }
             AttachmentRecipient::Object(_) | AttachmentRecipient::Player(_) => None,
         });

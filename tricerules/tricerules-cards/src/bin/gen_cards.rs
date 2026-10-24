@@ -73,7 +73,8 @@ use recipes::{
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
-    GraveyardDestination, InstructionKind, LifeAmount, PermanentEventFilter, ZoneCardFilter,
+    CompiledProgram, EffectContext, GraveyardDestination, InstructionKind, LifeAmount,
+    PermanentEventFilter, ProgramTargetReference, ProgramTargetRole, ZoneCardFilter,
 };
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
@@ -11901,6 +11902,68 @@ mod tests {
     /// clauses (Menace, Flying, Basic landcycling, and Run Behind's cost line) must stay intact.
     #[test]
     fn issue_318_cohort_generates_the_exact_reviewed_definitions() {
+        fn assert_owner_choice_program(raw: &RawCardDefinition) {
+            assert!(raw.spell_effect.is_empty());
+            let targeting = raw
+                .targeting
+                .as_ref()
+                .expect("the generated owner-choice spell must target");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the generated owner-choice spell must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert!(group.effect_indices.is_empty());
+
+            let program = raw
+                .spell_program
+                .as_ref()
+                .expect("the generated owner-choice operation must use a typed Program");
+            let [instruction] = program.body.steps.as_slice() else {
+                panic!("the generated owner-choice Program must contain one operation");
+            };
+            assert_eq!(instruction.id, "put_in_owners_library");
+            let InstructionKind::Perform(effect) = &instruction.kind else {
+                panic!("the owner-library Program instruction must be a Perform");
+            };
+            assert_eq!(
+                effect.as_ref(),
+                &SpellEffectKind::PutInOwnersLibrary {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+                }
+            );
+            assert_eq!(
+                program.target_bindings,
+                [ProgramTargetReference {
+                    instruction_id: "put_in_owners_library".into(),
+                    role: ProgramTargetRole::Subject,
+                    target_group_index: 0,
+                }]
+            );
+
+            let compiled = CompiledProgram::compile_with_targeting(
+                tricerules_cards::ProgramOwnerId::face(raw.id.clone(), raw.face_id.clone()),
+                EffectContext::Spell,
+                program,
+                Some(targeting),
+            )
+            .expect("the generated owner-choice Program and target binding must compile");
+            let [binding] = compiled.target_bindings.as_slice() else {
+                panic!("the compiled Program must bind one target role");
+            };
+            assert_eq!(binding.instruction_address, 0);
+            assert_eq!(binding.target_group_index, 0);
+            assert_eq!(binding.role_index, 0);
+
+            let schema = TargetSchema::compile_program(&compiled, Some(targeting))
+                .expect("the compiled target binding must form a valid target schema");
+            let [group] = schema.groups.as_slice() else {
+                panic!("the compiled Program must retain one target group");
+            };
+            assert_eq!(group.bindings.len(), 1);
+        }
+
         let mut motes = normal_card_with_oracle_id(
             "09eec5a2-7835-4b24-9dd1-594612ee9152",
             "Misleading Motes",
@@ -11921,24 +11984,7 @@ mod tests {
         assert_eq!(raw.types, ["Instant"]);
         assert_eq!(raw.mana_cost.colors(), [Color::Blue]);
         assert!(raw.cost_modifiers.is_empty());
-        assert_eq!(
-            raw.spell_effect,
-            [SpellEffectKind::PutInOwnersLibrary {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-            }]
-        );
-        let targeting = raw
-            .targeting
-            .as_ref()
-            .expect("Misleading Motes must target");
-        let [group] = targeting.groups.as_slice() else {
-            panic!("Misleading Motes must own exactly one target group");
-        };
-        assert_eq!((group.min, group.max), (1, 1));
-        assert_eq!(group.prompt, "Choose target creature");
-        assert_eq!(group.effect_indices, [0]);
-        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+        assert_owner_choice_program(&raw);
 
         let run_behind_clauses = "This spell costs {1} less to cast if it targets an attacking creature.\nTarget creature's owner puts it on their choice of the top or bottom of their library.";
         let mut run_behind = normal_card_with_oracle_id(
@@ -11971,14 +12017,7 @@ mod tests {
                 }),
             }]
         );
-        assert_eq!(
-            raw.spell_effect,
-            [SpellEffectKind::PutInOwnersLibrary {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-            }]
-        );
-        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+        assert_owner_choice_program(&raw);
 
         // The cost line and the targeted instruction compose in either printed order: the cost
         // modifier lives on its own list and never joins the implicit target contract.
@@ -11992,9 +12031,7 @@ mod tests {
         let generated = evaluate_fresh(&reversed).expect("reversed clauses still compose");
         let raw = parse_generated(&generated.to_ron("fixture"));
         assert_eq!(raw.cost_modifiers.len(), 1);
-        assert_eq!(raw.spell_effect.len(), 1);
-        assert!(raw.targeting.is_some());
-        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+        assert_owner_choice_program(&raw);
 
         let mut pack = normal_card_with_oracle_id(
             "ef702a1a-4ace-43e0-8e86-dcceb0b1e4d5",

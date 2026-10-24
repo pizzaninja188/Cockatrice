@@ -1,6 +1,7 @@
 use tricerules_cards::primitives::{
-    AbilitySourceZone, EffectSubject, LibraryPlacement, SpellEffectKind,
+    AbilitySourceZone, CompiledInstructionKind, EffectSubject, LibraryPlacement, SpellEffectKind,
 };
+use tricerules_cards::{AbilityDefinitionId, ProgramOwnerId};
 
 #[test]
 fn issue_155_equipment_cards_share_the_one_shot_attach_primitive() {
@@ -94,17 +95,30 @@ fn issue_155_auras_use_untargeted_attached_object_zone_actions() {
         assert!(ability.targeting.is_none());
     }
 
-    let watery = &registry
+    let watery_face = registry
         .get("watery_grasp")
         .expect("Watery Grasp")
-        .primary_face()
-        .activated_abilities[0];
+        .primary_face();
+    let watery = &watery_face.activated_abilities[0];
+    assert!(watery.effect.is_empty());
+    assert!(watery.program.is_some());
     assert!(matches!(
-        watery.effect.as_slice(),
-        [SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::AttachedObject,
-            placement: LibraryPlacement::Shuffle,
-        }]
+        registry
+            .compiled_program_for_owner(&ProgramOwnerId::ability(AbilityDefinitionId {
+                card_id: "watery_grasp".into(),
+                face_id: watery_face.face_id.clone(),
+                ability_path: vec![watery.ability_id.clone()],
+            }))
+            .expect("Watery Grasp owns its typed attached-object Program")
+            .body
+            .steps
+            .as_slice(),
+        [step] if matches!(&step.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
+                    subject: EffectSubject::AttachedObject,
+                    placement: LibraryPlacement::Shuffle,
+                }))
     ));
     assert!(watery.targeting.is_none());
 }

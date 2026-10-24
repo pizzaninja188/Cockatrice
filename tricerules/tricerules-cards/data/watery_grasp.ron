@@ -12,6 +12,13 @@
     ability_id: "activated_01",
     presentation: OracleLines([3]),
     costs: [Waterbend("{5}")],
-    effect: [PutInOwnersLibrary(subject: AttachedObject, placement: Shuffle)],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "return_attached_permanent", bind: [], input: None,
+        kind: Perform(PutInOwnersLibrary(
+          subject: AttachedObject,
+          placement: Shuffle,
+        ))),
+    ], yields: []))),
   )],
 )

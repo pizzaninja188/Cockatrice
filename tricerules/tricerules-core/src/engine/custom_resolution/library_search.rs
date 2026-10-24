@@ -208,7 +208,7 @@ impl GameEngine {
                 &mut events,
             );
         }
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
     }
 
     pub(super) fn finish_search_zone_scope(
@@ -398,63 +398,201 @@ impl GameEngine {
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, object_id, owner, generation, nonbottom_placement, spell_label) =
-            match &pending.continuation {
-                ResolutionContinuation::OwnerLibraryPlacement {
-                    stack,
-                    object_id,
-                    owner,
-                    zone_change_generation,
-                    nonbottom_placement,
-                    spell_label,
-                } => (
-                    stack.clone(),
-                    *object_id,
-                    *owner,
-                    *zone_change_generation,
-                    *nonbottom_placement,
-                    spell_label.clone(),
-                ),
-                _ => return Err(EngineError::Illegal("owner-placement continuation missing")),
-            };
+        let (
+            stack,
+            object_id,
+            owner,
+            generation,
+            placement,
+            commander_destination_choice,
+            stack_source_departed,
+            spell_label,
+        ) = match &pending.continuation {
+            ResolutionContinuation::OwnerLibraryPlacement {
+                stack,
+                object_id,
+                owner,
+                zone_change_generation,
+                placement,
+                commander_destination_choice,
+                stack_source_departed,
+                spell_label,
+            } => (
+                stack.clone(),
+                *object_id,
+                *owner,
+                *zone_change_generation,
+                *placement,
+                *commander_destination_choice,
+                *stack_source_departed,
+                spell_label.clone(),
+            ),
+            _ => return Err(EngineError::Illegal("owner-placement continuation missing")),
+        };
         let invalid_shape = decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || answer.selected_branch_index > 1
             || !answer.chosen_object_ids.is_empty()
-            || answer.selected_branch_index > 1;
+            || !answer.chosen_player_ids.is_empty()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
+            || answer.chosen_combat_defender.is_some();
         let current_generation = self
             .state
             .zone_change_generation
             .get(&object_id)
             .copied()
             .unwrap_or(0);
-        let stale = !self
+        let target_live = self
             .state
             .objects
             .get(&object_id)
             .is_some_and(|object| object.zone == Zone::Battlefield && object.owner == owner)
-            || current_generation != generation;
-        if invalid_shape || stale {
+            && current_generation == generation;
+        let commander_live = self.state.player_idx(owner).is_some_and(|index| {
+            !self.state.players[index].has_lost
+                && self.state.players[index]
+                    .declared_commander_object_ids
+                    .contains(&object_id)
+        });
+        if invalid_shape
+            || pending.deciding_player != owner
+            || !target_live
+            || (commander_destination_choice && !commander_live)
+            || (!stack_source_departed && !self.parked_choose_card_stack_is_current(&stack))
+        {
             self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal(if stale {
-                "owner-placement target became stale"
-            } else {
-                "owner placement requires the authored non-bottom placement or Bottom"
-            }));
+            return Err(EngineError::Illegal(
+                "owner library placement choice became stale or malformed",
+            ));
         }
 
-        let placement = if answer.selected_branch_index == 0 {
-            nonbottom_placement
-        } else {
-            LibraryPlacement::Bottom
-        };
         let mut events = Vec::new();
-        resolution::zones::move_permanent_to_owners_library(
-            self,
-            &mut events,
-            object_id,
-            placement,
-            &spell_label,
-        )?;
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+        if commander_destination_choice {
+            if answer.selected_branch_index == 0 {
+                resolution::zones::move_permanent_to_command_zone(self, &mut events, object_id)?;
+                if placement == LibraryPlacement::Shuffle {
+                    crate::engine::shuffle_player_library_for_current_command(
+                        &mut self.state,
+                        owner,
+                    );
+                    events.push(ev_log(format!("P{owner} shuffles their library.")));
+                }
+                return self.complete_parked_stack_with_previous(
+                    stack,
+                    EffectResult::default(),
+                    events,
+                );
+            }
+            if matches!(
+                placement,
+                LibraryPlacement::OwnerChoiceTopOrBottom
+                    | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
+            ) {
+                resolution::zones::publish_owner_library_placement_choice(
+                    self,
+                    &mut events,
+                    stack,
+                    resolution::zones::OwnerLibraryPlacementOffer {
+                        object_id,
+                        owner,
+                        zone_change_generation: generation,
+                        placement,
+                        stack_source_departed,
+                        spell_label: &spell_label,
+                    },
+                )?;
+                return Ok(finish_with_events(self, events));
+            }
+            resolution::zones::move_permanent_to_owners_library(
+                self,
+                &mut events,
+                object_id,
+                placement,
+                &spell_label,
+            )?;
+        } else {
+            let position_placement = match placement {
+                LibraryPlacement::OwnerChoiceTopOrBottom => {
+                    if answer.selected_branch_index == 0 {
+                        LibraryPlacement::Top
+                    } else {
+                        LibraryPlacement::Bottom
+                    }
+                }
+                LibraryPlacement::OwnerChoiceSecondFromTopOrBottom => {
+                    if answer.selected_branch_index == 0 {
+                        LibraryPlacement::SecondFromTop
+                    } else {
+                        LibraryPlacement::Bottom
+                    }
+                }
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "owner placement requires an owner-choice placement",
+                    ));
+                }
+            };
+            resolution::zones::move_permanent_to_owners_library(
+                self,
+                &mut events,
+                object_id,
+                position_placement,
+                &spell_label,
+            )?;
+        }
+        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+    }
+
+    /// A target owner who leaves takes their owned battlefield objects out of the game.
+    /// Retire the now-impossible placement operation without resurrecting it in Library, then
+    /// finish the already-begun parent instruction stream under CR 608.2m.
+    pub(in crate::engine) fn refresh_owner_library_placement_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (stack, object_id, owner, generation) = match &pending.continuation {
+            ResolutionContinuation::OwnerLibraryPlacement {
+                stack,
+                object_id,
+                owner,
+                zone_change_generation,
+                ..
+            } => (stack.clone(), *object_id, *owner, *zone_change_generation),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let owner_live = self
+            .state
+            .player_idx(owner)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let target_live =
+            owner_live
+                && self.state.objects.get(&object_id).is_some_and(|object| {
+                    object.zone == Zone::Battlefield && object.owner == owner
+                })
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == generation;
+        if target_live {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        let completed =
+            self.complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?;
+        events.extend(completed.events);
+        Ok(())
     }
 
     pub(super) fn finish_choose_card(

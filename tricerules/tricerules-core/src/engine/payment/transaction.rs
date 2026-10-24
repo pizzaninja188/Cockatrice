@@ -3370,10 +3370,10 @@ mod convoke_transaction_tests {
                 engine.state.last_known_counters_by_generation[&key][&CounterKind::PlusOnePlusOne],
                 1
             );
-            assert_eq!(
-                engine.state.last_known_attached_object_by_generation[&key],
-                (ids[0], generations[0])
-            );
+            let attachment = engine.state.last_known_attached_object_by_generation[&key];
+            assert_eq!(attachment.object_id, ids[0]);
+            assert_eq!(attachment.zone_change_generation, generations[0]);
+            assert_eq!(attachment.owner, engine.state.objects[&ids[0]].owner);
         }
         let batches: Vec<_> = receipt
             .trigger_events

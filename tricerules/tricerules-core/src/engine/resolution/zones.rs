@@ -1258,6 +1258,242 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
     Ok(())
 }
 
+pub(in crate::engine) fn move_permanent_to_command_zone(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    tid: ObjectId,
+) -> Result<(), EngineError> {
+    let target_name = object_display_name(&engine.state, engine.registry, tid);
+    let owner = engine
+        .state
+        .objects
+        .get(&tid)
+        .map(|object| object.owner)
+        .ok_or(EngineError::Illegal("no target object"))?;
+    let zone_snapshot = engine.snapshot_zone_event();
+    let leave_event = engine.battlefield_leave_event(tid);
+    move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Command, None)?;
+    engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        events,
+    );
+    events.push(permanent_moved_event(
+        &engine.state,
+        tid,
+        owner,
+        rv1::permanent_moved::Destination::Command,
+    ));
+    events.push(ev_log(format!(
+        "P{owner} puts {target_name} into the command zone instead."
+    )));
+    Ok(())
+}
+
+pub(in crate::engine) struct OwnerLibraryPlacementOffer<'a> {
+    pub object_id: ObjectId,
+    pub owner: PlayerId,
+    pub zone_change_generation: u64,
+    pub placement: LibraryPlacement,
+    pub stack_source_departed: bool,
+    pub spell_label: &'a str,
+}
+
+pub(in crate::engine) fn publish_owner_library_placement_choice(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    stack: crate::state::ParkedStackResolution,
+    offer: OwnerLibraryPlacementOffer<'_>,
+) -> Result<(), EngineError> {
+    let OwnerLibraryPlacementOffer {
+        object_id,
+        owner,
+        zone_change_generation,
+        placement,
+        stack_source_departed,
+        spell_label,
+    } = offer;
+    if !matches!(
+        placement,
+        LibraryPlacement::OwnerChoiceTopOrBottom
+            | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
+    ) {
+        return Err(EngineError::Illegal(
+            "owner library placement choice requires an owner-choice placement",
+        ));
+    }
+    let nonbottom_placement = if placement == LibraryPlacement::OwnerChoiceSecondFromTopOrBottom {
+        LibraryPlacement::SecondFromTop
+    } else {
+        LibraryPlacement::Top
+    };
+    let nonbottom_label = if nonbottom_placement == LibraryPlacement::SecondFromTop {
+        "second from the top"
+    } else {
+        "the top"
+    };
+    let prompt = format!(
+        "P{owner}: put {} on {nonbottom_label} or the bottom of its owner's library.",
+        object_display_name(&engine.state, engine.registry, object_id)
+    );
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
+                accepted_permanent_selections: Vec::new(),
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: owner,
+                source_object_id: stack.item.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                candidate_object_ids: Vec::new(),
+                candidate_card_ids: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                candidate_names: Vec::new(),
+                candidate_server_card_ids: Vec::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                resolution_branches: vec![
+                    rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: if nonbottom_placement == LibraryPlacement::SecondFromTop {
+                            "Second from top".into()
+                        } else {
+                            "Top".into()
+                        },
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: true,
+                        search_zones: Vec::new(),
+                        presentation: None,
+                    },
+                    rv1::ResolutionBranchOption {
+                        branch_index: 1,
+                        label: "Bottom".into(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: true,
+                        search_zones: Vec::new(),
+                        presentation: None,
+                    },
+                ],
+                mana_cost: String::new(),
+                candidate_selectable: Vec::new(),
+                public_reveal: None,
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    events.push(ev_log(prompt.clone()));
+    engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: owner,
+        presentation: PendingResolutionPresentation {
+            source_object_id: stack.item.id,
+            candidates: Vec::new(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::ResolutionBranch,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::OwnerLibraryPlacement {
+            stack,
+            object_id,
+            owner,
+            zone_change_generation,
+            placement,
+            commander_destination_choice: false,
+            stack_source_departed,
+            spell_label: spell_label.to_owned(),
+        },
+    });
+    Ok(())
+}
+
+pub(in crate::engine) fn publish_owner_library_commander_choice(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    stack: crate::state::ParkedStackResolution,
+    offer: OwnerLibraryPlacementOffer<'_>,
+) {
+    let OwnerLibraryPlacementOffer {
+        object_id,
+        owner,
+        zone_change_generation,
+        placement,
+        stack_source_departed,
+        spell_label,
+    } = offer;
+    let prompt =
+        format!("P{owner}: put this commander into the command zone or its owner's library?");
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: owner,
+                source_object_id: stack.item.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                min: 1,
+                max: 1,
+                resolution_branches: vec![
+                    rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: "Command zone".into(),
+                        selectable: true,
+                        ..Default::default()
+                    },
+                    rv1::ResolutionBranchOption {
+                        branch_index: 1,
+                        label: "Library".into(),
+                        selectable: true,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+        )),
+    });
+    events.push(ev_log(prompt.clone()));
+    engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: owner,
+        presentation: PendingResolutionPresentation {
+            source_object_id: stack.item.id,
+            candidates: Vec::new(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::ResolutionBranch,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::OwnerLibraryPlacement {
+            stack,
+            object_id,
+            owner,
+            zone_change_generation,
+            placement,
+            commander_destination_choice: true,
+            stack_source_departed,
+            spell_label: spell_label.to_owned(),
+        },
+    });
+}
+
 pub(super) fn put_in_owners_library(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1265,125 +1501,114 @@ pub(super) fn put_in_owners_library(
     let SpellEffectKind::PutInOwnersLibrary { subject, placement } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let attached_shuffle = matches!(
+        (&subject, placement),
+        (EffectSubject::AttachedObject, LibraryPlacement::Shuffle)
+    );
+    let tid = if attached_shuffle {
+        let attachment = cx.top.source_permanent_id.and_then(|source_id| {
+            super::targeting::attached_object_lki(
+                &cx.engine.state,
+                source_id,
+                cx.top.source_zone_change,
+            )
+        });
+        let Some(attachment) = attachment else {
+            // A live Aura that was detached before it left no longer names an attached object.
+            return Ok(EffectOutcome::Continue);
+        };
+        let target_is_same_battlefield_object = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&attachment.object_id)
+            .copied()
+            .unwrap_or(0)
+            == attachment.zone_change_generation
+            && cx
+                .engine
+                .state
+                .objects
+                .get(&attachment.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield);
+        if target_is_same_battlefield_object {
+            Some(attachment.object_id)
+        } else {
+            // CR 701.24c: the departed Aura's LKI still identifies which owner's library to
+            // shuffle, but the stale attached object cannot move or bind to a returned object.
+            // A player who has left the game has no library to shuffle (CR 800.4a).
+            let owner_is_active = cx
+                .engine
+                .state
+                .player_idx(attachment.owner)
+                .is_some_and(|index| !cx.engine.state.players[index].has_lost);
+            if owner_is_active {
+                crate::engine::shuffle_player_library_for_current_command(
+                    &mut cx.engine.state,
+                    attachment.owner,
+                );
+                cx.events.push(ev_log(format!(
+                    "P{} shuffles their library.",
+                    attachment.owner
+                )));
+            }
+            return Ok(EffectOutcome::Continue);
+        }
+    } else {
+        resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+    };
     if let Some(tid) = tid {
+        let Some(object) = cx.engine.state.objects.get(&tid) else {
+            return Ok(EffectOutcome::Continue);
+        };
+        let owner = object.owner;
+        let generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&tid)
+            .copied()
+            .unwrap_or(0);
+        let is_declared_commander = cx.engine.state.player_idx(owner).is_some_and(|index| {
+            !cx.engine.state.players[index].has_lost
+                && cx.engine.state.players[index]
+                    .declared_commander_object_ids
+                    .contains(&tid)
+        });
+        if is_declared_commander {
+            publish_owner_library_commander_choice(
+                cx.engine,
+                cx.events,
+                cx.parked_stack(),
+                OwnerLibraryPlacementOffer {
+                    object_id: tid,
+                    owner,
+                    zone_change_generation: generation,
+                    placement,
+                    stack_source_departed: false,
+                    spell_label: cx.spell_label,
+                },
+            );
+            return Ok(EffectOutcome::Suspended);
+        }
         if matches!(
             placement,
             LibraryPlacement::OwnerChoiceTopOrBottom
                 | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
         ) {
-            let Some(object) = cx.engine.state.objects.get(&tid) else {
-                return Ok(EffectOutcome::Continue);
-            };
-            let owner = object.owner;
-            let generation = cx
-                .engine
-                .state
-                .zone_change_generation
-                .get(&tid)
-                .copied()
-                .unwrap_or(0);
-            let nonbottom_placement =
-                if placement == LibraryPlacement::OwnerChoiceSecondFromTopOrBottom {
-                    LibraryPlacement::SecondFromTop
-                } else {
-                    LibraryPlacement::Top
-                };
-            let nonbottom_label = if nonbottom_placement == LibraryPlacement::SecondFromTop {
-                "second from the top"
-            } else {
-                "the top"
-            };
-            let prompt = format!(
-                "P{owner}: put {} on {nonbottom_label} or the bottom of its owner's library.",
-                object_display_name(&cx.engine.state, cx.engine.registry, tid)
-            );
-            cx.events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                    rv1::ResolutionChoiceRequired {
-                        resolution_prompt_id: 0,
-                        accepted_permanent_selections: Vec::new(),
-                        variable_mana_contribution: false,
-                        candidate_token_identities: Vec::new(),
-                        candidate_player_ids: Vec::new(),
-                        deciding_player_id: owner,
-                        source_object_id: cx.top.id,
-                        prompt_text: prompt.clone(),
-                        choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
-                        candidate_object_ids: Vec::new(),
-                        candidate_card_ids: Vec::new(),
-                        // Exactly one placement branch is mandatory. These cardinalities also
-                        // drive the ruled client's Decline affordance; 0/0 would falsely present
-                        // this CR 608 choice as optional even though submission rejects decline.
-                        min: 1,
-                        max: 1,
-                        ordered: false,
-                        candidate_names: Vec::new(),
-                        candidate_server_card_ids: Vec::new(),
-                        unique_names: false,
-                        generic_mana_cost: 0,
-                        payment_currently_legal: false,
-                        resolution_branches: vec![
-                            rv1::ResolutionBranchOption {
-                                branch_index: 0,
-                                label: if nonbottom_placement == LibraryPlacement::SecondFromTop {
-                                    "Second from top".into()
-                                } else {
-                                    "Top".into()
-                                },
-                                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                                cost_text: String::new(),
-                                selectable: true,
-                                search_zones: Vec::new(),
-                                presentation: None,
-                            },
-                            rv1::ResolutionBranchOption {
-                                branch_index: 1,
-                                label: "Bottom".into(),
-                                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                                cost_text: String::new(),
-                                selectable: true,
-                                search_zones: Vec::new(),
-                                presentation: None,
-                            },
-                        ],
-                        mana_cost: String::new(),
-                        candidate_selectable: Vec::new(),
-                        public_reveal: None,
-                        candidate_source_zones: Vec::new(),
-                        combat_defender_options: Vec::new(),
-                        waterbend: false,
-                        selection_slots: Vec::new(),
-                        replacement_options: Vec::new(),
-                        selection_alternatives: Vec::new(),
-                    },
-                )),
-            });
-            cx.events.push(ev_log(prompt.clone()));
-            cx.engine.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
-
-                deciding_player: owner,
-                presentation: PendingResolutionPresentation {
-                    source_object_id: cx.top.id,
-                    candidates: Vec::new(),
-                    min: 1,
-                    max: 1,
-                    ordered: false,
-                    prompt,
-                    choice_kind: custom::ChoiceKind::ResolutionBranch,
-                    unique_names: false,
-                },
-                continuation: ResolutionContinuation::OwnerLibraryPlacement {
-                    stack: ParkedStackResolution::new(cx.top.clone()),
+            publish_owner_library_placement_choice(
+                cx.engine,
+                cx.events,
+                cx.parked_stack(),
+                OwnerLibraryPlacementOffer {
                     object_id: tid,
                     owner,
                     zone_change_generation: generation,
-                    nonbottom_placement,
-                    spell_label: cx.spell_label.to_string(),
+                    placement,
+                    stack_source_departed: false,
+                    spell_label: cx.spell_label,
                 },
-            });
+            )?;
             return Ok(EffectOutcome::Suspended);
         }
         move_permanent_to_owners_library(cx.engine, cx.events, tid, placement, cx.spell_label)?;

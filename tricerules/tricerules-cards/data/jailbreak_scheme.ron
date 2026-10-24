@@ -27,30 +27,46 @@
         mode_id: "counter_block",
         presentation: OracleLines([2]),
         linked_cast_cost: Some((group_id: "spree", option_id: "counter_block_cost")),
-        effects: [
-          PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature))),
-          ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_be_blocked: true)),
-        ],
+        effects: [],
+        program: Some((
+          body: (steps: [
+            (id: "put_counter", bind: [], input: None,
+              kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature))))),
+            (id: "cant_be_blocked", bind: [], input: None,
+              kind: Perform(ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_be_blocked: true)))),
+          ], yields: []),
+          target_bindings: [
+            (instruction_id: "put_counter", role: Target, target_group_index: 0),
+            (instruction_id: "cant_be_blocked", role: Target, target_group_index: 0),
+          ],
+        )),
         targeting: Some((groups: [(
           min: 1,
           max: 1,
           prompt: "Choose target creature",
-          effect_indices: [0, 1],
+          effect_indices: [],
         )])),
       ),
       (
         mode_id: "library_choice",
         presentation: OracleLines([3]),
         linked_cast_cost: Some((group_id: "spree", option_id: "library_choice_cost")),
-        effects: [PutInOwnersLibrary(
-          subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature])),
-          placement: OwnerChoiceTopOrBottom,
-        )],
+        effects: [],
+        program: Some((
+          body: (steps: [
+            (id: "put_in_owners_library", bind: [], input: None,
+              kind: Perform(PutInOwnersLibrary(
+                subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature])),
+                placement: OwnerChoiceTopOrBottom,
+              ))),
+          ], yields: []),
+          target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+        )),
         targeting: Some((groups: [(
           min: 1,
           max: 1,
           prompt: "Choose target artifact or creature",
-          effect_indices: [0],
+          effect_indices: [],
         )])),
       ),
     ],

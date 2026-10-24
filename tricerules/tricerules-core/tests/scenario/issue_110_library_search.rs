@@ -3,7 +3,7 @@ use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, AbilitySourceZone, ActivateAbility, ChoiceCandidateSourceZone, ChoiceKind,
-    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
+    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice, TargetRef, TargetRefKind,
 };
 
 fn select_branch(index: u32) -> RuledCommand {
@@ -38,6 +38,14 @@ fn decline_resolution_choice() -> RuledCommand {
             chosen_player_ids: vec![],
         })),
     }
+}
+
+fn target_stack_spell(object_id: u32) -> Vec<TargetRef> {
+    vec![TargetRef {
+        object_id,
+        kind: TargetRefKind::Stack as i32,
+        ..Default::default()
+    }]
 }
 
 fn put_on_top(engine: &mut GameEngine, player: usize, ids: &[&str]) -> Vec<u32> {
@@ -672,4 +680,94 @@ fn tempest_hawk_combat_damage_trigger_searches_an_exact_copy_into_hand() {
     ));
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn riverwalk_technique_modes_keep_owner_placement_and_counter_behavior() {
+    let mut place = GameEngine::new(
+        tricerules_cards::registry::global(),
+        110_901,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["riverwalk_technique"]),
+            deck_with("forest", &["grizzly_bears"]),
+        ]),
+        true,
+    )
+    .expect("Riverwalk placement fixture starts");
+    advance_to_main1_from_game_start(&mut place);
+    let creature = inject_creature_on_battlefield(&mut place, 1, "grizzly_bears");
+    ensure_in_hand(&mut place, 0, "riverwalk_technique");
+    give_mana(
+        &mut place,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&place, 0, "riverwalk_technique");
+    semantic::accepted(
+        &mut place,
+        0,
+        &cast_modal_spell(slot, vec![(0, target_object(creature))]),
+    );
+    semantic::accepted(&mut place, 0, &pass());
+    let parked = semantic::accepted(&mut place, 1, &pass());
+    assert_eq!(
+        find_resolution_choice(&parked)
+            .expect("owner chooses top or bottom")
+            .deciding_player_id,
+        1
+    );
+    semantic::accepted(&mut place, 1, &select_branch(0));
+    assert_eq!(place.state.players[1].library.front(), Some(&creature));
+
+    let mut counter = GameEngine::new(
+        tricerules_cards::registry::global(),
+        110_902,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["riverwalk_technique", "divination"]),
+            deck_with("island", &[]),
+        ]),
+        true,
+    )
+    .expect("Riverwalk counter fixture starts");
+    advance_to_main1_from_game_start(&mut counter);
+    give_mana(
+        &mut counter,
+        0,
+        ManaGift {
+            u: 2,
+            c: 5,
+            ..Default::default()
+        },
+    );
+    ensure_in_hand(&mut counter, 0, "divination");
+    let divination = hand_index_for_card(&counter, 0, "divination");
+    semantic::accepted(&mut counter, 0, &cast_spell(divination, vec![]));
+    let divination_object = counter
+        .state
+        .stack
+        .last()
+        .expect("Divination is on stack")
+        .id;
+    ensure_in_hand(&mut counter, 0, "riverwalk_technique");
+    let slot = hand_index_for_card(&counter, 0, "riverwalk_technique");
+    semantic::accepted(
+        &mut counter,
+        0,
+        &cast_modal_spell(slot, vec![(1, target_stack_spell(divination_object))]),
+    );
+    semantic::accepted(&mut counter, 0, &pass());
+    semantic::accepted(&mut counter, 1, &pass());
+    assert_eq!(
+        counter.state.objects[&divination_object].zone,
+        Zone::Graveyard,
+        "the retained sibling mode counters its target spell"
+    );
 }

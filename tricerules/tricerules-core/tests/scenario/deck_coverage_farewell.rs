@@ -227,13 +227,26 @@ fn farewell_freezes_current_type_cohort_anthem_lki_counters_and_attached_generat
         .unwrap()
         .counters
         .insert(tricerules_cards::CounterKind::Quest, 2);
+    let bear_generation = engine
+        .state
+        .zone_change_generation
+        .get(&bear)
+        .copied()
+        .unwrap_or(0);
+    let aura_generation = engine
+        .state
+        .zone_change_generation
+        .get(&aura)
+        .copied()
+        .unwrap_or(0);
+    let bear_owner = engine.state.objects[&bear].owner;
     cast(&mut engine, &[0]);
     for oid in [source, bear, aura] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Exile);
     }
     let diagnostic = engine.diagnostic_snapshot().unwrap();
-    let key = serde_json::json!([bear, "0"]);
-    let lki = |field: &str| {
+    let lki = |field: &str, object_id: u32, generation: u64| {
+        let key = serde_json::json!([object_id, generation.to_string()]);
         diagnostic["state"][field]["entries"]
             .as_array()
             .unwrap()
@@ -243,16 +256,34 @@ fn farewell_freezes_current_type_cohort_anthem_lki_counters_and_attached_generat
             .clone()
     };
     assert_eq!(
-        lki("last_known_pt_by_generation"),
+        lki("last_known_pt_by_generation", bear, bear_generation),
         serde_json::json!(["5", "5"])
     );
-    assert!(engine.state.last_known_types_by_generation[&(bear, 0)]
-        .iter()
-        .any(|t| t == "Artifact"));
-    assert_eq!(lki("last_known_counters_by_generation")["Quest"], 2);
+    assert!(
+        engine.state.last_known_types_by_generation[&(bear, bear_generation)]
+            .iter()
+            .any(|t| t == "Artifact")
+    );
     assert_eq!(
-        engine.state.last_known_attached_object_by_generation[&(aura, 0)],
-        (bear, 0)
+        lki("last_known_counters_by_generation", bear, bear_generation)["Quest"],
+        2
+    );
+    let attached_object = lki(
+        "last_known_attached_object_by_generation",
+        aura,
+        aura_generation,
+    );
+    assert_eq!(
+        attached_object["object_id"],
+        serde_json::to_value(bear).unwrap()
+    );
+    assert_eq!(
+        attached_object["zone_change_generation"],
+        serde_json::json!(bear_generation.to_string())
+    );
+    assert_eq!(
+        attached_object["owner"],
+        serde_json::to_value(bear_owner).unwrap()
     );
     assert!(engine.state.objects[&bear].counters.is_empty());
     assert!(engine.state.objects[&aura].attached_to.is_none());

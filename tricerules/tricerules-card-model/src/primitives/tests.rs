@@ -5983,6 +5983,38 @@ fn program_fixture(body: &str) -> String {
     )
 }
 
+#[test]
+fn program_admits_owner_library_placement_for_an_explicit_target_role() {
+    let definition = r#"(id: "program_owner_library_fixture", name: "Program Owner Library Fixture",
+        face_id: "program_owner_library_fixture", mana_cost: "{1}{U}", types: ["Instant"],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target creature", effect_indices: [])])),
+        spell_program: Some((body: (steps: [
+            (id: "place", bind: [], input: None,
+                kind: Perform(PutInOwnersLibrary(
+                    subject: Chosen((kind: Creature)), placement: OwnerChoiceTopOrBottom)))
+        ], yields: []), target_bindings: [
+            (instruction_id: "place", role: Subject, target_group_index: 0)
+        ])))"#;
+
+    crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("the exact target-bound owner-library operation should compile");
+}
+
+#[test]
+fn flat_owner_library_placement_requires_an_authored_program() {
+    let effects = ron::from_str::<Vec<super::SpellEffectKind>>(
+        r#"[PutInOwnersLibrary(
+            subject: Chosen((kind: Creature)), placement: Top,
+        )]"#,
+    )
+    .expect("legacy owner-library effect parses before admission is checked");
+    let error = super::SpellEffectKind::validate_list(&effects)
+        .expect_err("owner-library movement must use the typed Program path");
+    assert!(error.contains("PutInOwnersLibrary"), "{error}");
+    assert!(error.contains("authored Program"), "{error}");
+}
+
 fn kyoshi_battle_fan_program_owner() -> crate::ProgramOwnerId {
     crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
         card_id: "kyoshi_battle_fan".into(),

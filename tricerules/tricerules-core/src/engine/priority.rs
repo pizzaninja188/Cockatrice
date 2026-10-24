@@ -468,6 +468,15 @@ impl GameEngine {
                     // and run its remaining cleanup and parent tail.
                     preserve = true;
                 }
+                ResolutionContinuation::OwnerLibraryPlacement {
+                    stack_source_departed,
+                    ..
+                } => {
+                    // The selected object is still validated independently. Preserve only this
+                    // begun operation and its cursor when its exact source/controller departs.
+                    *stack_source_departed = true;
+                    preserve = true;
+                }
                 ResolutionContinuation::ProgramChoose { .. } => {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
@@ -1124,6 +1133,7 @@ impl GameEngine {
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
         self.refresh_departed_ward_payment(events)?;
+        self.refresh_owner_library_placement_departure(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }

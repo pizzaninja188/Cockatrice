@@ -721,6 +721,28 @@ fn spell_hand_discard_target_group(
     Ok(reference.target_group_index)
 }
 
+fn spell_chosen_single_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+    role: ProgramTargetRole,
+    operation: &str,
+) -> Result<(u32, u32), String> {
+    let reference = single_instruction_target_binding(instruction_id, references, role, operation)?;
+    let targeting =
+        targeting.ok_or_else(|| format!("{operation} requires an authored target group"))?;
+    let group = targeting
+        .groups
+        .get(reference.target_group_index as usize)
+        .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
+    if group.min != 1 || group.max != 1 {
+        return Err(format!(
+            "{operation} requires one required single-target group"
+        ));
+    }
+    Ok((reference.target_group_index, group.max))
+}
+
 fn spell_exile_target_group(
     instruction_id: &str,
     references: &[ProgramTargetReference],
@@ -1037,6 +1059,27 @@ fn authored_target_role_index(
                 subject: EffectSubject::Chosen(_),
             },
             ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(_),
+                ..
+            },
+            ProgramTargetRole::Subject,
+        )
+        | (
+            SpellEffectKind::PutCounters {
+                subject: EffectSubject::Chosen(_),
+                ..
+            },
+            ProgramTargetRole::Target,
+        )
+        | (
+            SpellEffectKind::ApplyCombatRestriction {
+                scope: super::CombatRestrictionScope::Chosen(_),
+                ..
+            },
+            ProgramTargetRole::Target,
         )
         | (
             SpellEffectKind::Destroy {
@@ -1473,6 +1516,51 @@ impl Compiler<'_> {
                                         &instruction.id,
                                         &self.target_references,
                                     )?)
+                                }
+                                SpellEffectKind::PutInOwnersLibrary {
+                                    subject: EffectSubject::Chosen(_),
+                                    ..
+                                } => {
+                                    let (group_index, group_max) =
+                                        spell_chosen_single_target_group(
+                                            &instruction.id,
+                                            &self.target_references,
+                                            self.targeting,
+                                            ProgramTargetRole::Subject,
+                                            "PutInOwnersLibrary",
+                                        )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
+                                SpellEffectKind::PutCounters {
+                                    subject: EffectSubject::Chosen(_),
+                                    ..
+                                } => {
+                                    let (group_index, group_max) =
+                                        spell_chosen_single_target_group(
+                                            &instruction.id,
+                                            &self.target_references,
+                                            self.targeting,
+                                            ProgramTargetRole::Target,
+                                            "PutCounters",
+                                        )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
+                                }
+                                SpellEffectKind::ApplyCombatRestriction {
+                                    scope: super::CombatRestrictionScope::Chosen(_),
+                                    ..
+                                } => {
+                                    let (group_index, group_max) =
+                                        spell_chosen_single_target_group(
+                                            &instruction.id,
+                                            &self.target_references,
+                                            self.targeting,
+                                            ProgramTargetRole::Target,
+                                            "ApplyCombatRestriction",
+                                        )?;
+                                    target_group_max = Some(group_max);
+                                    Some(group_index)
                                 }
                                 _ => None,
                             }
@@ -3458,6 +3546,29 @@ fn validate_and_result_types(
                 target_group_index,
             }])
         }
+        SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        } if context == EffectContext::Spell => {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err(
+                    "PutInOwnersLibrary Chosen requires one explicit single-target binding".into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "PutInOwnersLibrary target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::AttachedObject,
+            placement: super::LibraryPlacement::Shuffle,
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::PutInOwnersLibrary { .. } => Err(
+            "PutInOwnersLibrary in a resolution program supports a bound single chosen target, or an ability-owned AttachedObject Shuffle".into(),
+        ),
         SpellEffectKind::Destroy { .. } if context == EffectContext::Spell => Err(
             "spell_program Destroy requires a chosen permanent target with one explicit Subject binding".into(),
         ),
@@ -3747,6 +3858,15 @@ fn validate_and_result_types(
         SpellEffectKind::SearchLibrary { .. } => {
             Err("SearchLibrary in spell_program requires typed retained selection_bounds".into())
         }
+        SpellEffectKind::LibraryPartition {
+            count: 1,
+            top_min: 0,
+            top_max: None,
+            kind: super::LibraryPartitionKind::Surveil,
+        } if context == EffectContext::Spell => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::RevealCohort => Ok(vec![ResultType::RevealedLibraryCohort]),
         SpellEffectKind::ChooseCohortPartition { chooser, selection } => {
             let PlayerRecipient::TargetedPlayer { kind, .. } = chooser else {
@@ -4011,6 +4131,15 @@ fn validate_and_result_types(
             counter.validate()?;
             Ok(Vec::new())
         }
+        SpellEffectKind::PutCounters {
+            counter: super::CounterKind::PlusOnePlusOne,
+            count: Amount::Fixed(1),
+            subject: EffectSubject::Chosen(filter),
+        } if context == EffectContext::Spell && is_exact_creature_target_filter(filter) => {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "PutCounters target")?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::RemoveAllCounters {
             counter,
             subject: EffectSubject::Source,
@@ -4164,6 +4293,21 @@ fn validate_and_result_types(
                 }) =>
         {
             effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::ApplyCombatRestriction {
+            scope: super::CombatRestrictionScope::Chosen(filter),
+            restriction,
+        } if context == EffectContext::Spell
+            && is_exact_creature_target_filter(filter)
+            && restriction
+                == &(super::CombatRestriction {
+                    cant_be_blocked: true,
+                    ..Default::default()
+                }) =>
+        {
+            effect.validate(context)?;
+            validate_program_target_filter(filter, "ApplyCombatRestriction target")?;
             Ok(Vec::new())
         }
         SpellEffectKind::ReturnTriggeredCard {

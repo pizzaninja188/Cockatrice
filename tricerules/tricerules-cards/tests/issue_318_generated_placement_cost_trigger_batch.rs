@@ -7,12 +7,12 @@
 //! draw triggers.
 
 use tricerules_cards::primitives::{
-    CombatRole, EffectSubject, LibraryPlacement, SpellCostModifier, TargetFilter, TargetGroupDef,
-    TargetMatchFilter, TargetSchema,
+    CombatRole, CompiledInstructionKind, EffectSubject, LibraryPlacement, SpellCostModifier,
+    TargetFilter, TargetGroupDef, TargetMatchFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, Color, Layout, ManaCost,
-    SpellEffectKind, TriggerCondition,
+    ProgramOwnerId, SpellEffectKind, TriggerCondition,
 };
 
 fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &TargetGroupDef {
@@ -54,13 +54,23 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
     assert_eq!(face.colors(), vec![Color::Blue]);
     assert!(face.cost_modifiers.is_empty());
     assert!(face.triggered_abilities.is_empty());
-    assert_eq!(
-        face.spell_effect,
-        [SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-            placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-        }]
-    );
+    assert!(face.spell_effect.is_empty());
+    let program = tricerules_cards::registry::global()
+        .compiled_program_for_owner(&ProgramOwnerId::face(
+            "misleading_motes",
+            face.face_id.clone(),
+        ))
+        .expect("Misleading Motes has a typed owner-choice Program");
+    assert_eq!(program.target_bindings.len(), 1);
+    assert!(matches!(
+        program.body.steps.as_slice(),
+        [step] if matches!(&step.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
+                    subject: EffectSubject::Chosen(filter),
+                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+                } if **filter == TargetFilter::default_creature()))
+    ));
     let targeting = face
         .targeting
         .as_ref()
@@ -68,10 +78,9 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.prompt, "Choose target creature");
-    assert_eq!(group.effect_indices, [0]);
+    assert!(group.effect_indices.is_empty());
     assert!(!group.same_graveyard);
     assert!(group.distinct_from.is_empty());
-    assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
 }
 
 #[test]
@@ -95,13 +104,20 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
             }),
         }]
     );
-    assert_eq!(
-        face.spell_effect,
-        [SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-            placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-        }]
-    );
+    assert!(face.spell_effect.is_empty());
+    let program = tricerules_cards::registry::global()
+        .compiled_program_for_owner(&ProgramOwnerId::face("run_behind", face.face_id.clone()))
+        .expect("Run Behind has a typed owner-choice Program");
+    assert_eq!(program.target_bindings.len(), 1);
+    assert!(matches!(
+        program.body.steps.as_slice(),
+        [step] if matches!(&step.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
+                    subject: EffectSubject::Chosen(filter),
+                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+                } if **filter == TargetFilter::default_creature()))
+    ));
     let targeting = face
         .targeting
         .as_ref()
@@ -109,8 +125,7 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.prompt, "Choose target creature");
-    assert_eq!(group.effect_indices, [0]);
-    assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
+    assert!(group.effect_indices.is_empty());
 }
 
 #[test]

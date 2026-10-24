@@ -6,11 +6,18 @@
   face_id: "lost_days",
   mana_cost: "{4}{U}",
   types: ["Instant", "Lesson"],
-  spell_effect: [
-    PutInOwnersLibrary(
-      subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment])),
-      placement: OwnerChoiceSecondFromTopOrBottom,
-    ),
-    CreateTokens(token: "clue", count: 1),
-  ],
+  spell_effect: [],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library", bind: [], input: None,
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment])),
+          placement: OwnerChoiceSecondFromTopOrBottom,
+        ))),
+      (id: "create_clue", bind: [], input: None,
+        kind: Perform(CreateTokens(token: "clue", count: 1))),
+    ], yields: []),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature or enchantment", effect_indices: [])])),
 )

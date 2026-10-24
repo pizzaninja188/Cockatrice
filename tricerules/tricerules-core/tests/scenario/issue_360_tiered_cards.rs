@@ -8,6 +8,7 @@ use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
+use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, CastCostGroupSelection, CastMethod, CastSpell, ResolutionChoiceDecision,
     SelectedSpellMode, SubmitResolutionChoice,
@@ -99,6 +100,48 @@ fn ice_magic_blizzara_requires_the_creature_owner_to_choose_placement() {
         .expect("owner chooses bottom");
     assert_eq!(e.state.objects[&bear].zone, Zone::Library);
     assert_eq!(e.state.players[1].library.back(), Some(&bear));
+}
+
+#[test]
+fn ice_magic_keeps_blizzard_and_blizzaga_tiered_siblings() {
+    let mut blizzard = engine(360_009, &["ice_magic"], &["grizzly_bears"]);
+    let target = inject_creature_on_battlefield(&mut blizzard, 1, "grizzly_bears");
+    ensure_card_in_hand(&mut blizzard, 0, "ice_magic");
+    let slot = hand_index_for_card(&blizzard, 0, "ice_magic");
+    semantic::accepted(
+        &mut blizzard,
+        0,
+        &cast_tier(slot, 0, 0, target_object(target)),
+    );
+    semantic::complete(&mut blizzard, 8, |_| None).require_exercised();
+    assert_eq!(blizzard.state.objects[&target].zone, Zone::Hand);
+    assert!(blizzard.state.players[1].hand.contains(&target));
+
+    let mut blizzaga = engine(360_010, &["ice_magic"], &["grizzly_bears"]);
+    let target = inject_creature_on_battlefield(&mut blizzaga, 1, "grizzly_bears");
+    ensure_card_in_hand(&mut blizzaga, 0, "ice_magic");
+    let slot = hand_index_for_card(&blizzaga, 0, "ice_magic");
+    semantic::accepted(
+        &mut blizzaga,
+        0,
+        &cast_tier(slot, 2, 2, target_object(target)),
+    );
+    semantic::accepted(&mut blizzaga, 0, &pass());
+    let completion = semantic::accepted(&mut blizzaga, 1, &pass());
+    assert_eq!(blizzaga.state.objects[&target].zone, Zone::Library);
+    assert!(blizzaga.state.players[1].library.contains(&target));
+    assert_eq!(
+        completion
+            .events
+            .iter()
+            .filter(|event| matches!(
+                &event.ev,
+                Some(Ev::Log(log)) if log.text == "P1 shuffles their library."
+            ))
+            .count(),
+        1,
+        "Blizzaga shuffles the exact target owner's library once"
+    );
 }
 
 #[test]

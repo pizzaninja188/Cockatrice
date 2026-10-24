@@ -34,15 +34,15 @@
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::PutCounters",
-      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+      "typed_path": "/faces/0/modal_spell/modes/0/program/body/steps/0/kind/Perform/PutCounters"
     },
     {
       "symbol": "SpellEffectKind::ApplyCombatRestriction",
-      "typed_path": "/faces/0/modal_spell/modes/0/effects/1"
+      "typed_path": "/faces/0/modal_spell/modes/0/program/body/steps/1/kind/Perform/ApplyCombatRestriction"
     },
     {
       "symbol": "SpellEffectKind::PutInOwnersLibrary",
-      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+      "typed_path": "/faces/0/modal_spell/modes/1/program/body/steps/0/kind/Perform/PutInOwnersLibrary"
     }
   ],
   "tokens": [],
