@@ -20,6 +20,16 @@ the owning frame. Authored-owner conversions include Calamitous Tide's face, Agn
 activation, Uthros Scanship's ETB, all three Three Steps Ahead modes, and the exact Recruit
 generator pair for Long Lake Nuisance and Patient Instructor. Broader operations and contexts remain
 migration targets.
+
+The bounded 2026-10-24 Discard→Draw increment moves Flux, Tolarian Winds, and Windfall to typed
+Programs. Each binds the completed `DiscardResult` and consumes it through the typed result slot:
+Flux draws each player's committed discard count, Tolarian Winds draws the controller's count, and
+Windfall draws the greatest completed player cohort. The result remains available across intervening
+Program instructions, including a suspended draw replacement. No flat Discard→Draw card consumer
+remains, and the legacy flat-list admission path now requires PreviousEffect card-result counts to
+use a bound Program input. Shared typed result-count evaluation remains for Gorging Vulture and
+Gerrard's Verdict. This increment adds no receipt type, identity-bearing payload, protocol, relay, or
+client behavior.
 Resolution prompt IDs are scoped to the deciding player for both legacy and Program choices; answer
 validation checks the actor and that actor's prompt identity. This does not widen accepted syntax.
 

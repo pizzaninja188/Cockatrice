@@ -1,18 +1,23 @@
 // Oracle and rulings checked 2026-09-30: https://scryfall.com/card/7ed/105/tolarian-winds
-// The draw count is the exact discard result cohort, so only cards actually discarded are counted.
+// The draw count consumes the exact committed, non-identifying DiscardResult.
 (
   id: "tolarian_winds",
   name: "Tolarian Winds",
   face_id: "tolarian_winds",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_effect: [
-    Discard(who: Controller, quantity: All),
-    Draw(count: Count(CardsMatchingResult(filter: (
-      source: PreviousEffect,
-      action: Discard,
-      players: Controller,
-      card_type: None,
-    )))),
-  ],
+  spell_program: Some((body: (
+    steps: [
+      (id: "discard", bind: ["discarded"],
+        kind: Perform(Discard(who: Controller, quantity: All))),
+      (id: "draw", input: Some("discarded"),
+        kind: Perform(Draw(who: Controller, count: Count(CardsMatchingResult(filter: (
+          source: PreviousEffect,
+          action: Discard,
+          players: Controller,
+          card_type: None,
+        )))))),
+    ],
+    yields: [],
+  ))),
 )

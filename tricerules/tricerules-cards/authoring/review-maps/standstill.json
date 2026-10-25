@@ -100,8 +100,8 @@
       "covers": "named Program CardResultCount accepts bound Source-sacrifice and Mill cohorts and rejects missing, wrong-type, or out-of-scope results"
     },
     {
-      "test": "mechanic_registry::issue_512_standstill::previous_effect_sacrifice_amount_requires_an_immediate_compatible_producer",
-      "covers": "CountExpression CardsMatchingResult PreviousEffect sacrifice Amount reads the immediately preceding SacrificeAll cohort and rejects a wrong action or missing producer"
+      "test": "mechanic_registry::issue_512_standstill::flat_previous_effect_sacrifice_count_requires_a_bound_program_input",
+      "covers": "flat PreviousEffect sacrifice result-count inputs are rejected even after a compatible SacrificeAll effect; Standstill itself continues to use its named Program result"
     }
   ],
   "complete_definition_review_confirmed": true

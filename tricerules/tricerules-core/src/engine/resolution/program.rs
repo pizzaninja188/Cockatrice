@@ -1339,6 +1339,9 @@ impl GameEngine {
                             ProgramValue::CardResultCohort(cohort) => {
                                 previous.cards = cohort.cards.clone();
                             }
+                            ProgramValue::DiscardResult(receipt) => {
+                                previous.program_discard_result = Some(receipt.clone());
+                            }
                             ProgramValue::TokenCopyBatch(objects) => {
                                 previous.produced_objects = objects.clone();
                                 previous.produced_object_provenance = Some(

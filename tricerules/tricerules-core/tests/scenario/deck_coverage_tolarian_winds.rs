@@ -96,3 +96,49 @@ fn tolarian_winds_does_not_count_itself_and_does_nothing_with_no_hand_cards() {
     assert!(engine.state.players[0].hand.is_empty());
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
 }
+
+#[test]
+fn tolarian_winds_binds_its_controller_discard_result_to_the_draw() {
+    use tricerules_cards::primitives::{
+        Amount, CardResultAction, CardResultFilter, CardResultSource, CountExpression,
+        DiscardQuantity, InstructionKind, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+    };
+
+    let face = tricerules_cards::registry::global()
+        .get(TOLARIAN_WINDS)
+        .expect("Tolarian Winds is admitted as a complete card")
+        .primary_face();
+    assert!(face.spell_effect.is_empty());
+    let steps = &face
+        .spell_program
+        .as_ref()
+        .expect("Tolarian Winds uses its typed ordered spell Program")
+        .body
+        .steps;
+    assert_eq!(steps.len(), 2);
+    assert!(matches!(
+        &steps[0].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: DiscardQuantity::All,
+            })
+    ));
+    assert_eq!(steps[0].bind, ["discarded"]);
+    assert_eq!(steps[1].input.as_deref(), Some("discarded"));
+    assert!(matches!(
+        &steps[1].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Count(CountExpression::CardsMatchingResult {
+                    filter: CardResultFilter {
+                        source: CardResultSource::PreviousEffect,
+                        action: CardResultAction::Discard,
+                        players: RelativePlayerSet::Controller,
+                        card_type: None,
+                    },
+                }),
+            })
+    ));
+}

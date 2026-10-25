@@ -776,7 +776,7 @@ mod tests {
     }
 
     #[test]
-    fn conditional_card_result_consumers_keep_outer_context_validation() {
+    fn flat_conditional_card_result_inputs_require_a_program_slot() {
         let make = |prefix: &str, source: &str| {
             format!(
                 r#"(
@@ -792,22 +792,21 @@ mod tests {
         )"#
             )
         };
-        for prefix in ["", "GainLife(amount: 1),"] {
+        for prefix in [
+            "",
+            "GainLife(amount: 1),",
+            "Discard(who: EachPlayer, quantity: AnyNumber),",
+        ] {
             let card = make(prefix, "PreviousEffect");
-            let error = super::from_chunks(&[&card]).expect_err("missing compatible predecessor");
+            let error = super::from_chunks(&[&card])
+                .expect_err("flat PreviousEffect inputs require a bound Program slot");
             assert!(
                 error
                     .to_string()
-                    .contains("immediately preceding compatible"),
+                    .contains("PreviousEffect card result counts require a bound Program input"),
                 "{error}"
             );
         }
-        let card = make(
-            "Discard(who: EachPlayer, quantity: AnyNumber),",
-            "PreviousEffect",
-        );
-        super::from_chunks(&[&card])
-            .expect("outer discard result remains available inside the conditional");
         let card = make("", "Payment");
         let error = super::from_chunks(&[&card]).expect_err("missing payment cost");
         assert!(
@@ -817,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn previous_card_result_rejects_an_incompatible_preceding_effect() {
+    fn flat_previous_card_result_requires_a_bound_program_input() {
         let card = r#"(
             id: "bad_previous_result",
             name: "Bad Previous Result",
@@ -835,10 +834,11 @@ mod tests {
             ],
         )"#;
 
-        let error = super::from_chunks(&[card]).expect_err("invalid result dependency");
+        let error = super::from_chunks(&[card])
+            .expect_err("flat PreviousEffect inputs require a bound Program slot");
         assert!(error
             .to_string()
-            .contains("immediately preceding compatible"));
+            .contains("PreviousEffect card result counts require a bound Program input"));
     }
 
     #[test]

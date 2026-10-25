@@ -5,13 +5,36 @@
       "face_id": "flux",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1"]
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
     },
     {
       "face_id": "flux",
       "start_line": 2,
       "end_line": 2,
-      "typed_paths": ["/faces/0/spell_effect/2"]
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "CountExpression::CardsMatchingResultForAffectedPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/CardsMatchingResultForAffectedPlayer"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform/Draw"
     }
   ],
   "tokens": [],

@@ -7,23 +7,23 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/spell_effect/0",
-        "/faces/0/spell_effect/1"
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
       ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::Discard",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Discard"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/1"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
     },
     {
       "symbol": "CountExpression::CardsMatchingResult",
-      "typed_path": "/faces/0/spell_effect/1/Draw/count/Count/CardsMatchingResult"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/CardsMatchingResult"
     }
   ],
   "tokens": [],
@@ -35,6 +35,10 @@
     {
       "test": "scenario deck_coverage_tolarian_winds::tolarian_winds_does_not_count_itself_and_does_nothing_with_no_hand_cards",
       "covers": "the actual card resolves with no other card in hand, moves to the graveyard, and draws zero cards"
+    },
+    {
+      "test": "scenario deck_coverage_tolarian_winds::tolarian_winds_binds_its_controller_discard_result_to_the_draw",
+      "covers": "the controller All discard is bound as DiscardResult and explicitly consumed by the unfiltered controller Draw count"
     }
   ],
   "complete_definition_review_confirmed": true

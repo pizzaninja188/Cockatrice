@@ -4176,59 +4176,6 @@ impl SpellEffectKind {
             }
         }
 
-        fn produces_card_result(effect: &SpellEffectKind, action: CardResultAction) -> bool {
-            if let SpellEffectKind::Conditional { effect, .. }
-            | SpellEffectKind::ConditionalCastCost { effect, .. } = effect
-            {
-                return produces_card_result(effect, action);
-            }
-            match action {
-                CardResultAction::Discard => matches!(
-                    effect,
-                    SpellEffectKind::Discard { .. }
-                        | SpellEffectKind::ChooseHandCards {
-                            action: HandCardAction::Discard,
-                            ..
-                        }
-                ),
-                CardResultAction::Destroy => matches!(
-                    effect,
-                    SpellEffectKind::Destroy { .. }
-                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
-                ),
-                CardResultAction::Exile => matches!(
-                    effect,
-                    SpellEffectKind::ChooseHandCards {
-                        action: HandCardAction::Exile,
-                        ..
-                    } | SpellEffectKind::ExileTopWithPlayPermission { .. }
-                        | SpellEffectKind::ExileWithOwnerCastPermission { .. }
-                        | SpellEffectKind::ExileGraveyards { .. }
-                        | SpellEffectKind::MoveGraveyardCards {
-                            destination: GraveyardDestination::Exile,
-                            ..
-                        }
-                ),
-                CardResultAction::PutOnLibraryBottom => false,
-                CardResultAction::ChooseLinkedExiledCard => {
-                    matches!(effect, SpellEffectKind::ChooseLinkedExiledCard { .. })
-                }
-                CardResultAction::Sacrifice => {
-                    matches!(
-                        effect,
-                        SpellEffectKind::TargetPlayerSacrifices { .. }
-                            | SpellEffectKind::Sacrifice { .. }
-                            | SpellEffectKind::SacrificeAll { .. }
-                    )
-                }
-                CardResultAction::Mill => matches!(
-                    effect,
-                    SpellEffectKind::Mill { .. } | SpellEffectKind::MillTargetPlayer { .. }
-                ),
-                CardResultAction::Tap => false,
-            }
-        }
-
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
         // an effect that declares an object target (Reanimate: `MoveGraveyardCards`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
@@ -4275,6 +4222,14 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if amount
+                .and_then(Amount::card_result_filter)
+                .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
+            {
+                return Err(
+                    "PreviousEffect card result counts require a bound Program input".into(),
+                );
+            }
             if let SpellEffectKind::ReturnOtherLinkedExiledCards {
                 linked_exile_id: return_link,
                 ..
@@ -4415,16 +4370,6 @@ impl SpellEffectKind {
                 {
                     return Err(
                         "PreviousEffectObject condition requires an immediately preceding compatible single-object producer"
-                            .into(),
-                    );
-                }
-            }
-            if let Some(filter) = amount.and_then(Amount::card_result_filter) {
-                if filter.source == CardResultSource::PreviousEffect
-                    && !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
-                {
-                    return Err(
-                        "PreviousEffect card result requires an immediately preceding compatible card-moving effect"
                             .into(),
                     );
                 }

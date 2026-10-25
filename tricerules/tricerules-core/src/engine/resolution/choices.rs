@@ -1063,6 +1063,9 @@ pub(in crate::engine) fn card_result_count(
     previous_result: &crate::state::EffectResult,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
+    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+        return program_discard_result_count(&engine.state, top.controller, receipt, filter, None);
+    }
     card_result_count_from_cohorts(
         &engine.state,
         top.controller,
@@ -1079,6 +1082,15 @@ pub(in crate::engine) fn card_result_count_for_player(
     filter: &tricerules_card_model::primitives::CardResultFilter,
     player: crate::state::PlayerId,
 ) -> u32 {
+    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+        return program_discard_result_count(
+            &engine.state,
+            top.controller,
+            receipt,
+            filter,
+            Some(player),
+        );
+    }
     matching_card_result_entries(
         &engine.state,
         top.controller,
@@ -1096,6 +1108,9 @@ pub(in crate::engine) fn card_result_maximum(
     previous_result: &crate::state::EffectResult,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
+    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+        return program_discard_result_maximum(&engine.state, top.controller, receipt, filter);
+    }
     card_result_maximum_from_cohorts(
         &engine.state,
         top.controller,
@@ -1116,6 +1131,73 @@ fn card_result_maximum_from_cohorts(
     for entry in
         matching_card_result_entries(state, controller, payment_result, previous_result, filter)
     {
+        let count = counts.entry(entry.affected_player).or_default();
+        *count = count.saturating_add(1);
+    }
+    counts.into_values().max().unwrap_or(0)
+}
+
+fn program_discard_result_count(
+    state: &crate::state::GameState,
+    controller: i32,
+    receipt: &crate::state::ProgramDiscardResult,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
+    affected_player: Option<crate::state::PlayerId>,
+) -> u32 {
+    if filter.source != tricerules_card_model::primitives::CardResultSource::PreviousEffect
+        || filter.action != tricerules_card_model::primitives::CardResultAction::Discard
+    {
+        return 0;
+    }
+    receipt
+        .cards
+        .iter()
+        .filter(|entry| {
+            crate::engine::history::relative_player_set_contains(
+                state,
+                filter.players,
+                controller,
+                entry.affected_player,
+            ) && affected_player.is_none_or(|player| entry.affected_player == player)
+        })
+        .filter(|entry| match (&entry.type_knowledge, filter.card_type) {
+            (_, None) => true,
+            (crate::state::DiscardCardTypeKnowledge::Known(types), Some(card_type)) => {
+                types.contains(&card_type)
+            }
+            (crate::state::DiscardCardTypeKnowledge::UnknownHidden, Some(_)) => false,
+        })
+        .count()
+        .min(u32::MAX as usize) as u32
+}
+
+fn program_discard_result_maximum(
+    state: &crate::state::GameState,
+    controller: i32,
+    receipt: &crate::state::ProgramDiscardResult,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
+) -> u32 {
+    if filter.source != tricerules_card_model::primitives::CardResultSource::PreviousEffect
+        || filter.action != tricerules_card_model::primitives::CardResultAction::Discard
+    {
+        return 0;
+    }
+    let mut counts = std::collections::BTreeMap::<i32, u32>::new();
+    for entry in &receipt.cards {
+        if !crate::engine::history::relative_player_set_contains(
+            state,
+            filter.players,
+            controller,
+            entry.affected_player,
+        ) || match (&entry.type_knowledge, filter.card_type) {
+            (_, None) => false,
+            (crate::state::DiscardCardTypeKnowledge::Known(types), Some(card_type)) => {
+                !types.contains(&card_type)
+            }
+            (crate::state::DiscardCardTypeKnowledge::UnknownHidden, Some(_)) => true,
+        } {
+            continue;
+        }
         let count = counts.entry(entry.affected_player).or_default();
         *count = count.saturating_add(1);
     }

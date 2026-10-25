@@ -4,8 +4,9 @@
 //! stable slots and requires every branch to declare the values it yields to its parent.
 //! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
 //! finite authored role signatures compiled below, while the remaining supported instructions
-//! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
-//! literals. `If` admits the global `Void` predicate and, on ability programs, a recursive
+//! are controller-scoped spell/ability sequences. Draw admits fixed literals and explicitly
+//! bound non-identifying counts from a Program discard result. Private hand-choice amounts remain
+//! fixed literals. `If` admits the global `Void` predicate and, on ability programs, a recursive
 //! source-owned condition family built from bounded `SourceCounterCount`, exact live
 //! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. Ability Choose
 //! requirements additionally admit one exact live controller creature counter-count profile;
@@ -1552,6 +1553,7 @@ impl Compiler<'_> {
                         steps.last(),
                         &self.slots,
                     )?;
+                    validate_program_draw_result_count_input(effect, input, &self.slots)?;
                     validate_previous_mill_mana_value_sum_input(
                         effect,
                         input,
@@ -2696,6 +2698,83 @@ fn program_gain_life_result_count_profile(amount: &Amount) -> Option<(&CardResul
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProgramDrawResultCount {
+    Controller,
+    ForAffectedPlayer,
+    MaximumPerPlayer,
+}
+
+fn program_draw_result_count_profile(
+    amount: &Amount,
+) -> Option<(&CardResultFilter, ProgramDrawResultCount)> {
+    let Amount::Count(expression) = amount else {
+        return None;
+    };
+    match expression {
+        CountExpression::CardsMatchingResult { filter } => {
+            Some((filter, ProgramDrawResultCount::Controller))
+        }
+        CountExpression::CardsMatchingResultForAffectedPlayer { filter } => {
+            Some((filter, ProgramDrawResultCount::ForAffectedPlayer))
+        }
+        CountExpression::MaximumCardsMatchingResult { filter } => {
+            Some((filter, ProgramDrawResultCount::MaximumPerPlayer))
+        }
+        _ => None,
+    }
+}
+
+fn validate_program_draw_result_count_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    let EffectOp::Draw { who, count } = effect else {
+        return Ok(());
+    };
+    if count.card_result_filter().is_none() {
+        return Ok(());
+    }
+    let (filter, profile) = program_draw_result_count_profile(count).ok_or_else(|| {
+        "Program Draw result counts support only a direct count, an affected-player count, or a per-player maximum".to_string()
+    })?;
+    let input = input.ok_or_else(|| {
+        "Program Draw result count requires an explicitly bound DiscardResult input".to_string()
+    })?;
+    let slot = slots
+        .get(input.0 as usize)
+        .ok_or_else(|| "Program Draw DiscardResult input slot is unavailable".to_string())?;
+    let (expected_who, expected_players) = match profile {
+        ProgramDrawResultCount::Controller => {
+            (PlayerRecipient::Controller, RelativePlayerSet::Controller)
+        }
+        ProgramDrawResultCount::ForAffectedPlayer | ProgramDrawResultCount::MaximumPerPlayer => {
+            (PlayerRecipient::EachPlayer, RelativePlayerSet::All)
+        }
+    };
+    let matching_discard = matches!(
+        &slot.result_type,
+        ResultType::DiscardResult {
+            who: producer_who,
+            cardinality: Cardinality { min: 0, .. },
+            ..
+        } if *producer_who == expected_who
+    );
+    if filter.source != CardResultSource::PreviousEffect
+        || filter.action != CardResultAction::Discard
+        || filter.players != expected_players
+        || filter.card_type.is_some()
+        || *who != expected_who
+        || !matching_discard
+    {
+        return Err(
+            "Program Draw result count must use an unfiltered DiscardResult with the matching producer, player set, and Draw recipient".into(),
+        );
+    }
+    count.validate()
+}
+
 fn validate_program_gain_life_result_count_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
@@ -3004,6 +3083,9 @@ fn compile_input(
         EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
             Some("CardResultCohort")
         }
+        EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
+            Some("DiscardResult")
+        }
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
         EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
@@ -3064,6 +3146,9 @@ fn compile_input(
                             ..
                         }
                     )
+                }
+                EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
+                    matches!(actual.result_type, ResultType::DiscardResult { .. })
                 }
                 EffectOp::RevealCohort => {
                     matches!(actual.result_type, ResultType::FoundLibraryCohort)
@@ -3841,9 +3926,23 @@ fn validate_and_result_types(
         ),
         SpellEffectKind::Draw { who, count } => {
             effect.validate(context)?;
-            validate_program_draw_recipient(*who, context)?;
-            validate_program_amount(count)?;
-            validate_fixed_program_amount("Draw count", count)?;
+            validate_program_draw_recipient(
+                *who,
+                context,
+                count.card_result_filter().is_some(),
+            )?;
+            if count.card_result_filter().is_some() {
+                // The exact count shape and explicitly bound DiscardResult slot are checked
+                // together during block compilation.
+                if program_draw_result_count_profile(count).is_none() {
+                    return Err(
+                        "Program Draw result counts support only a direct count, an affected-player count, or a per-player maximum".into(),
+                    );
+                }
+            } else {
+                validate_program_amount(count)?;
+                validate_fixed_program_amount("Draw count", count)?;
+            }
             // Replacement effects may expand the committed draw cohort, so the authored count
             // does not bound the receipt.
             Ok(vec![ResultType::DrawReceipt {
@@ -3969,7 +4068,13 @@ fn validate_and_result_types(
             let player_set_discard = context == EffectContext::Ability
                 && matches!(*who, PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer)
                 && matches!(quantity, super::DiscardQuantity::Exact(1));
-            if !player_set_discard {
+            let spell_each_player_discard = context == EffectContext::Spell
+                && *who == PlayerRecipient::EachPlayer
+                && matches!(
+                    quantity,
+                    super::DiscardQuantity::AnyNumber | super::DiscardQuantity::All
+                );
+            if !player_set_discard && !spell_each_player_discard {
                 validate_program_recipient(*who, context, "Discard recipient")?;
             }
             let optional_payment = matches!(quantity, super::DiscardQuantity::OptionalExact(_));
@@ -5114,7 +5219,14 @@ fn validate_program_recipient(
 fn validate_program_draw_recipient(
     recipient: PlayerRecipient,
     context: EffectContext,
+    has_discard_result_count: bool,
 ) -> Result<(), String> {
+    if recipient == PlayerRecipient::EachPlayer
+        && context == EffectContext::Spell
+        && has_discard_result_count
+    {
+        return Ok(());
+    }
     if recipient == PlayerRecipient::EachOtherPlayerThanAffectedPlayer
         && context == EffectContext::Ability
     {

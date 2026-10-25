@@ -185,12 +185,12 @@ fn standstill_named_count_uses_typed_cohorts_and_rejects_missing_or_wrong_result
 }
 
 #[test]
-fn previous_effect_sacrifice_amount_requires_an_immediate_compatible_producer() {
-    // Amount result counts still read only the immediately preceding matching movement.
+fn flat_previous_effect_sacrifice_count_requires_a_bound_program_input() {
+    // A compatible adjacent producer does not make a flat list a bound Program input.
     let fixture = r#"(
-        id: "standstill_legacy_receipt_fixture",
-        name: "Standstill Legacy Receipt Fixture",
-        face_id: "standstill_legacy_receipt_fixture",
+        id: "flat_sacrifice_result_fixture",
+        name: "Flat Sacrifice Result Fixture",
+        face_id: "flat_sacrifice_result_fixture",
         types: ["Artifact"],
         triggered_abilities: [(
             ability_id: "triggered_01",
@@ -211,31 +211,12 @@ fn previous_effect_sacrifice_amount_requires_an_immediate_compatible_producer() 
             max_triggers_per_turn: None,
         )],
     )"#;
+    let error = CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect_err("flat PreviousEffect count requires a bound Program input");
     assert!(
-        CardRegistry::from_chunks_and_tokens(&[fixture], &[]).is_ok(),
-        "PreviousEffect Count accepts the immediately preceding controller SacrificeAll cohort"
-    );
-
-    let wrong_action = fixture.replace("action: Sacrifice", "action: Discard");
-    assert_ne!(
-        wrong_action, fixture,
-        "the action replacement must take effect"
-    );
-    assert!(
-        CardRegistry::from_chunks_and_tokens(&[&wrong_action], &[]).is_err(),
-        "a PreviousEffect discard count cannot read a sacrifice cohort"
-    );
-
-    let missing_producer = fixture.replace(
-        "SacrificeAll(players: Controller, filter: (kind: AnyPermanent)),",
-        "",
-    );
-    assert_ne!(
-        missing_producer, fixture,
-        "the missing-producer replacement must take effect"
-    );
-    assert!(
-        CardRegistry::from_chunks_and_tokens(&[&missing_producer], &[]).is_err(),
-        "PreviousEffect Count does not infer an absent sacrifice producer"
+        error
+            .to_string()
+            .contains("PreviousEffect card result counts require a bound Program input"),
+        "{error}"
     );
 }

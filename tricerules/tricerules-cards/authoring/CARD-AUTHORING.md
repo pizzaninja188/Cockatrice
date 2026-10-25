@@ -305,8 +305,8 @@ player-set discard continues if its controller leaves; departed rows and their s
 retired together while the live accepted prefix and its generations remain fixed (CR 101.4, 608.2m,
 800.4a). Observer restoration republishes that same transaction with a fresh prompt ID. This runtime
 hardening does not admit new syntax; spell, optional and alternative-cost departure behavior is
-unchanged. Permanent choosers must be `Controller`; draw and hand-selection counts remain fixed
-literals. `GainLife` normally uses a fixed literal, with one bounded result-count form: it may
+unchanged. Permanent choosers must be `Controller`; hand-selection counts remain fixed literals.
+`GainLife` normally uses a fixed literal, with one bounded result-count form: it may
 consume the explicitly bound result of the immediately preceding unfiltered target `Discard`
 (`CardsMatchingResult` with `players: All`) or `Mill(who: Controller)` (`players: Controller`).
 The filter must use `source: PreviousEffect` and match that producer's action and player set. The
@@ -315,6 +315,21 @@ producer must have a finite result maximum and the coefficient times that maximu
 `u32`. This Program-only path uses the committed typed cohort, including an empty cohort as zero;
 it does not reopen result leaves in general affine quantities. Gerrard's Verdict uses the target
 Discard form, counting only Land cards in the committed discard cohort (CR 608.2c, 701.9a–c).
+
+Spell Programs admit a second, non-identifying discard receipt for ordered Discard→Draw effects.
+Bind a `Discard` step's `DiscardResult` and pass it explicitly to a later `Draw`; the slot may cross
+an intervening targetless step because it is a named Program value, not an ambient previous-effect
+read. The accepted unfiltered counts are `CardsMatchingResult` with `players: Controller` for a
+controller discard and controller draw, `CardsMatchingResultForAffectedPlayer` with `players: All`
+for an `EachPlayer` discard and matching `EachPlayer` draw, and `MaximumCardsMatchingResult` with
+`players: All` for an `EachPlayer` discard followed by each player drawing the greatest individual
+discard count. Spell Programs admit `Discard(EachPlayer, AnyNumber)` and `Discard(EachPlayer, All)`
+for these profiles; an `EachPlayer` draw needs one of the matching bound result-count forms. The
+count uses committed discard entries, including hidden Library-of-Leng destinations when
+unfiltered, and never reconstructs physical card identity. A completed empty or skipped Discard
+produces a present empty result; an unavailable bound slot is an invariant error. Flux, Tolarian
+Winds and Windfall exercise the three count forms respectively (CR 121.2, 608.2c, 701.9a/c,
+800.4a/i).
 
 `GrantKeywordsAll` is also an accepted resultless `Perform` leaf when the ordinary effect
 validator accepts its complete `CreatureScopeFilter`. Every untargeted validated scope can use it

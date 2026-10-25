@@ -5259,36 +5259,6 @@ fn damage_targets_rejects_conditional_amounts() {
 }
 
 #[test]
-fn previous_result_amount_requires_an_immediately_preceding_compatible_effect() {
-    let counted_gain = SpellEffectKind::GainLife {
-        amount: Amount::Count(CountExpression::CardsMatchingResult {
-            filter: CardResultFilter {
-                source: CardResultSource::PreviousEffect,
-                action: CardResultAction::Mill,
-                players: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Creature),
-            },
-        }),
-    };
-    let mill = SpellEffectKind::Mill {
-        count: Amount::Fixed(4),
-        who: PlayerRecipient::Controller,
-    };
-
-    assert!(SpellEffectKind::validate_list(&[mill.clone(), counted_gain.clone()]).is_ok());
-    assert!(SpellEffectKind::validate_list(std::slice::from_ref(&counted_gain)).is_err());
-    assert!(SpellEffectKind::validate_list(&[
-        mill,
-        SpellEffectKind::Draw {
-            who: PlayerRecipient::Controller,
-            count: Amount::Fixed(1),
-        },
-        counted_gain,
-    ])
-    .is_err());
-}
-
-#[test]
 fn player_effect_accepts_player_spec() {
     assert!(SpellEffectKind::TargetPlayerLosesLife {
         amount: 3,
@@ -6038,18 +6008,6 @@ fn windfall_maximum_card_result_roundtrip_and_context_boundaries() {
     ))
     .unwrap();
     assert!(affine.validate().is_err());
-    for preceding in ["", "Draw(count: 1),"] {
-        let card = format!(
-            r#"(id: "bad_wheel", name: "Bad Wheel", face_id: "bad_wheel", types: ["Sorcery"], spell_effect: [{preceding} Draw(who: EachPlayer, count: Count({source}))])"#
-        );
-        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("immediately preceding compatible"),
-            "{error}"
-        );
-    }
     let entry = format!(
         r#"(id: "bad_entry", name: "Bad Entry", face_id: "bad_entry", types: ["Artifact"], static_abilities: [(ability_id: "entry", presentation: Fallback, definition: EntersWithCounters(counter: Charge, amount: Count({source})))])"#
     );
@@ -12741,6 +12699,114 @@ fn spell_program_rejects_implicit_previous_result_counts() {
         ));
         let reason = invalid_program_reason(&definition);
         assert!(reason.contains("result"), "{reason}");
+    }
+}
+
+#[test]
+fn spell_program_draw_counts_read_the_explicit_discard_result_slot() {
+    let fixture = |id: &str, steps: &str| {
+        format!(
+            r#"(id: "{id}", name: "{id}", face_id: "{id}", mana_cost: "{{2}}{{U}}",
+                types: ["Sorcery"], spell_program: Some((body: (steps: [{steps}], yields: []))))"#
+        )
+    };
+    let discard_each = r#"(id: "discard", bind: ["discarded"], input: None,
+        kind: Perform(Discard(who: EachPlayer, quantity: AnyNumber)))"#;
+    let discard_controller = r#"(id: "discard", bind: ["discarded"], input: None,
+        kind: Perform(Discard(who: Controller, quantity: All)))"#;
+    let flux_draw = r#"(id: "draw", bind: [], input: Some("discarded"),
+        kind: Perform(Draw(who: EachPlayer,
+            count: Count(CardsMatchingResultForAffectedPlayer(filter: (
+                source: PreviousEffect, action: Discard, players: All, card_type: None))))))"#;
+    let winds_draw = r#"(id: "draw", bind: [], input: Some("discarded"),
+        kind: Perform(Draw(who: Controller,
+            count: Count(CardsMatchingResult(filter: (
+                source: PreviousEffect, action: Discard, players: Controller, card_type: None))))))"#;
+    let windfall_draw = r#"(id: "draw", bind: [], input: Some("discarded"),
+        kind: Perform(Draw(who: EachPlayer,
+            count: Count(MaximumCardsMatchingResult(filter: (
+                source: PreviousEffect, action: Discard, players: All, card_type: None))))))"#;
+
+    crate::CardRegistry::from_chunks_and_tokens(
+        &[&fixture(
+            "winds_program",
+            &format!("{discard_controller}, {winds_draw}"),
+        )],
+        &[],
+    )
+    .expect("Tolarian Winds' controller Draw consumes the named all-hand discard result");
+    crate::CardRegistry::from_chunks_and_tokens(
+        &[&fixture(
+            "flux_program",
+            &format!("{discard_each}, {flux_draw}"),
+        )],
+        &[],
+    )
+    .expect("Flux's per-player Draw consumes the named AnyNumber discard result");
+    crate::CardRegistry::from_chunks_and_tokens(
+        &[&fixture(
+            "windfall_program",
+            &format!("{discard_each}, {windfall_draw}"),
+        )],
+        &[],
+    )
+    .expect("Windfall's EachPlayer Draw consumes the named maximum discard result");
+
+    let nonadjacent = fixture(
+        "nonadjacent_discard_draw_program",
+        &format!(
+            "{discard_each}, (id: \"intervening_draw\", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))), {windfall_draw}"
+        ),
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&nonadjacent], &[])
+        .expect("an explicit discard slot remains valid across an intervening targetless Draw");
+
+    let flat = format!(
+        r#"(id: "flat_windfall", name: "Flat Windfall", face_id: "flat_windfall",
+            types: ["Sorcery"], spell_effect: [
+                Discard(who: EachPlayer, quantity: All),
+                Draw(who: EachPlayer, count: Count({windfall_draw_count}))
+            ])"#,
+        windfall_draw_count = "MaximumCardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: None))"
+    );
+    let flat_error = crate::CardRegistry::from_chunks_and_tokens(&[&flat], &[]).unwrap_err();
+    assert!(
+        flat_error
+            .to_string()
+            .contains("PreviousEffect card result counts require a bound Program input"),
+        "the formerly compatible flat Discard→Draw count requires a typed input: {flat_error}"
+    );
+
+    let invalid = [
+        (
+            "wrong player set",
+            format!(
+                "{discard_each}, (id: \"draw\", bind: [], input: Some(\"discarded\"), kind: Perform(Draw(who: EachPlayer, count: Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller, card_type: None))))))"
+            ),
+        ),
+        (
+            "wrong action",
+            format!(
+                "{discard_each}, (id: \"draw\", bind: [], input: Some(\"discarded\"), kind: Perform(Draw(who: EachPlayer, count: Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Mill, players: All, card_type: None))))))"
+            ),
+        ),
+        (
+            "filtered hidden types",
+            format!(
+                "{discard_each}, (id: \"draw\", bind: [], input: Some(\"discarded\"), kind: Perform(Draw(who: EachPlayer, count: Count(MaximumCardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: Some(Creature)))))))"
+            ),
+        ),
+        (
+            "unbounded affine result count",
+            format!(
+                "{discard_each}, (id: \"draw\", bind: [], input: Some(\"discarded\"), kind: Perform(Draw(who: EachPlayer, count: Count(Affine(constant: 0, terms: [(coefficient: 1, quantity: CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: None)))])))))"
+            ),
+        ),
+    ];
+    for (index, (case, steps)) in invalid.into_iter().enumerate() {
+        let definition = fixture(&format!("invalid_draw_count_{index}"), &steps);
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err(&format!("unsupported typed Draw count must reject: {case}"));
     }
 }
 

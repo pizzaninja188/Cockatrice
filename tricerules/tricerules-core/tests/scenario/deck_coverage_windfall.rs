@@ -556,7 +556,7 @@ fn windfall_two_deckout_losses_leave_the_nonconsecutive_survivor_as_winner() {
 fn windfall_exact_identity_face_and_complete_typed_effects() {
     use tricerules_cards::primitives::{
         Amount, CardResultAction, CardResultSource, CountExpression, DiscardQuantity,
-        PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+        InstructionKind, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
     };
     let definition = tricerules_cards::registry::global()
         .get("windfall")
@@ -569,15 +569,33 @@ fn windfall_exact_identity_face_and_complete_typed_effects() {
     assert_eq!(face.types, ["Sorcery"]);
     assert_eq!(face.colors(), vec![tricerules_cards::Color::Blue]);
     assert_eq!((face.power, face.toughness), (None, None));
-    assert_eq!(face.spell_effect.len(), 2);
+    assert!(face.spell_effect.is_empty());
+    let steps = &face
+        .spell_program
+        .as_ref()
+        .expect("Windfall uses its typed ordered spell Program")
+        .body
+        .steps;
+    assert_eq!(steps.len(), 2);
     assert!(matches!(
-        &face.spell_effect[0],
-        SpellEffectKind::Discard {
-            who: PlayerRecipient::EachPlayer,
-            quantity: DiscardQuantity::All
-        }
+        &steps[0].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                who: PlayerRecipient::EachPlayer,
+                quantity: DiscardQuantity::All
+            })
     ));
-    assert!(
-        matches!(&face.spell_effect[1],SpellEffectKind::Draw { who: PlayerRecipient::EachPlayer, count: Amount::Count(CountExpression::MaximumCardsMatchingResult { filter }) } if filter.source == CardResultSource::PreviousEffect && filter.action == CardResultAction::Discard && filter.players == RelativePlayerSet::All && filter.card_type.is_none())
-    );
+    assert_eq!(steps[0].bind, ["discarded"]);
+    assert_eq!(steps[1].input.as_deref(), Some("discarded"));
+    assert!(matches!(
+        &steps[1].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                who: PlayerRecipient::EachPlayer,
+                count: Amount::Count(CountExpression::MaximumCardsMatchingResult { filter })
+            } if filter.source == CardResultSource::PreviousEffect
+                && filter.action == CardResultAction::Discard
+                && filter.players == RelativePlayerSet::All
+                && filter.card_type.is_none())
+    ));
 }
