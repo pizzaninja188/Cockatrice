@@ -72,11 +72,27 @@ fn source_shuffle_is_spell_only_including_wrapped_effects() {
         .expect("resolving-spell self-shuffle is an authored instruction");
     assert!(effect.validate(EffectContext::Spell).is_ok());
     assert!(effect.validate(EffectContext::Ability).is_err());
-    for wrapped in [
-        "ShuffleResolvingSpellIntoOwnersLibrary".to_string(),
-        "MayBehold(choice_id:\"behold\",hand_filter:(required_subtypes:[\"Elf\"]),permanent_filter:(kind:Creature,controller:You),if_beheld:[ShuffleResolvingSpellIntoOwnersLibrary])".to_string(),
-    ] {
-        assert!(probe(&format!("spell_effect:[{wrapped}]")).is_ok(), "valid spell wrapper: {wrapped}: {:?}", probe(&format!("spell_effect:[{wrapped}]")).err());
+    let behold: SpellEffectKind = ron::from_str(
+        "MayBehold(choice_id:\"behold\",hand_filter:(required_subtypes:[\"Elf\"]),permanent_filter:(kind:Creature,controller:You),if_beheld:[ShuffleResolvingSpellIntoOwnersLibrary])",
+    )
+    .expect("the recursive effect shape parses for context validation");
+    assert!(behold.validate(EffectContext::Spell).is_ok());
+    assert!(
+        behold
+            .validate(EffectContext::Ability)
+            .unwrap_err()
+            .contains("spell"),
+        "the MayBehold branch cannot shuffle a resolving spell from an ability"
+    );
+
+    // Keep registry-level owner checks on the admitted direct operation. Flat Behold is rejected
+    // at the authoring boundary, so its recursive spell-context contract is checked above.
+    for wrapped in ["ShuffleResolvingSpellIntoOwnersLibrary".to_string()] {
+        assert!(
+            probe(&format!("spell_effect:[{wrapped}]")).is_ok(),
+            "valid spell wrapper: {wrapped}: {:?}",
+            probe(&format!("spell_effect:[{wrapped}]")).err()
+        );
         for fields in [
             format!("activated_abilities:[(ability_id:\"activated\",presentation:Fallback,costs:[],effect:[{wrapped}])]"),
             format!("triggered_abilities:[(ability_id:\"triggered\",presentation:Fallback,trigger:WhenSelfEntersBattlefield,effect:[{wrapped}])]"),

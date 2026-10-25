@@ -216,7 +216,7 @@ fn flat_previous_effect_sacrifice_count_requires_a_bound_program_input() {
     assert!(
         error
             .to_string()
-            .contains("PreviousEffect card result counts require a bound Program input"),
+            .contains("PreviousEffect references require an authored Program"),
         "{error}"
     );
 }

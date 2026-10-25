@@ -4879,3 +4879,82 @@ mod tidebinder_program_owner_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scoped_grant_linked_exile_validation_tests {
+    use super::*;
+
+    fn scoped_grant_face(children: &str) -> CardFace {
+        let ron = format!(
+            r#"(id: "grant_probe", name: "Grant Probe", face_id: "grant_probe",
+                types: ["Artifact"],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                    definition: GrantActivatedAbilityToPermanents(
+                        filter: (kind: AnyPermanent), activated_abilities: [{children}],
+                    ))])"#
+        );
+        let raw: RawCardDefinition = RON_OPTS
+            .from_str(&ron)
+            .expect("scoped grant fixture parses");
+        let card = raw
+            .into_definition()
+            .expect("scoped grant fixture converts to a card definition");
+        card.faces
+            .into_iter()
+            .next()
+            .expect("normal card has one face")
+    }
+
+    fn child(ability_id: &str, effect: &str) -> String {
+        format!(
+            r#"(ability_id: "{ability_id}", presentation: Fallback, costs: [], effect: [{effect}])"#
+        )
+    }
+
+    #[test]
+    fn linked_exile_walker_visits_behold_and_nested_trigger_modes_once() {
+        let consumer = r#"ReturnLinkedExiledCards(
+            producer_ability_id: "producer_01", linked_exile_id: "linked_01",
+            filter: (card_type: Creature),
+        )"#;
+        let behold = format!(
+            r#"MayBehold(choice_id: "behold_01", hand_filter: (card_type: Creature),
+                permanent_filter: (kind: Creature, controller: You), if_beheld: [{consumer}])"#
+        );
+        let behold_only = scoped_grant_face(&child("consumer_01", &behold));
+        let error = validate_linked_exile_pairs(&behold_only)
+            .expect_err("the visitor counts a consumer nested in MayBehold");
+        assert!(
+            error.contains("exactly one producer and one consumer"),
+            "{error}"
+        );
+
+        let nested_mode = format!(
+            r#"GrantTriggeredAbility(subject: Source, ability: (
+                ability_id: "nested_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield,
+                modal: Some((min_modes: 1, max_modes: 1, modes: [
+                    (mode_id: "mode_01", presentation: Fallback, effects: [{consumer}]),
+                    (mode_id: "mode_02", presentation: Fallback, effects: [GainLife(amount: 1)]),
+                ])),
+            ))"#
+        );
+        let nested_mode_only = scoped_grant_face(&child("outer_01", &nested_mode));
+        let error = validate_linked_exile_pairs(&nested_mode_only)
+            .expect_err("the visitor counts a consumer in a nested triggered mode");
+        assert!(
+            error.contains("exactly one producer and one consumer"),
+            "{error}"
+        );
+
+        let producer = child(
+            "producer_01",
+            r#"MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile,
+                linked_exile_id: "linked_01")"#,
+        );
+        let second_consumer = child("consumer_01", &behold);
+        let matching_pair = scoped_grant_face(&format!("{producer}, {second_consumer}"));
+        validate_linked_exile_pairs(&matching_pair)
+            .expect("the scoped grant visitor counts the exact producer and wrapped consumer once");
+    }
+}

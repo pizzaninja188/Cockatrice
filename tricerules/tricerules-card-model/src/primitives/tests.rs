@@ -2446,7 +2446,7 @@ fn flat_token_copy_cohort_chain_requires_an_authored_program() {
         .expect_err("flat PreviousEffectObjects batch consumers require a typed Program")
         .to_string();
     assert!(
-        error.contains("PreviousEffectObjects batch consumers require an authored Program"),
+        error.contains("PreviousEffect references require an authored Program"),
         "unexpected flat token-copy rejection: {error}"
     );
 }
@@ -2483,10 +2483,123 @@ fn flat_previous_effect_objects_batch_consumers_are_rejected_recursively() {
         let error = super::SpellEffectKind::validate_list(&[effect])
             .expect_err(&format!("flat {label} must use a typed Program"));
         assert!(
-            error.contains("PreviousEffectObjects batch consumers require an authored Program"),
+            error.contains("PreviousEffect references require an authored Program"),
             "flat {label}: {error}"
         );
     }
+}
+
+#[test]
+fn flat_previous_effect_references_and_resolution_behold_fail_closed_recursively() {
+    let nested_previous_object: super::SpellEffectKind = ron::from_str(
+        r#"MayBehold(
+            who: Controller,
+            choice_id: "behold",
+            hand_filter: (required_subtypes: ["Elf"]),
+            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            if_beheld: [GrantKeywords(subject: PreviousEffectObject, keywords: [Haste])],
+        )"#,
+    )
+    .expect("nested PreviousEffectObject in a flat Behold branch parses");
+    let nested_previous_count: super::SpellEffectKind = ron::from_str(
+        r#"MayBehold(
+            who: Controller,
+            choice_id: "behold",
+            hand_filter: (required_subtypes: ["Elf"]),
+            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            if_beheld: [GainLife(amount: Count(CardsMatchingResult(filter: (
+                source: PreviousEffect, action: Discard, players: Controller,
+            ))))],
+        )"#,
+    )
+    .expect("nested PreviousEffect count in a flat Behold branch parses");
+
+    for (label, effect) in [
+        ("single object", nested_previous_object),
+        ("card result count", nested_previous_count),
+    ] {
+        let error = super::SpellEffectKind::validate_list(&[effect]).expect_err(&format!(
+            "flat nested PreviousEffect {label} must use a Program"
+        ));
+        assert!(
+            error.contains("PreviousEffect references require an authored Program"),
+            "flat nested PreviousEffect {label}: {error}"
+        );
+    }
+
+    let direct: super::SpellEffectKind = ron::from_str(
+        r#"MayBehold(
+            who: Controller,
+            choice_id: "behold",
+            hand_filter: (required_subtypes: ["Elf"]),
+            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            if_beheld: [Untap(subject: Source)],
+        )"#,
+    )
+    .expect("direct flat MayBehold parses");
+    let nested: super::SpellEffectKind = ron::from_str(
+        r#"Conditional(condition: Void, effect: MayBehold(
+            who: Controller,
+            choice_id: "behold",
+            hand_filter: (required_subtypes: ["Elf"]),
+            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            if_beheld: [Untap(subject: Source)],
+        ))"#,
+    )
+    .expect("nested flat MayBehold parses");
+    for (label, effect) in [("direct", direct), ("nested", nested)] {
+        let error = super::SpellEffectKind::validate_list(&[effect]).expect_err(&format!(
+            "flat resolution MayBehold must use a Program ({label})"
+        ));
+        assert!(
+            error.contains("resolution MayBehold requires an authored Program"),
+            "flat resolution MayBehold ({label}): {error}"
+        );
+    }
+}
+
+#[test]
+fn flat_previous_result_operations_require_explicit_program_inputs() {
+    let linked_exile: super::SpellEffectKind =
+        ron::from_str(r#"Exile(subject: TriggerObject, linked_exile_id: Some("imprinted_card"))"#)
+            .expect("Mimic Vat's flat linked Exile producer parses");
+    let direct_return: super::SpellEffectKind = ron::from_str(
+        r#"ReturnOtherLinkedExiledCards(
+            producer_ability_id: "imprint",
+            linked_exile_id: "imprinted_card",
+        )"#,
+    )
+    .expect("Mimic Vat's flat linked return consumer parses");
+    let nested_return: super::SpellEffectKind = ron::from_str(
+        r#"Conditional(condition: Void, effect: ReturnOtherLinkedExiledCards(
+            producer_ability_id: "imprint",
+            linked_exile_id: "imprinted_card",
+        ))"#,
+    )
+    .expect("nested flat linked return consumer parses");
+    let mill: super::SpellEffectKind =
+        ron::from_str("Mill(count: 3, who: Controller)").expect("flat Mill parses");
+    let previous_mill_damage: super::SpellEffectKind =
+        ron::from_str("DamagePlayer(who: Controller, amount: Count(PreviousMillManaValueSum))")
+            .expect("flat PreviousMillManaValueSum consumer parses");
+
+    for (label, consumer) in [
+        ("linked return", direct_return),
+        ("nested linked return", nested_return),
+    ] {
+        let error = super::SpellEffectKind::validate_list(&[linked_exile.clone(), consumer])
+            .expect_err(&format!("flat {label} must use an authored Program input"));
+        assert!(
+            error.contains("ReturnOtherLinkedExiledCards requires an authored Program input"),
+            "flat {label}: {error}"
+        );
+    }
+    let error = super::SpellEffectKind::validate_list(&[mill, previous_mill_damage])
+        .expect_err("flat PreviousMillManaValueSum must use an authored Program input");
+    assert!(
+        error.contains("PreviousEffect references require an authored Program"),
+        "flat PreviousMillManaValueSum: {error}"
+    );
 }
 
 #[test]
@@ -2515,7 +2628,7 @@ fn flat_koya_exile_to_delayed_trigger_signature_requires_an_authored_program() {
             &format!("the retired flat Koya {label} signature must be refused"),
         );
         assert!(
-            error.contains("PreviousEffectObject delayed triggers require an authored Program"),
+            error.contains("PreviousEffect references require an authored Program"),
             "unexpected flat Koya {label} signature error: {error}"
         );
     }
@@ -2532,7 +2645,7 @@ fn teferi_flat_choose_return_shuffle_requires_an_authored_program() {
                 max: 1,
                 constraints: [],
             ),
-            ReturnToOwnersHand(subject: PreviousEffectObject),
+            GainLife(amount: 1),
             ShuffleNonlandPermanentsIntoOwnersLibraries(
                 players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
             ),
@@ -5711,7 +5824,7 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     .expect("Tidebinder effect sequence parses");
     assert!(SpellEffectKind::validate_list(&tidebinder)
         .expect_err("Tidebinder's previous-object receipt is now typed in its Program")
-        .contains("legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"));
+        .contains("PreviousEffect references require an authored Program"));
 
     let orphan = tidebinder[1..].to_vec();
     assert!(SpellEffectKind::validate_list(&orphan).is_err());
@@ -5758,9 +5871,7 @@ fn issue_207_flat_previous_object_ability_removal_requires_a_typed_program() {
     let error = SpellEffectKind::validate_list(&tidebinder)
         .expect_err("an implicit previous-object removal receipt now requires a typed Program");
     assert!(
-        error.contains(
-            "legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"
-        ),
+        error.contains("PreviousEffect references require an authored Program"),
         "{error}"
     );
 }
@@ -6101,6 +6212,8 @@ fn vow_equipment_program_ron(condition: &str) -> String {
                                 min: 0, max: 1,
                                 constraints: [EquipmentAttachableTo(recipient:
                                     ChosenTarget(group_index: 0, target_index: 0))]))),
+                        (id: "between_choice_and_attach", bind: [], input: None,
+                            kind: Perform(GainLife(amount: 1))),
                         (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
                             kind: Perform(AttachEquipment(
                                 equipment: PreviousEffectObject,
@@ -6150,6 +6263,8 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
             (id: "create_tokens", bind: ["created_tokens"], input: None,
                 kind: Perform(CreateTokens(token: "ally_w_1_1", count: 1,
                     who: Controller, tapped: false, sacrifice_timing: None))),
+            (id: "intervening_life", bind: [], input: None,
+                kind: Perform(GainLife(amount: 1))),
             (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
                 kind: Perform(AttachEquipment(
                     equipment: Source, creature: PreviousEffectObjects))),
@@ -6169,6 +6284,8 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
     );
     let compiled = compiled.unwrap();
     assert_eq!(compiled.slots.len(), 1);
+    assert_eq!(compiled.body.steps.len(), 3);
+    assert!(compiled.body.steps[1].outputs.is_empty());
     assert!(matches!(
         compiled
             .slot(compiled.body.steps[0].outputs[0])
@@ -6178,7 +6295,7 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
         })
     ));
     assert_eq!(
-        compiled.body.steps[1].input,
+        compiled.body.steps[2].input,
         compiled.body.steps[0].outputs.first().copied()
     );
 
@@ -6192,11 +6309,8 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
             source.replace("bind: [\"created_tokens\"]", "bind: []"),
         ),
         (
-            "non-immediate consumer",
-            source.replace(
-                "(id: \"attach_created_tokens\"",
-                "(id: \"between\", bind: [], input: None, kind: Perform(GainLife(amount: 1))),\n            (id: \"attach_created_tokens\"",
-            ),
+            "missing receipt input",
+            source.replace("input: Some(\"created_tokens\")", "input: None"),
         ),
     ] {
         let program: super::CardProgram =
@@ -6262,11 +6376,12 @@ fn equipment_receipt_program_compiler_admits_only_exact_vow_dwarf_target_guard()
         panic!("Dwarf guard stays a typed Choose requirement");
     };
     assert_eq!(branches.len(), 1);
-    assert_eq!(branches[0].body.steps.len(), 2);
+    assert_eq!(branches[0].body.steps.len(), 3);
     assert_eq!(
-        branches[0].body.steps[1].input,
+        branches[0].body.steps[2].input,
         branches[0].body.steps[0].outputs.first().copied()
     );
+    assert!(branches[0].body.steps[1].outputs.is_empty());
 
     for (label, card_id, widened) in [
         (
@@ -9865,6 +9980,8 @@ fn registry_discovers_nested_koya_delayed_program_and_rejects_unavailable_captur
                             (id: "exile_target", bind: ["exiled"], input: None,
                                 kind: Perform(Exile(subject: Chosen((kind: Creature,
                                     excluded_objects: [Source]))))),
+                            (id: "intervening_life", bind: [], input: None,
+                                kind: Perform(GainLife(amount: 1))),
                             (id: "schedule_return", bind: [], input: Some("exiled"),
                                 kind: Perform(CreateDelayedTrigger(
                                     subject: Some(PreviousEffectObject),
@@ -9916,9 +10033,11 @@ fn registry_discovers_nested_koya_delayed_program_and_rejects_unavailable_captur
     };
     assert_eq!(
         yes.steps.len(),
-        2,
-        "producer and consumer are in the branch"
+        3,
+        "the branch contains the Exile, an unrelated resultless effect, and the exact consumer"
     );
+    assert_eq!(yes.steps[2].input, Some(yes.steps[0].outputs[0]));
+    assert!(yes.steps[1].outputs.is_empty());
 
     let child_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
         card_id: "koya,_death_from_above".into(),
@@ -11761,8 +11880,8 @@ fn program_gain_life_result_count_rejects_wrong_scope_shape_and_overflow() {
         .expect_err("a result not yielded from its branch is out of scope");
     assert!(error.to_string().contains("is not in scope"), "{error}");
 
-    let non_immediate = program_gain_life_result_fixture(
-        "gain_life_result_non_immediate",
+    let resultless_sibling = program_gain_life_result_fixture(
+        "gain_life_result_resultless_sibling",
         &format!(
             r#"{MILL}, (id: "scry", bind: [], input: None,
                   kind: Perform(Scry(count: 1))),
@@ -11772,15 +11891,23 @@ fn program_gain_life_result_count_rejects_wrong_scope_shape_and_overflow() {
         "[]",
         "None",
     );
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[&non_immediate], &[])
-        .expect_err("a prior but non-immediate result is unsupported");
-    assert!(
-        error.to_string().contains("immediately preceding"),
-        "{error}"
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&resultless_sibling], &[])
+        .expect("a resultless sibling does not sever an explicitly bound same-block input");
+    let owner = crate::ProgramOwnerId::face(
+        "gain_life_result_resultless_sibling",
+        crate::CardFaceId::new("gain_life_result_resultless_sibling").unwrap(),
     );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact card face owns its compiled spell Program");
+    let [mill, scry, gain] = compiled.body.steps.as_slice() else {
+        panic!("the resultless sibling remains between the direct Mill and GainLife");
+    };
+    assert!(scry.outputs.is_empty());
+    assert_eq!(gain.input, mill.outputs.first().copied());
 
-    let mismatched_input = program_gain_life_result_fixture(
-        "gain_life_result_mismatched_input",
+    let named_prior_input = program_gain_life_result_fixture(
+        "gain_life_result_named_prior_input",
         &format!(
             r#"(id: "first_mill", bind: ["first"], input: None,
                   kind: Perform(Mill(count: 4, who: Controller))),
@@ -11792,15 +11919,19 @@ fn program_gain_life_result_count_rejects_wrong_scope_shape_and_overflow() {
         "[]",
         "None",
     );
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_input], &[]).expect_err(
-        "the consumer cannot bind an older cohort when a different receipt is immediate",
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&named_prior_input], &[])
+        .expect("the consumer uses the exact named earlier receipt rather than the latest slot");
+    let owner = crate::ProgramOwnerId::face(
+        "gain_life_result_named_prior_input",
+        crate::CardFaceId::new("gain_life_result_named_prior_input").unwrap(),
     );
-    assert!(
-        error
-            .to_string()
-            .contains("immediately preceding instruction"),
-        "{error}"
-    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact card face owns its compiled spell Program");
+    let [first_mill, _current_mill, gain] = compiled.body.steps.as_slice() else {
+        panic!("both direct producer results precede the consumer");
+    };
+    assert_eq!(gain.input, first_mill.outputs.first().copied());
 
     let unbounded = program_gain_life_result_fixture(
         "gain_life_result_unbounded",
@@ -11924,6 +12055,8 @@ fn program_gain_life_accepts_gerrards_typed_discard_result_count() {
                 kind: Perform(ChooseHandCards(action: Discard, count: 2,
                     target: (kind: AnyPlayer), chooser: AffectedPlayer,
                     card_filter: None, optional: false))),
+            (id: "between_discard_and_life", bind: [], input: None,
+                kind: Perform(GainLife(amount: 1))),
             (id: "gain_life", bind: [], input: Some("discarded"),
                 kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
                     (coefficient: 3, quantity: CardsMatchingResult(filter: (
@@ -11947,13 +12080,14 @@ fn program_gain_life_accepts_gerrards_typed_discard_result_count() {
     let compiled = registry
         .compiled_program_for_owner(&owner)
         .expect("the Gerrard fixture owns its compiled spell Program");
-    let [discard, gain_life] = compiled.body.steps.as_slice() else {
-        panic!("the fixture keeps one producer immediately followed by its consumer");
+    let [discard, intervening_life, gain_life] = compiled.body.steps.as_slice() else {
+        panic!("the fixture keeps one producer, one resultless sibling, and its exact consumer");
     };
     let [discard_result] = discard.outputs.as_slice() else {
         panic!("the targeted Discard produces exactly one typed cohort");
     };
     assert_eq!(gain_life.input, Some(*discard_result));
+    assert!(intervening_life.outputs.is_empty());
     assert!(matches!(
         &compiled
             .slot(*discard_result)
@@ -11985,6 +12119,8 @@ fn program_gain_life_accepts_vultures_typed_mill_result_count() {
             program: Some((body: (steps: [
                 (id: "mill", bind: ["milled"], input: None,
                     kind: Perform(Mill(count: 4, who: Controller))),
+                (id: "between_mill_and_life", bind: [], input: None,
+                    kind: Perform(GainLife(amount: 1))),
                 (id: "gain_life", bind: [], input: Some("milled"),
                     kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
                         source: PreviousEffect, action: Mill, players: Controller,
@@ -12004,13 +12140,14 @@ fn program_gain_life_accepts_vultures_typed_mill_result_count() {
     let compiled = registry
         .compiled_program_for_owner(&owner)
         .expect("the Vulture fixture owns its compiled triggered Program");
-    let [mill, gain_life] = compiled.body.steps.as_slice() else {
-        panic!("the fixture keeps one producer immediately followed by its consumer");
+    let [mill, intervening_life, gain_life] = compiled.body.steps.as_slice() else {
+        panic!("the fixture keeps one producer, one resultless sibling, and its exact consumer");
     };
     let [mill_result] = mill.outputs.as_slice() else {
         panic!("the Controller Mill produces exactly one typed cohort");
     };
     assert_eq!(gain_life.input, Some(*mill_result));
+    assert!(intervening_life.outputs.is_empty());
     assert!(matches!(
         &compiled
             .slot(*mill_result)
@@ -12825,7 +12962,7 @@ fn spell_program_draw_counts_read_the_explicit_discard_result_slot() {
     assert!(
         flat_error
             .to_string()
-            .contains("PreviousEffect card result counts require a bound Program input"),
+            .contains("PreviousEffect references require an authored Program"),
         "the formerly compatible flat Discard→Draw count requires a typed input: {flat_error}"
     );
 
@@ -16519,7 +16656,7 @@ fn earthbender_counter_receipt_program_survives_an_intervening_instruction() {
 }
 
 #[test]
-fn program_source_sacrifice_receipt_is_typed_immediate_and_unambiguous() {
+fn program_source_sacrifice_receipt_is_typed_same_block_and_unambiguous() {
     use crate::primitives::{CompiledInstructionKind, CompiledProgram, EffectContext};
 
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
@@ -16548,14 +16685,16 @@ fn program_source_sacrifice_receipt_is_typed_immediate_and_unambiguous() {
             (id: "sacrifice", bind: ["sacrificed"], kind: Perform(
                 Sacrifice(subject: Source),
             )),
+            (id: "unrelated", kind: Perform(GainLife(amount: 1))),
             {reflexive},
         ], yields: [])"#
     );
     let compiled = compile(&direct_source_sacrifice)
-        .expect("a reflexive child consumes its immediately preceding source sacrifice result");
-    let [sacrifice, child] = compiled.body.steps.as_slice() else {
-        panic!("the source sacrifice directly precedes its reflexive child");
+        .expect("a reflexive child consumes its exact same-block source sacrifice result");
+    let [sacrifice, unrelated, child] = compiled.body.steps.as_slice() else {
+        panic!("the source sacrifice, unrelated resultless sibling, and reflexive child remain in one block");
     };
+    assert!(unrelated.outputs.is_empty());
     assert!(matches!(
         &sacrifice.kind,
         CompiledInstructionKind::Perform(effect)
@@ -16599,18 +16738,6 @@ fn program_source_sacrifice_receipt_is_typed_immediate_and_unambiguous() {
     assert!(
         compile(&unrelated_object).is_err(),
         "the receipt predicate must name the exact sacrificed source"
-    );
-
-    let non_immediate = direct_source_sacrifice.replace(
-        &format!("{reflexive},"),
-        &format!(
-            r#"(id: "unrelated", kind: Perform(GainLife(amount: 1))),
-            {reflexive},"#
-        ),
-    );
-    assert!(
-        compile(&non_immediate).is_err(),
-        "an unrelated instruction cannot separate the receipt from its consumer"
     );
 
     let branch_ambiguous = format!(
@@ -17618,6 +17745,8 @@ mod combustible_gearhulk_program_compiler_tests {
                     otherwise: (steps: [
                         (id: "mill", bind: ["milled"], input: None,
                             kind: Perform(Mill(count: 3, who: Controller))),
+                        (id: "intervening_life", bind: [], input: None,
+                            kind: Perform(GainLife(amount: 1))),
                         (id: "damage", bind: [], input: {input},
                             kind: Perform(DamagePlayer(
                                 amount: {amount},
@@ -17782,10 +17911,10 @@ mod combustible_gearhulk_program_compiler_tests {
             &targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")"),
             damage_target_binding(),
         )
-        .expect("the direct mana-value sum consumes its named immediate Mill result");
+        .expect("the direct mana-value sum consumes its exact same-block Mill result");
 
         assert_eq!(compiled.target_bindings.len(), 1);
-        assert_eq!(compiled.target_bindings[0].instruction_address, 3);
+        assert_eq!(compiled.target_bindings[0].instruction_address, 4);
         let Some(milled_slot) = compiled.slots.iter().find(|slot| slot.name == "milled") else {
             panic!("the Otherwise Mill instruction binds its typed result");
         };
@@ -17804,11 +17933,13 @@ mod combustible_gearhulk_program_compiler_tests {
         let CompiledInstructionKind::Choose { otherwise, .. } = &choose.kind else {
             panic!("the target choice owns the Otherwise block");
         };
-        let [mill, damage] = otherwise.steps.as_slice() else {
-            panic!("the Otherwise block contains the Mill and its direct damage consumer");
+        let [mill, intervening_life, damage] = otherwise.steps.as_slice() else {
+            panic!("the Otherwise block contains the Mill, an unrelated resultless effect, and its typed damage consumer");
         };
         assert_eq!(mill.id, "mill");
         assert!(mill.outputs.contains(&milled_slot.id));
+        assert_eq!(intervening_life.id, "intervening_life");
+        assert!(intervening_life.outputs.is_empty());
         assert_eq!(damage.id, "damage");
         assert_eq!(damage.input, Some(milled_slot.id));
         assert!(matches!(
@@ -17860,30 +17991,25 @@ mod combustible_gearhulk_program_compiler_tests {
     }
 
     #[test]
-    fn program_compiler_requires_the_immediately_preceding_controller_mill_slot() {
+    fn program_compiler_requires_the_exact_prior_controller_mill_slot() {
         let valid =
             targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")");
-        let intervening_operation = valid.replace(
-            "(id: \"damage\"",
-            "(id: \"intervening_life\", bind: [], input: None, kind: Perform(GainLife(amount: 1))),\n                        (id: \"damage\"",
-        );
-        let error = compile(&intervening_operation, damage_target_binding())
-            .expect_err("an intervening operation breaks the immediate Mill contract");
-        assert!(
-            error.contains("immediately preceding Controller Mill"),
-            "{error}"
+        let compiled = compile(&valid, damage_target_binding())
+            .expect("a resultless sibling does not sever the exact typed Mill receipt");
+        let CompiledInstructionKind::Choose { otherwise, .. } = &compiled.body.steps[0].kind else {
+            panic!("the targeted choice owns the Otherwise block");
+        };
+        assert_eq!(otherwise.steps.len(), 3);
+        assert_eq!(
+            otherwise.steps[2].input,
+            Some(otherwise.steps[0].outputs[0])
         );
 
-        let older_named_slot = valid.replace(
-            "(id: \"damage\"",
-            "(id: \"second_mill\", bind: [\"recent\"], input: None, kind: Perform(Mill(count: 1, who: Controller))),\n                        (id: \"damage\"",
-        );
-        let error = compile(&older_named_slot, damage_target_binding())
-            .expect_err("the consumer cannot select an older Mill slot");
-        assert!(
-            error.contains("result bound by the immediately preceding Controller Mill"),
-            "{error}"
-        );
+        let forward_named_slot =
+            valid.replace("input: Some(\"milled\")", "input: Some(\"future_mill\")");
+        let error = compile(&forward_named_slot, damage_target_binding())
+            .expect_err("the consumer cannot read a result before the block binds it");
+        assert!(error.contains("future_mill"), "{error}");
 
         let inherited_branch_slot = r#"(steps: [
             (id: "outer_mill", bind: ["milled"], input: None,
@@ -17911,7 +18037,7 @@ mod combustible_gearhulk_program_compiler_tests {
         ], yields: [])"#;
         let error = compile(inherited_branch_slot, damage_target_binding())
             .expect_err("a branch cannot consume an inherited older Mill result");
-        assert!(error.contains("same program block"), "{error}");
+        assert!(error.contains("same-block"), "{error}");
     }
 
     #[test]

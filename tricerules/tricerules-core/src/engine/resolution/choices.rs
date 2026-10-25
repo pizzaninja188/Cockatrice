@@ -637,10 +637,7 @@ pub(super) fn may_behold(
         cx.events.push(ev_log(format!(
             "P{deciding_player} has no matching object to behold."
         )));
-        if cx.program_state.is_some() {
-            return Ok(EffectOutcome::Continue);
-        }
-        return Ok(EffectOutcome::RestartResolutionBranch(None));
+        return Ok(EffectOutcome::Continue);
     }
     let candidate_card_ids = candidates
         .iter()

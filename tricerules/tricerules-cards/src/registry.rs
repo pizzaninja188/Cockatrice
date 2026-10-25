@@ -803,7 +803,7 @@ mod tests {
             assert!(
                 error
                     .to_string()
-                    .contains("PreviousEffect card result counts require a bound Program input"),
+                    .contains("PreviousEffect references require an authored Program"),
                 "{error}"
             );
         }
@@ -838,7 +838,55 @@ mod tests {
             .expect_err("flat PreviousEffect inputs require a bound Program slot");
         assert!(error
             .to_string()
-            .contains("PreviousEffect card result counts require a bound Program input"));
+            .contains("PreviousEffect references require an authored Program"));
+    }
+
+    #[test]
+    fn resolution_behold_requires_a_typed_program_in_spell_ability_and_modal_lists() {
+        let behold = r#"MayBehold(
+            who: Controller,
+            choice_id: "behold",
+            hand_filter: (required_subtypes: ["Elf"]),
+            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            if_beheld: [GainLife(amount: 1)],
+        )"#;
+        let spell = format!(
+            r#"(
+                id: "flat_behold_spell", name: "Flat Behold Spell", face_id: "flat_behold_spell",
+                types: ["Instant"], spell_effect: [{behold}],
+            )"#
+        );
+        let ability = format!(
+            r#"(
+                id: "flat_behold_ability", name: "Flat Behold Ability", face_id: "flat_behold_ability",
+                types: ["Enchantment"], triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield,
+                    effect: [{behold}],
+                )],
+            )"#
+        );
+        let modal = format!(
+            r#"(
+                id: "flat_behold_modal", name: "Flat Behold Modal", face_id: "flat_behold_modal",
+                types: ["Instant"], modal_spell: (
+                    min_modes: 1, max_modes: 1,
+                    modes: [(mode_id: "behold", presentation: Fallback, effects: [{behold}])],
+                ),
+            )"#
+        );
+
+        for (label, card) in [("spell", spell), ("ability", ability), ("modal", modal)] {
+            let error = super::from_chunks(&[&card]).expect_err(&format!(
+                "flat resolution Behold in {label} requires a Program"
+            ));
+            assert!(
+                error
+                    .to_string()
+                    .contains("resolution MayBehold requires an authored Program"),
+                "{label}: {error}"
+            );
+        }
     }
 
     #[test]

@@ -983,7 +983,7 @@ mod hand_size_count_tests {
     }
 
     #[test]
-    fn previous_mill_mana_value_sum_only_follows_a_controller_mill_into_damage() {
+    fn flat_previous_mill_mana_value_sum_requires_a_typed_program_input() {
         use crate::primitives::{PlayerRecipient, SpellEffectKind};
 
         let amount = Amount::Count(CountExpression::PreviousMillManaValueSum);
@@ -995,14 +995,26 @@ mod hand_size_count_tests {
             amount: amount.clone(),
             who: PlayerRecipient::Controller,
         };
-        assert!(SpellEffectKind::validate_list(&[mill.clone(), damage.clone()]).is_ok());
+        assert!(
+            SpellEffectKind::validate_list(&[mill.clone(), damage.clone()])
+                .unwrap_err()
+                .contains("PreviousEffect references require an authored Program")
+        );
 
         let wrong_recipient = SpellEffectKind::Mill {
             count: Amount::Fixed(3),
             who: PlayerRecipient::EachOpponent,
         };
-        assert!(SpellEffectKind::validate_list(&[wrong_recipient, damage.clone()]).is_err());
-        assert!(SpellEffectKind::validate_list(std::slice::from_ref(&damage)).is_err());
+        assert!(
+            SpellEffectKind::validate_list(&[wrong_recipient, damage.clone()])
+                .unwrap_err()
+                .contains("PreviousEffect references require an authored Program")
+        );
+        assert!(
+            SpellEffectKind::validate_list(std::slice::from_ref(&damage))
+                .unwrap_err()
+                .contains("PreviousEffect references require an authored Program")
+        );
         assert!(SpellEffectKind::validate_list(&[
             mill.clone(),
             SpellEffectKind::GainLife {
@@ -1010,7 +1022,8 @@ mod hand_size_count_tests {
             },
             damage.clone(),
         ])
-        .is_err());
+        .unwrap_err()
+        .contains("PreviousEffect references require an authored Program"));
 
         let wrapped = SpellEffectKind::DamagePlayer {
             amount: Amount::DivideRoundedDown {
@@ -1019,7 +1032,9 @@ mod hand_size_count_tests {
             },
             who: PlayerRecipient::Controller,
         };
-        assert!(SpellEffectKind::validate_list(&[mill, wrapped]).is_err());
+        assert!(SpellEffectKind::validate_list(&[mill, wrapped])
+            .unwrap_err()
+            .contains("PreviousEffect references require an authored Program"));
     }
 
     #[test]

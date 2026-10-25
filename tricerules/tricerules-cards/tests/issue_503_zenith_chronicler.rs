@@ -206,13 +206,18 @@ fn caster_complement_context_validation_descends_may_behold() {
         let body = format!(
             "triggered_abilities:[(ability_id:\"trigger\",presentation:Fallback,trigger:{trigger},effect:[{effect}])]"
         );
-        let result = probe(&body);
-        assert_eq!(
-            result.is_ok(),
-            trigger == cast,
-            "{body}: {}",
-            result.as_ref().err().map_or("accepted", String::as_str)
-        );
+        let error = probe(&body).expect_err("flat resolution Behold requires an authored Program");
+        if trigger == cast {
+            assert!(
+                error.contains("resolution MayBehold requires an authored Program"),
+                "the cast trigger passes context validation before the flat-list boundary: {error}"
+            );
+        } else {
+            assert!(
+                error.contains("triggering-spell context requires WheneverPlayerCastsSpell"),
+                "the nested Draw keeps its cast-trigger requirement: {error}"
+            );
+        }
     }
     for body in [
         format!("activated_abilities:[(ability_id:\"activated\",presentation:Fallback,costs:[],effect:[{effect}])]"),

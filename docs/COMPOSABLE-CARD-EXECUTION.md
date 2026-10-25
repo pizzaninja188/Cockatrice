@@ -1,18 +1,25 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-25): the `DrawDiscard` compatibility family and flat `ChooseResolutionBranch`
-grammar/runtime are retired. After the Trade Route Envoy port, flat-variant validation/traversal,
-selection/dispatch, and expansion paths were removed. The shared internal
-`EffectOutcome::RestartResolutionBranch` remains for MayBehold's no-candidate path; typed Program
-`Choose` and shared cost, requirement, and branch-selection helpers remain. The broader composable-card execution
-migration remains incomplete. The bounded 2026-10-24 Passage increment now authors Elven Passage and
-Fabled Passage as typed Programs, including the exact bound tapped-Battlefield BasicLand search
-result. Earthbender Ascension's landfall ability now uses an explicitly bound optional
+Status (2026-10-25): the approved retirement of existing flat result-predecessor paths is complete.
+The `DrawDiscard` compatibility family, flat `ChooseResolutionBranch`, and flat resolution
+`MayBehold` admission paths are retired. The engine's flat MayBehold branch expansion, restart
+outcome, effect-index resume, and non-program stale-choice refresh paths have been removed; typed
+Program Behold, its exact result/generation checks, and the shared Behold evaluator remain. Flat
+effect lists also reject PreviousEffect-backed object, count, and amount references recursively.
+Their ownerless mill-damage, linked-exile return, and untap-predecessor matchers are retired in
+favor of exact Program inputs, while Buggy's atomic flat linked-exile play remains. The six retained
+typed profiles validate an explicitly named prior result by its compiled same-block direct
+`Perform` producer, so unrelated instructions need not be adjacent. The card-data census found no
+remaining flat PreviousEffect owners for these retired forms. Typed Program `Choose` and shared
+cost, requirement, and branch-selection helpers remain. The bounded 2026-10-24 Passage increment
+authors Elven Passage and Fabled Passage as typed Programs, including the exact bound
+tapped-Battlefield BasicLand search result. Earthbender Ascension's landfall ability uses an
+explicitly bound optional
 `CounterPlacementReceipt` from `PutCounters(Quest, 1, Source)` for its
 `CreateReflexiveTrigger(CountersPlaced(Quest, Source))` step; the receipt remains tied to the exact
-source generation and represents one committed placement after replacements. Other receipt
-composition and library search/selection transactions remain open, so the broader migration is
-still incomplete.
+source generation and represents one committed placement after replacements. General-purpose
+receipt combinations and additional library search/selection transactions are future capabilities
+outside this approved migration, not unresolved card owners in its census.
 The target design also established cross-component resolution-prompt identity, exact compiled owner
 identities, and immutable ability binding. Supported finite profiles, accepted syntax, and
 restrictions are maintained in the
@@ -25,17 +32,18 @@ admission rejects old `DrawDiscard` RON and requires every sibling to be authore
 container uses programs. Typed discard outcomes and replacement/entry/payment continuations retain
 the owning frame. Authored-owner conversions include Calamitous Tide's face, Agna Qel'a's
 activation, Uthros Scanship's ETB, all three Three Steps Ahead modes, and the exact Recruit
-generator pair for Long Lake Nuisance and Patient Instructor. Broader operations and contexts remain
-migration targets.
+generator pair for Long Lake Nuisance and Patient Instructor. That census covered the DrawDiscard
+conversion; broader operation and context support is separately scoped future capability work.
 
 The bounded 2026-10-24 Discard→Draw increment moves Flux, Tolarian Winds, and Windfall to typed
 Programs. Each binds the completed `DiscardResult` and consumes it through the typed result slot:
 Flux draws each player's committed discard count, Tolarian Winds draws the controller's count, and
 Windfall draws the greatest completed player cohort. The result remains available across intervening
 Program instructions, including a suspended draw replacement. No flat Discard→Draw card consumer
-remains, and the legacy flat-list admission path now requires PreviousEffect card-result counts to
-use a bound Program input. Shared typed result-count evaluation remains for Gorging Vulture and
-Gerrard's Verdict. This increment adds no receipt type, identity-bearing payload, protocol, relay, or
+remains, and flat effect lists reject PreviousEffect card-result counts, object references, and
+amount references recursively. Shared typed result-count evaluation remains for Gorging Vulture and
+Gerrard's Verdict; each consumer names its exact same-block producer slot, and a resultless sibling
+may intervene. This increment adds no receipt type, identity-bearing payload, protocol, relay, or
 client behavior.
 Resolution prompt IDs are scoped to the deciding player for both legacy and Program choices; answer
 validation checks the actor and that actor's prompt identity. This does not widen accepted syntax.
@@ -52,8 +60,8 @@ added no protocol/client changes. The subsequent flat-branch retirement removed 
 the protobuf, relay, or client contract. Trade Route Envoy
 was outside the original `DrawDiscard` migration census. Following this port, the flat
 `ChooseResolutionBranch` schema/runtime was retired; typed Program `Choose` and shared branch/cost
-helpers remain. This does not complete the broader migration: receipt composition and library
-search/selection transactions remain open. The bounded 2026-10-21
+helpers remain. At this 2026-10-21 checkpoint, generalized receipt composition and library
+search/selection transactions were identified as separate future capability work. The bounded 2026-10-21
 optional-trigger continuation correction retains a begun choice after its original controller
 leaves, lets a surviving player select who will apply or decline it, and preserves the original
 stack controller, source, target IDs, and target generations (CR 400.7, 608.2m, 800.4a, 800.4g–h).
@@ -245,9 +253,10 @@ leave-and-return with a changed link (CR 400.7, 603.7, 607.2a). This adds no car
 protocol, relay, or client change.
 
 The 2026-10-22 Koya increment moves only the `triggered_01` parent body into a Program. Its exact
-owner binds the optional `0..1` creature target to `Exile(Chosen)` and immediately passes the
-operation's zero-or-one exact post-Exile object to `CreateDelayedTrigger(PreviousEffectObject)` for
-the existing `delayed_01` child. A completed no-target Exile carries an explicit empty result and
+owner binds the optional `0..1` creature target to `Exile(Chosen)` and passes the operation's
+zero-or-one exact post-Exile object through a named same-block input to
+`CreateDelayedTrigger(PreviousEffectObject)` for the existing `delayed_01` child; an intervening
+resultless instruction is allowed. A completed no-target Exile carries an explicit empty result and
 stages no observer; a trigger whose target is illegal before resolution never reaches that producer.
 The delayed child keeps the captured object generation and controller rather than searching Exile,
 including when a declared commander owner chooses Command after observer creation (CR 400.7j,
@@ -264,7 +273,8 @@ instruction zero. If that actor has left before resolution or while a choice is 
 delegation flow publishes a fresh prompt in the selected player's prompt-ID space; delegation does
 not change the ability controller or a compiled cost payer (CR 503.1a, 800.4g). Its threshold binds
 the existing typed `CardResultCohort(Sacrifice, Controller, 0..1)` from `Sacrifice(Source)` and passes
-that explicit result immediately to `CreateReflexiveTrigger(Sacrificed(Source))`. The ordinary child
+that exact same-block result to `CreateReflexiveTrigger(Sacrificed(Source))`; a resultless sibling may
+intervene. The ordinary child
 uses fixed-positive `DamageAll` for all players with the exact default Creature filter; Floodgates
 uses six, and this does not admit direct Program `DamageAll`. The committed sacrifice must be the
 exact source incarnation; a replacement destination still represents a successful sacrifice.
@@ -493,15 +503,16 @@ The bounded 2026-10-20 Combustible Gearhulk increment admits one narrow composit
 cost-free `Choose` by `TargetedPlayer(OpponentPlayer)` is paired with exactly one target-bound
 `DamagePlayer` on the same singleton, controller-chosen opponent group. The compiler resolves that
 group through nested blocks and the owning ability or mode's local target context. In the `Otherwise`
-block, a controller `Mill` binds a named result and the immediately following `DamagePlayer` reads
-that explicit input with `Count(PreviousMillManaValueSum)`. No wrapper, ambient previous-result read,
-intervening instruction, other recipient, or paid targeted-chooser profile is admitted. If the
+block, a controller `Mill` binds a named result and a `DamagePlayer` in that same block reads that
+exact input with `Count(PreviousMillManaValueSum)`; a resultless sibling may intervene. No wrapper,
+ambient previous-result read, mismatched result slot, other recipient, or paid targeted-chooser
+profile is admitted. If the
 target leaves while a choice is pending, delegation changes only who answers; it does not replace
 the captured damage target. The begun trigger retains source LKI if Gearhulk leaves (CR 113.7a,
 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). The six actual-card scenarios cover exact Mill receipts,
 draw failure with a short library, Narset's controller-scoped draw replacement, target departure,
 delegation with deterministic replay, and ordered damage prevention. Model compiler tests cover the
-recursive and owner/mode-local target binding, the immediate named Mill input, and rejected paid,
+recursive and owner/mode-local target binding, the exact named Mill input, and rejected paid,
 wrapped, unbound, and mismatched-group forms. The pinned Oracle identity is
 [Combustible Gearhulk](https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=676036&printed=false);
 its 2016-09-20 Wizards rulings confirm no actions during its resolution, a legal draw-three choice
@@ -807,7 +818,8 @@ ordinary operation/program. Do not force genuinely distinct mechanics into loose
 
 ## Migration sequence and acceptance
 
-These are dependencies for the broader migration; the bounded pilot does not complete this list:
+This historical roadmap records broader execution capabilities. It is not an outstanding-owner
+checklist for the completed 2026-10-25 result-predecessor retirement:
 
 1. The model/compiler and temporary source-only lowering established explicit target roles and
    result provenance. For the retired DrawDiscard family, that lowering and provenance are now
@@ -820,8 +832,8 @@ These are dependencies for the broader migration; the bounded pilot does not com
 4. Complete for the DrawDiscard family: its 45 owners use explicit programs, and its old sequencing
    variant, draw-after continuations, and source adjacency lowering are removed.
 5. For this family, existing generator templates already emit authored programs. Source datasets
-   were not refreshed as part of the retirement. Broader generator and corpus migrations remain
-   separate work.
+   were not refreshed as part of the retirement. Broader generator and corpus migrations are
+   separately scoped future work.
 
 Deletion is mandatory when no admitted definition, generated template or runtime caller uses a
 superseded path and its independent assertions pass through the shared implementation. Legacy
@@ -841,7 +853,8 @@ admission status; whole-card review remains deferred. Keep `custom_resolution/*`
 shared mechanic transactions, copy legality or entry/APNAP work; its directory name does not make every
 contained mechanism card-specific.
 Wash Out uses the shared owner-hand return continuation for matching mass returns and individual
-returns. Library-return cohort consolidation remains separate and deferred for a later migration.
+returns. Library-return cohort consolidation is a distinct future capability, deferred outside the
+migration batch documented here.
 
 Fanatic of the Harrowing's exact `triggered_01` owner now uses an authored ability Program. It
 collects each live player's private `Exact(1)` discard choice in APNAP order, commits the complete

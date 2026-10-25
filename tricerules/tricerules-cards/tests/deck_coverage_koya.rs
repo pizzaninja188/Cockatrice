@@ -239,13 +239,13 @@ fn koya_exile_producer_and_delayed_consumer_reject_near_misses() {
         "a DrawReceipt is not an ExiledObject"
     );
 
-    let non_adjacent = replace_once(
+    let unrelated_instruction = replace_once(
         KOYA_RON,
         "        (id: \"schedule_return\", bind: [], input: Some(\"exiled\"),",
         "        (id: \"unrelated_gap\", input: None, kind: Perform(GainLife(amount: 1))),\n        (id: \"schedule_return\", bind: [], input: Some(\"exiled\"),",
     );
     assert!(
-        !compiles(&non_adjacent),
-        "the typed Exile result must be adjacent"
+        compiles(&unrelated_instruction),
+        "the exact named Exile result remains usable across an unrelated instruction"
     );
 }

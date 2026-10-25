@@ -206,8 +206,8 @@ than treating ordinary successful entry coverage as proof of it.
 
 Kyoshi Battle Fan's `triggered_01` has its own exact token-receipt profile: an ordinary untapped
 `CreateTokens(token: ally_w_1_1, count: 1, who: Controller)` binds `CreatedTokenBatch(0..*)`,
-immediately consumed by `AttachEquipment(input: created_tokens, equipment: Source,
-creature: PreviousEffectObjects)`. The receipt is the complete replacement-expanded token cohort,
+consumed by a same-block `AttachEquipment(input: created_tokens, equipment: Source,
+creature: PreviousEffectObjects)`; an intervening resultless instruction is allowed. The receipt is the complete replacement-expanded token cohort,
 including a completed empty result, with each token's exact object and generation. Only this
 producer, binding, input, owner and recipient shape is admitted; this specialized use records the
 whole cohort because one created token auto-attaches, several require a choice, and an empty batch
@@ -307,8 +307,9 @@ retired together while the live accepted prefix and its generations remain fixed
 hardening does not admit new syntax; spell, optional and alternative-cost departure behavior is
 unchanged. Permanent choosers must be `Controller`; hand-selection counts remain fixed literals.
 `GainLife` normally uses a fixed literal, with one bounded result-count form: it may
-consume the explicitly bound result of the immediately preceding unfiltered target `Discard`
-(`CardsMatchingResult` with `players: All`) or `Mill(who: Controller)` (`players: Controller`).
+consume the explicitly bound result of a prior same-block direct unfiltered target `Discard`
+(`CardsMatchingResult` with `players: All`) or `Mill(who: Controller)` (`players: Controller`). A
+resultless sibling may intervene; the consumer must still name the exact producer slot.
 The filter must use `source: PreviousEffect` and match that producer's action and player set. The
 amount may be the direct count or exactly one positive term in `Affine(constant: 0, ...)`; its
 producer must have a finite result maximum and the coefficient times that maximum must fit in
@@ -573,10 +574,10 @@ Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may 
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.
 Source sacrifice remains resultless for existing uses such as Command Bridge. When bound, the
 ability Program exposes the existing `CardResultCohort` type with action `Sacrifice`, recipient
-`Controller`, and cardinality 0..1. Its only admitted consumer is an explicit input to the immediately
-following `CreateReflexiveTrigger(when: Some(Sacrificed(Source)))`; the producer must be a direct
-`Perform(Sacrifice(Source))` in the same block. Wrong-type, non-immediate, or branch-ambiguous inputs
-are rejected. Runtime checks committed Battlefield movement for the exact source ObjectId and
+`Controller`, and cardinality 0..1. Its only admitted consumer is an explicit input to a
+`CreateReflexiveTrigger(when: Some(Sacrificed(Source)))` in the same block; the input must name the
+direct `Perform(Sacrifice(Source))` result. Resultless siblings may intervene. Wrong-type or
+branch-ambiguous inputs are rejected. Runtime checks committed Battlefield movement for the exact source ObjectId and
 generation and the instructed controller. An empty cohort creates no reflexive trigger; a successful
 sacrifice remains successful if a replacement changes its destination (CR 701.21a, 400.7). The
 existing `sacrificed_objects` receipt remains available to the normal resolver. Gravelgill Scoundrel
@@ -643,9 +644,9 @@ reflexive child contains one fixed-amount `DamageTarget` with a valid Program ta
 existing `Tap` of a chosen opposing creature (Icewrought Sentry). Sparktongue Dragon uses fixed 3
 damage with `AnyTarget`; other fixed amounts and ordinary filters use the same targeting contract.
 One additional exact child is admitted for `when: Some(Sacrificed(Source))`: its explicit input must
-be the immediately preceding bound `Sacrifice(Source)` result, and its ordinary effect list contains
-one fixed-positive `DamageAll` for all players with the exact default Creature filter. Lavabrink
-Floodgates uses six damage. This reuses ordinary damage handling and does not admit a direct Program
+name the bound direct `Sacrifice(Source)` result from the same block; a resultless sibling may
+intervene. Its ordinary effect list contains one fixed-positive `DamageAll` for all players with
+the exact default Creature filter. Lavabrink Floodgates uses six damage. This reuses ordinary damage handling and does not admit a direct Program
 `DamageAll` leaf. The inner ability cannot add a separate `when`, targeting definition, or
 intervening condition, and a spell Program cannot create a reflexive child without a captured
 permanent source (CR 603.12a, 120.4b, 616.1e-f).
@@ -729,11 +730,12 @@ source-backed program; do not flatten the payment into a legacy branch effect.
 One bounded outer-and-child case is admitted for Koya, Death from Above. Only the exact
 `koya,_death_from_above` `triggered_01` owner may use the outer Program profile. Its triggered
 ability keeps one optional target group (`min: 0`, `max: 1`, no legacy `effect_indices`); the group
-binds as `Subject` to the immediately following `Exile(Chosen(Creature except Source))` instruction.
+binds as `Subject` to the direct `Exile(Chosen(Creature except Source))` instruction.
 The compiler carries that operation's exact post-move object as a private zero-or-one
 `ExiledObject` result, including its object ID, zone-change generation, and controller snapshot.
-The immediately adjacent `CreateDelayedTrigger(PreviousEffectObject)` consumes that result for
-`AtBeginningOfNextEndStep` and the exact `delayed_01` child. A completed optional-target Exile with
+The same-block `CreateDelayedTrigger(PreviousEffectObject)` consumes that result for
+`AtBeginningOfNextEndStep` and the exact `delayed_01` child; an intervening resultless sibling is
+allowed. A completed optional-target Exile with
 no target binds `None` and creates no observer; if the trigger fizzles before the Exile instruction,
 there is no completed result to consume. Resolution never searches the Exile zone for a substitute.
 These identity and source-departure rules follow CR 400.7j, 113.7a, and 608.2h. The observer is
@@ -752,7 +754,8 @@ supported program instructions may compose before, inside, or after that return;
 its cursor across Clone's entry-copy choice. `ReturnTriggeredCard`
 also serves Abnormal Endurance's legacy graveyard return, but that different operation shape remains
 on its existing legacy path. Koya's object-capture profile remains distinct from the typed
-target-controller delayed child described below. It fails closed for a non-adjacent producer, other
+target-controller delayed child described below. It fails closed for a missing or wrong same-block
+producer, other
 delayed timings, plural or other previous-effect subjects, modal or targetful child bodies, `may`,
 `once`, and maximum-use metadata; do not generalize it to arbitrary effect-created or activated
 abilities. Koya's exact trigger, target filters, and target bounds remain in its card definition and
@@ -1076,15 +1079,15 @@ Combustible Gearhulk uses a deliberately narrower targeted-choice profile. `Choo
 Its compiled target binding pairs exactly one `DamagePlayer` with that same singleton opponent
 target group. The group is resolved recursively through nested blocks and through the owning
 ability or mode's local target context. In `Otherwise`, `Mill(who: Controller)` must bind a named
-result; the immediately following `DamagePlayer` in that same block must read it with
-`input: Some("milled")` and `Count(PreviousMillManaValueSum)`. No wrapper, ambient previous-result
-read, intervening instruction, alternative player recipient, or paid targeted-chooser form is
+result; a `DamagePlayer` in that same block must read that exact slot with `input: Some("milled")`
+and `Count(PreviousMillManaValueSum)`. A sibling instruction may intervene. No wrapper, ambient
+previous-result read, mismatched result slot, alternative player recipient, or paid targeted-chooser form is
 accepted. Delegating the pending choice after target departure changes the chooser only. The
 original target remains the damage recipient, and the resolving trigger retains Gearhulk source LKI
 after source departure (CR 113.7a, 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). Its actual-card scenarios
 cover the exact Mill receipts, short-library draw branch, Narset's controller-scoped draw, target
 departure, delegated replay, and ordered prevention. Compiler regressions also reject paid Mana and
-Waterbend branches, non-immediate or wrapped Mill inputs, and mismatched target groups. The model
+Waterbend branches, unbound or wrapped Mill inputs, and mismatched target groups. The model
 tests `program_compiler_accepts_gearhulk_targeted_choose_and_damage_group`,
 `program_compiler_recursively_accepts_gearhulk_targeted_choose_in_otherwise`,
 `program_compiler_accepts_gearhulk_typed_mill_input_for_targeted_damage`,

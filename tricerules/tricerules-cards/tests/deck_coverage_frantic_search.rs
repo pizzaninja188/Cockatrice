@@ -11,22 +11,21 @@ fn probe(effects: &str) -> Result<CardRegistry, String> {
 const CHOICE: &str = "ChoosePermanents(chooser:Controller,filter:(kind:AnyPermanent,permanent_types:[Land]),min:0,max:3)";
 
 #[test]
-fn chosen_untap_requires_an_immediate_direct_permanent_choice() {
-    probe(&format!("{CHOICE},UntapChosenPermanents")).unwrap();
-    probe(&format!(
-        "{},UntapChosenPermanents",
-        CHOICE.replace("min:0,max:3", "min:1,max:1")
-    ))
-    .unwrap();
+fn flat_chosen_untap_requires_a_typed_program_input() {
     for effects in [
         "UntapChosenPermanents".to_string(),
+        format!("{CHOICE},UntapChosenPermanents"),
+        format!(
+            "{},UntapChosenPermanents",
+            CHOICE.replace("min:0,max:3", "min:1,max:1")
+        ),
         "Scry(count:1),UntapChosenPermanents".to_string(),
         format!("{CHOICE},Scry(count:1),UntapChosenPermanents"),
         format!("{CHOICE},UntapChosenPermanents,UntapChosenPermanents"),
     ] {
         let error = probe(&effects).expect_err("incompatible receipt rejected");
         assert!(
-            error.contains("immediately preceding direct ChoosePermanents"),
+            error.contains("UntapChosenPermanents requires an authored Program input"),
             "{error}"
         );
     }
@@ -34,7 +33,14 @@ fn chosen_untap_requires_an_immediate_direct_permanent_choice() {
         format!("Conditional(condition:ActivePlayer(players:Controller),effect:{CHOICE})");
     probe(&wrapped).unwrap();
     let error = probe(&format!("{wrapped},UntapChosenPermanents"))
-        .expect_err("conditional producer rejected");
-    assert!(error.contains("immediately preceding direct ChoosePermanents"));
-    assert!(probe(&format!("{CHOICE},Conditional(condition:ActivePlayer(players:Controller),effect:UntapChosenPermanents)")).is_err());
+        .expect_err("flat lists cannot bind an explicit Program input");
+    assert!(error.contains("UntapChosenPermanents requires an authored Program input"));
+    let nested = probe(&format!(
+        "{CHOICE},Conditional(condition:ActivePlayer(players:Controller),effect:UntapChosenPermanents)"
+    ))
+    .expect_err("nested flat consumers also require a Program input");
+    assert!(
+        nested.contains("requires an authored Program input")
+            || nested.contains("Conditional currently supports")
+    );
 }

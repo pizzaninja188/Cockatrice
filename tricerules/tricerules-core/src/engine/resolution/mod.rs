@@ -720,7 +720,6 @@ enum EffectOutcome {
     ChaosWarpOwnerInstructions(PlayerId),
     ChaosWarpCommanderChoice,
     Suspended,
-    RestartResolutionBranch(Option<usize>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2183,15 +2182,6 @@ impl GameEngine {
                         };
                     }
                 }
-                if let SpellEffectKind::MayBehold { if_beheld, .. } = &entry.effect {
-                    if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
-                    {
-                        if choice.is_some() {
-                            expanded.extend(build_entries(if_beheld, None, &[], None));
-                        }
-                        continue;
-                    }
-                }
                 expanded.push(entry);
             }
             resolution_effects = expanded;
@@ -2369,20 +2359,6 @@ impl GameEngine {
                         }
                     }
                     return Ok(ResolutionProgress::Parked);
-                }
-                EffectOutcome::RestartResolutionBranch(branch_index) => {
-                    let mut item = top.clone();
-                    item.resolution_branch_choices
-                        .insert(index as u32, branch_index);
-                    let (effects, label) = self.build_resolution_effects(&item);
-                    return self.run_effect_list_with_previous(
-                        &item,
-                        &label,
-                        effects,
-                        index,
-                        previous_effect_result,
-                        events,
-                    );
                 }
                 EffectOutcome::Continue => {}
                 EffectOutcome::ChaosWarpOwnerInstructions(_)
@@ -2962,7 +2938,6 @@ impl GameEngine {
         #[derive(Clone, Copy)]
         enum ChooserLeaf {
             ChoosePermanents,
-            MayBehold,
             Proliferate,
             Populate,
             Amass,
@@ -2976,9 +2951,6 @@ impl GameEngine {
         let (stack, expected_leaf) = match &pending.continuation {
             ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_none() => {
                 (stack.clone(), ChooserLeaf::ChoosePermanents)
-            }
-            ResolutionContinuation::BeholdChoice { stack, .. } if stack.program.is_none() => {
-                (stack.clone(), ChooserLeaf::MayBehold)
             }
             ResolutionContinuation::Proliferate { stack, .. } if stack.program.is_none() => {
                 (stack.clone(), ChooserLeaf::Proliferate)
@@ -3020,7 +2992,6 @@ impl GameEngine {
             ChooserLeaf::ChoosePermanents => {
                 matches!(effect, SpellEffectKind::ChoosePermanents { .. })
             }
-            ChooserLeaf::MayBehold => matches!(effect, SpellEffectKind::MayBehold { .. }),
             ChooserLeaf::Proliferate => matches!(effect, SpellEffectKind::Proliferate),
             ChooserLeaf::Populate => matches!(effect, SpellEffectKind::Populate),
             ChooserLeaf::Amass => matches!(effect, SpellEffectKind::Amass { .. }),

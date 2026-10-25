@@ -3304,48 +3304,69 @@ impl SpellEffectKind {
         }
     }
 
-    /// Find the retired implicit previous-object receipt path through legacy flat effect wrappers.
-    /// Programs must bind a typed result instead of relying on the preceding effect list item.
-    pub(crate) fn contains_legacy_flat_previous_object_ability_removal(&self) -> bool {
+    /// A legacy effect list has no named input slot, so any PreviousEffect-backed scalar or
+    /// object reference must be compiled as part of a typed Program. Walk the same flat wrappers
+    /// as the other list-boundary gates, without inspecting nested authored Program bodies.
+    fn contains_legacy_previous_effect_reference(&self) -> bool {
         self.contains_legacy_flat_signature(|effect| {
-            matches!(
-                effect,
-                Self::RemoveAllAbilities {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
-                }
-            )
+            effect.result_consuming_amount().is_some_and(|amount| {
+                amount
+                    .card_result_filter()
+                    .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
+                    || amount.uses_previous_mill_mana_value_sum()
+            }) || effect.has_previous_effect_object_reference()
         })
     }
 
-    /// Find flat batch consumers of the implicit PreviousEffectObjects receipt. These consumers
-    /// need a typed Program input so empty and completed batches remain distinct.
-    pub(crate) fn contains_legacy_flat_previous_object_batch_consumer(&self) -> bool {
-        self.contains_legacy_flat_signature(|effect| {
+    fn has_previous_effect_object_reference(&self) -> bool {
+        fn is_previous_object(subject: &EffectSubject) -> bool {
             matches!(
-                effect,
-                Self::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObjects,
-                    ..
-                } | Self::CreateDelayedTrigger {
-                    subject: Some(EffectSubject::PreviousEffectObjects),
-                    ..
-                }
+                subject,
+                EffectSubject::PreviousEffectObject | EffectSubject::PreviousEffectObjects
             )
-        })
-    }
+        }
 
-    /// Find the retired Koya single-object delayed consumer through the same flat wrappers.
-    pub(crate) fn contains_legacy_flat_previous_object_delayed_trigger(&self) -> bool {
-        self.contains_legacy_flat_signature(|effect| {
-            matches!(
-                effect,
-                Self::CreateDelayedTrigger {
-                    subject: Some(EffectSubject::PreviousEffectObject),
-                    ..
-                }
-            )
-        })
+        match self {
+            Self::Conditional { condition, .. } => condition.references_previous_effect_object(),
+            Self::ApplyPermanentModifier { subject, .. }
+            | Self::Destroy { subject, .. }
+            | Self::DestroyPreventingRegeneration { subject, .. }
+            | Self::Sacrifice { subject, .. }
+            | Self::PumpTarget { subject, .. }
+            | Self::Tap { subject }
+            | Self::Untap { subject }
+            | Self::SetPrepared { subject, .. }
+            | Self::RemoveAllAbilities { subject, .. }
+            | Self::GrantKeywords { subject, .. }
+            | Self::GrantKeywordChoice { subject, .. }
+            | Self::GrantProtection { subject, .. }
+            | Self::AddTypes { subject, .. }
+            | Self::Exile { subject, .. }
+            | Self::ExileWithOwnerCastPermission { subject, .. }
+            | Self::ReturnToOwnersHand { subject }
+            | Self::PutInOwnersLibrary { subject, .. }
+            | Self::Regenerate { subject }
+            | Self::Explore { subject }
+            | Self::PutCounters { subject, .. }
+            | Self::RemoveCounters { subject, .. }
+            | Self::RemoveAllCounters { subject, .. }
+            | Self::PutCounterSnapshot { subject, .. } => is_previous_object(subject),
+            Self::Fight { first, second, .. } => {
+                is_previous_object(first) || is_previous_object(second)
+            }
+            Self::AttachEquipment {
+                equipment,
+                creature,
+            } => is_previous_object(equipment) || is_previous_object(creature),
+            Self::GrantTriggeredAbility { subject, .. } => is_previous_object(subject),
+            Self::CreateDelayedTrigger { subject, .. } => {
+                subject.as_ref().is_some_and(is_previous_object)
+            }
+            Self::ShufflePermanentsIntoOwnersLibraries { subjects, .. } => {
+                subjects.iter().any(is_previous_object)
+            }
+            _ => false,
+        }
     }
 
     /// Find the explicit Program-only player input through legacy flat-effect wrappers. A
@@ -4011,24 +4032,39 @@ impl SpellEffectKind {
         }
         if effects
             .iter()
-            .any(SpellEffectKind::contains_legacy_flat_previous_object_ability_removal)
+            .any(SpellEffectKind::contains_legacy_previous_effect_reference)
         {
+            return Err("PreviousEffect references require an authored Program".into());
+        }
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, SpellEffectKind::MayBehold { .. })
+            })
+        }) {
+            return Err("resolution MayBehold requires an authored Program".into());
+        }
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, SpellEffectKind::ReturnOtherLinkedExiledCards { .. })
+            })
+        }) {
+            return Err("ReturnOtherLinkedExiledCards requires an authored Program input".into());
+        }
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, SpellEffectKind::UntapChosenPermanents)
+            })
+        }) {
+            return Err("UntapChosenPermanents requires an authored Program input".into());
+        }
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, SpellEffectKind::MyrBattlesphereAttack)
+            })
+        }) {
             return Err(
-                "legacy RemoveAllAbilities(PreviousEffectObject) requires an authored Program"
-                    .into(),
+                "MyrBattlesphereAttack requires an explicitly bound Program input result".into(),
             );
-        }
-        if effects
-            .iter()
-            .any(SpellEffectKind::contains_legacy_flat_previous_object_batch_consumer)
-        {
-            return Err("PreviousEffectObjects batch consumers require an authored Program".into());
-        }
-        if effects
-            .iter()
-            .any(SpellEffectKind::contains_legacy_flat_previous_object_delayed_trigger)
-        {
-            return Err("PreviousEffectObject delayed triggers require an authored Program".into());
         }
         if effects
             .iter()
@@ -4059,67 +4095,6 @@ impl SpellEffectKind {
                     .into(),
             );
         }
-        #[derive(Clone, Copy, PartialEq, Eq)]
-        enum ProducedObjectCardinality {
-            None,
-            OptionalOne,
-            ExactlyOne,
-            Many,
-        }
-
-        fn produced_object_cardinality(effect: &SpellEffectKind) -> ProducedObjectCardinality {
-            match effect {
-                SpellEffectKind::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
-                } => ProducedObjectCardinality::OptionalOne,
-                SpellEffectKind::ChoosePermanents { min: 1, max: 1, .. } => {
-                    ProducedObjectCardinality::ExactlyOne
-                }
-                SpellEffectKind::ChoosePermanents { max: 1, .. }
-                | SpellEffectKind::CounterTargetAbility
-                | SpellEffectKind::Amass { .. } => ProducedObjectCardinality::OptionalOne,
-                SpellEffectKind::ChoosePermanents { .. } => ProducedObjectCardinality::Many,
-                SpellEffectKind::Conditional { effect, .. } => {
-                    match produced_object_cardinality(effect) {
-                        ProducedObjectCardinality::None => ProducedObjectCardinality::None,
-                        ProducedObjectCardinality::Many => ProducedObjectCardinality::Many,
-                        ProducedObjectCardinality::OptionalOne
-                        | ProducedObjectCardinality::ExactlyOne => {
-                            ProducedObjectCardinality::OptionalOne
-                        }
-                    }
-                }
-                _ => ProducedObjectCardinality::None,
-            }
-        }
-
-        #[derive(Clone, Copy, PartialEq, Eq)]
-        enum PreviousObjectRequirement {
-            ExactlyOne,
-            OptionalOne,
-        }
-
-        fn previous_object_requirement(
-            effect: &SpellEffectKind,
-        ) -> Option<PreviousObjectRequirement> {
-            match effect {
-                SpellEffectKind::Conditional { effect, .. } => previous_object_requirement(effect),
-                SpellEffectKind::GrantKeywords {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
-                } => Some(PreviousObjectRequirement::ExactlyOne),
-                SpellEffectKind::ApplyPermanentModifier {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
-                } => Some(PreviousObjectRequirement::OptionalOne),
-                SpellEffectKind::ReturnToOwnersHand {
-                    subject: EffectSubject::PreviousEffectObject,
-                } => Some(PreviousObjectRequirement::OptionalOne),
-                _ => None,
-            }
-        }
-
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
         // an effect that declares an object target (Reanimate: `MoveGraveyardCards`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
@@ -4140,78 +4115,7 @@ impl SpellEffectKind {
             );
         }
 
-        for (index, effect) in effects.iter().enumerate() {
-            let amount = effect.result_consuming_amount();
-            let previous = index
-                .checked_sub(1)
-                .and_then(|previous| effects.get(previous));
-            if amount
-                .and_then(Amount::card_result_filter)
-                .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
-            {
-                return Err(
-                    "PreviousEffect card result counts require a bound Program input".into(),
-                );
-            }
-            if let SpellEffectKind::ReturnOtherLinkedExiledCards {
-                linked_exile_id: return_link,
-                ..
-            } = effect
-            {
-                let Some(SpellEffectKind::Exile {
-                    subject: EffectSubject::TriggerObject,
-                    linked_exile_id: Some(exile_link),
-                }) = previous
-                else {
-                    return Err(
-                        "ReturnOtherLinkedExiledCards requires an immediately preceding linked TriggerObject Exile receipt"
-                            .into(),
-                    );
-                };
-                if return_link != exile_link {
-                    return Err(
-                        "ReturnOtherLinkedExiledCards must use the immediately preceding Exile link"
-                            .into(),
-                    );
-                }
-            }
-            if amount.is_some_and(Amount::uses_previous_mill_mana_value_sum) {
-                let exact_damage_consumer = matches!(
-                    effect,
-                    SpellEffectKind::DamagePlayer {
-                        amount: Amount::Count(CountExpression::PreviousMillManaValueSum),
-                        ..
-                    }
-                );
-                if !exact_damage_consumer
-                    || !matches!(
-                        previous,
-                        Some(SpellEffectKind::Mill {
-                            who: PlayerRecipient::Controller,
-                            ..
-                        })
-                    )
-                {
-                    return Err(
-                        "PreviousMillManaValueSum requires an immediately preceding controller Mill and direct DamagePlayer consumer"
-                            .into(),
-                    );
-                }
-            }
-            if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
-                return Err(
-                    "MyrBattlesphereAttack requires an explicitly bound Program input result"
-                        .into(),
-                );
-            }
-            if matches!(effect, SpellEffectKind::UntapChosenPermanents)
-                && !matches!(previous, Some(SpellEffectKind::ChoosePermanents { .. }))
-            {
-                return Err(
-                    "UntapChosenPermanents requires an immediately preceding direct ChoosePermanents"
-                        .into(),
-                );
-            }
+        for effect in effects {
             if matches!(
                 effect,
                 SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
@@ -4220,42 +4124,6 @@ impl SpellEffectKind {
                     "ShuffleNonlandPermanentsIntoOwnersLibraries requires an authored Program"
                         .into(),
                 );
-            }
-            let previous_cardinality = previous
-                .map(produced_object_cardinality)
-                .unwrap_or(ProducedObjectCardinality::None);
-            if let Some(requirement) = previous_object_requirement(effect) {
-                let valid = match requirement {
-                    PreviousObjectRequirement::ExactlyOne => {
-                        previous_cardinality == ProducedObjectCardinality::ExactlyOne
-                    }
-                    PreviousObjectRequirement::OptionalOne => matches!(
-                        previous_cardinality,
-                        ProducedObjectCardinality::OptionalOne
-                            | ProducedObjectCardinality::ExactlyOne
-                    ),
-                };
-                if !valid {
-                    return Err(match requirement {
-                        PreviousObjectRequirement::ExactlyOne
-                        | PreviousObjectRequirement::OptionalOne => "PreviousEffectObject requires an immediately preceding compatible single-object producer",
-                    }
-                    .into());
-                }
-            }
-            if let SpellEffectKind::Conditional { condition, .. } = effect {
-                if condition.references_previous_effect_object()
-                    && !matches!(
-                        previous_cardinality,
-                        ProducedObjectCardinality::OptionalOne
-                            | ProducedObjectCardinality::ExactlyOne
-                    )
-                {
-                    return Err(
-                        "PreviousEffectObject condition requires an immediately preceding compatible single-object producer"
-                            .into(),
-                    );
-                }
             }
         }
         Ok(())
@@ -6602,7 +6470,7 @@ mod program_input_count_flat_admission_tests {
         }];
         assert!(SpellEffectKind::validate_list(&behold_success)
             .unwrap_err()
-            .contains("ProgramInputCount requires a direct typed Program input"));
+            .contains("resolution MayBehold requires an authored Program"));
     }
 }
 

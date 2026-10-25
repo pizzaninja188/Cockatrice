@@ -1596,20 +1596,20 @@ impl Compiler<'_> {
                     validate_program_gain_life_result_count_input(
                         effect,
                         input,
-                        steps.last(),
+                        &steps,
                         &self.slots,
                     )?;
                     validate_program_draw_result_count_input(effect, input, &self.slots)?;
                     validate_previous_mill_mana_value_sum_input(
                         effect,
                         input,
-                        steps.last(),
+                        &steps,
                         &self.slots,
                     )?;
                     validate_koya_exile_delayed_input(
                         effect,
                         input,
-                        steps.last(),
+                        &steps,
                         &self.slots,
                         self.allow_koya_outer_exile_result,
                     )?;
@@ -1858,7 +1858,7 @@ impl Compiler<'_> {
                     validate_equipment_selection_input(
                         effect,
                         input,
-                        steps.last(),
+                        &steps,
                         &self.slots,
                         self.allow_equipment_receipt,
                         self.allow_vow_equipment_choice,
@@ -2462,28 +2462,29 @@ impl Compiler<'_> {
             ) {
                 let input_slot = input.ok_or_else(|| {
                     format!(
-                        "CreateReflexiveTrigger instruction '{}' requires the immediately preceding Source sacrifice result",
+                        "CreateReflexiveTrigger instruction '{}' requires an explicitly bound Source sacrifice result from this block",
                         instruction.id
                     )
                 })?;
-                let immediately_preceding_source_sacrifice = steps.last().is_some_and(|previous| {
-                    previous.input.is_none()
-                        && previous.outputs.len() == 1
-                        && previous.outputs[0] == input_slot
-                        && matches!(
-                            &previous.kind,
-                            CompiledInstructionKind::Perform(effect)
-                                if matches!(
-                                    effect.as_ref(),
-                                    SpellEffectKind::Sacrifice {
-                                        subject: EffectSubject::Source,
-                                    }
+                let same_block_source_sacrifice =
+                    same_block_direct_perform_producer(&steps, Some(input_slot)).is_some_and(
+                        |producer| {
+                            producer.input.is_none()
+                                && matches!(
+                                    &producer.kind,
+                                    CompiledInstructionKind::Perform(effect)
+                                        if matches!(
+                                            effect.as_ref(),
+                                            SpellEffectKind::Sacrifice {
+                                                subject: EffectSubject::Source,
+                                            }
+                                        )
                                 )
-                        )
-                });
-                if !immediately_preceding_source_sacrifice {
+                        },
+                    );
+                if !same_block_source_sacrifice {
                     return Err(format!(
-                        "CreateReflexiveTrigger instruction '{}' must immediately consume the direct Source sacrifice result in the same block",
+                        "CreateReflexiveTrigger instruction '{}' must consume the exact direct Source sacrifice result from the same block",
                         instruction.id
                     ));
                 }
@@ -2896,7 +2897,7 @@ fn validate_program_draw_result_count_input(
 fn validate_program_gain_life_result_count_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    previous: Option<&CompiledInstruction>,
+    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
     let EffectOp::GainLife { amount } = effect else {
@@ -2915,20 +2916,9 @@ fn validate_program_gain_life_result_count_input(
     let input = input.ok_or_else(|| {
         "Program GainLife result count requires an explicitly bound input result".to_string()
     })?;
-    let previous = previous.ok_or_else(|| {
-        "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".to_string()
+    let previous = same_block_direct_perform_producer(steps, Some(input)).ok_or_else(|| {
+        "Program GainLife result count requires a same-block direct Discard or Controller Mill result".to_string()
     })?;
-    let [previous_output] = previous.outputs.as_slice() else {
-        return Err(
-            "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
-        );
-    };
-    if *previous_output != input {
-        return Err(
-            "Program GainLife input must be the result of the immediately preceding instruction"
-                .into(),
-        );
-    }
 
     let (action, players, producer_max) = match &previous.kind {
         CompiledInstructionKind::Perform(producer) => match producer.as_ref() {
@@ -2951,13 +2941,13 @@ fn validate_program_gain_life_result_count_input(
             ),
             _ => {
                 return Err(
-                    "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
+                    "Program GainLife result count requires a same-block matching Discard or Controller Mill result".into(),
                 );
             }
         },
         _ => {
             return Err(
-                "Program GainLife result count requires the immediately preceding matching Discard or Controller Mill result".into(),
+                "Program GainLife result count requires a same-block matching Discard or Controller Mill result".into(),
             );
         }
     };
@@ -2967,7 +2957,7 @@ fn validate_program_gain_life_result_count_input(
         || filter.players != players
     {
         return Err(
-            "Program GainLife result count must match the immediately preceding Discard or Controller Mill action and player set".into(),
+            "Program GainLife result count must match its same-block Discard or Controller Mill action and player set".into(),
         );
     }
 
@@ -3012,28 +3002,34 @@ fn validate_program_gain_life_result_count_input(
     Ok(())
 }
 
+fn same_block_direct_perform_producer(
+    steps: &[CompiledInstruction],
+    input: Option<ResultSlotId>,
+) -> Option<&CompiledInstruction> {
+    let input = input?;
+    steps.iter().find(|step| {
+        step.outputs.as_slice() == [input]
+            && matches!(&step.kind, CompiledInstructionKind::Perform(_))
+    })
+}
+
 fn validate_previous_mill_mana_value_sum_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    previous: Option<&CompiledInstruction>,
+    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
     if !is_targeted_opponent_previous_mill_damage(effect) {
         return Ok(());
     }
     let slot_id = input.ok_or_else(|| {
-        "PreviousMillManaValueSum requires an explicitly bound input from an immediately preceding Controller Mill instruction".to_string()
+        "PreviousMillManaValueSum requires an explicitly bound Controller Mill input".to_string()
     })?;
-    let previous = previous.ok_or_else(|| {
-        "PreviousMillManaValueSum requires an immediately preceding Controller Mill instruction in the same program block".to_string()
+    let producer = same_block_direct_perform_producer(steps, Some(slot_id)).ok_or_else(|| {
+        "PreviousMillManaValueSum requires a same-block direct Controller Mill producer".to_string()
     })?;
-    if previous.outputs.len() != 1 || previous.outputs[0] != slot_id {
-        return Err(
-            "PreviousMillManaValueSum input must be the result bound by the immediately preceding Controller Mill instruction".into(),
-        );
-    }
     if !matches!(
-        &previous.kind,
+        &producer.kind,
         CompiledInstructionKind::Perform(effect)
             if matches!(effect.as_ref(), SpellEffectKind::Mill {
                 who: PlayerRecipient::Controller,
@@ -3041,7 +3037,7 @@ fn validate_previous_mill_mana_value_sum_input(
             })
     ) {
         return Err(
-            "PreviousMillManaValueSum requires an immediately preceding Controller Mill instruction".into(),
+            "PreviousMillManaValueSum requires its same-block input to come from a Controller Mill instruction".into(),
         );
     }
     if !matches!(
@@ -3084,7 +3080,7 @@ fn is_koya_outer_exile_producer(effect: &EffectOp) -> bool {
 fn validate_koya_exile_delayed_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    previous: Option<&CompiledInstruction>,
+    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
     allow_koya_outer_exile_result: bool,
 ) -> Result<(), String> {
@@ -3092,34 +3088,28 @@ fn validate_koya_exile_delayed_input(
         return Ok(());
     }
     let invalid = || {
-        "Koya delayed Exile consumer requires the immediately preceding exact optional Exile result"
+        "Koya delayed Exile consumer requires its exact optional Exile result from the same block"
             .to_string()
     };
     let Some(input) = input else {
         return Err(invalid());
     };
-    let Some(previous) = previous else {
+    let Some(producer) = same_block_direct_perform_producer(steps, Some(input)) else {
         return Err(invalid());
     };
-    let [previous_output] = previous.outputs.as_slice() else {
-        return Err(invalid());
-    };
-    if *previous_output != input
-        || !matches!(
-            &previous.kind,
-            CompiledInstructionKind::Perform(previous_effect)
-                if is_koya_outer_exile_producer(previous_effect)
-        )
-        || !matches!(
-            slots.get(input.0 as usize).map(|slot| &slot.result_type),
-            Some(ResultType::ExiledObject {
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1)
-                }
-            })
-        )
-    {
+    if !matches!(
+        &producer.kind,
+        CompiledInstructionKind::Perform(previous_effect)
+            if is_koya_outer_exile_producer(previous_effect)
+    ) || !matches!(
+        slots.get(input.0 as usize).map(|slot| &slot.result_type),
+        Some(ResultType::ExiledObject {
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(1)
+            }
+        })
+    ) {
         return Err(invalid());
     }
     Ok(())
@@ -3675,7 +3665,7 @@ fn is_vow_chosen_target_effect(effect: &EffectOp) -> bool {
 fn validate_equipment_selection_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    previous: Option<&CompiledInstruction>,
+    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
     allow_equipment_receipt: bool,
     allow_vow_equipment_choice: bool,
@@ -3689,34 +3679,32 @@ fn validate_equipment_selection_input(
                 return Err("CreatedTokenBatch attachment is reserved for Kyoshi Battle Fan's exact triggered Program".into());
             }
             let slot = input.ok_or_else(|| {
-                "Kyoshi Battle Fan receipt attachment requires its immediately preceding CreatedTokenBatch input".to_string()
+                "Kyoshi Battle Fan receipt attachment requires its CreatedTokenBatch input"
+                    .to_string()
             })?;
-            let previous = previous.ok_or_else(|| {
-                "Kyoshi Battle Fan receipt attachment requires an immediately preceding CreateTokens instruction".to_string()
+            let producer = same_block_direct_perform_producer(steps, Some(slot)).ok_or_else(|| {
+                "Kyoshi Battle Fan receipt attachment requires a same-block CreateTokens instruction".to_string()
             })?;
-            if previous.outputs.as_slice() != [slot]
-                || !matches!(
-                    &previous.kind,
-                    CompiledInstructionKind::Perform(producer)
-                        if matches!(
-                            producer.as_ref(),
-                            SpellEffectKind::CreateTokens {
-                                token,
-                                count: Amount::Fixed(1),
-                                who: PlayerRecipient::Controller,
-                                tapped: false,
-                                sacrifice_timing: None,
-                            } if token == "ally_w_1_1"
-                        )
-                )
-                || !matches!(
-                    slots.get(slot.0 as usize).map(|slot| &slot.result_type),
-                    Some(ResultType::CreatedTokenBatch {
-                        cardinality: Cardinality { min: 0, max: None }
-                    })
-                )
-            {
-                return Err("Kyoshi Battle Fan receipt attachment must consume the exact immediately preceding Ally CreateTokens result".into());
+            if !matches!(
+                &producer.kind,
+                CompiledInstructionKind::Perform(producer)
+                    if matches!(
+                        producer.as_ref(),
+                        SpellEffectKind::CreateTokens {
+                            token,
+                            count: Amount::Fixed(1),
+                            who: PlayerRecipient::Controller,
+                            tapped: false,
+                            sacrifice_timing: None,
+                        } if token == "ally_w_1_1"
+                    )
+            ) || !matches!(
+                slots.get(slot.0 as usize).map(|slot| &slot.result_type),
+                Some(ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None }
+                })
+            ) {
+                return Err("Kyoshi Battle Fan receipt attachment must consume its exact Ally CreateTokens result from the same block".into());
             }
         }
         SpellEffectKind::AttachEquipment {
@@ -3730,27 +3718,27 @@ fn validate_equipment_selection_input(
                 );
             }
             let slot = input.ok_or_else(|| {
-                "Vow to Erebor attachment requires its immediately preceding optional Equipment selection".to_string()
+                "Vow to Erebor attachment requires its optional Equipment selection input"
+                    .to_string()
             })?;
-            let previous = previous.ok_or_else(|| {
-                "Vow to Erebor attachment requires an immediately preceding ChoosePermanents instruction".to_string()
-            })?;
-            if previous.outputs.as_slice() != [slot]
-                || !matches!(
-                    &previous.kind,
-                    CompiledInstructionKind::Perform(producer)
-                        if is_exact_vow_equipment_choice(producer.as_ref())
-                )
-                || !matches!(
-                    slots.get(slot.0 as usize).map(|slot| &slot.result_type),
-                    Some(ResultType::PermanentSelection {
-                        chooser: PlayerRecipient::Controller,
-                        filter,
-                        cardinality: Cardinality { min: 0, max: Some(1) },
-                    }) if filter.as_ref() == &vow_equipment_filter()
-                )
-            {
-                return Err("Vow to Erebor attachment must consume only its exact immediately preceding Equipment selection".into());
+            let producer =
+                same_block_direct_perform_producer(steps, Some(slot)).ok_or_else(|| {
+                    "Vow to Erebor attachment requires a same-block ChoosePermanents instruction"
+                        .to_string()
+                })?;
+            if !matches!(
+                &producer.kind,
+                CompiledInstructionKind::Perform(producer)
+                    if is_exact_vow_equipment_choice(producer.as_ref())
+            ) || !matches!(
+                slots.get(slot.0 as usize).map(|slot| &slot.result_type),
+                Some(ResultType::PermanentSelection {
+                    chooser: PlayerRecipient::Controller,
+                    filter,
+                    cardinality: Cardinality { min: 0, max: Some(1) },
+                }) if filter.as_ref() == &vow_equipment_filter()
+            ) {
+                return Err("Vow to Erebor attachment must consume only its exact same-block Equipment selection".into());
             }
         }
         _ => {}

@@ -249,7 +249,7 @@ fn scoped_nested_triggered_definitions_cannot_borrow_cast_cost_metadata() {
 }
 
 #[test]
-fn scoped_linked_exile_validation_reaches_wrappers_and_nested_modes_once() {
+fn scoped_activated_grants_reject_flat_behold_before_registry_admission() {
     let consumer = r#"ReturnLinkedExiledCards(producer_ability_id: "activated_01", linked_exile_id: "linked_01", filter: (card_type: Creature))"#;
     let beheld = format!(
         r#"MayBehold(choice_id: "behold_01", hand_filter: (card_type: Creature), permanent_filter: (kind: Creature, controller: You), if_beheld: [{consumer}])"#
@@ -257,31 +257,8 @@ fn scoped_linked_exile_validation_reaches_wrappers_and_nested_modes_once() {
     invalid(
         "(kind: AnyPermanent)",
         &child_with_effect(&beheld),
-        "exactly one producer and one consumer",
+        "resolution MayBehold requires an authored Program",
     );
-    let trigger = format!(
-        r#"GrantTriggeredAbility(subject: Source, ability: (
-        ability_id: "nested_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield,
-        modal: Some((min_modes: 1, max_modes: 1, modes: [
-            (mode_id: "mode_01", presentation: Fallback, effects: [{consumer}]),
-            (mode_id: "mode_02", presentation: Fallback, effects: [GainLife(amount: 1)]),
-        ])),
-    ))"#
-    );
-    invalid(
-        "(kind: AnyPermanent)",
-        &child_with_effect(&trigger),
-        "exactly one producer and one consumer",
-    );
-    let producer = r#"MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: "linked_01")"#;
-    let consumer_ability = child_with_effect(&beheld).replacen(
-        "(ability_id: \"activated_01\"",
-        "(ability_id: \"activated_02\"",
-        1,
-    );
-    let children = format!("{}, {}", child_with_effect(producer), consumer_ability);
-    let ron = card("(kind: AnyPermanent)", &children);
-    CardRegistry::from_chunks_and_tokens(&[&ron], &[]).expect("one exact producer-consumer pair");
 }
 
 #[test]
