@@ -57,8 +57,7 @@ const TYPED_BATTLEFIELD_SEARCH_BEHOLD_FIXTURE: &str = r#"(
     (id: "scry_after_search", bind: [], input: None, kind: Perform(Scry(count: 0))),
     (id: "behold_elf", bind: [], input: Some("found_land"), kind: Perform(MayBehold(
       who: Controller, choice_id: "behold_elf",
-      hand_filter: (required_subtypes: ["Elf"]),
-      permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+      criterion: (required_subtype: "Elf"),
       if_beheld: [Untap(subject: PreviousEffectObject)],
     ))),
     (id: "tail_treasure", bind: [], input: None, kind: Perform(CreateTokens(
@@ -89,8 +88,7 @@ const TYPED_CREATURE_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
     (id: "behold_elf", bind: [], input: Some("found_creature"),
       kind: Perform(MayBehold(
         who: Controller, choice_id: "behold_elf",
-        hand_filter: (required_subtypes: ["Elf"]),
-        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+        criterion: (required_subtype: "Elf"),
         if_beheld: [Untap(subject: PreviousEffectObject)],
       ))),
     (id: "tail_treasure", bind: [], input: None,

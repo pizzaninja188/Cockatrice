@@ -92,12 +92,21 @@ fn caster_complement_refuses_every_non_draw_recipient_slot() {
         format!("ExileTopWithPlayPermission(player:{recipient})"),
         format!("Mill(count:1,who:{recipient})"),
         format!("CreateTokens(token:\"soldier\",count:1,who:{recipient})"),
-        format!("MayBehold(choice_id:\"behold\",hand_filter:(),permanent_filter:(kind:Creature),who:{recipient})"),
+        format!(
+            "MayBehold(choice_id:\"behold\",criterion:(required_subtype:\"Elf\"),who:{recipient})"
+        ),
         format!("SearchLibrary(who:{recipient})"),
     ] {
-        let effect:SpellEffectKind=ron::from_str(&data).unwrap_or_else(|error|panic!("{data}: {error}"));
-        for context in [EffectContext::Spell,EffectContext::Ability] {
-            assert!(effect.validate(context).unwrap_err().contains("supported only by Draw"),"{data}");
+        let effect: SpellEffectKind =
+            ron::from_str(&data).unwrap_or_else(|error| panic!("{data}: {error}"));
+        for context in [EffectContext::Spell, EffectContext::Ability] {
+            assert!(
+                effect
+                    .validate(context)
+                    .unwrap_err()
+                    .contains("supported only by Draw"),
+                "{data}"
+            );
         }
     }
 }
@@ -198,8 +207,7 @@ fn caster_complement_context_validation_descends_wrappers_programs_and_modal_mod
 
 #[test]
 fn caster_complement_context_validation_descends_may_behold() {
-    let effect = r#"MayBehold(choice_id:"behold",hand_filter:(required_subtypes:["Elf"]),
-        permanent_filter:(kind:Creature,controller:You),
+    let effect = r#"MayBehold(choice_id:"behold",criterion:(required_subtype:"Elf"),
         if_beheld:[Draw(count:1,who:EachOtherPlayerThanAffectedPlayer)])"#;
     let cast = "WheneverPlayerCastsSpell(caster:AnyPlayer)";
     for trigger in [cast, "WhenSelfEntersBattlefield", "WhenSelfDies"] {

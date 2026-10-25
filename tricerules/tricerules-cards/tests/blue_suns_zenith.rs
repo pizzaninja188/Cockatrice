@@ -73,7 +73,7 @@ fn source_shuffle_is_spell_only_including_wrapped_effects() {
     assert!(effect.validate(EffectContext::Spell).is_ok());
     assert!(effect.validate(EffectContext::Ability).is_err());
     let behold: SpellEffectKind = ron::from_str(
-        "MayBehold(choice_id:\"behold\",hand_filter:(required_subtypes:[\"Elf\"]),permanent_filter:(kind:Creature,controller:You),if_beheld:[ShuffleResolvingSpellIntoOwnersLibrary])",
+        "MayBehold(choice_id:\"behold\",criterion:(required_subtype:\"Elf\"),if_beheld:[ShuffleResolvingSpellIntoOwnersLibrary])",
     )
     .expect("the recursive effect shape parses for context validation");
     assert!(behold.validate(EffectContext::Spell).is_ok());

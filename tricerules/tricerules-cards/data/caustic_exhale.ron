@@ -14,12 +14,7 @@
       Behold(
         option_id: "option_01",
         presentation: Fallback,
-        hand_filter: (required_subtypes: ["Dragon"]),
-        permanent_filter: (
-          kind: AnyPermanent,
-          controller: You,
-          required_subtypes: ["Dragon"],
-        ),
+        criterion: (required_subtype: "Dragon"),
       ),
       Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
     ],

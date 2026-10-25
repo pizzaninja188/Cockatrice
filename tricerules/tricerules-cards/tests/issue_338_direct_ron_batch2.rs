@@ -13,10 +13,10 @@
 //! 608.2c (printed instruction order).
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, CastCostGroupDef, CastCostOptionDef, CombatRestriction, EffectSubject,
-    GameCondition, GraveyardAggregate, ManaCostChoiceKind, ObjectCastCostKind, PermanentTypeFilter,
-    PlayerRecipient, RelativePlayerSet, ResolutionCost, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
+    AbilityCost, Amount, BeholdCriterion, CastCostGroupDef, CastCostOptionDef, CombatRestriction,
+    EffectSubject, GameCondition, GraveyardAggregate, ManaCostChoiceKind, ObjectCastCostKind,
+    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
     TargetingSourceFilter, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, CastTriggerPlayer, ChoiceId, Color, Layout, ManaCost};
@@ -91,20 +91,16 @@ fn mana_option_cost(group: &CastCostGroupDef, index: usize) -> String {
     cost.to_string()
 }
 
-fn behold_option(
-    group: &CastCostGroupDef,
-    index: usize,
-) -> (&ChoiceId, &ZoneCardFilter, &TargetFilter) {
+fn behold_option(group: &CastCostGroupDef, index: usize) -> (&ChoiceId, &BeholdCriterion) {
     let CastCostOptionDef::Behold {
         option_id,
-        hand_filter,
-        permanent_filter,
+        criterion,
         ..
     } = &group.options[index]
     else {
         panic!("expected a behold option at index {index}");
     };
-    (option_id, hand_filter, permanent_filter.as_ref())
+    (option_id, criterion)
 }
 
 #[test]
@@ -325,18 +321,9 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         let [group] = face.cast_cost_groups.as_slice() else {
             panic!("Mudbutton Cursetosser has exactly one cast-cost group");
         };
-        let (option_id, hand_filter, permanent_filter) = behold_option(group, 0);
+        let (option_id, criterion) = behold_option(group, 0);
         assert_eq!(*option_id, ChoiceId::new("behold").unwrap());
-        assert_eq!(hand_filter.required_subtypes, ["Goblin"]);
-        assert_eq!(
-            permanent_filter,
-            &TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                controller: TargetController::You,
-                required_subtypes: vec!["Goblin".into()],
-                ..TargetFilter::default()
-            }
-        );
+        assert_eq!(criterion.required_subtype, "Goblin");
         assert_eq!(mana_option_cost(group, 1), "{2}");
     }
     assert_eq!(
@@ -390,18 +377,9 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         let [group] = face.cast_cost_groups.as_slice() else {
             panic!("Lys Alana Dignitary has exactly one cast-cost group");
         };
-        let (option_id, hand_filter, permanent_filter) = behold_option(group, 0);
+        let (option_id, criterion) = behold_option(group, 0);
         assert_eq!(*option_id, ChoiceId::new("behold").unwrap());
-        assert_eq!(hand_filter.required_subtypes, ["Elf"]);
-        assert_eq!(
-            permanent_filter,
-            &TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                controller: TargetController::You,
-                required_subtypes: vec!["Elf".into()],
-                ..TargetFilter::default()
-            }
-        );
+        assert_eq!(criterion.required_subtype, "Elf");
         assert_eq!(mana_option_cost(group, 1), "{2}");
     }
     let [mana] = face.activated_abilities.as_slice() else {

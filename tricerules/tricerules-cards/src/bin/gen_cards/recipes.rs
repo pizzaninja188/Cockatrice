@@ -1,16 +1,17 @@
 use tricerules_cards::primitives::{
     ActivatedCostModifier, ActivationLimit, AuthoredBlock, BasePowerToughnessValue,
-    BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardProgram,
-    CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
-    CastCostGroupDef, CastCostOptionDef, CombatRestriction, CombatRestrictionScope, CombatRole,
-    ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource, CreatureScopeController,
-    CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity, EffectSubject,
-    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
-    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    HandCardAction, HandCardChooser, HandChoiceVisibility, Instruction, InstructionKind,
-    LifeAmount, LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet,
-    ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
+    BeholdCriterion, CardProgram, CardResultAction, CardResultFilter, CardResultSource,
+    CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef, CombatRestriction,
+    CombatRestrictionScope, CombatRole, ConditionPlayerSet, CountExpression,
+    CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
+    DelayedTokenSacrificeTiming, DiscardQuantity, EffectSubject, EntersTappedAffected,
+    EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction, GameCondition,
+    GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction,
+    HandCardChooser, HandChoiceVisibility, Instruction, InstructionKind, LifeAmount,
+    LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet, ObjectCastCostKind,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
     PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
     ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
     SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
@@ -2252,16 +2253,9 @@ fn behold_option(context: &RecipeContext, option_id: &str, subtype: &str) -> Cas
     CastCostOptionDef::Behold {
         option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
         presentation: additional_cost_option_presentation(context),
-        hand_filter: ZoneCardFilter {
-            required_subtypes: vec![subtype.to_string()],
-            ..ZoneCardFilter::default()
+        criterion: BeholdCriterion {
+            required_subtype: subtype.to_string(),
         },
-        permanent_filter: Box::new(TargetFilter {
-            kind: TargetKind::AnyPermanent,
-            controller: TargetController::You,
-            required_subtypes: vec![subtype.to_string()],
-            ..TargetFilter::default()
-        }),
     }
 }
 
@@ -54364,16 +54358,9 @@ mod tests {
         CastCostOptionDef::Behold {
             option_id: ChoiceId::new(option_id).unwrap(),
             presentation: issue_338_option_presentation(),
-            hand_filter: ZoneCardFilter {
-                required_subtypes: vec![subtype.to_string()],
-                ..ZoneCardFilter::default()
+            criterion: BeholdCriterion {
+                required_subtype: subtype.to_string(),
             },
-            permanent_filter: Box::new(TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                controller: TargetController::You,
-                required_subtypes: vec![subtype.to_string()],
-                ..TargetFilter::default()
-            }),
         }
     }
 
@@ -54474,6 +54461,31 @@ mod tests {
                 issue_338_mana("pay_mana", "{2}"),
             ])
         );
+
+        for (subtype, clause) in [
+            (
+                "Kithkin",
+                "As an additional cost to cast this spell, behold a Kithkin or pay {2}.",
+            ),
+            (
+                "Merfolk",
+                "As an additional cost to cast this spell, behold a Merfolk or pay {2}.",
+            ),
+        ] {
+            let matched = issue_338_match(clause);
+            let RecipeEmission::CastCostGroup(group) = matched.emission else {
+                panic!("{subtype} Behold recipe emits a cast-cost group");
+            };
+            let serialized = ron::ser::to_string(&group).expect("generated group serializes");
+            assert!(serialized.contains("criterion"), "{serialized}");
+            assert!(serialized.contains(subtype), "{serialized}");
+            assert!(!serialized.contains("hand_filter"), "{serialized}");
+            assert!(!serialized.contains("permanent_filter"), "{serialized}");
+            assert_eq!(
+                ron::from_str::<CastCostGroupDef>(&serialized).expect("generated group parses"),
+                group
+            );
+        }
 
         let matched = issue_338_match(
             "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature.",

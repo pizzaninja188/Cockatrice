@@ -2025,8 +2025,7 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
         choice_id: ChoiceId,
-        hand_filter: ZoneCardFilter,
-        permanent_filter: TargetFilter,
+        criterion: BeholdCriterion,
         #[serde(default)]
         if_beheld: Vec<SpellEffectKind>,
     },
@@ -2231,6 +2230,40 @@ pub struct ZoneCardFilter {
     pub has_adventure: Option<bool>,
     #[serde(default)]
     pub printed_power: Option<PowerComparison>,
+}
+
+/// One subtype shared by Behold's hand-card and controlled-permanent choices. Caustic Exhale and
+/// Elven Passage use the same criterion while keeping their cast-cost and resolution-time choices
+/// distinct.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BeholdCriterion {
+    pub required_subtype: String,
+}
+
+impl BeholdCriterion {
+    /// Existing hand-card predicate used by Behold's reveal-or-select rules.
+    pub fn hand_filter(&self) -> ZoneCardFilter {
+        ZoneCardFilter {
+            required_subtypes: vec![self.required_subtype.clone()],
+            ..ZoneCardFilter::default()
+        }
+    }
+
+    /// Existing permanent-selection predicate used by Behold's battlefield choice.
+    pub fn permanent_filter(&self) -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            required_subtypes: vec![self.required_subtype.clone()],
+            ..TargetFilter::default()
+        }
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        self.hand_filter().validate()?;
+        self.permanent_filter().validate_target_constraints()
+    }
 }
 
 impl ZoneCardFilter {
@@ -5194,8 +5227,7 @@ impl SpellEffectKind {
             SpellEffectKind::MayBehold {
                 who,
                 choice_id,
-                hand_filter,
-                permanent_filter,
+                criterion,
                 if_beheld,
             } => {
                 if matches!(
@@ -5207,16 +5239,7 @@ impl SpellEffectKind {
                     return Err("MayBehold requires exactly one deciding player".into());
                 }
                 choice_id.validate()?;
-                hand_filter.validate()?;
-                permanent_filter.validate_characteristic_constraints()?;
-                if !permanent_filter.all_terminal_filters_match(|leaf| {
-                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                        && leaf.controller == TargetController::You
-                }) {
-                    return Err(
-                        "MayBehold permanent filter must select permanents you control".into(),
-                    );
-                }
+                criterion.validate()?;
                 if if_beheld.is_empty() {
                     return Err("MayBehold requires at least one success effect".into());
                 }
@@ -6583,11 +6606,8 @@ mod program_input_count_flat_admission_tests {
         let behold_success = [SpellEffectKind::MayBehold {
             who: PlayerRecipient::Controller,
             choice_id: ChoiceId::new("behold").unwrap(),
-            hand_filter: ZoneCardFilter::default(),
-            permanent_filter: TargetFilter {
-                kind: TargetKind::Creature,
-                controller: TargetController::You,
-                ..TargetFilter::default()
+            criterion: super::BeholdCriterion {
+                required_subtype: "Elf".to_string(),
             },
             if_beheld: vec![SpellEffectKind::DamagePlayer {
                 amount: program_input_count(),
@@ -6597,6 +6617,40 @@ mod program_input_count_flat_admission_tests {
         assert!(SpellEffectKind::validate_list(&behold_success)
             .unwrap_err()
             .contains("resolution MayBehold requires an authored Program"));
+    }
+
+    #[test]
+    fn behold_criterion_projects_the_same_subtype_into_both_existing_filter_shapes() {
+        for subtype in ["Dragon", "Elf", "Goblin", "Kithkin", "Merfolk"] {
+            let criterion = super::BeholdCriterion {
+                required_subtype: subtype.to_string(),
+            };
+            assert_eq!(
+                criterion.hand_filter(),
+                super::ZoneCardFilter {
+                    required_subtypes: vec![subtype.to_string()],
+                    ..super::ZoneCardFilter::default()
+                }
+            );
+            assert_eq!(
+                criterion.permanent_filter(),
+                super::TargetFilter {
+                    kind: super::TargetKind::AnyPermanent,
+                    controller: super::TargetController::You,
+                    required_subtypes: vec![subtype.to_string()],
+                    ..super::TargetFilter::default()
+                }
+            );
+            criterion.validate().expect("both derived filters validate");
+        }
+    }
+
+    #[test]
+    fn behold_criterion_rejects_an_empty_subtype_through_existing_filter_validation() {
+        let criterion = super::BeholdCriterion {
+            required_subtype: " \t ".to_string(),
+        };
+        assert!(criterion.validate().is_err());
     }
 }
 

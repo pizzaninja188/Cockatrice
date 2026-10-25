@@ -576,15 +576,11 @@ pub(super) fn may_behold(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::MayBehold {
-        who,
-        hand_filter,
-        permanent_filter,
-        ..
-    } = effect
-    else {
+    let SpellEffectKind::MayBehold { who, criterion, .. } = effect else {
         unreachable!();
     };
+    let hand_filter = criterion.hand_filter();
+    let permanent_filter = criterion.permanent_filter();
     let recipients = super::player_recipients(cx, who);
     let [deciding_player] = recipients.as_slice() else {
         return Err(EngineError::Illegal(

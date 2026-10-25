@@ -903,11 +903,9 @@ impl GameEngine {
                         }
                         vec![]
                     }
-                    CastCostOptionDef::Behold {
-                        hand_filter,
-                        permanent_filter,
-                        ..
-                    } => {
+                    CastCostOptionDef::Behold { criterion, .. } => {
+                        let hand_filter = criterion.hand_filter();
+                        let permanent_filter = criterion.permanent_filter();
                         use rv1::cast_cost_group_selection::SelectedObject;
                         match selection.selected_object {
                             Some(SelectedObject::HandIndex(hand_index)) => {
@@ -921,7 +919,7 @@ impl GameEngine {
                                         &self.state,
                                         self.registry,
                                         object_id,
-                                        Some(hand_filter),
+                                        Some(&hand_filter),
                                     )
                                 {
                                     return Err(EngineError::Illegal(
@@ -956,7 +954,7 @@ impl GameEngine {
                                     player,
                                     None,
                                     object_id,
-                                    permanent_filter,
+                                    &permanent_filter,
                                 ) {
                                     return Err(EngineError::Illegal(
                                         "illegal behold permanent selection",

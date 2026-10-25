@@ -1667,10 +1667,11 @@ fn legal_spell_cost_choices(
                     CastCostOptionDef::Behold {
                         option_id,
                         presentation,
-                        hand_filter,
-                        permanent_filter,
+                        criterion,
                         ..
                     } => {
+                        let hand_filter = criterion.hand_filter();
+                        let permanent_filter = criterion.permanent_filter();
                         let valid_hand_indices = eng.state.players[player_idx]
                             .hand
                             .iter()
@@ -1682,7 +1683,7 @@ fn legal_spell_cost_choices(
                                         &eng.state,
                                         eng.registry,
                                         *oid,
-                                        Some(hand_filter),
+                                        Some(&hand_filter),
                                     )
                             })
                             .map(|(slot, _)| slot as u32)
@@ -1697,7 +1698,7 @@ fn legal_spell_cost_choices(
                                     player,
                                     None,
                                     *oid,
-                                    permanent_filter,
+                                    &permanent_filter,
                                 )
                             })
                             .collect::<Vec<_>>();

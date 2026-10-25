@@ -2552,8 +2552,7 @@ fn flat_previous_effect_references_and_resolution_behold_fail_closed_recursively
         r#"MayBehold(
             who: Controller,
             choice_id: "behold",
-            hand_filter: (required_subtypes: ["Elf"]),
-            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            criterion: (required_subtype: "Elf"),
             if_beheld: [GrantKeywords(subject: PreviousEffectObject, keywords: [Haste])],
         )"#,
     )
@@ -2562,8 +2561,7 @@ fn flat_previous_effect_references_and_resolution_behold_fail_closed_recursively
         r#"MayBehold(
             who: Controller,
             choice_id: "behold",
-            hand_filter: (required_subtypes: ["Elf"]),
-            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            criterion: (required_subtype: "Elf"),
             if_beheld: [GainLife(amount: Count(CardsMatchingResult(filter: (
                 source: PreviousEffect, action: Discard, players: Controller,
             ))))],
@@ -2588,8 +2586,7 @@ fn flat_previous_effect_references_and_resolution_behold_fail_closed_recursively
         r#"MayBehold(
             who: Controller,
             choice_id: "behold",
-            hand_filter: (required_subtypes: ["Elf"]),
-            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            criterion: (required_subtype: "Elf"),
             if_beheld: [Untap(subject: Source)],
         )"#,
     )
@@ -2598,8 +2595,7 @@ fn flat_previous_effect_references_and_resolution_behold_fail_closed_recursively
         r#"Conditional(condition: Void, effect: MayBehold(
             who: Controller,
             choice_id: "behold",
-            hand_filter: (required_subtypes: ["Elf"]),
-            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            criterion: (required_subtype: "Elf"),
             if_beheld: [Untap(subject: Source)],
         ))"#,
     )

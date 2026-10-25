@@ -1,8 +1,8 @@
 //! Costs paid to activate abilities.
 
 use super::{
-    BattlefieldPermanentFilter, GameCondition, TargetController, TargetFilter, TargetKind,
-    ZoneCardFilter,
+    BattlefieldPermanentFilter, BeholdCriterion, GameCondition, TargetController, TargetFilter,
+    TargetKind, ZoneCardFilter,
 };
 use crate::mana::ManaCost;
 use crate::{choice_fallback, AbilityPresentation, ChoiceId};
@@ -391,8 +391,7 @@ pub enum CastCostOptionDef {
     Behold {
         option_id: ChoiceId,
         presentation: AbilityPresentation,
-        hand_filter: ZoneCardFilter,
-        permanent_filter: Box<TargetFilter>,
+        criterion: BeholdCriterion,
     },
     /// Discard one other card chosen from the caster's hand. Bone Shards and Bitter Triumph use
     /// this as one announced cost option.
@@ -489,14 +488,7 @@ impl CastCostGroupDef {
                         return Err("Multikicker requires a positive signed-representable fixed generic fee".into());
                     }
                 }
-                CastCostOptionDef::Behold {
-                    hand_filter,
-                    permanent_filter,
-                    ..
-                } => {
-                    hand_filter.validate()?;
-                    permanent_filter.validate_target_constraints()?;
-                }
+                CastCostOptionDef::Behold { criterion, .. } => criterion.validate()?,
                 CastCostOptionDef::DiscardCard { .. } => {}
                 CastCostOptionDef::PayLife { amount, .. } => {
                     if *amount == 0 || *amount > i32::MAX as u32 {

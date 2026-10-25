@@ -1,11 +1,11 @@
 //! Exact authored owners for reusable Scry, search, Proliferate, and result-count operations.
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone,
-    CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer, CompiledChooseBranch,
-    CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind, CompiledProgram,
-    CompiledProgramCondition, CompiledProgramResultCondition, CountExpression, DiscardQuantity,
-    DiscardResultOutcome, EntersTappedAffected, GameCondition, GraveyardAggregate,
+    AbilityCost, Amount, BeholdCriterion, CardResultAction, CardResultFilter, CardResultSource,
+    CardSearchZone, CardTypeFilter, Cardinality, CastCostOptionDef, CastTriggerPlayer,
+    CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
+    CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, CountExpression,
+    DiscardQuantity, DiscardResultOutcome, EntersTappedAffected, GameCondition, GraveyardAggregate,
     LibraryBottomOrder, LifeAmount, ManaAmount, PermanentTypeFilter, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds,
     SearchZoneSelection, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
@@ -447,18 +447,35 @@ fn authored_osseous_exhale_uses_owned_behold_receipt_program() {
     assert_eq!((group.min, group.max), (0, 1));
     let [CastCostOptionDef::Behold {
         option_id,
-        hand_filter,
-        permanent_filter,
+        criterion,
         ..
     }] = group.options.as_slice()
     else {
         panic!("Osseous Exhale keeps the exact Dragon Behold option");
     };
     assert_eq!(option_id.as_str(), "option_01");
-    assert_eq!(hand_filter.required_subtypes, ["Dragon".to_string()]);
-    assert_eq!(permanent_filter.kind, TargetKind::AnyPermanent);
-    assert_eq!(permanent_filter.controller, TargetController::You);
-    assert_eq!(permanent_filter.required_subtypes, ["Dragon".to_string()]);
+    assert_eq!(
+        criterion,
+        &BeholdCriterion {
+            required_subtype: "Dragon".to_string(),
+        }
+    );
+    assert_eq!(
+        criterion.hand_filter(),
+        ZoneCardFilter {
+            required_subtypes: vec!["Dragon".to_string()],
+            ..ZoneCardFilter::default()
+        }
+    );
+    assert_eq!(
+        criterion.permanent_filter(),
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            required_subtypes: vec!["Dragon".to_string()],
+            ..TargetFilter::default()
+        }
+    );
 
     let program = face_program("osseous_exhale");
     assert_eq!(program.context, EffectContext::Spell);

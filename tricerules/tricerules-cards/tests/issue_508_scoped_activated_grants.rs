@@ -252,7 +252,7 @@ fn scoped_nested_triggered_definitions_cannot_borrow_cast_cost_metadata() {
 fn scoped_activated_grants_reject_flat_behold_before_registry_admission() {
     let consumer = r#"ReturnLinkedExiledCards(producer_ability_id: "activated_01", linked_exile_id: "linked_01", filter: (card_type: Creature))"#;
     let beheld = format!(
-        r#"MayBehold(choice_id: "behold_01", hand_filter: (card_type: Creature), permanent_filter: (kind: Creature, controller: You), if_beheld: [{consumer}])"#
+        r#"MayBehold(choice_id: "behold_01", criterion: (required_subtype: "Elf"), if_beheld: [{consumer}])"#
     );
     invalid(
         "(kind: AnyPermanent)",

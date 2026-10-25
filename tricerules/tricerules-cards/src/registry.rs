@@ -846,8 +846,7 @@ mod tests {
         let behold = r#"MayBehold(
             who: Controller,
             choice_id: "behold",
-            hand_filter: (required_subtypes: ["Elf"]),
-            permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+            criterion: (required_subtype: "Elf"),
             if_beheld: [GainLife(amount: 1)],
         )"#;
         let spell = format!(

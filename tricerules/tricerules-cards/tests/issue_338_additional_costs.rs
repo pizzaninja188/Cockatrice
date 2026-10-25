@@ -16,9 +16,8 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, ObjectCastCostKind,
+    BeholdCriterion, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, ObjectCastCostKind,
     ObjectPaymentConstraint, PermanentTypeFilter, TargetController, TargetFilter, TargetKind,
-    ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, CardFace, ChoiceId, Keyword, ManaCost};
 
@@ -293,16 +292,9 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
             CastCostOptionDef::Behold {
                 option_id: ChoiceId::new("behold").unwrap(),
                 presentation: AbilityPresentation::OracleLines(vec![1]),
-                hand_filter: ZoneCardFilter {
-                    required_subtypes: vec!["Kithkin".to_string()],
-                    ..ZoneCardFilter::default()
+                criterion: BeholdCriterion {
+                    required_subtype: "Kithkin".to_string(),
                 },
-                permanent_filter: Box::new(TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    controller: TargetController::You,
-                    required_subtypes: vec!["Kithkin".to_string()],
-                    ..TargetFilter::default()
-                }),
             },
             mana("pay_mana", "{2}"),
         ]
@@ -313,16 +305,9 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
             CastCostOptionDef::Behold {
                 option_id: ChoiceId::new("behold").unwrap(),
                 presentation: AbilityPresentation::OracleLines(vec![1]),
-                hand_filter: ZoneCardFilter {
-                    required_subtypes: vec!["Merfolk".to_string()],
-                    ..ZoneCardFilter::default()
+                criterion: BeholdCriterion {
+                    required_subtype: "Merfolk".to_string(),
                 },
-                permanent_filter: Box::new(TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    controller: TargetController::You,
-                    required_subtypes: vec!["Merfolk".to_string()],
-                    ..TargetFilter::default()
-                }),
             },
             mana("pay_mana", "{2}"),
         ]

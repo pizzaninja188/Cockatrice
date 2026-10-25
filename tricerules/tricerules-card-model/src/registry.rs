@@ -4929,8 +4929,8 @@ mod scoped_grant_linked_exile_validation_tests {
             filter: (card_type: Creature),
         )"#;
         let behold = format!(
-            r#"MayBehold(choice_id: "behold_01", hand_filter: (card_type: Creature),
-                permanent_filter: (kind: Creature, controller: You), if_beheld: [{consumer}])"#
+            r#"MayBehold(choice_id: "behold_01", criterion: (required_subtype: "Elf"),
+                if_beheld: [{consumer}])"#
         );
         let behold_only = scoped_grant_face(&child("consumer_01", &behold));
         let error = validate_linked_exile_pairs(&behold_only)

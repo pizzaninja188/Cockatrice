@@ -706,7 +706,11 @@ use it only with its exact `if_beheld: [Untap(PreviousEffectObject)]` child. Elv
 latter and keeps the result while Behold is parked; Fabled Passage evaluates its four-land condition
 after the search and untaps only the captured entrant. No eligible Behold object means no prompt and
 the Program tail continues. Behold of a battlefield Elf does not reveal it; choosing an Elf from
-hand reveals that one card (CR 701.4a, 701.20, 701.23b, 701.26b, 608.2c).
+hand reveals that one card (CR 701.4a, 701.20, 701.23b, 701.26b, 608.2c). Both cast-cost
+Behold and `MayBehold` author one `criterion: (required_subtype: "Elf")`; the engine derives the
+existing subtype-only hand filter and `AnyPermanent`/`You` filter from it. This does not add a
+Creature-card-type restriction, and the two operations keep their separate payment and resolution
+timing.
 
 Embermouth Sentinel's `triggered_01` is the current conditional-destination use: its optional
 controller `Choose` has one free `Always` branch, whose resultless search checks one

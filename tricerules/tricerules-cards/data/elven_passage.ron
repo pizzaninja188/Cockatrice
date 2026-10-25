@@ -31,8 +31,7 @@
       (id: "behold_elf", bind: [], input: Some("found_land"), kind: Perform(MayBehold(
         who: Controller,
         choice_id: "behold_elf",
-        hand_filter: (required_subtypes: ["Elf"]),
-        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+        criterion: (required_subtype: "Elf"),
         if_beheld: [Untap(subject: PreviousEffectObject)],
       ))),
     ], yields: []))),

@@ -18,8 +18,7 @@
       Behold(
         option_id: "behold",
         presentation: OracleLines([1]),
-        hand_filter: (required_subtypes: ["Goblin"]),
-        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Goblin"]),
+        criterion: (required_subtype: "Goblin"),
       ),
       Mana(
         option_id: "pay_mana",
