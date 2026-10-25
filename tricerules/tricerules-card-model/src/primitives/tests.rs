@@ -16083,12 +16083,6 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
             )))], yields: [])"#,
         ),
         (
-            "zero counter placement",
-            r#"(steps: [(id: "put", kind: Perform(PutCounters(
-                counter: Night, count: 0, subject: Source,
-            )))], yields: [])"#,
-        ),
-        (
             "dynamic counter placement",
             r#"(steps: [(id: "put", kind: Perform(PutCounters(
                 counter: Night, count: X, subject: Source,
@@ -16120,6 +16114,15 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
             "unsupported source-counter form was admitted: {label}"
         );
     }
+
+    compile(
+        "zero_source_counter_placement_fixture",
+        EffectContext::Ability,
+        r#"(steps: [(id: "put", kind: Perform(PutCounters(
+            counter: Night, count: 0, subject: Source,
+        )))], yields: [])"#,
+    )
+    .expect("a validated zero-count Source placement remains a valid no-op effect");
 }
 
 #[test]
@@ -16141,12 +16144,10 @@ fn source_counter_program_rejects_invalid_direct_counter_shapes_and_spell_contex
 
     compile_ability("PutCounters(counter: Charge, count: 1, subject: Source)")
         .expect("ability programs admit positive fixed Source counters of any valid kind");
+    compile_ability("PutCounters(counter: Charge, count: 0, subject: Source)")
+        .expect("ability programs admit a validated zero-count Source placement");
 
     for (label, leaf) in [
-        (
-            "zero amount",
-            "PutCounters(counter: PlusOnePlusOne, count: 0, subject: Source)",
-        ),
         (
             "dynamic amount",
             "PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)",
@@ -16156,11 +16157,9 @@ fn source_counter_program_rejects_invalid_direct_counter_shapes_and_spell_contex
             "PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))",
         ),
     ] {
-        let error = compile_ability(leaf)
-            .expect_err("only fixed positive Source counter placements are admitted");
         assert!(
-            error.contains("effect is not in the resolution-program operation whitelist"),
-            "{label}: {error}"
+            compile_ability(leaf).is_err(),
+            "unsupported direct Source counter form remains rejected: {label}"
         );
     }
 
@@ -17049,6 +17048,20 @@ fn earthbender_counter_receipt_program_survives_an_intervening_instruction() {
             ),
             "a different producer type cannot authorize the counter event",
         ),
+        (
+            body.replace(
+                "PutCounters(counter: Quest, count: 1, subject: Source)",
+                "PutCounters(counter: Quest, count: Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller))), subject: Source)",
+            ),
+            "an implicit previous card result cannot bypass typed amount inputs",
+        ),
+        (
+            body.replace(
+                "PutCounters(counter: Quest, count: 1, subject: Source)",
+                "PutCounters(counter: Quest, count: Count(ProgramInputCount), subject: Source)",
+            ),
+            "ProgramInputCount remains limited to its existing direct consumers",
+        ),
     ] {
         assert!(
             compile(&invalid, EffectContext::Ability).is_err(),
@@ -17065,7 +17078,94 @@ fn earthbender_counter_receipt_program_survives_an_intervening_instruction() {
         ))], yields: []))"#,
     )
     .expect("the unrelated resultless counter Program parses");
-    assert!(CompiledProgram::compile(owner, EffectContext::Ability, &resultless).is_ok());
+    let compiled = CompiledProgram::compile(owner, EffectContext::Ability, &resultless)
+        .expect("unbound Source PutCounters remains valid");
+    assert!(
+        compiled.body.steps[0].outputs.is_empty(),
+        "the normal result type creates no runtime output slot when it is unbound"
+    );
+}
+
+#[test]
+fn program_source_counter_placement_receipt_accepts_valid_counter_amounts() {
+    use crate::primitives::{
+        Cardinality, CompiledProgram, ConditionObjectRef, CounterKind, EffectContext, ResultType,
+    };
+
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "counter_receipt_amount_fixture".into(),
+        face_id: crate::CardFaceId::new("counter_receipt_amount_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let cases = [
+        ("fixed Charge count two", "Charge", "2", CounterKind::Charge),
+        (
+            "dynamic SourceCounterCount amount",
+            "Charge",
+            "Count(SourceCounterCount(counter: Charge))",
+            CounterKind::Charge,
+        ),
+        ("zero Charge amount", "Charge", "0", CounterKind::Charge),
+    ];
+    let mut failures = Vec::new();
+
+    for (label, counter, amount, expected_counter) in cases {
+        let body = format!(
+            r#"(steps: [
+                (id: "place", bind: ["placed"], kind: Perform(
+                    PutCounters(counter: {counter}, count: {amount}, subject: Source),
+                )),
+                (id: "reflexive", input: Some("placed"), kind: Perform(
+                    CreateReflexiveTrigger(
+                        when: Some(CountersPlaced(counter: {counter}, object: Source)),
+                        ability: (
+                            ability_id: "reflexive_01", presentation: Fallback,
+                            intervening_if: None, effect: [GainLife(amount: 1)],
+                            targeting: None,
+                        ),
+                    ),
+                )),
+            ], yields: [])"#
+        );
+        let program: crate::CardProgram = ron::from_str(&format!("(body: {body})"))
+            .unwrap_or_else(|error| panic!("{label} fixture parses: {error}"));
+        let compiled =
+            match CompiledProgram::compile(owner.clone(), EffectContext::Ability, &program) {
+                Ok(compiled) => compiled,
+                Err(error) => {
+                    failures.push(format!("{label}: {error}"));
+                    continue;
+                }
+            };
+        let [producer, consumer] = compiled.body.steps.as_slice() else {
+            panic!("{label} fixture has a producer and receipt consumer");
+        };
+        let [receipt_slot] = producer.outputs.as_slice() else {
+            panic!("{label} producer binds exactly one receipt");
+        };
+        assert_eq!(
+            consumer.input,
+            Some(*receipt_slot),
+            "{label} uses its named slot"
+        );
+        assert_eq!(
+            compiled.slot(*receipt_slot).unwrap().result_type,
+            ResultType::CounterPlacementReceipt {
+                counter: expected_counter,
+                object: ConditionObjectRef::Source,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            },
+            "{label} receipt type describes one optional committed event"
+        );
+    }
+
+    assert!(
+        failures.is_empty(),
+        "validated Source counter amounts should compile through the existing receipt type: {failures:#?}"
+    );
 }
 
 #[test]

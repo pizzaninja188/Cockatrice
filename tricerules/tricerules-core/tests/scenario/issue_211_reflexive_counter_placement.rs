@@ -3,8 +3,8 @@ use crate::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
-    dev_command, ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone,
-    RuledCommand,
+    dev_command, ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard,
+    DevPutCardInZone, DevZone, RuledCommand,
 };
 
 fn choose_trigger_target(object_id: u32) -> RuledCommand {
@@ -55,6 +55,254 @@ fn threshold_engine(seed: u64) -> (GameEngine, u32, u32) {
         .counters
         .insert(CounterKind::Quest, 3);
     (engine, ascension, creature)
+}
+
+fn counter_receipt_program_fixture(
+    id: &str,
+    producer_steps: &str,
+    prohibit_counters: bool,
+) -> String {
+    let static_abilities = if prohibit_counters {
+        r#"static_abilities: [(ability_id: "static_01", presentation: Fallback,
+            definition: ProhibitCounters(affected: Self_))],"#
+    } else {
+        ""
+    };
+    format!(
+        r#"(
+            id: "{id}", name: "Counter Receipt Runtime Fixture", face_id: "{id}",
+            types: ["Creature"], power: 2, toughness: 2,
+            {static_abilities}
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    {producer_steps}
+                    (id: "reflexive", input: Some("placed"), kind: Perform(
+                        CreateReflexiveTrigger(
+                            when: Some(CountersPlaced(counter: Charge, object: Source)),
+                            ability: (
+                                ability_id: "reflexive_01", presentation: Fallback,
+                                intervening_if: None, effect: [GainLife(amount: 1)],
+                                targeting: None,
+                            ),
+                        ),
+                    )),
+                    (id: "tail", kind: Perform(GainLife(amount: 1))),
+                ], yields: []))),
+                modal: None, targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None,
+            )]
+        )"#
+    )
+}
+
+fn counter_receipt_runtime_engine(seed: u64, fixture: &str, id: &str) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture,
+                include_str!("../../../tricerules-cards/data/doubling_season.ron"),
+            ],
+            &[],
+        )
+        .expect("test-only typed counter receipt fixture compiles"),
+    ));
+    let deck = vec![id.to_string(); 20];
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("counter receipt fixture game");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn move_counter_receipt_fixture_to_battlefield(engine: &mut GameEngine, player: usize) -> u32 {
+    let before = engine.state.players[player].battlefield.clone();
+    let player_id = engine.state.players[player].id;
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            player_id,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: player_id,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Counter Receipt Runtime Fixture".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("enter test-only counter receipt source through engine");
+    let object_id = *engine.state.players[player]
+        .battlefield
+        .iter()
+        .find(|object_id| !before.contains(object_id))
+        .expect("test-only source entered the battlefield");
+    object_id
+}
+
+fn conjure_doubling_season(engine: &mut GameEngine, player: usize) {
+    let player_id = engine.state.players[player].id;
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            player_id,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: player_id,
+                    dev: Some(dev_command::Dev::PutCardInZone(DevPutCardInZone {
+                        card_name: "Doubling Season".into(),
+                        zone: DevZone::Battlefield as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("put the existing Doubling Season replacement onto the battlefield");
+}
+
+#[test]
+fn dynamic_source_counter_amount_emits_one_charge_receipt_and_resumes_tail_once() {
+    let id = "counter_receipt_dynamic_fixture";
+    let fixture = counter_receipt_program_fixture(
+        id,
+        r#"(id: "seed_charge", kind: Perform(
+                PutCounters(counter: Charge, count: 2, subject: Source),
+            )),
+            (id: "place_dynamic_charge", bind: ["placed"], kind: Perform(
+                PutCounters(
+                    counter: Charge,
+                    count: Count(SourceCounterCount(counter: Charge)),
+                    subject: Source,
+                ),
+            )),"#,
+        false,
+    );
+    let mut engine = counter_receipt_runtime_engine(211_090, &fixture, id);
+    let source = move_counter_receipt_fixture_to_battlefield(&mut engine, 0);
+    let source_generation = engine.state.zone_change_generation[&source];
+    assert_eq!(engine.state.stack.len(), 1);
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the committed placement stages one reflexive trigger after the original ability"
+    );
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        4
+    );
+    assert_eq!(
+        engine.state.players[0].life, 22,
+        "one reflexive effect and one Program tail"
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        source_generation
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn zero_counter_amount_writes_none_and_resumes_tail_once() {
+    let id = "counter_receipt_zero_fixture";
+    let fixture = counter_receipt_program_fixture(
+        id,
+        r#"(id: "place_zero_charge", bind: ["placed"], kind: Perform(
+                PutCounters(counter: Charge, count: 0, subject: Source),
+            )),"#,
+        false,
+    );
+    let mut engine = counter_receipt_runtime_engine(211_091, &fixture, id);
+    let source = move_counter_receipt_fixture_to_battlefield(&mut engine, 0);
+    assert_eq!(engine.state.stack.len(), 1);
+
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.players[0].life, 21,
+        "only the outer Program tail runs"
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn tatterkite_counter_prevention_captures_none_and_resumes_tail_once() {
+    let id = "counter_receipt_tatterkite_fixture";
+    let fixture = counter_receipt_program_fixture(
+        id,
+        r#"(id: "place_charge", bind: ["placed"], kind: Perform(
+                PutCounters(counter: Charge, count: 2, subject: Source),
+            )),"#,
+        true,
+    );
+    let mut engine = counter_receipt_runtime_engine(211_092, &fixture, id);
+    let source = move_counter_receipt_fixture_to_battlefield(&mut engine, 0);
+    assert_eq!(engine.state.stack.len(), 1);
+
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.players[0].life, 21,
+        "only the outer Program tail runs"
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn replacement_doubled_charge_placement_projects_one_receipt_and_reflexive_trigger() {
+    let id = "counter_receipt_doubled_fixture";
+    let fixture = counter_receipt_program_fixture(
+        id,
+        r#"(id: "place_charge", bind: ["placed"], kind: Perform(
+                PutCounters(counter: Charge, count: 2, subject: Source),
+            )),"#,
+        false,
+    );
+    let mut engine = counter_receipt_runtime_engine(211_093, &fixture, id);
+    conjure_doubling_season(&mut engine, 0);
+    let source = move_counter_receipt_fixture_to_battlefield(&mut engine, 0);
+    assert_eq!(engine.state.stack.len(), 1);
+
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        4
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "replacement-expanded placement creates one reflexive trigger receipt"
+    );
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.players[0].life, 22,
+        "one reflexive effect and one tail"
+    );
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]

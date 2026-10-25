@@ -1525,13 +1525,18 @@ If line 2 describes only the parent ability and would be misleading as the branc
 
 Use an ability-owned `CardProgram` when a reflexive trigger depends on a counter instruction
 actually placing a counter. Bind the instruction's optional `CounterPlacementReceipt` and pass that
-named slot to the consumer; do not use an ambient previous-effect lookup. The admitted producer is
-exactly `PutCounters(Quest, 1, Source)`, with cardinality `0..1`, and the consumer is exactly
-`CreateReflexiveTrigger(CountersPlaced(Quest, Source))`. This receipt follows the named slot across
-intervening instructions, identifies the exact source object generation, and carries one committed
-placement even when replacement effects increase its count. A completed placement with no counters
-has a typed empty result and creates no reflexive trigger. Other counter kinds, subjects, counts, or
-receipt consumers remain outside this profile; the nested ability uses its existing validation.
+named slot to the consumer; do not use an ambient previous-effect lookup. The producer is an
+ability-owned `PutCounters(counter, count, Source)` whose counter and amount pass the ordinary
+effect and Program validators. It binds one optional `CounterPlacementReceipt` (`0..1`), regardless
+of the attempted amount. The consumer must name the same counter and `Source` in
+`CreateReflexiveTrigger(CountersPlaced(counter, Source))` and use that explicit slot. Other producer
+subjects and receipt consumers remain outside this profile; `ProgramInputCount` keeps its existing
+direct-consumer restriction, and implicit card-result amounts still require a typed input.
+
+The receipt follows the named slot across intervening instructions, identifies the exact source
+object generation, and records the actual committed delta (`count`, `before`, and `after`), including
+replacement-expanded placements. A completed placement with no counters has a typed empty result
+and creates no reflexive trigger. The nested ability uses its existing validation.
 
 ```ron
 program: Some((body: (steps: [

@@ -296,7 +296,7 @@ pub enum ResultType {
     CounteredAbilitySource {
         cardinality: Cardinality,
     },
-    /// Optional exact-generation receipt from one authored Quest counter placement on Source.
+    /// Optional exact-generation receipt from one authored counter placement on Source.
     /// A completed empty result is distinct from an unwritten output slot.
     CounterPlacementReceipt {
         counter: super::CounterKind,
@@ -1895,18 +1895,6 @@ impl Compiler<'_> {
                             .is_some()
                     {
                         validate_resultless_direct_battlefield_library_search(effect, self.context)?
-                    } else if !instruction.bind.is_empty()
-                        && is_counter_placement_receipt_producer(effect, self.context)
-                    {
-                        effect.validate(self.context)?;
-                        vec![ResultType::CounterPlacementReceipt {
-                            counter: super::CounterKind::Quest,
-                            object: super::ConditionObjectRef::Source,
-                            cardinality: Cardinality {
-                                min: 0,
-                                max: Some(1),
-                            },
-                        }]
                     } else {
                         validate_and_result_types(
                             effect,
@@ -2819,29 +2807,22 @@ fn is_source_sacrifice_reflexive_consumer(effect: &SpellEffectKind) -> bool {
     )
 }
 
-fn is_counter_placement_receipt_producer(effect: &SpellEffectKind, context: EffectContext) -> bool {
-    context == EffectContext::Ability
-        && matches!(
-            effect,
-            SpellEffectKind::PutCounters {
-                counter: super::CounterKind::Quest,
-                count: Amount::Fixed(1),
-                subject: EffectSubject::Source,
-            }
-        )
+fn counter_placement_reflexive_counter(effect: &SpellEffectKind) -> Option<super::CounterKind> {
+    match effect {
+        SpellEffectKind::CreateReflexiveTrigger {
+            when:
+                Some(super::ResolutionReceiptCondition::CountersPlaced {
+                    counter,
+                    object: super::ConditionObjectRef::Source,
+                }),
+            ..
+        } => Some(*counter),
+        _ => None,
+    }
 }
 
 fn is_counter_placement_reflexive_consumer(effect: &SpellEffectKind) -> bool {
-    matches!(
-        effect,
-        SpellEffectKind::CreateReflexiveTrigger {
-            when: Some(super::ResolutionReceiptCondition::CountersPlaced {
-                counter: super::CounterKind::Quest,
-                object: super::ConditionObjectRef::Source,
-            }),
-            ..
-        }
-    )
+    counter_placement_reflexive_counter(effect).is_some()
 }
 
 fn validate_counter_placement_program_reflexive_trigger(
@@ -2850,8 +2831,7 @@ fn validate_counter_placement_program_reflexive_trigger(
 ) -> Result<(), String> {
     if context != EffectContext::Ability || !is_counter_placement_reflexive_consumer(effect) {
         return Err(
-            "CountersPlaced(Quest, Source) reflexive Programs require an ability-owned source"
-                .into(),
+            "CountersPlaced(Source) reflexive Programs require an ability-owned source".into(),
         );
     }
     Ok(())
@@ -3557,16 +3537,19 @@ fn compile_input(
                 EffectOp::CreateReflexiveTrigger { .. }
                     if is_counter_placement_reflexive_consumer(effect) =>
                 {
+                    let counter = counter_placement_reflexive_counter(effect)
+                        .expect("counter-placement consumer has a source counter condition");
                     matches!(
                         &actual.result_type,
                         ResultType::CounterPlacementReceipt {
-                            counter: super::CounterKind::Quest,
+                            counter: actual_counter,
                             object: super::ConditionObjectRef::Source,
                             cardinality: Cardinality {
                                 min: 0,
                                 max: Some(1),
                             },
                         }
+                        if *actual_counter == counter
                     )
                 }
                 EffectOp::CreateReflexiveTrigger { .. }
@@ -4845,13 +4828,19 @@ fn validate_and_result_types(
             counter,
             count,
             subject: EffectSubject::Source,
-        } if context == EffectContext::Ability
-            && matches!(count, Amount::Fixed(amount) if *amount > 0)
-        =>
-        {
+            ..
+        } if context == EffectContext::Ability => {
             effect.validate(context)?;
+            validate_program_amount(count)?;
             counter.validate()?;
-            Ok(Vec::new())
+            Ok(vec![ResultType::CounterPlacementReceipt {
+                counter: *counter,
+                object: super::ConditionObjectRef::Source,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            }])
         }
         SpellEffectKind::PutCounters {
             counter: super::CounterKind::PlusOnePlusOne,
