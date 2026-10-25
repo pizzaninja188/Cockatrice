@@ -13,17 +13,19 @@
         "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability",
         "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/trigger",
         "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/presentation",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/chooser",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/presentation",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/presentation",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/presentation",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/body/steps/0/kind/Perform/Draw",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/chooser",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/presentation",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/who",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/0",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/0/branch_id",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/0/count",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/1",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/1/branch_id",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/1/count",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/2",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/2/branch_id",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/2/count",
         "/faces/0/targeting"
       ]
     },
@@ -61,41 +63,37 @@
       "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/trigger"
     },
     {
-      "symbol": "InstructionKind::Choose",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose"
+        "symbol": "InstructionKind::DrawCountChoice",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice"
     },
     {
-      "symbol": "PlayerRecipient::AffectedPlayer",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/chooser"
+        "symbol": "PlayerRecipient::AffectedPlayer",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/chooser"
     },
     {
-      "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/Draw"
+        "symbol": "AbilityPresentation::OracleLines",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/presentation"
     },
     {
-      "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/body/steps/0/kind/Perform/Draw"
+        "symbol": "PlayerRecipient::AffectedPlayer",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/who"
     },
     {
-      "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/body/steps/0/kind/Perform/Draw"
+        "symbol": "DrawCountChoiceAlternative",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/0"
     },
     {
-      "symbol": "AbilityPresentation::OracleLines",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/presentation"
+        "symbol": "DrawCountChoiceAlternative",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/1"
     },
     {
-      "symbol": "AbilityPresentation::OracleLines",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/0/presentation"
+        "symbol": "DrawCountChoiceAlternative",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/DrawCountChoice/alternatives/2"
     },
-    {
-      "symbol": "AbilityPresentation::OracleLines",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/1/presentation"
-    },
-    {
-      "symbol": "AbilityPresentation::OracleLines",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/program/body/steps/0/kind/Choose/branches/2/presentation"
-    },
+      {
+        "symbol": "AbilityPresentation::OracleLines",
+        "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateDelayedTrigger/ability/presentation"
+      },
     {
       "symbol": "SpellEffectKind::CreateDelayedTrigger",
       "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform"

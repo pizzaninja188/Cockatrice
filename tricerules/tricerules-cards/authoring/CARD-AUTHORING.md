@@ -748,6 +748,15 @@ Icewrought Sentry pays before creating its reflexive tap trigger; and Sparktongu
 creating its reflexive damage trigger. Keep each real card's ordered actions and fallback in its
 source-backed program; do not flatten the payment into a legacy branch effect.
 
+For a mandatory choice among contiguous draw quantities, `DrawCountChoice` is a source-only
+shorthand for an ordinary `Choose` whose branches each perform one `Draw`. Supply a shared
+`choice`, `chooser`, `presentation`, and draw recipient (`who`), followed by ordered
+`(branch_id, count)` alternatives starting at zero and increasing by one through the largest
+quantity. Keep the explicit zero-draw branch; each `branch_id` is also the generated Draw
+instruction ID and remains subject to the compiler's ordinary ID-collision checks. The shorthand
+cannot bind or consume Program results, and it expands before compilation, so runtime still sees
+ordinary `Choose` and `Draw` instructions.
+
 An unlinked `Exile(Chosen(filter))` may bind its exact post-move object as an `ExiledObject` result
 when `filter.is_permanent_only()` succeeds and ordinary effect and target validation pass. Each
 terminal filter leaf must be `Creature` or `AnyPermanent`, including every branch of a pure

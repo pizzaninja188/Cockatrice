@@ -124,6 +124,7 @@ fn validate_spell_program_cast_snapshot_references(
                     visit_block(yes, cast_condition_count)?;
                     visit_block(no, cast_condition_count)?;
                 }
+                crate::primitives::InstructionKind::DrawCountChoice { .. } => {}
                 crate::primitives::InstructionKind::ImportCastPayment
                 | crate::primitives::InstructionKind::Perform(_) => {}
             }
@@ -2616,6 +2617,16 @@ fn visit_authored_program_effects(
                     visit_authored_program_effects(&branch.body, visit)?;
                 }
                 visit_authored_program_effects(otherwise, visit)?;
+            }
+            crate::primitives::InstructionKind::DrawCountChoice {
+                who, alternatives, ..
+            } => {
+                for alternative in alternatives {
+                    visit(&SpellEffectKind::Draw {
+                        who: *who,
+                        count: crate::primitives::Amount::Fixed(alternative.count),
+                    })?;
+                }
             }
             crate::primitives::InstructionKind::ImportCastPayment => {}
         }

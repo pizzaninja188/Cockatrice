@@ -21,19 +21,16 @@
           trigger: AtBeginningOfNextTurnUpkeep,
           effect: [],
           program: Some((body: (steps: [
-            (id: "choose_count", kind: Choose(
+            (id: "choose_count", kind: DrawCountChoice(
               choice: "draw_count",
               chooser: AffectedPlayer,
-              optional: false,
-              branches: [
-                (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, requirement: Always,
-                  body: (steps: [(id: "draw_zero", kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
-                (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, requirement: Always,
-                  body: (steps: [(id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
-                (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, requirement: Always,
-                  body: (steps: [(id: "draw_two", kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
+              presentation: OracleLines([1]),
+              who: AffectedPlayer,
+              alternatives: [
+                (branch_id: "draw_zero", count: 0),
+                (branch_id: "draw_one", count: 1),
+                (branch_id: "draw_two", count: 2),
               ],
-              otherwise: (steps: [], yields: []),
             )),
           ], yields: []), target_bindings: [])),
           modal: None, targeting: None, may: false, intervening_if: None,

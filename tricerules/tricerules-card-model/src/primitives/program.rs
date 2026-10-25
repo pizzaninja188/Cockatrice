@@ -160,6 +160,13 @@ pub enum InstructionKind {
         yes: AuthoredBlock,
         no: AuthoredBlock,
     },
+    DrawCountChoice {
+        choice: ChoiceId,
+        chooser: PlayerRecipient,
+        presentation: AbilityPresentation,
+        who: PlayerRecipient,
+        alternatives: Vec<DrawCountChoiceAlternative>,
+    },
     Choose {
         choice: ChoiceId,
         chooser: PlayerRecipient,
@@ -167,6 +174,14 @@ pub enum InstructionKind {
         branches: Vec<AuthoredChooseBranch>,
         otherwise: AuthoredBlock,
     },
+}
+
+/// One ordered finite draw-count option in an authored `DrawCountChoice` shorthand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DrawCountChoiceAlternative {
+    pub branch_id: ChoiceId,
+    pub count: u32,
 }
 
 /// One player-selected branch in an authored `Choose` control-flow node. Its body is a scoped
@@ -605,7 +620,7 @@ impl CompiledProgram {
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
-        let source_program = lower_program_target_aliases(program, targeting)?;
+        let source_program = normalize_authored_program(program, targeting)?;
         let source_program = source_program.as_ref();
         let mut compiled = Self::compile_internal(
             owner,
@@ -720,58 +735,66 @@ impl CompiledProgram {
     }
 }
 
-struct TargetAliasLowering<'a> {
+struct ProgramSourceLowering<'a> {
     aliases: HashMap<&'a str, &'a ProgramTargetAlias>,
     effect_uses: HashSet<String>,
     bindings: Vec<ProgramTargetReference>,
 }
 
-fn lower_program_target_aliases<'a>(
+/// Normalize source conveniences for this exact Program owner before compilation. The recursive
+/// block walk deliberately stops at nested delayed-Program owners; registry compilation normalizes
+/// those children separately with their own context and inputs.
+fn normalize_authored_program<'a>(
     program: &'a CardProgram,
     targeting: Option<&TargetingDef>,
 ) -> Result<Cow<'a, CardProgram>, String> {
-    if program.target_aliases.is_empty() {
+    if program.target_aliases.is_empty()
+        && !authored_block_contains_draw_count_choice(&program.body)
+    {
         return Ok(Cow::Borrowed(program));
     }
-    let targeting = targeting
-        .ok_or_else(|| "program target aliases require an authored target group".to_string())?;
+
     let mut aliases = HashMap::new();
     let mut alias_groups = HashSet::new();
-    for alias in &program.target_aliases {
-        if alias.name.trim().is_empty() || alias.name.contains(char::is_whitespace) {
-            return Err(
-                "program target alias names must be nonempty and contain no whitespace".into(),
-            );
-        }
-        if aliases.insert(alias.name.as_str(), alias).is_some() {
-            return Err(format!("duplicate program target alias '{}'", alias.name));
-        }
-        if !alias_groups.insert(alias.group_index) {
-            return Err("program target aliases must use distinct target groups".into());
-        }
-        let group = targeting
-            .groups
-            .get(alias.group_index as usize)
-            .ok_or_else(|| {
-                format!(
-                    "program target alias '{}' references an unknown target group",
+    if !program.target_aliases.is_empty() {
+        let targeting = targeting
+            .ok_or_else(|| "program target aliases require an authored target group".to_string())?;
+        for alias in &program.target_aliases {
+            if alias.name.trim().is_empty() || alias.name.contains(char::is_whitespace) {
+                return Err(
+                    "program target alias names must be nonempty and contain no whitespace".into(),
+                );
+            }
+            if aliases.insert(alias.name.as_str(), alias).is_some() {
+                return Err(format!("duplicate program target alias '{}'", alias.name));
+            }
+            if !alias_groups.insert(alias.group_index) {
+                return Err("program target aliases must use distinct target groups".into());
+            }
+            let group = targeting
+                .groups
+                .get(alias.group_index as usize)
+                .ok_or_else(|| {
+                    format!(
+                        "program target alias '{}' references an unknown target group",
+                        alias.name
+                    )
+                })?;
+            if group.max != 1 || group.min > 1 {
+                return Err(format!(
+                    "program target alias '{}' requires a target group with bounds 0..1 or 1..1",
                     alias.name
-                )
-            })?;
-        if group.max != 1 || group.min > 1 {
-            return Err(format!(
-                "program target alias '{}' requires a target group with bounds 0..1 or 1..1",
-                alias.name
-            ));
+                ));
+            }
         }
     }
     let mut lowered = program.clone();
-    let mut state = TargetAliasLowering {
+    let mut state = ProgramSourceLowering {
         aliases,
         effect_uses: HashSet::new(),
         bindings: Vec::new(),
     };
-    lower_alias_block(&mut lowered.body, &mut state)?;
+    normalize_program_block(&mut lowered.body, &mut state)?;
     for alias in program.target_aliases.iter() {
         if !state.effect_uses.contains(&alias.name) {
             return Err(format!(
@@ -796,57 +819,85 @@ fn lower_program_target_aliases<'a>(
     Ok(Cow::Owned(lowered))
 }
 
-fn lower_alias_block(
+fn authored_block_contains_draw_count_choice(block: &AuthoredBlock) -> bool {
+    block
+        .steps
+        .iter()
+        .any(|instruction| match &instruction.kind {
+            InstructionKind::DrawCountChoice { .. } => true,
+            InstructionKind::If { yes, no, .. } | InstructionKind::IfResult { yes, no, .. } => {
+                authored_block_contains_draw_count_choice(yes)
+                    || authored_block_contains_draw_count_choice(no)
+            }
+            InstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| authored_block_contains_draw_count_choice(&branch.body))
+                    || authored_block_contains_draw_count_choice(otherwise)
+            }
+            _ => false,
+        })
+}
+
+fn normalize_program_block(
     block: &mut AuthoredBlock,
-    state: &mut TargetAliasLowering<'_>,
+    state: &mut ProgramSourceLowering<'_>,
 ) -> Result<(), String> {
     for instruction in &mut block.steps {
         match &mut instruction.kind {
             InstructionKind::Perform(effect) => {
-                let mut uses = Vec::new();
-                lower_alias_effect(effect, state, &mut uses)?;
-                if uses.len() > 1 {
-                    return Err(format!(
-                        "program instruction '{}' has ambiguous target alias roles",
-                        instruction.id
-                    ));
-                }
-                if let Some(alias_name) = uses.pop() {
-                    let alias = state
-                        .aliases
-                        .get(alias_name.as_str())
-                        .expect("lowered alias came from the validated table");
-                    let roles = [
-                        ProgramTargetRole::Target,
-                        ProgramTargetRole::Spell,
-                        ProgramTargetRole::Source,
-                        ProgramTargetRole::Subject,
-                        ProgramTargetRole::StackAbility,
-                    ]
-                    .into_iter()
-                    .filter(|role| authored_target_role_index(effect, *role).is_some())
-                    .collect::<Vec<_>>();
-                    if roles.len() != 1 {
+                if !state.aliases.is_empty() {
+                    let mut uses = Vec::new();
+                    lower_alias_effect(effect, state, &mut uses)?;
+                    if uses.len() > 1 {
                         return Err(format!(
-                            "program instruction '{}' does not expose one unambiguous target role for alias '{}'",
-                            instruction.id, alias_name
+                            "program instruction '{}' has ambiguous target alias roles",
+                            instruction.id
                         ));
                     }
-                    state.bindings.push(ProgramTargetReference {
-                        instruction_id: instruction.id.clone(),
-                        role: roles[0],
-                        target_group_index: alias.group_index,
-                    });
+                    if let Some(alias_name) = uses.pop() {
+                        let alias = state
+                            .aliases
+                            .get(alias_name.as_str())
+                            .expect("lowered alias came from the validated table");
+                        let roles = [
+                            ProgramTargetRole::Target,
+                            ProgramTargetRole::Spell,
+                            ProgramTargetRole::Source,
+                            ProgramTargetRole::Subject,
+                            ProgramTargetRole::StackAbility,
+                        ]
+                        .into_iter()
+                        .filter(|role| authored_target_role_index(effect, *role).is_some())
+                        .collect::<Vec<_>>();
+                        if roles.len() != 1 {
+                            return Err(format!(
+                                "program instruction '{}' does not expose one unambiguous target role for alias '{}'",
+                                instruction.id, alias_name
+                            ));
+                        }
+                        state.bindings.push(ProgramTargetReference {
+                            instruction_id: instruction.id.clone(),
+                            role: roles[0],
+                            target_group_index: alias.group_index,
+                        });
+                    }
                 }
             }
             InstructionKind::If { condition, yes, no } => {
-                lower_alias_condition(condition, state)?;
-                lower_alias_block(yes, state)?;
-                lower_alias_block(no, state)?;
+                if !state.aliases.is_empty() {
+                    lower_alias_condition(condition, state)?;
+                }
+                normalize_program_block(yes, state)?;
+                normalize_program_block(no, state)?;
             }
             InstructionKind::IfResult { yes, no, .. } => {
-                lower_alias_block(yes, state)?;
-                lower_alias_block(no, state)?;
+                normalize_program_block(yes, state)?;
+                normalize_program_block(no, state)?;
             }
             InstructionKind::Choose {
                 branches,
@@ -854,14 +905,42 @@ fn lower_alias_block(
                 ..
             } => {
                 for branch in branches {
-                    if let ResolutionBranchRequirement::GameCondition(condition) =
-                        &mut branch.requirement
-                    {
-                        lower_alias_condition(condition, state)?;
+                    if !state.aliases.is_empty() {
+                        if let ResolutionBranchRequirement::GameCondition(condition) =
+                            &mut branch.requirement
+                        {
+                            lower_alias_condition(condition, state)?;
+                        }
                     }
-                    lower_alias_block(&mut branch.body, state)?;
+                    normalize_program_block(&mut branch.body, state)?;
                 }
-                lower_alias_block(otherwise, state)?;
+                normalize_program_block(otherwise, state)?;
+            }
+            InstructionKind::DrawCountChoice {
+                choice,
+                chooser,
+                presentation,
+                who,
+                alternatives,
+            } => {
+                if instruction.input.is_some() || !instruction.bind.is_empty() {
+                    return Err(format!(
+                        "DrawCountChoice instruction '{}' cannot consume or bind Program results",
+                        instruction.id
+                    ));
+                }
+                let branches =
+                    expand_draw_count_choice(&instruction.id, presentation, *who, alternatives)?;
+                instruction.kind = InstructionKind::Choose {
+                    choice: choice.clone(),
+                    chooser: *chooser,
+                    optional: false,
+                    branches,
+                    otherwise: AuthoredBlock {
+                        steps: Vec::new(),
+                        yields: Vec::new(),
+                    },
+                };
             }
             InstructionKind::ImportCastPayment => {}
         }
@@ -869,9 +948,54 @@ fn lower_alias_block(
     Ok(())
 }
 
+fn expand_draw_count_choice(
+    instruction_id: &str,
+    presentation: &AbilityPresentation,
+    who: PlayerRecipient,
+    alternatives: &[DrawCountChoiceAlternative],
+) -> Result<Vec<AuthoredChooseBranch>, String> {
+    if alternatives.is_empty() {
+        return Err(format!(
+            "DrawCountChoice instruction '{instruction_id}' requires at least the zero-draw alternative"
+        ));
+    }
+
+    let mut branches = Vec::with_capacity(alternatives.len());
+    for (index, alternative) in alternatives.iter().enumerate() {
+        let expected_count = u32::try_from(index)
+            .map_err(|_| "DrawCountChoice alternative count exceeds u32".to_string())?;
+        if alternative.count != expected_count {
+            return Err(format!(
+                "DrawCountChoice instruction '{instruction_id}' alternatives must be contiguous from zero; expected count {expected_count}, found {}",
+                alternative.count
+            ));
+        }
+        let child_id = alternative.branch_id.as_str().to_owned();
+        branches.push(AuthoredChooseBranch {
+            branch_id: alternative.branch_id.clone(),
+            presentation: presentation.clone(),
+            cost: ResolutionCost::None,
+            requirement: ResolutionBranchRequirement::Always,
+            body: AuthoredBlock {
+                steps: vec![Instruction {
+                    id: child_id,
+                    bind: Vec::new(),
+                    input: None,
+                    kind: InstructionKind::Perform(Box::new(SpellEffectKind::Draw {
+                        who,
+                        count: Amount::Fixed(alternative.count),
+                    })),
+                }],
+                yields: Vec::new(),
+            },
+        });
+    }
+    Ok(branches)
+}
+
 fn lower_alias_condition(
     condition: &mut GameCondition,
-    state: &mut TargetAliasLowering<'_>,
+    state: &mut ProgramSourceLowering<'_>,
 ) -> Result<(), String> {
     match condition {
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
@@ -892,7 +1016,7 @@ fn lower_alias_condition(
 
 fn lower_alias_condition_object(
     object: &mut ConditionObjectRef,
-    state: &mut TargetAliasLowering<'_>,
+    state: &mut ProgramSourceLowering<'_>,
 ) -> Result<(), String> {
     let ConditionObjectRef::TargetAlias(name) = object else {
         return Ok(());
@@ -910,7 +1034,7 @@ fn lower_alias_condition_object(
 
 fn lower_alias_subject(
     subject: &mut EffectSubject,
-    state: &mut TargetAliasLowering,
+    state: &mut ProgramSourceLowering,
     uses: &mut Vec<String>,
 ) -> Result<(), String> {
     let EffectSubject::TargetAlias(name) = subject else {
@@ -928,7 +1052,7 @@ fn lower_alias_subject(
 
 fn lower_alias_effect(
     effect: &mut SpellEffectKind,
-    state: &mut TargetAliasLowering,
+    state: &mut ProgramSourceLowering,
     uses: &mut Vec<String>,
 ) -> Result<(), String> {
     match effect {
@@ -1834,6 +1958,12 @@ impl Compiler<'_> {
                         }],
                         CompiledInstructionKind::ImportCastPayment,
                     )
+                }
+                InstructionKind::DrawCountChoice { .. } => {
+                    return Err(format!(
+                        "DrawCountChoice instruction '{}' was not normalized before compilation",
+                        instruction.id
+                    ));
                 }
                 InstructionKind::Perform(effect) => {
                     let supported_program_input_consumer = matches!(

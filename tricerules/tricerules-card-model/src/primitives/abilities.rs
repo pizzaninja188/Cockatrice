@@ -1998,6 +1998,7 @@ fn program_requires_attack_trigger(program: &crate::CardProgram) -> bool {
                             .iter()
                             .any(|branch| block_requires_attack_trigger(&branch.body))
                 }
+                crate::primitives::InstructionKind::DrawCountChoice { .. } => false,
                 crate::primitives::InstructionKind::ImportCastPayment => false,
             })
     }

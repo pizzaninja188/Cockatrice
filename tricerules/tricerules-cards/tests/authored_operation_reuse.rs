@@ -1580,3 +1580,225 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
         },
     );
 }
+
+fn explicit_draw_count_program() -> CardProgram {
+    ron::from_str(
+        r#"(
+            body: (steps: [
+                (id: "choose_count", kind: Choose(
+                    choice: "draw_count",
+                    chooser: AffectedPlayer,
+                    optional: false,
+                    branches: [
+                        (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, requirement: Always,
+                            body: (steps: [(id: "draw_zero", kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
+                        (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, requirement: Always,
+                            body: (steps: [(id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
+                        (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, requirement: Always,
+                            body: (steps: [(id: "draw_two", kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
+                    ],
+                    otherwise: (steps: [], yields: []),
+                )),
+            ]),
+        )"#,
+    )
+    .expect("explicit Draw choice source parses")
+}
+
+fn arcane_denial_delayed_owner() -> ProgramOwnerId {
+    ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "arcane_denial".into(),
+        face_id: tricerules_cards::CardFaceId::new("arcane_denial").unwrap(),
+        ability_path: vec![tricerules_cards::AbilityId::new("delayed_01").unwrap()],
+    })
+}
+
+fn project_arcane_denial_delayed_child_source(program: &mut CompiledProgram) {
+    let step = program
+        .body
+        .steps
+        .iter_mut()
+        .find(|step| step.id == "create_target_draw_trigger")
+        .expect("Arcane Denial parent retains its target-controller delayed trigger");
+    let CompiledInstructionKind::Perform(effect) = &mut step.kind else {
+        panic!("the parent trigger remains an ordinary Perform instruction");
+    };
+    let SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect.as_mut() else {
+        panic!("the parent trigger remains a delayed-trigger effect");
+    };
+    assert!(
+        ability.program.is_some(),
+        "the one projected field is the embedded child source Program"
+    );
+    ability.program = None;
+}
+
+fn draw_count_test_owner() -> ProgramOwnerId {
+    ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "draw_count_choice_test".into(),
+        face_id: tricerules_cards::CardFaceId::new("draw_count_choice_test").unwrap(),
+        ability_path: vec![tricerules_cards::AbilityId::new("delayed_01").unwrap()],
+    })
+}
+
+fn draw_count_program_with(alternatives: &str) -> CardProgram {
+    let source = format!(
+        r#"(
+            body: (steps: [
+                (id: "choose_count", kind: DrawCountChoice(
+                    choice: "draw_count",
+                    chooser: AffectedPlayer,
+                    presentation: OracleLines([1]),
+                    who: AffectedPlayer,
+                    alternatives: [{alternatives}],
+                )),
+            ]),
+        )"#
+    );
+    ron::from_str(&source).expect("draw-count choice fixture parses")
+}
+
+fn compile_draw_count_test_program(program: &CardProgram) -> Result<CompiledProgram, String> {
+    CompiledProgram::compile(draw_count_test_owner(), EffectContext::Ability, program)
+}
+
+#[test]
+fn authored_draw_count_choice_compiles_to_the_existing_choose_draw_tree() {
+    let compact = draw_count_program_with(
+        r#"(branch_id: "draw_zero", count: 0),
+           (branch_id: "draw_one", count: 1),
+           (branch_id: "draw_two", count: 2)"#,
+    );
+    let explicit = explicit_draw_count_program();
+
+    let compact =
+        CompiledProgram::compile(draw_count_test_owner(), EffectContext::Ability, &compact)
+            .expect("draw-count choice lowers through the ordinary Program compiler");
+    let explicit =
+        CompiledProgram::compile(draw_count_test_owner(), EffectContext::Ability, &explicit)
+            .expect("explicit Draw choice compiles");
+    assert_eq!(compact, explicit);
+}
+
+#[test]
+fn arcane_denial_draw_count_choice_matches_the_pre_migration_owner_tree() {
+    let owner = arcane_denial_delayed_owner();
+    let registry = tricerules_cards::registry::global();
+    let actual = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Arcane Denial's delayed_01 owns the draw-choice Program");
+    let expected = CompiledProgram::compile(
+        owner,
+        EffectContext::Ability,
+        &explicit_draw_count_program(),
+    )
+    .expect("the exact old explicit Arcane Denial owner source compiles");
+
+    assert_eq!(actual, &expected);
+    assert_eq!(
+        actual.required_inputs,
+        vec![tricerules_cards::primitives::ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+
+    let face = registry
+        .get("arcane_denial")
+        .expect("Arcane Denial is registered")
+        .primary_face();
+    let parent_owner = ProgramOwnerId::face("arcane_denial", face.face_id.clone());
+    let actual_parent = registry
+        .compiled_program_for_owner(&parent_owner)
+        .expect("Arcane Denial's exact face owner has a compiled parent Program");
+    let mut expected_parent_source = face
+        .spell_program
+        .as_ref()
+        .expect("Arcane Denial has an authored parent Program")
+        .clone();
+    let trigger = expected_parent_source
+        .body
+        .steps
+        .iter_mut()
+        .find(|step| step.id == "create_target_draw_trigger")
+        .expect("the pre-migration parent has the target-controller delayed trigger");
+    let InstructionKind::Perform(effect) = &mut trigger.kind else {
+        panic!("the delayed trigger remains an ordinary Perform instruction");
+    };
+    let SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect.as_mut() else {
+        panic!("the delayed trigger source is CreateDelayedTrigger");
+    };
+    ability.program = Some(explicit_draw_count_program());
+    let mut expected_parent = CompiledProgram::compile_with_targeting(
+        parent_owner,
+        EffectContext::Spell,
+        &expected_parent_source,
+        face.targeting.as_ref(),
+    )
+    .expect("the pre-migration parent Program compiles");
+
+    // Parent compilation retains the raw child CardProgram inside CreateDelayedTrigger. The
+    // child-owner equality above proves its complete compiled tree; this comparison then proves
+    // every parent field while projecting only that one source-representation field away.
+    let mut actual_parent = actual_parent.clone();
+    project_arcane_denial_delayed_child_source(&mut actual_parent);
+    project_arcane_denial_delayed_child_source(&mut expected_parent);
+    assert_eq!(actual_parent, expected_parent);
+}
+
+#[test]
+fn draw_count_choice_rejects_gaps_and_empty_alternatives() {
+    let gap = draw_count_program_with(
+        r#"(branch_id: "draw_zero", count: 0),
+           (branch_id: "draw_two", count: 2)"#,
+    );
+    let error = compile_draw_count_test_program(&gap)
+        .expect_err("a draw-count choice cannot skip an intermediate quantity");
+    assert!(error.contains("contiguous from zero"), "{error}");
+
+    let empty = draw_count_program_with("");
+    let error = compile_draw_count_test_program(&empty)
+        .expect_err("the shorthand does not encode an empty zero-draw choice");
+    assert!(
+        error.contains("requires at least the zero-draw alternative"),
+        "{error}"
+    );
+}
+
+#[test]
+fn draw_count_choice_uses_existing_branch_and_instruction_id_validation() {
+    let duplicate = draw_count_program_with(
+        r#"(branch_id: "draw_zero", count: 0),
+           (branch_id: "draw_zero", count: 1)"#,
+    );
+    let error = compile_draw_count_test_program(&duplicate)
+        .expect_err("duplicate branch IDs remain rejected by the ordinary Choose compiler");
+    assert!(error.contains("duplicate branch id 'draw_zero'"), "{error}");
+
+    let mut collision = draw_count_program_with(r#"(branch_id: "draw_zero", count: 0)"#);
+    collision.body.steps.insert(
+        0,
+        tricerules_cards::Instruction {
+            id: "draw_zero".into(),
+            bind: Vec::new(),
+            input: None,
+            kind: InstructionKind::Perform(Box::new(SpellEffectKind::Draw {
+                who: PlayerRecipient::AffectedPlayer,
+                count: Amount::Fixed(1),
+            })),
+        },
+    );
+    let error = compile_draw_count_test_program(&collision)
+        .expect_err("generated child IDs remain in the global instruction namespace");
+    assert!(
+        error.contains("duplicate or empty instruction id 'draw_zero'"),
+        "{error}"
+    );
+
+    let reserved = draw_count_program_with(r#"(branch_id: "fallback", count: 0)"#);
+    let error = compile_draw_count_test_program(&reserved)
+        .expect_err("reserved branch IDs remain rejected by the ordinary Choose compiler");
+    assert!(error.contains("is reserved"), "{error}");
+
+    let noncanonical = draw_count_program_with(r#"(branch_id: "draw-zero", count: 0)"#);
+    let error = compile_draw_count_test_program(&noncanonical)
+        .expect_err("noncanonical branch IDs remain rejected by the ordinary Choose compiler");
+    assert!(error.contains("canonical snake_case"), "{error}");
+}
