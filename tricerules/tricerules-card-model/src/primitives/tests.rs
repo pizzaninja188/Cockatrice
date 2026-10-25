@@ -2045,48 +2045,6 @@ fn issue_159_retires_legacy_counter_receipt_and_current_target_conditions_deseri
 }
 
 #[test]
-fn issue_211_counter_reflexive_receipts_require_an_adjacent_matching_producer() {
-    let valid = r#"(
-        id: "test", name: "Test", face_id: "test", types: ["Enchantment"],
-        triggered_abilities: [(
-            ability_id: "triggered_01", presentation: Fallback,
-            trigger: WheneverPermanentEntersBattlefield(
-                controller: Controller,
-                filter: (permanent_type: Some(Land)),
-            ),
-            effect: [
-                PutCounters(counter: Quest, count: 1, subject: Source),
-                CreateReflexiveTrigger(
-                    when: Some(CountersPlaced(counter: Quest, object: Source)),
-                    ability: (
-                        ability_id: "reflexive_01", presentation: Fallback,
-                        intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
-                        effect: [GainLife(amount: 1)],
-                    ),
-                ),
-            ],
-        )],
-    )"#;
-    assert!(crate::CardRegistry::from_chunks_and_tokens(&[valid], &[]).is_ok());
-
-    let missing_producer = valid.replace(
-        "PutCounters(counter: Quest, count: 1, subject: Source)",
-        "Draw(count: 1)",
-    );
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[&missing_producer], &[])
-        .expect_err("a receipt cannot inspect a nonadjacent or absent counter result");
-    assert!(error
-        .to_string()
-        .contains("immediately preceding PutCounters effect with the same counter kind"));
-
-    let mismatched_counter = valid.replace(
-        "PutCounters(counter: Quest, count: 1, subject: Source)",
-        "PutCounters(counter: Charge, count: 1, subject: Source)",
-    );
-    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_counter], &[]).is_err());
-}
-
-#[test]
 fn issue_159_exact_cohorts_grouped_permissions_and_second_from_top_deserialize() {
     let retired_graveyard_syntax = ron::from_str::<super::SpellEffectKind>(
         "ChooseGraveyardCard(filter: (card_type: Some(NonlandPermanent)), destination: Hand, optional: true, from_result: Some((source: PreviousEffect, action: Mill, players: Controller)))",
@@ -7128,7 +7086,7 @@ fn program_reusable_operation_contract() {
             "when: Some(CountersPlaced(counter: Quest, object: Source)), ",
             "",
             "DamageTarget(amount: 3, target: (kind: AnyTarget))",
-            "CreateReflexiveTrigger supports only the approved resultless target shapes",
+            "instruction requires an explicitly bound input result",
         ),
         (
             "intervening-if metadata",
@@ -16458,6 +16416,106 @@ fn program_source_counter_removal_branch_fallback_is_readable() {
         branch.fallback_label(),
         "Remove a doom counter from this permanent."
     );
+}
+
+#[test]
+fn earthbender_counter_receipt_program_survives_an_intervening_instruction() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "earthbender_receipt_fixture".into(),
+        face_id: crate::CardFaceId::new("earthbender_receipt_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let body = r#"(steps: [
+            (id: "place_quest", bind: ["placed"], kind: Perform(
+                PutCounters(counter: Quest, count: 1, subject: Source),
+            )),
+            (id: "gain_life", kind: Perform(GainLife(amount: 1))),
+            (id: "reflexive", input: Some("placed"), kind: Perform(
+                CreateReflexiveTrigger(
+                    when: Some(CountersPlaced(counter: Quest, object: Source)),
+                    ability: (
+                        ability_id: "reflexive_01", presentation: Fallback,
+                        intervening_if: Some(SourceCounterCount(
+                            counter: Quest, min: Some(4),
+                        )),
+                        effect: [GainLife(amount: 1)],
+                    ),
+                ),
+            )),
+        ], yields: [])"#;
+    let compile = |body: &str, context| {
+        let program: crate::CardProgram =
+            ron::from_str(&format!("(body: {body})")).expect("the counter receipt fixture parses");
+        CompiledProgram::compile(owner.clone(), context, &program)
+    };
+
+    let compiled = compile(body, EffectContext::Ability).expect(
+        "a named Quest placement receipt remains authorized across an unrelated instruction",
+    );
+    let [producer, _intervening, consumer] = compiled.body.steps.as_slice() else {
+        panic!("the receipt fixture has one producer, one intervening step, and one consumer");
+    };
+    let [receipt_slot] = producer.outputs.as_slice() else {
+        panic!("the exact Quest placement binds one receipt");
+    };
+    assert_eq!(consumer.input, Some(*receipt_slot));
+    assert_eq!(
+        compiled.slot(*receipt_slot).unwrap().result_type,
+        crate::primitives::ResultType::CounterPlacementReceipt {
+            counter: crate::primitives::CounterKind::Quest,
+            object: crate::primitives::ConditionObjectRef::Source,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        }
+    );
+
+    for (invalid, reason) in [
+        (
+            body.replace("input: Some(\"placed\"),", ""),
+            "the consumer requires an explicit receipt input",
+        ),
+        (
+            body.replace(
+                "CountersPlaced(counter: Quest, object: Source)",
+                "CountersPlaced(counter: Charge, object: Source)",
+            ),
+            "a different counter event cannot consume the Quest receipt",
+        ),
+        (
+            body.replace(
+                "CountersPlaced(counter: Quest, object: Source)",
+                "CountersPlaced(counter: Quest, object: PreviousEffectObject)",
+            ),
+            "a different event object cannot consume the Source receipt",
+        ),
+        (
+            body.replace(
+                "PutCounters(counter: Quest, count: 1, subject: Source)",
+                "Draw(who: Controller, count: 1)",
+            ),
+            "a different producer type cannot authorize the counter event",
+        ),
+    ] {
+        assert!(
+            compile(&invalid, EffectContext::Ability).is_err(),
+            "{reason}"
+        );
+    }
+    assert!(
+        compile(body, EffectContext::Spell).is_err(),
+        "the specialized receipt consumer is ability-owned"
+    );
+    let resultless: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "other_counters", kind: Perform(
+            PutCounters(counter: Charge, count: 1, subject: Source),
+        ))], yields: []))"#,
+    )
+    .expect("the unrelated resultless counter Program parses");
+    assert!(CompiledProgram::compile(owner, EffectContext::Ability, &resultless).is_ok());
 }
 
 #[test]

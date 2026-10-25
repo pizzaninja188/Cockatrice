@@ -145,6 +145,87 @@ fn fourth_quest_counter_creates_a_targeted_reflexive_trigger() {
 }
 
 #[test]
+fn replacement_choices_resume_one_counter_receipt_and_one_reflexive_trigger() {
+    let (mut engine, ascension, creature) = threshold_engine(211_006);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let forest = relocate_to_hand(&mut engine, 0, "forest");
+    let forest_slot = engine.state.players[0]
+        .hand
+        .iter()
+        .position(|candidate| *candidate == forest)
+        .expect("Forest in hand");
+
+    engine
+        .apply_scenario_command(0, &play_land(forest_slot))
+        .expect("play Forest");
+    pass_both_players(&mut engine);
+
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("counter replacement ordering parks the typed Program");
+    assert_eq!(
+        choice.presentation.choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(choice.presentation.candidates.len(), 2);
+    assert_eq!(
+        engine.state.objects[&ascension].counter_count(CounterKind::Quest),
+        3,
+        "the Quest placement remains uncommitted while its replacement order is chosen"
+    );
+    let selected = choice.presentation.candidates[0];
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("finish the parked counter replacement batch");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.objects[&ascension].counter_count(CounterKind::Quest),
+        7,
+        "both Doubling Seasons modify the one committed placement"
+    );
+    assert_eq!(
+        engine.state.pending_triggers.len(),
+        1,
+        "the replacement-expanded placement produces exactly one reflexive event"
+    );
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(creature))
+        .expect("target controlled creature");
+    pass_both_players(&mut engine);
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("replacement ordering parks the single reflexive counter placement");
+    assert_eq!(
+        choice.presentation.choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(choice.presentation.candidates.len(), 2);
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::PlusOnePlusOne),
+        0,
+        "the reflexive placement remains uncommitted while its replacement order is chosen"
+    );
+    let selected = choice.presentation.candidates[0];
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("finish the parked reflexive counter placement");
+
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::PlusOnePlusOne),
+        4,
+        "the parked Program tail resumes once"
+    );
+    assert!(engine.effective_has_keyword(creature, Keyword::Trample));
+    assert!(engine.state.pending_triggers.is_empty());
+}
+
+#[test]
 fn reflexive_intervening_if_is_rechecked_on_resolution() {
     let (mut engine, ascension, creature) = threshold_engine(211_002);
     let forest = relocate_to_hand(&mut engine, 0, "forest");

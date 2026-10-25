@@ -1426,6 +1426,9 @@ pub(crate) enum ProgramValue {
     TargetedSpellController(Option<PlayerId>),
     /// Optional exact generation-bound source permanent from one countered stack ability.
     CounteredAbilitySource(Option<TriggerObjectRef>),
+    /// Optional exact-generation result from one committed counter placement. `None` records a
+    /// completed attempt with no counters placed; it is distinct from an unwritten output slot.
+    CounterPlacementReceipt(Option<CounterPlacementReceipt>),
     DrawReceipt(Vec<TriggerObjectRef>),
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),

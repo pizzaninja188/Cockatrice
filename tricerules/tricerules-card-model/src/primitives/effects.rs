@@ -4257,24 +4257,6 @@ impl SpellEffectKind {
                     );
                 }
             }
-            if let SpellEffectKind::CreateReflexiveTrigger {
-                when: Some(ResolutionReceiptCondition::CountersPlaced { counter, object: _ }),
-                ..
-            } = effect
-            {
-                if !matches!(
-                    previous,
-                    Some(SpellEffectKind::PutCounters {
-                        counter: produced,
-                        ..
-                    }) if produced == counter
-                ) {
-                    return Err(
-                        "counter-placement reflexive trigger requires an immediately preceding PutCounters effect with the same counter kind"
-                            .into(),
-                    );
-                }
-            }
         }
         Ok(())
     }

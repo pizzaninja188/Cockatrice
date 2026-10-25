@@ -1506,29 +1506,39 @@ If line 2 describes only the parent ability and would be misleading as the branc
 
 ### Bind "when you do" to a successful counter placement
 
-Use a receipt-gated reflexive trigger when the printed trigger depends on the immediately
-preceding counter instruction actually placing a counter. The receipt is private engine state,
-matches the exact object generation, and is unavailable after any intervening instruction.
+Use an ability-owned `CardProgram` when a reflexive trigger depends on a counter instruction
+actually placing a counter. Bind the instruction's optional `CounterPlacementReceipt` and pass that
+named slot to the consumer; do not use an ambient previous-effect lookup. The admitted producer is
+exactly `PutCounters(Quest, 1, Source)`, with cardinality `0..1`, and the consumer is exactly
+`CreateReflexiveTrigger(CountersPlaced(Quest, Source))`. This receipt follows the named slot across
+intervening instructions, identifies the exact source object generation, and carries one committed
+placement even when replacement effects increase its count. A completed placement with no counters
+has a typed empty result and creates no reflexive trigger. Other counter kinds, subjects, counts, or
+receipt consumers remain outside this profile; the nested ability uses its existing validation.
 
 ```ron
-effect: [
-  PutCounters(counter: Quest, count: 1, subject: Source),
-  CreateReflexiveTrigger(
-    when: Some(CountersPlaced(counter: Quest, object: Source)),
-    ability: (
-      ability_id: "reflexive_01",
-      presentation: OracleLines([2]),
-      intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
-      effect: [GainLife(amount: 1)],
+program: Some((body: (steps: [
+  (id: "place_quest", bind: ["placed"], kind: Perform(
+    PutCounters(counter: Quest, count: 1, subject: Source),
+  )),
+  (id: "create_counter_reflexive", input: Some("placed"), kind: Perform(
+    CreateReflexiveTrigger(
+      when: Some(CountersPlaced(counter: Quest, object: Source)),
+      ability: (
+        ability_id: "reflexive_01",
+        presentation: OracleLines([2]),
+        intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
+        effect: [GainLife(amount: 1)],
+      ),
     ),
-  ),
-],
+  )),
+], yields: []), target_bindings: [])),
 ```
 
-The registry requires the same counter kind on an immediately preceding `PutCounters`. Omit
-`when` for a reflexive trigger created unconditionally by a successful paid branch. Put an
-`intervening_if` condition on the nested ability only for an actual CR 603.4 clause; the engine
-checks it both before staging the reflexive trigger and again when that trigger resolves.
+`Earthbender Ascension` uses this profile for its landfall ability. Omit `when` for a reflexive
+trigger created unconditionally by a successful paid branch. Put an `intervening_if` condition on
+the nested ability only for an actual CR 603.4 clause; the engine checks it both before staging the
+reflexive trigger and again when that trigger resolves.
 
 ## 6. Add a generic primitive or keyword
 

@@ -1405,6 +1405,9 @@ impl GameEngine {
                                 previous.produced_objects.push(*object);
                             }
                             ProgramValue::CounteredAbilitySource(None) => {}
+                            value @ ProgramValue::CounterPlacementReceipt(_) => {
+                                previous.program_value = Some(value.clone());
+                            }
                             value @ ProgramValue::TargetedSpellController(_) => {
                                 previous.program_value = Some(value.clone());
                             }
@@ -1455,6 +1458,16 @@ impl GameEngine {
                             top,
                         )? {
                             previous.sacrificed_objects.push(receipt);
+                        }
+                    }
+                    if is_program_counter_placement_reflexive(&effect) {
+                        if let Some(receipt) = program_counter_placement_reflexive_receipt(
+                            compiled,
+                            &program_state,
+                            input,
+                            top,
+                        )? {
+                            previous.counter_placements.push(receipt);
                         }
                     }
                     let mut result = EffectResult::default();
@@ -2319,6 +2332,68 @@ fn optional_physical_output(
     Ok(result.produced_objects.first().copied())
 }
 
+fn counter_placement_output(
+    result: &EffectResult,
+    counter: tricerules_card_model::primitives::CounterKind,
+    object: tricerules_card_model::primitives::ConditionObjectRef,
+    cardinality: &tricerules_card_model::primitives::Cardinality,
+    top: &StackItem,
+) -> Result<Option<crate::state::CounterPlacementReceipt>, EngineError> {
+    if object != tricerules_card_model::primitives::ConditionObjectRef::Source {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement receipt must identify the exact source object",
+        ));
+    }
+    let source_id = top
+        .source_permanent_id
+        .ok_or(EngineError::ProgramInvariant(
+            "counter-placement receipt has no exact source object",
+        ))?;
+    let expected_object = crate::state::TriggerObjectRef {
+        object_id: source_id,
+        zone_change_generation: top.source_zone_change,
+        controller_at_event: top.controller,
+    };
+    let receipts = result
+        .counter_placements
+        .iter()
+        .copied()
+        .filter(|receipt| {
+            receipt.counter == counter && receipt.object.object_id == expected_object.object_id
+        })
+        .collect::<Vec<_>>();
+    if receipts.iter().any(|receipt| {
+        receipt.object.zone_change_generation != expected_object.zone_change_generation
+    }) {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement receipt does not match the exact source generation",
+        ));
+    }
+    let count = u32::try_from(receipts.len()).map_err(|_| {
+        EngineError::ProgramInvariant("counter-placement receipt cardinality overflowed")
+    })?;
+    if count < cardinality.min || cardinality.max.is_some_and(|max| count > max) {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement receipt exceeded its compiled cardinality",
+        ));
+    }
+    match receipts.as_slice() {
+        [] => Ok(None),
+        [receipt]
+            if receipt.count > 0
+                && receipt.after.checked_sub(receipt.before) == Some(receipt.count) =>
+        {
+            Ok(Some(*receipt))
+        }
+        [_] => Err(EngineError::ProgramInvariant(
+            "counter-placement receipt does not prove a committed counter change",
+        )),
+        _ => Err(EngineError::ProgramInvariant(
+            "counter-placement receipt is ambiguous",
+        )),
+    }
+}
+
 fn capture_program_outputs_inner(
     stack_context: Option<(&crate::engine::GameEngine, &StackItem)>,
     compiled: &CompiledProgram,
@@ -2363,6 +2438,22 @@ fn capture_program_outputs_inner(
                     result,
                     cardinality,
                     "CounterTargetAbility result exceeded its compiled cardinality",
+                )?)
+            }
+            ResultType::CounterPlacementReceipt {
+                counter,
+                object,
+                cardinality,
+            } => {
+                let (_, top) = stack_context.ok_or(EngineError::ProgramInvariant(
+                    "counter-placement receipt capture lacks its exact stack occurrence",
+                ))?;
+                ProgramValue::CounterPlacementReceipt(counter_placement_output(
+                    result,
+                    *counter,
+                    *object,
+                    cardinality,
+                    top,
                 )?)
             }
             ResultType::PermanentSelection { .. } => {
@@ -2629,6 +2720,85 @@ fn is_program_source_sacrifice_reflexive(effect: &SpellEffectKind) -> bool {
     )
 }
 
+fn is_program_counter_placement_reflexive(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::CreateReflexiveTrigger {
+            when: Some(
+                tricerules_card_model::primitives::ResolutionReceiptCondition::CountersPlaced {
+                    counter: tricerules_card_model::primitives::CounterKind::Quest,
+                    object: tricerules_card_model::primitives::ConditionObjectRef::Source,
+                }
+            ),
+            ..
+        }
+    )
+}
+
+/// Project the explicitly named Quest placement output into the existing reflexive-trigger
+/// matcher. The output remains tied to its exact source generation across later Program steps.
+fn program_counter_placement_reflexive_receipt(
+    compiled: &CompiledProgram,
+    run: &ProgramRunState,
+    input: Option<ResultSlotId>,
+    top: &StackItem,
+) -> Result<Option<crate::state::CounterPlacementReceipt>, EngineError> {
+    let slot_id = input.ok_or(EngineError::ProgramInvariant(
+        "counter-placement reflexive child is missing its typed input",
+    ))?;
+    let slot = compiled.slot(slot_id).ok_or(EngineError::ProgramInvariant(
+        "counter-placement reflexive input slot disappeared",
+    ))?;
+    let expected_type = ResultType::CounterPlacementReceipt {
+        counter: tricerules_card_model::primitives::CounterKind::Quest,
+        object: tricerules_card_model::primitives::ConditionObjectRef::Source,
+        cardinality: tricerules_card_model::primitives::Cardinality {
+            min: 0,
+            max: Some(1),
+        },
+    };
+    if slot.result_type != expected_type {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement reflexive input has the wrong compiled result type",
+        ));
+    }
+    let value = run
+        .slots
+        .get(slot_id.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or(EngineError::ProgramInvariant(
+            "counter-placement reflexive input is unavailable",
+        ))?;
+    let ProgramValue::CounterPlacementReceipt(receipt) = value else {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement reflexive input is not a placement receipt",
+        ));
+    };
+    let Some(receipt) = receipt else {
+        return Ok(None);
+    };
+    let expected_object = crate::state::TriggerObjectRef {
+        object_id: top
+            .source_permanent_id
+            .ok_or(EngineError::ProgramInvariant(
+                "counter-placement reflexive child has no exact source object",
+            ))?,
+        zone_change_generation: top.source_zone_change,
+        controller_at_event: top.controller,
+    };
+    if receipt.counter != tricerules_card_model::primitives::CounterKind::Quest
+        || receipt.object.object_id != expected_object.object_id
+        || receipt.object.zone_change_generation != expected_object.zone_change_generation
+        || receipt.count == 0
+        || receipt.after.checked_sub(receipt.before) != Some(receipt.count)
+    {
+        return Err(EngineError::ProgramInvariant(
+            "counter-placement reflexive input does not prove the exact committed Quest placement",
+        ));
+    }
+    Ok(Some(*receipt))
+}
+
 /// Project an explicit typed source-sacrifice input into the existing receipt consumed by the
 /// reflexive-trigger gate. This path is deliberately limited to the one compiled result shape
 /// and never infers success from ambient previous-result state.
@@ -2877,9 +3047,10 @@ fn run_program_only_leaf(
 #[cfg(test)]
 mod countered_ability_source_tests {
     use super::*;
-    use crate::state::{EffectResult, ProgramRunState, TriggerObjectRef};
+    use crate::state::{CounterPlacementReceipt, EffectResult, ProgramRunState, TriggerObjectRef};
     use tricerules_card_model::primitives::{
-        Cardinality, CompiledBlock, CompiledSlot, EffectContext, ProgramTargetProjection,
+        Cardinality, CompiledBlock, CompiledSlot, ConditionObjectRef, CounterKind, EffectContext,
+        ProgramTargetProjection,
     };
 
     fn ability_owner() -> tricerules_card_model::ProgramOwnerId {
@@ -2907,6 +3078,33 @@ mod countered_ability_source_tests {
                 id: ResultSlotId(0),
                 name: "receipt".into(),
                 result_type: ResultType::CounteredAbilitySource {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                },
+            }],
+        }
+    }
+
+    fn compiled_counter_placement_program() -> CompiledProgram {
+        CompiledProgram {
+            owner: ability_owner(),
+            context: EffectContext::Ability,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "placed".into(),
+                result_type: ResultType::CounterPlacementReceipt {
+                    counter: CounterKind::Quest,
+                    object: ConditionObjectRef::Source,
                     cardinality: Cardinality {
                         min: 0,
                         max: Some(1),
@@ -3024,6 +3222,127 @@ mod countered_ability_source_tests {
             capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result),
             Err(EngineError::ProgramInvariant(
                 "CounterTargetAbility result exceeded its compiled cardinality"
+            ))
+        ));
+    }
+
+    #[test]
+    fn counter_placement_capture_distinguishes_empty_unwritten_and_ambiguous_receipts() {
+        let compiled = compiled_counter_placement_program();
+        let (engine, mut top) = fixture_engine_and_top();
+        let source = TriggerObjectRef {
+            object_id: 91_279,
+            zone_change_generation: 7,
+            controller_at_event: 0,
+        };
+        top.source_permanent_id = Some(source.object_id);
+        top.source_zone_change = source.zone_change_generation;
+        top.controller = 1;
+        let mut run = run_with_slot(None);
+        let mut result = EffectResult::default();
+
+        capture_program_outputs_for_stack(
+            &engine,
+            &top,
+            &compiled,
+            &mut run,
+            &[ResultSlotId(0)],
+            &result,
+        )
+        .expect("a completed no-placement result is captured");
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::CounterPlacementReceipt(None))
+        ));
+        assert_eq!(
+            program_counter_placement_reflexive_receipt(
+                &compiled,
+                &run,
+                Some(ResultSlotId(0)),
+                &top,
+            )
+            .expect("a completed empty placement does not authorize a reflexive trigger"),
+            None
+        );
+
+        run.slots[0] = None;
+        assert!(matches!(
+            program_counter_placement_reflexive_receipt(
+                &compiled,
+                &run,
+                Some(ResultSlotId(0)),
+                &top,
+            ),
+            Err(EngineError::ProgramInvariant(
+                "counter-placement reflexive input is unavailable"
+            ))
+        ));
+
+        let receipt = CounterPlacementReceipt {
+            object: TriggerObjectRef {
+                controller_at_event: 0,
+                ..source
+            },
+            counter: CounterKind::Quest,
+            count: 2,
+            before: 3,
+            after: 5,
+        };
+        result.counter_placements.push(receipt);
+        capture_program_outputs_for_stack(
+            &engine,
+            &top,
+            &compiled,
+            &mut run,
+            &[ResultSlotId(0)],
+            &result,
+        )
+        .expect("replacement-expanded counters keep one exact event receipt");
+        assert_eq!(
+            program_counter_placement_reflexive_receipt(
+                &compiled,
+                &run,
+                Some(ResultSlotId(0)),
+                &top,
+            )
+            .expect("the exact committed receipt is projected"),
+            Some(receipt)
+        );
+
+        result.counter_placements.push(receipt);
+        assert!(matches!(
+            capture_program_outputs_for_stack(
+                &engine,
+                &top,
+                &compiled,
+                &mut run,
+                &[ResultSlotId(0)],
+                &result,
+            ),
+            Err(EngineError::ProgramInvariant(
+                "counter-placement receipt exceeded its compiled cardinality"
+            ))
+        ));
+
+        let stale = CounterPlacementReceipt {
+            object: TriggerObjectRef {
+                zone_change_generation: source.zone_change_generation + 1,
+                ..source
+            },
+            ..receipt
+        };
+        result.counter_placements = vec![stale];
+        assert!(matches!(
+            capture_program_outputs_for_stack(
+                &engine,
+                &top,
+                &compiled,
+                &mut run,
+                &[ResultSlotId(0)],
+                &result,
+            ),
+            Err(EngineError::ProgramInvariant(
+                "counter-placement receipt does not match the exact source generation"
             ))
         ));
     }

@@ -27,34 +27,39 @@
         controller: Controller,
         filter: (permanent_type: Some(Land)),
       ),
-      effect: [
-        PutCounters(counter: Quest, count: 1, subject: Source),
-        CreateReflexiveTrigger(
-          when: Some(CountersPlaced(counter: Quest, object: Source)),
-          ability: (
-            ability_id: "reflexive_01",
-            presentation: OracleLines([2]),
-            intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
-            effect: [
-              PutCounters(
-                counter: PlusOnePlusOne,
-                count: 1,
-                subject: Chosen((kind: Creature, controller: You)),
-              ),
-              GrantKeywords(
-                subject: Chosen((kind: Creature, controller: You)),
-                keywords: [Trample],
-              ),
-            ],
-            targeting: Some((groups: [(
-              min: 1,
-              max: 1,
-              prompt: "Choose target creature you control",
-              effect_indices: [0, 1],
-            )])),
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "place_quest", bind: ["placed"], kind: Perform(
+          PutCounters(counter: Quest, count: 1, subject: Source),
+        )),
+        (id: "create_counter_reflexive", input: Some("placed"), kind: Perform(
+          CreateReflexiveTrigger(
+            when: Some(CountersPlaced(counter: Quest, object: Source)),
+            ability: (
+              ability_id: "reflexive_01",
+              presentation: OracleLines([2]),
+              intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
+              effect: [
+                PutCounters(
+                  counter: PlusOnePlusOne,
+                  count: 1,
+                  subject: Chosen((kind: Creature, controller: You)),
+                ),
+                GrantKeywords(
+                  subject: Chosen((kind: Creature, controller: You)),
+                  keywords: [Trample],
+                ),
+              ],
+              targeting: Some((groups: [(
+                min: 1,
+                max: 1,
+                prompt: "Choose target creature you control",
+                effect_indices: [0, 1],
+              )])),
+            ),
           ),
-        ),
-      ],
+        )),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )
