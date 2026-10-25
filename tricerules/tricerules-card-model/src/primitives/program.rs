@@ -3546,80 +3546,47 @@ fn validate_equipment_selection_input(
     slots: &[CompiledSlot],
     target_group_index: Option<u32>,
 ) -> Result<(), String> {
-    match effect {
-        SpellEffectKind::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObjects,
-        } => {
-            let slot = input.ok_or_else(|| {
-                "CreatedTokenBatch attachment requires its typed CreateTokens input".to_string()
-            })?;
-            let producer =
-                same_block_direct_perform_producer(steps, Some(slot)).ok_or_else(|| {
-                    "CreatedTokenBatch attachment requires a same-block CreateTokens instruction"
-                        .to_string()
-                })?;
-            if !matches!(
-                &producer.kind,
-                CompiledInstructionKind::Perform(producer)
-                    if matches!(producer.as_ref(), SpellEffectKind::CreateTokens { .. })
-            ) || !matches!(
-                slots.get(slot.0 as usize).map(|slot| &slot.result_type),
-                Some(ResultType::CreatedTokenBatch {
-                    cardinality: Cardinality { min: 0, max: None }
-                })
-            ) {
+    if let SpellEffectKind::AttachEquipment {
+        equipment: EffectSubject::PreviousEffectObject,
+        creature: EffectSubject::Chosen(_),
+    } = effect
+    {
+        let attach_group = target_group_index.ok_or_else(|| {
+            "selected Equipment attachment requires its chosen creature target binding".to_string()
+        })?;
+        let slot = input.ok_or_else(|| {
+            "selected Equipment attachment requires its typed selection input".to_string()
+        })?;
+        let producer = same_block_direct_perform_producer(steps, Some(slot)).ok_or_else(|| {
+            "selected Equipment attachment requires a same-block ChoosePermanents instruction"
+                .to_string()
+        })?;
+        let producer_effect = match &producer.kind {
+            CompiledInstructionKind::Perform(producer) => producer.as_ref(),
+            _ => {
                 return Err(
-                    "CreatedTokenBatch attachment must consume a same-block CreateTokens result"
-                        .into(),
-                );
-            }
-        }
-        SpellEffectKind::AttachEquipment {
-            equipment: EffectSubject::PreviousEffectObject,
-            creature: EffectSubject::Chosen(_),
-        } => {
-            let attach_group = target_group_index.ok_or_else(|| {
-                "selected Equipment attachment requires its chosen creature target binding"
-                    .to_string()
-            })?;
-            let slot = input.ok_or_else(|| {
-                "selected Equipment attachment requires its typed selection input".to_string()
-            })?;
-            let producer =
-                same_block_direct_perform_producer(steps, Some(slot)).ok_or_else(|| {
-                    "selected Equipment attachment requires a same-block ChoosePermanents instruction"
-                        .to_string()
-                })?;
-            let producer_effect = match &producer.kind {
-                CompiledInstructionKind::Perform(producer) => producer.as_ref(),
-                _ => {
-                    return Err(
-                        "selected Equipment attachment requires a ChoosePermanents producer".into(),
-                    )
-                }
-            };
-            let Some((choice_group, choice_target)) = equipment_choice_target(producer_effect)
-            else {
-                return Err("selected Equipment attachment requires one Equipment choice constrained to its creature target".into());
-            };
-            if choice_group != attach_group
-                || choice_target != 0
-                || !matches!(
-                    slots.get(slot.0 as usize).map(|slot| &slot.result_type),
-                    Some(ResultType::PermanentSelection {
-                        chooser: PlayerRecipient::Controller,
-                        filter,
-                        cardinality: Cardinality { min: 0, max: Some(1) },
-                    }) if matches!(producer_effect,
-                        SpellEffectKind::ChoosePermanents { filter: producer_filter, .. }
-                            if filter.as_ref() == producer_filter)
+                    "selected Equipment attachment requires a ChoosePermanents producer".into(),
                 )
-            {
-                return Err("selected Equipment attachment must consume exactly one same-block Equipment selection constrained to its chosen creature target".into());
             }
+        };
+        let Some((choice_group, choice_target)) = equipment_choice_target(producer_effect) else {
+            return Err("selected Equipment attachment requires one Equipment choice constrained to its creature target".into());
+        };
+        if choice_group != attach_group
+            || choice_target != 0
+            || !matches!(
+                slots.get(slot.0 as usize).map(|slot| &slot.result_type),
+                Some(ResultType::PermanentSelection {
+                    chooser: PlayerRecipient::Controller,
+                    filter,
+                    cardinality: Cardinality { min: 0, max: Some(1) },
+                }) if matches!(producer_effect,
+                    SpellEffectKind::ChoosePermanents { filter: producer_filter, .. }
+                        if filter.as_ref() == producer_filter)
+            )
+        {
+            return Err("selected Equipment attachment must consume exactly one same-block Equipment selection constrained to its chosen creature target".into());
         }
-        _ => {}
     }
     Ok(())
 }
@@ -4659,16 +4626,12 @@ fn validate_and_result_types(
                     );
                 }
                 super::TokenCopySource::LinkedExile {
-                    producer_ability_id,
-                    linked_exile_id,
+                    ..
                 } if context == EffectContext::Ability
-                    && is_mimic_vat_create_copy_owner(&compiler.owner)
-                    && producer_ability_id.as_str() == "imprint"
-                    && linked_exile_id.as_str() == "imprinted_card"
-                    && matches!(count, Amount::Fixed(1)) => {}
+                    && top_level_ability_id(&compiler.owner).is_some() => {}
                 super::TokenCopySource::LinkedExile { .. } => {
                     return Err(
-                        "LinkedExile token copies require Mimic Vat's exact create_copy ability, imprint producer, imprinted_card link, and count 1".into(),
+                        "LinkedExile token copies require a top-level ability program owner".into(),
                     );
                 }
             }
@@ -5524,17 +5487,6 @@ fn is_linked_exile_receipt_body(body: &AuthoredBlock) -> bool {
     }
 
     true
-}
-
-fn is_mimic_vat_create_copy_owner(owner: &ProgramOwnerId) -> bool {
-    matches!(
-        owner,
-        ProgramOwnerId::Ability(definition)
-            if definition.card_id == "mimic_vat"
-                && definition.face_id.as_str() == "mimic_vat"
-                && definition.ability_path.len() == 1
-                && definition.ability_path[0].as_str() == "create_copy"
-    )
 }
 
 fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {

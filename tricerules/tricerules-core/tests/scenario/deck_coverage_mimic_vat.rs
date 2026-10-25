@@ -1568,6 +1568,27 @@ fn archive_receipt_fixture_registry() -> &'static tricerules_cards::CardRegistry
         )),
         (id: "program_tail", kind: Perform(GainLife(amount: 2)))
     ], yields: [])"#;
+    const COPY_ABILITY: &str = r#"(
+        ability_id: "make_batch", presentation: Fallback,
+        source_zone: Battlefield, costs: [Mana("{3}"), Tap], effect: [],
+        program: Some((body: (steps: [
+            (id: "copy_entry", bind: ["copies"], input: None,
+                kind: Perform(CreateTokenCopies(count: 2, source: LinkedExile(
+                    producer_ability_id: "archive_event", linked_exile_id: "archived_card",
+                )))),
+            (id: "grant_haste", bind: [], input: Some("copies"),
+                kind: Perform(ApplyPermanentModifier(
+                    subject: PreviousEffectObjects,
+                    modifier: GrantKeywords([Haste]), duration: Indefinite,
+                ))),
+            (id: "schedule_exile", bind: [], input: Some("copies"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObjects),
+                    ability: (ability_id: "exile_copy", presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep, effect: [ExileObservedObjects]),
+                ))),
+        ], yields: []), target_bindings: [])),
+    )"#;
     let fixture = format!(
         r#"(id: "archive_fixture", name: "Archive Fixture", face_id: "archive_fixture",
             types: ["Artifact"],
@@ -1577,7 +1598,8 @@ fn archive_receipt_fixture_registry() -> &'static tricerules_cards::CardRegistry
                 effect: [], program: Some((body: {BODY}, target_bindings: [])),
                 modal: None, targeting: None, may: false, intervening_if: None,
                 triggers_only_once: false, max_triggers_per_turn: None,
-            )])"#
+        )],
+        activated_abilities: [{COPY_ABILITY}])"#
     );
     let old_event = r#"(id: "archive_old_event", name: "Archive Old Event",
         face_id: "archive_old_event", types: ["Creature"], power: 1, toughness: 1)"#;
@@ -1768,4 +1790,80 @@ fn generic_linked_exile_receipt_excludes_the_exact_current_generation_and_resume
         engine.state.players[0].life, 26,
         "the intervening branch effect and suspended Program tail each resolved once per event"
     );
+}
+
+#[test]
+fn generic_linked_exile_copy_batch_creates_two_hasty_tokens_and_exiles_only_that_cohort() {
+    let decks = Some(vec![
+        vec!["archive_old_event".to_string(); 20],
+        vec!["archive_old_event".to_string(); 20],
+    ]);
+    let mut engine = GameEngine::new(
+        archive_receipt_fixture_registry(),
+        2_026_102_126,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("two-player synthetic linked-copy game");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "archive_fixture");
+    let unrelated = inject_creature_on_battlefield(&mut engine, 0, "archive_old_event");
+    let event = inject_creature_on_battlefield(&mut engine, 1, "archive_old_event");
+    engine.state.objects.get_mut(&event).unwrap().damage = 2;
+    engine
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
+        .expect("the archive event creature dies");
+    assert_eq!(resolve_archive_receipt(&mut engine), (source, event));
+    assert_eq!(engine.state.objects[&event].zone, Zone::Exile);
+
+    grant_pool(&mut engine, 0);
+    let activation = activate_ability_for(&engine, source, 0, Vec::new());
+    engine
+        .apply_scenario_command(0, &activation)
+        .expect("activate the generic top-level linked-copy ability");
+    pass_both_players(&mut engine);
+
+    let copies = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|object| {
+            engine.state.objects[object].card_id == "archive_old_event"
+                && engine.state.objects[object].token_origin.is_some()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        copies.len(),
+        2,
+        "the admitted count-two operation creates both copies"
+    );
+    assert!(copies
+        .iter()
+        .all(|copy| engine.effective_has_keyword(*copy, tricerules_cards::Keyword::Haste)));
+    assert_eq!(
+        engine.state.observed_object_cohorts.len(),
+        1,
+        "the single delayed ability observes the complete two-token batch"
+    );
+    assert_eq!(engine.state.objects[&unrelated].zone, Zone::Battlefield);
+
+    pass_until_end_step(&mut engine);
+    assert_eq!(engine.state.turn_step, TurnStep::EndStep);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the cohort delay triggers once"
+    );
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(copies
+        .iter()
+        .all(|copy| !engine.state.objects.contains_key(copy)));
+    assert_eq!(
+        engine.state.objects[&unrelated].zone,
+        Zone::Battlefield,
+        "the same-name creature outside the copy result survives"
+    );
+    assert!(engine.state.observed_object_cohorts.is_empty());
 }

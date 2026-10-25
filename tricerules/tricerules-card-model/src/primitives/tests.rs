@@ -1707,34 +1707,91 @@ fn trigger_observed_object_program_input_is_ability_only_and_trigger_bound() {
         "{activation_error}"
     );
 
-    for source in [
-        "Source",
-        "LinkedExile(producer_ability_id: \"producer\", linked_exile_id: \"linked\")",
-    ] {
-        let unsupported: crate::CardProgram = ron::from_str(&format!(
-            r#"(body: (steps: [
+    let source = "Source";
+    let unsupported: crate::CardProgram = ron::from_str(&format!(
+        r#"(body: (steps: [
                 (id: "copy", kind: Perform(CreateTokenCopies(count: 1, source: {source})))
             ], yields: []))"#
-        ))
-        .expect("unsupported source fixture parses");
-        let error = crate::primitives::CompiledProgram::compile(
-            crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-                card_id: "unsupported_copy".into(),
-                face_id: crate::CardFaceId::new("unsupported_copy").unwrap(),
-                ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
-            }),
-            crate::primitives::EffectContext::Ability,
-            &unsupported,
-        )
-        .expect_err("unapproved token-copy sources remain outside program scope");
-        assert!(
-            error.contains("source is not supported")
-                || error.contains(
-                    "LinkedExile token copies require Mimic Vat's exact create_copy ability"
-                ),
-            "{error}"
-        );
-    }
+    ))
+    .expect("unsupported source fixture parses");
+    let error = crate::primitives::CompiledProgram::compile(
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "unsupported_copy".into(),
+            face_id: crate::CardFaceId::new("unsupported_copy").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        }),
+        crate::primitives::EffectContext::Ability,
+        &unsupported,
+    )
+    .expect_err("unapproved token-copy sources remain outside program scope");
+    assert!(error.contains("source is not supported"), "{error}");
+}
+
+#[test]
+fn linked_exile_copy_program_admits_generic_pair_and_count_two() {
+    use crate::primitives::{CompiledInstructionKind, CompiledProgram, EffectContext, ResultType};
+
+    const PROGRAM: &str = r#"(body: (steps: [
+            (id: "copy", bind: ["copies"], input: None,
+                kind: Perform(CreateTokenCopies(count: 2, source: LinkedExile(
+                    producer_ability_id: "archive_event", linked_exile_id: "archived_card",
+                )))),
+            (id: "grant_haste", bind: [], input: Some("copies"),
+                kind: Perform(ApplyPermanentModifier(
+                    subject: PreviousEffectObjects,
+                    modifier: GrantKeywords([Haste]), duration: Indefinite,
+                ))),
+            (id: "schedule_exile", bind: [], input: Some("copies"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObjects),
+                    ability: (ability_id: "exile_copy", presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep, effect: [ExileObservedObjects]),
+                ))),
+        ], yields: []), target_bindings: [])"#;
+    let program: crate::CardProgram =
+        ron::from_str(PROGRAM).expect("generic linked-copy Program parses");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "archive_fixture".into(),
+        face_id: crate::CardFaceId::new("archive_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("make_batch").unwrap()],
+    });
+    let compiled = CompiledProgram::compile(owner.clone(), EffectContext::Ability, &program)
+        .expect("a different copy ability may consume the named linked-exile pair at count two");
+    let [copy, haste, delayed] = compiled.body.steps.as_slice() else {
+        panic!("the linked-copy Program keeps one producer and its two consumers");
+    };
+    assert!(matches!(
+        &copy.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokenCopies {
+                count: crate::primitives::Amount::Fixed(2),
+                source: crate::primitives::TokenCopySource::LinkedExile {
+                    producer_ability_id, linked_exile_id,
+                },
+            } if producer_ability_id.as_str() == "archive_event"
+                && linked_exile_id.as_str() == "archived_card")
+    ));
+    let [batch_slot] = copy.outputs.as_slice() else {
+        panic!("CreateTokenCopies publishes one typed batch slot");
+    };
+    assert_eq!(
+        compiled.slot(*batch_slot).map(|slot| &slot.result_type),
+        Some(&ResultType::TokenCopyBatch)
+    );
+    assert_eq!(haste.input, Some(*batch_slot));
+    assert_eq!(delayed.input, Some(*batch_slot));
+
+    let nested_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "archive_fixture".into(),
+        face_id: crate::CardFaceId::new("archive_fixture").unwrap(),
+        ability_path: vec![
+            crate::AbilityId::new("outer_grant").unwrap(),
+            crate::AbilityId::new("make_batch").unwrap(),
+        ],
+    });
+    let error = CompiledProgram::compile(nested_owner, EffectContext::Ability, &program)
+        .expect_err("nested copy ability owners cannot claim top-level linked-exile copies");
+    assert!(error.contains("top-level ability program owner"), "{error}");
 }
 
 #[test]
@@ -6606,6 +6663,63 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
         .is_err(),
         "the Equipment receipt must not accept the distinct TokenCopyBatch result"
     );
+}
+
+#[test]
+fn equipment_receipt_program_compiler_admits_parent_created_batch_in_nested_choice() {
+    let program: super::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "create_tokens", bind: ["created_tokens"], input: None,
+                kind: Perform(CreateTokens(token: "ally_w_1_1", count: 2,
+                    who: Controller, tapped: false, sacrifice_timing: None))),
+            (id: "choose_attachment", bind: [], input: None, kind: Choose(
+                choice: "attach_created_cohort", chooser: Controller, optional: false,
+                branches: [(branch_id: "attach", presentation: Fallback, cost: None,
+                    requirement: Always, body: (steps: [
+                        (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
+                            kind: Perform(AttachEquipment(
+                                equipment: Source, creature: PreviousEffectObjects))),
+                    ], yields: []))],
+                otherwise: (steps: [], yields: []),
+            )),
+            (id: "tail", bind: [], input: None, kind: Perform(GainLife(amount: 1))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("nested Equipment receipt Program parses");
+
+    let compiled = super::CompiledProgram::compile(
+        kyoshi_battle_fan_program_owner(),
+        super::EffectContext::Ability,
+        &program,
+    );
+    assert!(
+        compiled.is_ok(),
+        "the child AttachEquipment consumes its parent's typed CreateTokens cohort: {compiled:?}"
+    );
+    let compiled = compiled.unwrap();
+    let [create, choose, tail] = compiled.body.steps.as_slice() else {
+        panic!("the CreateTokens producer, child choice, and parent tail remain ordered");
+    };
+    let Some(batch_slot) = create.outputs.first().copied() else {
+        panic!("CreateTokens binds the exact batch slot");
+    };
+    assert!(matches!(
+        compiled.slot(batch_slot).map(|slot| &slot.result_type),
+        Some(super::ResultType::CreatedTokenBatch {
+            cardinality: super::Cardinality { min: 0, max: None }
+        })
+    ));
+    let super::CompiledInstructionKind::Choose { branches, .. } = &choose.kind else {
+        panic!("the attachment remains behind a nested Choose");
+    };
+    let [branch] = branches.as_slice() else {
+        panic!("the attachment branch stays singular");
+    };
+    let [attach] = branch.body.steps.as_slice() else {
+        panic!("the nested branch contains one receipt consumer");
+    };
+    assert_eq!(attach.input, Some(batch_slot));
+    assert_eq!(tail.id.as_str(), "tail");
 }
 
 #[test]

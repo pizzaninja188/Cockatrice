@@ -907,13 +907,15 @@ permanent entry; runtime checks the captured reference and its matching current 
 snapshot before instruction zero and each program-unit resume. Non-entry triggers and activated
 ability owners do not supply this input.
 
-Mimic Vat's `create_copy` owner is the only admitted Program use of
-`CreateTokenCopies(count: Fixed(1), source: LinkedExile(producer_ability_id: "imprint",
-linked_exile_id: "imprinted_card"))`. It binds its `TokenCopyBatch` result to both `Haste` and
-the next-end-step delayed `Exile` consumer; either consumer must name that same result. The producer
-result may instead be discarded or bound under another local name, but consumers still require a
-typed input. This owner-specific compiler admission does not generalize to other linked-copy cards.
-Empty linked exile yields no copy and registers no delayed observer. The matching flat-list
+`CreateTokenCopies(source: LinkedExile(...))` is available to top-level ability Programs. The
+compiler requires ability context and a top-level ability owner; registry validation resolves the
+named producer ability and link to exactly one same-face `Exile` producer and its matching linked
+consumer. Mimic Vat uses count 1 with `producer_ability_id: "imprint"` and
+`linked_exile_id: "imprinted_card"`, then shares its `TokenCopyBatch` result with `Haste` and the
+next-end-step delayed `Exile` consumer. A different fixed count or top-level ability owner can use
+the same typed contract after its named pair passes registry validation. The producer result may
+instead be discarded or bound under another local name, but consumers still require that typed
+input. Empty linked exile yields no copy and registers no delayed observer. The matching flat-list
 Haste and delayed-Exile consumers of `PreviousEffectObjects` are retired; ordinary flat token-copy
 lists remain supported for noncohort consumers.
 

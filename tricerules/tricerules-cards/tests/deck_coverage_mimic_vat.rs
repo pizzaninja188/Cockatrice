@@ -74,21 +74,6 @@ fn copy_count_mut(program: &mut CardProgram) -> &mut Amount {
     count
 }
 
-fn assert_linked_copy_profile_rejected(
-    program: &CardProgram,
-    owner: ProgramOwnerId,
-    context: EffectContext,
-) {
-    let error = CompiledProgram::compile(owner, context, program)
-        .expect_err("only the exact Mimic Vat linked-copy profile compiles");
-    assert!(
-        error.contains("LinkedExile token copies require Mimic Vat's exact create_copy ability")
-            || error
-                .contains("linked-exile token copies require an activated or triggered ability"),
-        "unexpected rejection: {error}"
-    );
-}
-
 #[test]
 fn mimic_vat_create_copy_program_compiles_from_the_actual_card_definition() {
     let registry = actual_mimic_vat_registry();
@@ -175,7 +160,7 @@ fn mimic_vat_create_copy_program_compiles_from_the_actual_card_definition() {
 }
 
 #[test]
-fn mimic_vat_linked_copy_admission_rejects_near_miss_profiles() {
+fn linked_copy_admission_is_structural_and_registry_checks_the_named_pair() {
     let actual = actual_create_copy_program();
 
     let mut wrong_producer = actual.clone();
@@ -187,11 +172,8 @@ fn mimic_vat_linked_copy_admission_rejects_near_miss_profiles() {
         panic!("the actual source is LinkedExile");
     };
     *producer_ability_id = AbilityId::new("other_producer").unwrap();
-    assert_linked_copy_profile_rejected(
-        &wrong_producer,
-        mimic_vat_create_copy_owner(),
-        EffectContext::Ability,
-    );
+    compile_mimic_vat_create_copy(&wrong_producer)
+        .expect("the compiler leaves exact source-pair proof to the registry");
 
     let mut wrong_link = actual.clone();
     let TokenCopySource::LinkedExile {
@@ -201,29 +183,72 @@ fn mimic_vat_linked_copy_admission_rejects_near_miss_profiles() {
         panic!("the actual source is LinkedExile");
     };
     *linked_exile_id = AbilityLinkId::new("other_link").unwrap();
-    assert_linked_copy_profile_rejected(
-        &wrong_link,
-        mimic_vat_create_copy_owner(),
-        EffectContext::Ability,
-    );
+    compile_mimic_vat_create_copy(&wrong_link)
+        .expect("the compiler does not hard-code Mimic Vat's linked-exile id");
 
     let mut wrong_count = actual.clone();
     *copy_count_mut(&mut wrong_count) = Amount::Fixed(2);
-    assert_linked_copy_profile_rejected(
-        &wrong_count,
-        mimic_vat_create_copy_owner(),
-        EffectContext::Ability,
-    );
+    compile_mimic_vat_create_copy(&wrong_count)
+        .expect("LinkedExile copies retain the existing fixed-amount validation");
 
     let other_owner = ProgramOwnerId::ability(AbilityDefinitionId {
         card_id: "other_card".into(),
         face_id: CardFaceId::new("other_card").unwrap(),
         ability_path: vec![AbilityId::new("create_copy").unwrap()],
     });
-    assert_linked_copy_profile_rejected(&actual, other_owner, EffectContext::Ability);
+    CompiledProgram::compile(other_owner, EffectContext::Ability, &actual)
+        .expect("a different top-level copy ability can name the validated producer pair");
+
+    let nested_owner = ProgramOwnerId::ability(AbilityDefinitionId {
+        card_id: "mimic_vat".into(),
+        face_id: CardFaceId::new("mimic_vat").unwrap(),
+        ability_path: vec![
+            AbilityId::new("outer").unwrap(),
+            AbilityId::new("create_copy").unwrap(),
+        ],
+    });
+    let error = CompiledProgram::compile(nested_owner, EffectContext::Ability, &actual)
+        .expect_err("nested linked-copy owners remain unsupported");
+    assert!(error.contains("top-level ability program owner"), "{error}");
 
     let spell_owner = ProgramOwnerId::face("mimic_vat", CardFaceId::new("mimic_vat").unwrap());
-    assert_linked_copy_profile_rejected(&actual, spell_owner, EffectContext::Spell);
+    assert!(
+        CompiledProgram::compile(spell_owner, EffectContext::Spell, &actual).is_err(),
+        "LinkedExile copies remain ability-only"
+    );
+
+    let missing_pair = MIMIC_VAT_RON.replace(
+        "source: LinkedExile(\n            producer_ability_id: \"imprint\",\n            linked_exile_id: \"imprinted_card\",",
+        "source: LinkedExile(\n            producer_ability_id: \"missing_producer\",\n            linked_exile_id: \"imprinted_card\",",
+    );
+    assert_ne!(
+        missing_pair, MIMIC_VAT_RON,
+        "the missing-pair fixture changes the copy source"
+    );
+    let error = CardRegistry::from_chunks_and_tokens(&[&missing_pair], &[])
+        .expect_err("the registry rejects a linked-copy source without its named producer")
+        .to_string();
+    assert!(
+        error.contains("linked-exile token-copy source must name exactly one Exile producer"),
+        "unexpected missing source-pair error: {error}"
+    );
+
+    let ambiguous_pair = MIMIC_VAT_RON.replacen(
+        "      )),\n    ], yields: []), target_bindings: [])),",
+        "      )),\n      (id: \"duplicate_exile\", bind: [], input: None, kind: Perform(Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\")))),\n    ], yields: []), target_bindings: [])),",
+        1,
+    );
+    assert_ne!(
+        ambiguous_pair, MIMIC_VAT_RON,
+        "the ambiguous-pair fixture adds a producer"
+    );
+    let error = CardRegistry::from_chunks_and_tokens(&[&ambiguous_pair], &[])
+        .expect_err("the registry rejects multiple producers for the named pair")
+        .to_string();
+    assert!(
+        error.contains("requires exactly one producer and one consumer"),
+        "unexpected ambiguous source-pair error: {error}"
+    );
 }
 
 #[test]

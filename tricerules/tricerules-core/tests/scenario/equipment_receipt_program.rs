@@ -89,10 +89,11 @@ fn generic_equipment_receipt_registry() -> &'static tricerules_cards::CardRegist
             "token:\"soldier_w_1_1\",count:2,who:SourceController,tapped:true,sacrifice_timing:Some(NextEndStep)",
         );
         let card = card.replace(
-            "kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[])",
-            "kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects))),(id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1)))],yields:[])",
+            "(id:\"attach_created_tokens\",bind:[],input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[])",
+            "(id:\"choose_attachment\",bind:[],input:None,kind:Choose(choice:\"attach_created_cohort\",chooser:Controller,optional:false,branches:[(branch_id:\"attach\",presentation:Fallback,cost:None,requirement:Always,body:(steps:[(id:\"attach_created_tokens\",bind:[],input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[]))],otherwise:(steps:[],yields:[]))),(id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1)))],yields:[])",
         );
         assert!(card.contains("token:\"soldier_w_1_1\",count:2"));
+        assert!(card.contains("id:\"choose_attachment\""));
         assert!(card.contains("id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1))"));
         tricerules_cards::CardRegistry::from_chunks_and_tokens(
             &[&card],
@@ -476,7 +477,7 @@ fn generic_equipment_receipt_uses_generation_safe_chooser_and_resumes_tail_once(
         .iter()
         .all(|soldier| engine.state.objects[soldier].tapped));
     let choice = find_resolution_choice(&resolved)
-        .expect("the generic receipt offers its exact created cohort");
+        .expect("the nested child Choose reaches AttachEquipment with the created cohort");
     assert_eq!(choice.candidate_object_ids, created_soldiers);
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(

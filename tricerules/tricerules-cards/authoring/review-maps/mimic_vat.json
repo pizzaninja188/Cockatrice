@@ -187,11 +187,11 @@
     },
     {
       "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_create_copy_program_compiles_from_the_actual_card_definition",
-      "covers": "The actual Mimic Vat definition compiles the exact create_copy owner Program, with one linked-exile TokenCopyBatch shared by Haste and next-end-step exile consumers; the imprint Program remains present."
+      "covers": "The actual Mimic Vat definition compiles its top-level create_copy Program, with one linked-exile TokenCopyBatch shared by Haste and next-end-step exile consumers; the imprint receipt Program remains present."
     },
     {
-      "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_linked_copy_admission_rejects_near_miss_profiles",
-      "covers": "Linked-exile copy admission rejects wrong producer or link IDs, copy counts other than one, a different owner, and Spell context."
+      "test": "deck_registry::deck_coverage_mimic_vat::linked_copy_admission_is_structural_and_registry_checks_the_named_pair",
+      "covers": "Linked-exile copy admission accepts another top-level ability, producer, link, and fixed count; nested owners and Spell context remain rejected, while the registry rejects missing or ambiguous named pairs."
     },
     {
       "test": "deck_registry::deck_coverage_mimic_vat::mimic_vat_typed_copy_batch_checks_consumer_input_and_result_type",
