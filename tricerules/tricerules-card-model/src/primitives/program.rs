@@ -308,12 +308,13 @@ pub struct Cardinality {
     pub max: Option<u32>,
 }
 
-/// Producer meaning attached to a shared scalar count slot. Consumers must check this metadata;
-/// a numeric count from an unrelated operation is not interchangeable.
+/// Producer meaning attached to a shared scalar count slot. Specialized consumers may require a
+/// specific meaning; generic scalar consumers accept any resolved Count value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountResultKind {
     RevealedPrefix,
     JoinForcesManaPaid,
+    TappedPermanents,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1990,14 +1991,14 @@ impl Compiler<'_> {
                             who: PlayerRecipient::EachPlayer,
                             count: Amount::Count(CountExpression::ProgramInputCount),
                         }
-                    );
+                    ) || is_generic_program_input_count_consumer(effect);
                     if effect
                         .result_consuming_amount()
                         .is_some_and(Amount::uses_program_input_count)
                         && !direct_count_input
                     {
                         return Err(
-                            "ProgramInputCount is supported only by direct Controller DamagePlayer or EachPlayer Draw Program inputs".into(),
+                            "ProgramInputCount is supported only by direct typed Count Program inputs".into(),
                         );
                     }
                     let input =
@@ -2030,7 +2031,12 @@ impl Compiler<'_> {
                         &self.slots,
                     )?;
                     validate_return_to_owners_hand_input(effect.as_ref(), input, &self.slots)?;
-                    validate_myr_battlesphere_attack_input(effect.as_ref(), input, &self.slots)?;
+                    validate_tap_chosen_permanents_input(
+                        effect.as_ref(),
+                        input,
+                        &steps,
+                        &self.slots,
+                    )?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -3654,40 +3660,65 @@ fn validate_search_result_input(
     Ok(())
 }
 
-fn validate_myr_battlesphere_attack_input(
+fn validate_tap_chosen_permanents_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
+    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
-    if !matches!(effect, EffectOp::MyrBattlesphereAttack) {
+    if !matches!(effect, EffectOp::TapChosenPermanents) {
         return Ok(());
     }
-    let invalid = || {
-        "MyrBattlesphereAttack input result must be the optional Controller choice of controlled untapped Myr permanents with cardinality 0..=u32::MAX".to_string()
-    };
+    let invalid =
+        || "TapChosenPermanents requires a direct ChoosePermanents selection input".to_string();
     let input = input.ok_or_else(invalid)?;
-    let Some(ResultType::PermanentSelection {
+    let producer = same_block_direct_perform_producer(steps, Some(input)).ok_or_else(invalid)?;
+    let CompiledInstructionKind::Perform(producer_effect) = &producer.kind else {
+        return Err(invalid());
+    };
+    let SpellEffectKind::ChoosePermanents {
         chooser,
         filter,
-        cardinality: Cardinality {
-            min: 0,
-            max: Some(u32::MAX),
-        },
+        max,
+        ..
+    } = producer_effect.as_ref()
+    else {
+        return Err(invalid());
+    };
+    let Some(ResultType::PermanentSelection {
+        chooser: result_chooser,
+        filter: result_filter,
+        cardinality,
     }) = slots.get(input.0 as usize).map(|slot| &slot.result_type)
     else {
         return Err(invalid());
     };
-    let expected_filter = TargetFilter {
-        kind: TargetKind::AnyPermanent,
-        controller: super::TargetController::You,
-        tapped: Some(false),
-        required_subtypes: vec!["Myr".into()],
-        ..TargetFilter::default()
-    };
-    if *chooser != PlayerRecipient::Controller || **filter != expected_filter {
+    if chooser != result_chooser
+        || filter != result_filter.as_ref()
+        || cardinality.min != 0
+        || cardinality.max != Some(*max)
+    {
         return Err(invalid());
     }
     Ok(())
+}
+
+fn is_generic_program_input_count_consumer(effect: &EffectOp) -> bool {
+    matches!(
+        effect,
+        EffectOp::PumpTarget {
+            subject: EffectSubject::Source,
+            scale: Some(crate::PtScale {
+                basis: crate::PtScaleBasis::Amount(Amount::Count(
+                    CountExpression::ProgramInputCount,
+                )),
+                ..
+            }),
+            ..
+        } | EffectOp::DamageAttackedPlayerOrPlaneswalker {
+            amount: Amount::Count(CountExpression::ProgramInputCount),
+        }
+    )
 }
 
 fn compile_input(
@@ -3706,8 +3737,9 @@ fn compile_input(
             affected_player: Some(PlayerRecipient::ProgramInputPlayer),
             ..
         } => Some("TargetedSpellController"),
-        EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
-        EffectOp::MyrBattlesphereAttack => Some("PermanentSelection"),
+        EffectOp::UntapChosenPermanents | EffectOp::TapChosenPermanents => {
+            Some("PermanentSelection")
+        }
         EffectOp::Untap {
             subject: EffectSubject::PreviousEffectObject,
         } => Some("PermanentSelection"),
@@ -3754,6 +3786,7 @@ fn compile_input(
             who: PlayerRecipient::EachPlayer,
             count: Amount::Count(CountExpression::ProgramInputCount),
         } => Some("Count"),
+        effect if is_generic_program_input_count_consumer(effect) => Some("Count"),
         EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
             Some("DiscardResult")
         }
@@ -3854,6 +3887,9 @@ fn compile_input(
                     actual.result_type,
                     ResultType::Count(CountResultKind::JoinForcesManaPaid)
                 ),
+                effect if is_generic_program_input_count_consumer(effect) => {
+                    matches!(actual.result_type, ResultType::Count(_))
+                }
                 EffectOp::RevealCohort => {
                     matches!(actual.result_type, ResultType::FoundLibraryCohort)
                 }
@@ -4432,6 +4468,20 @@ fn validate_and_result_types(
             validate_program_target_filter(filter, "PumpTarget target")?;
             Ok(Vec::new())
         }
+        SpellEffectKind::PumpTarget {
+            subject: EffectSubject::Source,
+            ..
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
+            if context == EffectContext::Ability =>
+        {
+            effect.validate(context)?;
+            validate_program_amount(amount)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::AttachEquipment { .. } => Err(
             "AttachEquipment in a resolution program requires Source and PreviousEffectObject".into(),
         ),
@@ -4803,6 +4853,10 @@ fn validate_and_result_types(
         SpellEffectKind::UntapChosenPermanents => {
             effect.validate(context)?;
             Ok(Vec::new())
+        }
+        SpellEffectKind::TapChosenPermanents => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::Count(CountResultKind::TappedPermanents)])
         }
         SpellEffectKind::Untap {
             subject: EffectSubject::PreviousEffectObject,
@@ -5415,10 +5469,6 @@ fn validate_and_result_types(
                     )
                 }
             }
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::MyrBattlesphereAttack => {
             effect.validate(context)?;
             Ok(Vec::new())
         }
@@ -6409,6 +6459,177 @@ mod scalar_program_input_tests {
         }
     }
 
+    fn source_pump_input() -> SpellEffectKind {
+        SpellEffectKind::PumpTarget {
+            power: 0,
+            toughness: 0,
+            scale: Some(crate::PtScale {
+                basis: crate::PtScaleBasis::Amount(Amount::Count(
+                    CountExpression::ProgramInputCount,
+                )),
+                power_per_unit: 1,
+                toughness_per_unit: 0,
+            }),
+            subject: EffectSubject::Source,
+        }
+    }
+
+    fn attacked_recipient_damage_input() -> SpellEffectKind {
+        SpellEffectKind::DamageAttackedPlayerOrPlaneswalker {
+            amount: Amount::Count(CountExpression::ProgramInputCount),
+        }
+    }
+
+    fn choose_permanents(min: u32, max: u32) -> SpellEffectKind {
+        SpellEffectKind::ChoosePermanents {
+            chooser: PlayerRecipient::Controller,
+            filter: TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: super::super::TargetController::You,
+                ..TargetFilter::default()
+            },
+            min,
+            max,
+            constraints: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn mandatory_permanent_selection_can_feed_chosen_tap_count() {
+        let program = compile_ability(vec![
+            instruction("choose", &["selected"], None, choose_permanents(1, 2)),
+            instruction(
+                "tap",
+                &["count"],
+                Some("selected"),
+                SpellEffectKind::TapChosenPermanents,
+            ),
+        ])
+        .expect("a valid mandatory permanent selection can feed a chosen tap");
+
+        assert!(matches!(
+            program.slots[0].result_type,
+            ResultType::PermanentSelection {
+                chooser: PlayerRecipient::Controller,
+                // Runtime candidate shortages can produce an empty selection even though the
+                // authored chooser asks for at least one when enough candidates exist.
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(2)
+                },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn targeted_opponent_can_choose_permanents_for_a_chosen_tap_count() {
+        let card_program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![
+                    instruction(
+                        "choose",
+                        &["selected"],
+                        None,
+                        SpellEffectKind::ChoosePermanents {
+                            chooser: PlayerRecipient::TargetedPlayer {
+                                group_index: 0,
+                                kind: TargetKind::OpponentPlayer,
+                            },
+                            filter: TargetFilter {
+                                kind: TargetKind::AnyPermanent,
+                                controller: super::super::TargetController::You,
+                                ..TargetFilter::default()
+                            },
+                            min: 1,
+                            max: 1,
+                            constraints: Vec::new(),
+                        },
+                    ),
+                    instruction(
+                        "tap",
+                        &["count"],
+                        Some("selected"),
+                        SpellEffectKind::TapChosenPermanents,
+                    ),
+                ],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "choose".into(),
+                role: ProgramTargetRole::Target,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target opponent".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+
+        let program = CompiledProgram::compile_with_targeting(
+            ability_owner(),
+            EffectContext::Ability,
+            &card_program,
+            Some(&targeting),
+        )
+        .expect("the existing targeted-opponent chooser can feed a chosen tap");
+
+        assert!(matches!(
+            program.slots[0].result_type,
+            ResultType::PermanentSelection {
+                chooser: PlayerRecipient::TargetedPlayer {
+                    group_index: 0,
+                    kind: TargetKind::OpponentPlayer,
+                },
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1)
+                },
+                ..
+            }
+        ));
+        assert_eq!(program.body.steps[1].input, Some(ResultSlotId(0)));
+    }
+
+    #[test]
+    fn generic_count_inputs_feed_source_pump_and_attacked_recipient_damage() {
+        let source_pump = compile_ability(vec![
+            instruction("reveal", &["prefix"], None, reveal_prefix()),
+            instruction("pump_source", &[], Some("prefix"), source_pump_input()),
+        ])
+        .expect("any dominating Count can scale a Source pump");
+        assert_eq!(
+            source_pump.slots[0].result_type,
+            ResultType::Count(CountResultKind::RevealedPrefix)
+        );
+        assert_eq!(source_pump.body.steps[1].input, Some(ResultSlotId(0)));
+
+        let attacked_damage = compile_ability(vec![
+            instruction("join_forces", &["total"], None, join_forces()),
+            instruction(
+                "damage_attacked_recipient",
+                &[],
+                Some("total"),
+                attacked_recipient_damage_input(),
+            ),
+        ])
+        .expect("any dominating Count can set attack-recipient damage");
+        assert_eq!(
+            attacked_damage.slots[0].result_type,
+            ResultType::Count(CountResultKind::JoinForcesManaPaid)
+        );
+        assert_eq!(attacked_damage.body.steps[1].input, Some(ResultSlotId(0)));
+    }
+
     #[test]
     fn scalar_results_keep_their_producer_meaning_across_a_targetless_step() {
         let revealed = compile_ability(vec![
@@ -6509,7 +6730,7 @@ mod scalar_program_input_tests {
         ]);
         assert!(wrong_recipient
             .unwrap_err()
-            .contains("supported only by direct Controller DamagePlayer or EachPlayer Draw"));
+            .contains("supported only by direct typed Count Program inputs"));
 
         let nested = compile_ability(vec![
             instruction("join_forces", &["total"], None, join_forces()),
@@ -6528,6 +6749,6 @@ mod scalar_program_input_tests {
         ]);
         assert!(nested
             .unwrap_err()
-            .contains("supported only by direct Controller DamagePlayer or EachPlayer Draw"));
+            .contains("supported only by direct typed Count Program inputs"));
     }
 }

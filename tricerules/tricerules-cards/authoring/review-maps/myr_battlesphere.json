@@ -37,8 +37,16 @@
       "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/Perform/ChoosePermanents"
     },
     {
-      "symbol": "SpellEffectKind::MyrBattlesphereAttack",
+      "symbol": "SpellEffectKind::TapChosenPermanents",
       "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/2/kind/Perform/PumpTarget"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAttackedPlayerOrPlaneswalker",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/3/kind/Perform/DamageAttackedPlayerOrPlaneswalker"
     }
   ],
   "tokens": [
@@ -130,23 +138,19 @@
       "covers": "myr battlesphere complete definition and rules named token are exact"
     },
     {
-      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_program_accepts_its_named_selection_across_a_resultless_instruction",
-      "covers": "named permanent selection remains available to the Myr consumer after a resultless Program instruction"
+      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_program_binds_the_generic_tap_count_to_both_followups",
+      "covers": "chosen Myr tap result feeds the generic Source pump and attack-recipient damage"
     },
     {
-      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_program_rejects_missing_or_incompatible_selection_inputs",
-      "covers": "Myr consumer rejects missing input, incompatible chooser and selection profile, cardinality, or result type"
+      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_tap_program_requires_its_bound_selection_input",
+      "covers": "generic chosen-permanent tap requires its explicit selection result"
     },
     {
-      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_program_rejects_nonattack_and_nested_nonattack_contexts",
-      "covers": "Myr consumer requires the self-attack trigger even when nested in a Program branch"
+      "test": "deck_registry::deck_coverage_myr_battlesphere::generic_attacked_recipient_damage_requires_an_attack_trigger",
+      "covers": "generic attack-recipient damage requires a self-attack trigger"
     },
     {
-      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_rejects_legacy_flat_consumer_without_program_input",
-      "covers": "legacy adjacent-choice Myr attack sequence fails closed without a bound Program input"
-    },
-    {
-      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_reflexive_trigger_context",
+      "test": "deck_registry::deck_coverage_myr_battlesphere::attacked_recipient_damage_rejects_reflexive_trigger_context",
       "covers": "reflexive child cannot admit the otherwise valid attack producer and consumer without attack context"
     }
   ],

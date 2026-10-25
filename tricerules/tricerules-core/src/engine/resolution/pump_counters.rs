@@ -177,11 +177,12 @@ pub(super) fn pump_target(
     // 608.2h fixes every subject-relative value before any of this instruction's modifiers are
     // installed, so grouped subjects cannot observe one another's newly created effects.
     let affected = cx.resolve_battlefield_subjects(&subject);
+    let source_subject = matches!(&subject, EffectSubject::Source);
     let adjustments = affected
         .into_iter()
         .filter_map(|tid| {
             let characteristics = cx.engine.characteristics(tid)?;
-            if !characteristics.is_creature() {
+            if !source_subject && !characteristics.is_creature() {
                 return None;
             }
             let (delta_power, delta_toughness) =
@@ -200,7 +201,11 @@ pub(super) fn pump_target(
                         scaled_delta(toughness, scale.toughness_per_unit, units),
                     )
                 });
-            Some((tid, delta_power, delta_toughness))
+            (!source_subject || delta_power != 0 || delta_toughness != 0).then_some((
+                tid,
+                delta_power,
+                delta_toughness,
+            ))
         })
         .collect::<Vec<_>>();
     let engine = &mut *cx.engine;

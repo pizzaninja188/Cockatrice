@@ -591,6 +591,85 @@ pub(super) fn untap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOut
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn tap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let Some(ResultType::PermanentSelection {
+        chooser,
+        filter,
+        cardinality,
+    }) = cx.previous_effect_result.input_result_type.as_ref()
+    else {
+        return Err(EngineError::ProgramInvariant(
+            "TapChosenPermanents lacks its typed permanent-selection input",
+        ));
+    };
+    let chooser_candidates = super::player_recipients(cx, *chooser);
+    let [chooser] = chooser_candidates.as_slice() else {
+        return Err(EngineError::Illegal(
+            "TapChosenPermanents requires exactly one resolved chooser",
+        ));
+    };
+    let produced_objects = &cx.previous_effect_result.produced_objects;
+    if produced_objects.len() < cardinality.min as usize
+        || cardinality
+            .max
+            .is_some_and(|max| produced_objects.len() > max as usize)
+    {
+        return Err(EngineError::Illegal(
+            "chosen permanent selection violates its authored cardinality",
+        ));
+    }
+
+    let source = TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
+    let mut seen = std::collections::HashSet::with_capacity(produced_objects.len());
+    for chosen in produced_objects {
+        let current_generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&chosen.object_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(object) = cx.engine.state.objects.get(&chosen.object_id) else {
+            return Err(EngineError::Illegal(
+                "chosen permanent selection contains a stale object",
+            ));
+        };
+        if !seen.insert(chosen.object_id)
+            || current_generation != chosen.zone_change_generation
+            || object.zone != Zone::Battlefield
+            || object.tapped
+            || !crate::engine::targeting::permanent_choice_filter_legal(
+                cx.engine,
+                filter,
+                chosen.object_id,
+                *chooser,
+                source,
+                cx.top.trigger_context,
+            )
+        {
+            return Err(EngineError::Illegal(
+                "chosen permanent selection is stale or no longer matches its authored filter",
+            ));
+        }
+    }
+
+    let selected = produced_objects
+        .iter()
+        .map(|chosen| chosen.object_id)
+        .collect::<Vec<_>>();
+    let tap_events = cx.engine.tap_permanents(cx.controller, &selected);
+    let count = tap_events.len().min(u32::MAX as usize) as u32;
+    if count > 0 {
+        cx.engine.fire_triggers(&tap_events, cx.events);
+        cx.events.push(ev_log(format!(
+            "{} taps {count} chosen permanent(s)",
+            cx.spell_label
+        )));
+    }
+    cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(count));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn damage_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

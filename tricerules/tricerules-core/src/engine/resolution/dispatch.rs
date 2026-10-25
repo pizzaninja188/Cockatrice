@@ -77,7 +77,6 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. } => {
             damage::damage_attacked_player_or_planeswalker(cx, effect)?
         }
-        SpellEffectKind::MyrBattlesphereAttack => damage::myr_battlesphere_attack(cx)?,
         effect @ SpellEffectKind::Draw { .. } => zones::draw(cx, effect)?,
         SpellEffectKind::JoinForces => join_forces::begin(cx)?,
         effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
@@ -283,6 +282,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::TapAll { .. } => mass::tap_all(cx, effect)?,
         effect @ SpellEffectKind::UntapAll { .. } => mass::untap_all(cx, effect)?,
         SpellEffectKind::UntapChosenPermanents => mass::untap_chosen_permanents(cx)?,
+        SpellEffectKind::TapChosenPermanents => mass::tap_chosen_permanents(cx)?,
         effect @ SpellEffectKind::DestroyAll { .. } => mass::destroy_all(cx, effect)?,
         effect @ SpellEffectKind::ExileAll { .. } => mass::exile_all(cx, effect)?,
         SpellEffectKind::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves => {

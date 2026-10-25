@@ -66,6 +66,8 @@ mod battlefield_returns;
 mod blight;
 mod boompile;
 #[cfg(test)]
+mod chosen_tap_tests;
+#[cfg(test)]
 mod chosen_untap_tests;
 mod damage;
 mod destruction;

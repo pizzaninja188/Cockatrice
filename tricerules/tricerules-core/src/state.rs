@@ -7,9 +7,9 @@ use tricerules_card_model::primitives::{
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryLookRemainderPolicy, LibraryPlacement, LinkedExiledCardDestination,
     LinkedExiledCardPlayKind, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination,
-    SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect,
-    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, ResultType,
+    SearchDestination, SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection,
+    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
@@ -226,6 +226,9 @@ pub(crate) struct ProgramDiscardResult {
 /// following instruction and never serialized to clients.
 #[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct EffectResult {
+    /// Static type of the instruction's explicit Program input, retained so generic effect
+    /// consumers can validate the exact authored selection contract at resolution time.
+    pub input_result_type: Option<ResultType>,
     pub cards: Vec<CardResultEntry>,
     pub program_discard_result: Option<ProgramDiscardResult>,
     pub produced_objects: Vec<TriggerObjectRef>,
@@ -284,6 +287,7 @@ pub(crate) struct CounterPlacementReceipt {
 impl From<CardResultCohort> for EffectResult {
     fn from(cohort: CardResultCohort) -> Self {
         Self {
+            input_result_type: None,
             cards: cohort.cards,
             program_discard_result: cohort.program_discard_result,
             produced_objects: Vec::new(),

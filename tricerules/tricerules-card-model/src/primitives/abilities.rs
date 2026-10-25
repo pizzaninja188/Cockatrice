@@ -1931,7 +1931,7 @@ impl TriggeredAbilityDef {
             });
         if requires_attack && !matches!(self.trigger, TriggerCondition::WheneverSelfAttacks { .. })
         {
-            return Err("MyrBattlesphereAttack requires WheneverSelfAttacks".into());
+            return Err("DamageAttackedPlayerOrPlaneswalker requires WheneverSelfAttacks".into());
         }
         let requires_unblocked_opponent_attack_group = self
             .effect

@@ -172,13 +172,37 @@ fn myr_battlesphere_partial_selection_taps_only_chosen_and_counts_once() {
 #[test]
 fn myr_battlesphere_zero_selection_declines_tap_bonus_and_damage() {
     let (mut engine, source, tokens) = pending_attack();
-    engine
+    let result = engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.characteristics(source).unwrap().power, Some(4));
     assert_eq!(engine.state.players[1].life, 20);
     assert!(tokens.iter().all(|id| !engine.state.objects[id].tapped));
     assert!(engine.state.pending_resolution.is_none());
+    assert!(!engine.state.continuous_effects.iter().any(|effect| {
+        effect.affected == AffectedScope::Single(source)
+            && matches!(&effect.kind, ContinuousEffectKind::PtModify { .. })
+    }));
+    assert!(!engine
+        .state
+        .turn_history
+        .current
+        .dealt_damage_objects
+        .contains(&(
+            source,
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+        )));
+    assert!(!result.events.iter().any(|event| {
+        matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::LifeChanged(change)) if change.player_id == 1
+        )
+    }));
 }
 
 #[test]

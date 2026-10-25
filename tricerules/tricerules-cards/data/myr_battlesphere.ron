@@ -26,7 +26,20 @@
         min: 0,
         max: 4294967295,
         ))),
-        (id: "attack_myrs", input: Some("myrs"), kind: Perform(MyrBattlesphereAttack)),
+        (id: "tap_myrs", bind: ["tapped_count"], input: Some("myrs"), kind: Perform(TapChosenPermanents)),
+        (id: "pump_source", input: Some("tapped_count"), kind: Perform(PumpTarget(
+          power: 0,
+          toughness: 0,
+          subject: Source,
+          scale: Some((
+            basis: Amount(Count(ProgramInputCount)),
+            power_per_unit: 1,
+            toughness_per_unit: 0,
+          )),
+        ))),
+        (id: "damage_attacked_recipient", input: Some("tapped_count"), kind: Perform(DamageAttackedPlayerOrPlaneswalker(
+          amount: Count(ProgramInputCount),
+        ))),
       ]),
     )),
   )],

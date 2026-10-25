@@ -5,13 +5,6 @@ fn myr_program_source() -> String {
     include_str!("../data/myr_battlesphere.ron").replace("\r\n", "\n")
 }
 
-fn myr_program_source_with_resultless_interlude() -> String {
-    myr_program_source().replace(
-        "        (id: \"attack_myrs\", input: Some(\"myrs\"),",
-        "        (id: \"untap_myrs\", input: Some(\"myrs\"), kind: Perform(UntapChosenPermanents)),\n        (id: \"attack_myrs\", input: Some(\"myrs\"),",
-    )
-}
-
 fn myr_registry_error(source: &str) -> String {
     let token = include_str!("../data/tokens/myr_token_c_1_1.ron");
     CardRegistry::from_chunks_and_tokens(&[source], &[token])
@@ -19,14 +12,12 @@ fn myr_registry_error(source: &str) -> String {
         .to_string()
 }
 
-const MYR_INPUT_PROFILE_ERROR: &str = "MyrBattlesphereAttack input result must be the optional Controller choice of controlled untapped Myr permanents with cardinality 0..=u32::MAX";
-
 #[test]
-fn myr_attack_program_accepts_its_named_selection_across_a_resultless_instruction() {
-    let source = myr_program_source_with_resultless_interlude();
+fn myr_attack_program_binds_the_generic_tap_count_to_both_followups() {
+    let source = myr_program_source();
     let token = include_str!("../data/tokens/myr_token_c_1_1.ron");
     let registry = CardRegistry::from_chunks_and_tokens(&[&source], &[token])
-        .expect("typed Myr selection input should compile across an intervening instruction");
+        .expect("typed Myr tap result should feed both generic follow-up effects");
     let attack = &registry
         .get("myr_battlesphere")
         .unwrap()
@@ -34,55 +25,32 @@ fn myr_attack_program_accepts_its_named_selection_across_a_resultless_instructio
         .triggered_abilities[1];
     assert!(attack.effect.is_empty());
     let program = attack.program.as_ref().unwrap();
-    assert_eq!(program.body.steps.len(), 3);
-    assert_eq!(program.body.steps[2].input.as_deref(), Some("myrs"));
+    assert_eq!(program.body.steps.len(), 4);
+    assert_eq!(program.body.steps[1].input.as_deref(), Some("myrs"));
+    assert_eq!(program.body.steps[1].bind, ["tapped_count"]);
+    assert_eq!(program.body.steps[2].input.as_deref(), Some("tapped_count"));
+    assert_eq!(program.body.steps[3].input.as_deref(), Some("tapped_count"));
 }
 
 #[test]
-fn myr_attack_program_rejects_missing_or_incompatible_selection_inputs() {
+fn myr_tap_program_requires_its_bound_selection_input() {
     let valid = myr_program_source();
     let missing_input = valid.replace(
-        "(id: \"attack_myrs\", input: Some(\"myrs\"),",
-        "(id: \"attack_myrs\",",
+        "(id: \"tap_myrs\", bind: [\"tapped_count\"], input: Some(\"myrs\"),",
+        "(id: \"tap_myrs\", bind: [\"tapped_count\"],",
     );
     assert!(myr_registry_error(&missing_input)
         .contains("instruction requires an explicitly bound input result"));
 
-    let wrong_filter = valid.replace(
-        "controller: You, required_subtypes: [\"Myr\"]",
-        "controller: Any, required_subtypes: [\"Myr\"]",
-    );
-    assert!(myr_registry_error(&wrong_filter).contains(MYR_INPUT_PROFILE_ERROR));
-
-    let wrong_chooser = valid.replace(
-        "kind: Perform(ChoosePermanents(",
-        "kind: Perform(ChoosePermanents(\n        chooser: AffectedPlayer,",
-    );
-    assert_ne!(
-        wrong_chooser, valid,
-        "the invalid chooser fixture changes source"
-    );
-    assert!(myr_registry_error(&wrong_chooser).contains(
-        "ChoosePermanents chooser supports only the resolving spell controller in spell_program"
-    ));
-
-    let wrong_cardinality = valid.replace("max: 4294967295,", "max: 4,");
-    assert!(myr_registry_error(&wrong_cardinality).contains(MYR_INPUT_PROFILE_ERROR));
-
     let wrong_type = valid.replace(
-        "(id: \"choose_myrs\", bind: [\"myrs\"], kind: Perform(ChoosePermanents(\n        filter: (kind: AnyPermanent, controller: You, required_subtypes: [\"Myr\"], tapped: Some(false)),\n        min: 0,\n        max: 4294967295,\n        )))",
-        "(id: \"choose_myrs\", bind: [\"myrs\"], kind: Perform(SelectHandCards(\n        count: 1, ordered: false, prompt: \"Choose a card\",\n      )))",
+        "(id: \"tap_myrs\", bind: [\"tapped_count\"], input: Some(\"myrs\"),",
+        "(id: \"tap_myrs\", bind: [\"tapped_count\"], input: Some(\"tapped_count\"),",
     );
-    assert_ne!(
-        wrong_type, valid,
-        "the wrong-result-type fixture changes source"
-    );
-    assert!(myr_registry_error(&wrong_type)
-        .contains("input result 'myrs' has the wrong type for this instruction"));
+    assert!(myr_registry_error(&wrong_type).contains("input result 'tapped_count' is not in scope"));
 }
 
 #[test]
-fn myr_attack_program_rejects_nonattack_and_nested_nonattack_contexts() {
+fn generic_attacked_recipient_damage_requires_an_attack_trigger() {
     let valid = myr_program_source();
     let token = include_str!("../data/tokens/myr_token_c_1_1.ron");
     let wrong_trigger = valid.replace(
@@ -92,35 +60,7 @@ fn myr_attack_program_rejects_nonattack_and_nested_nonattack_contexts() {
     let error = CardRegistry::from_chunks_and_tokens(&[&wrong_trigger], &[token]).unwrap_err();
     assert!(error
         .to_string()
-        .contains("MyrBattlesphereAttack requires WheneverSelfAttacks"));
-
-    let nested = valid.replace(
-        "(id: \"attack_myrs\", input: Some(\"myrs\"), kind: Perform(MyrBattlesphereAttack))",
-        r#"(id: "attack_branch", kind: Choose(
-          choice: "attack_branch",
-          chooser: Controller,
-          optional: false,
-          branches: [(
-            branch_id: "attack_myrs",
-            presentation: Fallback,
-            cost: None,
-            requirement: Always,
-            body: (steps: [
-              (id: "attack_myrs", input: Some("myrs"), kind: Perform(MyrBattlesphereAttack)),
-            ], yields: []),
-          )],
-          otherwise: (steps: [], yields: []),
-        ))"#,
-    );
-    let nested_wrong_trigger = nested.replace(
-        "WheneverSelfAttacks(minimum_other_attackers: 0)",
-        "AtBeginningOfUpkeep(player: Controller)",
-    );
-    let error =
-        CardRegistry::from_chunks_and_tokens(&[&nested_wrong_trigger], &[token]).unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("MyrBattlesphereAttack requires WheneverSelfAttacks"));
+        .contains("DamageAttackedPlayerOrPlaneswalker requires WheneverSelfAttacks"));
 }
 
 #[test]
@@ -169,7 +109,7 @@ fn myr_battlesphere_complete_definition_and_rules_named_token_are_exact() {
         .program
         .as_ref()
         .expect("attack uses a typed Program");
-    assert_eq!(attack_program.body.steps.len(), 2);
+    assert_eq!(attack_program.body.steps.len(), 4);
     assert_eq!(attack_program.body.steps[0].bind, ["myrs"]);
     assert_eq!(attack_program.body.steps[1].input.as_deref(), Some("myrs"));
     assert!(matches!(
@@ -190,7 +130,28 @@ fn myr_battlesphere_complete_definition_and_rules_named_token_are_exact() {
     assert!(matches!(
         &attack_program.body.steps[1].kind,
         InstructionKind::Perform(effect)
-            if matches!(effect.as_ref(), SpellEffectKind::MyrBattlesphereAttack)
+            if matches!(effect.as_ref(), SpellEffectKind::TapChosenPermanents)
+    ));
+    assert_eq!(attack_program.body.steps[1].bind, ["tapped_count"]);
+    assert!(matches!(
+        &attack_program.body.steps[2].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::PumpTarget {
+                subject: EffectSubject::Source,
+                scale: Some(PtScale {
+                    basis: PtScaleBasis::Amount(Amount::Count(CountExpression::ProgramInputCount)),
+                    power_per_unit: 1,
+                    toughness_per_unit: 0,
+                }),
+                ..
+            })
+    ));
+    assert!(matches!(
+        &attack_program.body.steps[3].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::DamageAttackedPlayerOrPlaneswalker {
+                amount: Amount::Count(CountExpression::ProgramInputCount),
+            })
     ));
     let token = registry.get("myr_token_c_1_1").unwrap();
     assert!(registry.is_token("myr_token_c_1_1"));
@@ -203,36 +164,12 @@ fn myr_battlesphere_complete_definition_and_rules_named_token_are_exact() {
 }
 
 #[test]
-fn myr_attack_rejects_legacy_flat_consumer_without_program_input() {
-    let legacy = [
-        SpellEffectKind::ChoosePermanents {
-            chooser: PlayerRecipient::Controller,
-            filter: TargetFilter {
-                kind: TargetKind::AnyPermanent,
-                controller: TargetController::You,
-                tapped: Some(false),
-                required_subtypes: vec!["Myr".into()],
-                ..TargetFilter::default()
-            },
-            min: 0,
-            max: u32::MAX,
-            constraints: Vec::new(),
-        },
-        SpellEffectKind::MyrBattlesphereAttack,
-    ];
-    assert_eq!(
-        SpellEffectKind::validate_list(&legacy).unwrap_err(),
-        "MyrBattlesphereAttack requires an explicitly bound Program input result"
-    );
-}
-
-#[test]
-fn myr_attack_consumer_rejects_reflexive_trigger_context() {
+fn attacked_recipient_damage_rejects_reflexive_trigger_context() {
     let card = include_str!("../data/myr_battlesphere.ron").replace("\r\n", "\n");
     let token = include_str!("../data/tokens/myr_token_c_1_1.ron");
     let wrong = card.replace(
         "  )],\n)",
-        "  ), (\n    ability_id: \"triggered_03\",\n    presentation: Fallback,\n    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),\n    effect: [CreateReflexiveTrigger(ability: (ability_id: \"reflexive_01\", presentation: Fallback, effect: [MyrBattlesphereAttack]))],\n  )],\n)",
+        "  ), (\n    ability_id: \"triggered_03\",\n    presentation: Fallback,\n    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),\n    effect: [CreateReflexiveTrigger(ability: (ability_id: \"reflexive_01\", presentation: Fallback, effect: [DamageAttackedPlayerOrPlaneswalker(amount: 1)]))],\n  )],\n)",
     );
     let error = CardRegistry::from_chunks_and_tokens(&[&wrong], &[token]).unwrap_err();
     assert!(

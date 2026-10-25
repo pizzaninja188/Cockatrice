@@ -1820,6 +1820,7 @@ fn validate_effect_targets(
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::UntapChosenPermanents
+        | SpellEffectKind::TapChosenPermanents
         | SpellEffectKind::CopyNextSpellThisTurn
         | SpellEffectKind::CopyCapturedSpell { .. }
         | SpellEffectKind::Untap {
@@ -1908,7 +1909,6 @@ fn validate_effect_targets(
         // CR 115.1: "deals N damage to that player / to you" names a player, it does not target.
         | SpellEffectKind::DamagePlayer { .. }
         | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
-        | SpellEffectKind::MyrBattlesphereAttack
         | SpellEffectKind::GiveControlOfSourceToAttackingPlayer
         // CR 701.18: library search is untargeted; the library card is chosen via a pending
         // interrupt, not a target declared at cast time. Scry is the same shape — the cards it

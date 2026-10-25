@@ -1043,9 +1043,6 @@ pub enum SpellEffectKind {
     DamageAttackedPlayerOrPlaneswalker {
         amount: Amount,
     },
-    /// Myr Battlesphere's inseparable resolution-time tap/count, source bonus and attack
-    /// recipient damage. Consumes a bound optional controlled untapped Myr selection.
-    MyrBattlesphereAttack,
     /// Damage each chosen target using the declared division mode. ChooseAtCast distributes a
     /// total (Fire); EvenAtResolution divides a total among legal targets (Fireball); PerTarget
     /// deals the amount independently to each legal target (Prismari Charm and Dual Shot).
@@ -1274,6 +1271,11 @@ pub enum SpellEffectKind {
     /// `ChoosePermanents`. Frantic Search chooses lands; Snap uses the same untargeted
     /// choice mechanic after returning its target. All surviving objects untap simultaneously.
     UntapChosenPermanents,
+    /// Tap the entire generation-bound receipt of a direct `ChoosePermanents` and publish the
+    /// count as a typed scalar result. Myr Battlesphere uses that count for its source pump and
+    /// attack-recipient damage; the adjacent `UntapChosenPermanents` operation (Frantic Search
+    /// and Snap) has no count result because its authored effects do not need one.
+    TapChosenPermanents,
     /// CR 722.3: the same designation transition serves prepared entry and later instructions.
     SetPrepared {
         subject: EffectSubject,
@@ -3788,7 +3790,6 @@ impl SpellEffectKind {
             | SpellEffectKind::PutAbilitySourceOntoBattlefield
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
-            | SpellEffectKind::MyrBattlesphereAttack
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::JoinForces
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
@@ -3815,6 +3816,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
+            | SpellEffectKind::TapChosenPermanents
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::UntapChosenPermanents
             | SpellEffectKind::PumpAll { .. }
@@ -4143,15 +4145,6 @@ impl SpellEffectKind {
         }) {
             return Err("UntapChosenPermanents requires an authored Program input".into());
         }
-        if effects.iter().any(|effect| {
-            effect.contains_legacy_flat_signature(|leaf| {
-                matches!(leaf, SpellEffectKind::MyrBattlesphereAttack)
-            })
-        }) {
-            return Err(
-                "MyrBattlesphereAttack requires an explicitly bound Program input result".into(),
-            );
-        }
         if effects
             .iter()
             .any(SpellEffectKind::contains_program_input_player)
@@ -4416,13 +4409,17 @@ impl SpellEffectKind {
         if context == EffectContext::Spell && self.requires_source_counters() {
             return Err("source counter quantities require a battlefield ability source".into());
         }
-        if matches!(self, Self::MyrBattlesphereAttack) && context != EffectContext::Ability {
-            return Err("MyrBattlesphereAttack requires an attack ability source".into());
-        }
         if matches!(self, Self::GiveControlOfSourceToAttackingPlayer)
             && context != EffectContext::Ability
         {
             return Err("GiveControlOfSourceToAttackingPlayer requires a triggered ability".into());
+        }
+        if matches!(self, Self::DamageAttackedPlayerOrPlaneswalker { .. })
+            && context != EffectContext::Ability
+        {
+            return Err(
+                "DamageAttackedPlayerOrPlaneswalker requires an attack ability source".into(),
+            );
         }
         if matches!(self, Self::SetSourceBasePower { .. }) && context != EffectContext::Ability {
             return Err("SetSourceBasePower requires an ability context".into());
@@ -6339,7 +6336,7 @@ impl SpellEffectKind {
 
     pub(crate) fn requires_attack_trigger(&self) -> bool {
         match self {
-            Self::MyrBattlesphereAttack => true,
+            Self::DamageAttackedPlayerOrPlaneswalker { .. } => true,
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
                 effect.requires_attack_trigger()
             }

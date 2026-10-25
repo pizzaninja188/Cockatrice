@@ -1387,6 +1387,15 @@ impl GameEngine {
 
                     let mut previous = EffectResult::default();
                     if let Some(input) = input {
+                        previous.input_result_type = Some(
+                            compiled
+                                .slot(input)
+                                .ok_or(EngineError::ProgramInvariant(
+                                    "resolution program input slot is invalid",
+                                ))?
+                                .result_type
+                                .clone(),
+                        );
                         match program_state
                             .slots
                             .get(input.0 as usize)
