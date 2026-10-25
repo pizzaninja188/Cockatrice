@@ -8,5 +8,5 @@
   power: 4,
   toughness: 5,
   keywords: [Deathtouch],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfDealsCombatDamageToPlayer,effect:[CreateTokens(token:"food",count:1,who:Controller,tapped:false,sacrifice_timing:None)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfDealsCombatDamageToPlayer,effect:[CreateTokens(token:"food",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

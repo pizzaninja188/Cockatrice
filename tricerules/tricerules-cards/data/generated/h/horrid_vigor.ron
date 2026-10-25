@@ -5,5 +5,5 @@
   face_id: "horrid_vigor",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Deathtouch, Indestructible])],
+  spell_effect: [GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Deathtouch, Indestructible])],
 )

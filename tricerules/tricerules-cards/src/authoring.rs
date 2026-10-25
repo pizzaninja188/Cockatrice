@@ -407,4 +407,37 @@ mod tests {
         );
         assert_eq!(def.primary_face().mana_cost.to_string(), "{3}{U}");
     }
+
+    #[test]
+    fn clone_draft_roundtrips_typed_defaults_and_keeps_review_sentinels() {
+        let raw = r#"(id:"divination",name:"Divination",face_id:"divination",mana_cost:"{2}{U}",types:["Sorcery"],spell_effect:[Draw(count:2)])"#;
+        let source = serde_json::json!({"name":"Test Draw", "oracle_id":"test-id", "layout":"normal", "mana_cost":"{3}{U}", "type_line":"Sorcery", "oracle_text":"Draw three cards."});
+        let original = raw_card(raw).unwrap();
+        let (draft, _) = clone_draft(raw, &source).unwrap();
+
+        assert!(draft.contains("// MECHANICS UNRESOLVED"));
+        assert!(draft.contains("// AUTHORING_SCAFFOLD"));
+        assert!(draft.contains("__mechanics_unresolved: true"));
+        assert!(draft.contains("__presentation_review_unresolved: true"));
+        assert!(draft.contains("flashback_cost: None"));
+        assert!(draft.contains("targeting: None"));
+        assert!(draft.contains("modal_spell: None"));
+
+        let reviewed = draft
+            .lines()
+            .filter(|line| {
+                !line.contains("__mechanics_unresolved")
+                    && !line.contains("__presentation_review_unresolved")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let roundtripped = raw_card(&reviewed).unwrap();
+        assert_eq!(roundtripped.id, "test_draw");
+        assert_eq!(roundtripped.name, "Test Draw");
+        assert_eq!(roundtripped.mana_cost.to_string(), "{3}{U}");
+        assert_eq!(roundtripped.spell_effect, original.spell_effect);
+        assert_eq!(roundtripped.flashback_cost, original.flashback_cost);
+        assert_eq!(roundtripped.targeting, original.targeting);
+        assert_eq!(roundtripped.modal_spell, original.modal_spell);
+    }
 }

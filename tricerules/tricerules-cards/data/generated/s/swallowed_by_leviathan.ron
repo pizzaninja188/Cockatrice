@@ -6,5 +6,5 @@
   mana_cost: "{2}{U}",
   types: ["Instant"],
   spell_effect: [LibraryPartition(count:2,top_min:0,top_max:None,kind:Surveil), CounterTargetSpell(spell_filter:(any_of:None,card_type:None,is_color:None,min_mana_value:None,max_mana_value:None),unless_controller_pays:Some(Count(GraveyardCards(owners:Controller,filter:None))),unless_controller_pays_by_cast_cost:None)],
-  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target spell",effect_indices:[1],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target spell",effect_indices:[1])])),
 )

@@ -5,5 +5,5 @@
   face_id: "interjection",
   mana_cost: "{W}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike])],
+  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [FirstStrike])],
 )

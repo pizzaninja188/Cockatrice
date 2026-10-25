@@ -8,5 +8,5 @@
   power: 4,
   toughness: 4,
   keywords: [Reach, Trample],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 2)])],
 )

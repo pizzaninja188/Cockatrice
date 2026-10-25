@@ -5,6 +5,6 @@
   face_id: "misty_palms_oasis",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(w: 1), (b: 1)])]), (ability_id:"activated_02",presentation:OracleLines([3]),source_zone:Battlefield,costs:[Mana("{4}"),Tap,SacrificeSelf],cost_modifiers:[],effect:[Draw(who:Controller,count:1)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Tap],effect:[ProduceMana(options: [(w: 1), (b: 1)])]), (ability_id:"activated_02",presentation:OracleLines([3]),costs:[Mana("{4}"),Tap,SacrificeSelf],effect:[Draw(count: 1)])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:EntersTapped(affected:Self_,condition:None,unless_cost:None))],
 )

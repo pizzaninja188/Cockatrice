@@ -8,5 +8,5 @@
   power: 3,
   toughness: 1,
   keywords: [Vigilance],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Explore(subject:Source)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Explore(subject:Source)])],
 )

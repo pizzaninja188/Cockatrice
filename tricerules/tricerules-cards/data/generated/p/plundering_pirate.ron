@@ -7,5 +7,5 @@
   types: ["Creature", "Orc", "Pirate"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

@@ -5,5 +5,5 @@
   face_id: "pillar_launch",
   mana_cost: "{G}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]), Untap(subject: Chosen((kind: Creature)))],
+  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Reach]), Untap(subject: Chosen((kind:Creature)))],
 )

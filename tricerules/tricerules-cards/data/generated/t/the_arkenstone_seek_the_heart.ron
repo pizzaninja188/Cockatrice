@@ -10,7 +10,7 @@
       mana_cost: "{5}",
       types: ["Artifact"],
       supertypes: ["Legendary"],
-      triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfEndStep(player:Controller),effect:[Draw(who:Controller,count:1)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+      triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfEndStep(player:Controller),effect:[Draw(count: 1)])],
       static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:AnthemPt(filter:(controller:Some(YouControl),subtype:None,color:None,required_keyword:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:false),condition:None,delta_power:1,delta_toughness:1))],
     ),
     (
@@ -18,7 +18,7 @@
       face_id: "seek_the_heart",
       mana_cost: "{2}{W}",
       types: ["Sorcery", "Adventure"],
-      spell_effect: [SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],required_supertypes:["Legendary"],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Hand,conditional_destination:None,shuffle:true,reveal:true)],
+      spell_effect: [SearchLibrary(filter:Some((card_type:Some(Creature),required_supertypes:["Legendary"])),reveal:true)],
     ),
   ],
 )

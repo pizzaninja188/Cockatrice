@@ -9,7 +9,7 @@
   power: 3,
   toughness: 6,
   keywords: [Reach, Vigilance],
-  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([4]), costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])])],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([4]),costs:[Tap],effect:[ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 3)])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([3]),definition:SelfCombatRestriction(restriction:(cant_attack:true,cant_block:true,cant_be_blocked:false,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:None),condition:Some(GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:["Lesson"],excluded_subtypes:[],has_adventure:None,printed_power:None)),min:None,max:Some(2)))))],
 )

@@ -5,5 +5,5 @@
   face_id: "alesha_s_legacy",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  spell_effect: [GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Deathtouch, Indestructible])],
+  spell_effect: [GrantKeywords(subject: Chosen((kind:Creature,controller:You)), keywords: [Deathtouch, Indestructible])],
 )

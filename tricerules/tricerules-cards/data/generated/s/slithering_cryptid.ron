@@ -7,5 +7,5 @@
   types: ["Creature", "Fish", "Mutant"],
   power: 2,
   toughness: 3,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"mutagen",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"mutagen",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

@@ -8,5 +8,5 @@
   power: 3,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None,entry_modifiers:[])],modal:None,targeting:Some((groups:[(min:0,max:2,prompt:"Choose up to two target cards from a single graveyard",effect_indices:[0],distinct_from:[],same_graveyard:true,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None,entry_modifiers:[])],targeting:Some((groups:[(min:0,max:2,prompt:"Choose up to two target cards from a single graveyard",effect_indices:[0],same_graveyard:true)])))],
 )

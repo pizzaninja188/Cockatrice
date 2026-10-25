@@ -8,5 +8,5 @@
   power: 0,
   toughness: 6,
   keywords: [Defender],
-  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Tap],effect:[LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
 )

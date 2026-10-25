@@ -8,6 +8,6 @@
   power: 1,
   toughness: 1,
   keywords: [Flying],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Graveyard,costs:[Mana("{2}{B}"),ExileSelf],cost_modifiers:[],effect:[Draw(who:Controller,count:1),LoseLife(amount:Fixed(1),who:Controller)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Graveyard,costs:[Mana("{2}{B}"),ExileSelf],effect:[Draw(count: 1),LoseLife(amount:Fixed(1),who:Controller)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
 )

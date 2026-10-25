@@ -8,5 +8,5 @@
   power: 2,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"soldier_w_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"soldier_w_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

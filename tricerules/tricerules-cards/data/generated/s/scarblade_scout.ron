@@ -8,5 +8,5 @@
   power: 2,
   toughness: 2,
   keywords: [Lifelink],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Mill(count:2,who:Controller)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Mill(count:2,who:Controller)])],
 )

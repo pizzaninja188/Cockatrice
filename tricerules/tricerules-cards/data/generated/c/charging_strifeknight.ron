@@ -8,5 +8,5 @@
   power: 3,
   toughness: 3,
   keywords: [Haste],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Tap,Discard],cost_modifiers:[],effect:[Draw(who:Controller,count:1)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Tap,Discard],effect:[Draw(count: 1)])],
 )

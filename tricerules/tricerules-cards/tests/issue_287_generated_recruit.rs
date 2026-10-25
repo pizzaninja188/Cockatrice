@@ -139,7 +139,7 @@ fn issue_287_recruit_named_count_requires_its_bound_discard_result() {
     registry_from(source).expect("the unmodified generated Recruit compiles with its token");
 
     let missing_producer = source.replace(
-        ",(id:\"discard_one\",bind:[\"discarded\"],input:None,kind:Perform(Discard(who:Controller,quantity:Exact(1))))",
+        ",(id:\"discard_one\",bind:[\"discarded\"],kind:Perform(Discard(who:Controller,quantity:Exact(1))))",
         "",
     );
     assert_ne!(

@@ -7,5 +7,5 @@
   types: ["Creature", "Giant", "Cleric"],
   power: 5,
   toughness: 4,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 3)])],
 )

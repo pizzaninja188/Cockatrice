@@ -8,5 +8,5 @@
   power: 3,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Draw(count: 1)])],
 )

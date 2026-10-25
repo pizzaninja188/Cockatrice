@@ -8,5 +8,5 @@
   power: 4,
   toughness: 6,
   keywords: [Flying],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfBecomesTarget(source:SpellOrAbility,source_controller:Opponent),effect:[],program:Some((body:(steps:[(id:"ward",bind:[],input:None,kind:Perform(CounterTriggeringStackObjectUnlessPays(cost:Mana("{2}"))))],yields:[]))),modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None), (ability_id: "triggered_02", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [Scry(count:2)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverSelfBecomesTarget(source:SpellOrAbility,source_controller:Opponent),program:Some((body:(steps:[(id:"ward",kind:Perform(CounterTriggeringStackObjectUnlessPays(cost:Mana("{2}"))))])))), (ability_id:"triggered_02",presentation:OracleLines([3]),trigger:WhenSelfEntersBattlefield,effect:[Scry(count:2)])],
 )

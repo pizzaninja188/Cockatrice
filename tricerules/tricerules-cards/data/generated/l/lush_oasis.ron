@@ -5,7 +5,7 @@
   face_id: "lush_oasis",
   mana_cost: "",
   types: ["Land", "Desert"],
-  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([3]), costs: [Tap], effect: [ProduceMana(options: [(g: 1), (u: 1)])])],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[DamageTarget(amount:1,target:(any_of:None,kind:OpponentPlayer,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None))],modal:None,targeting:Some((groups:[(min:1,max:1,prompt:"Choose target opponent",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),costs:[Tap],effect:[ProduceMana(options: [(g: 1), (u: 1)])])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[DamageTarget(amount:1,target:(kind:OpponentPlayer))],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target opponent",effect_indices:[0])])))],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:EntersTapped(affected:Self_,condition:None,unless_cost:None))],
 )

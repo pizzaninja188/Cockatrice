@@ -7,5 +7,5 @@
   types: ["Creature", "Rat"],
   power: 2,
   toughness: 1,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"rat_b_1_1_cant_block",count:1,who:Controller,tapped:false,sacrifice_timing:None)]), (ability_id:"triggered_02",presentation:OracleLines([2]),trigger:WheneverCreatureDies(controller:Controller,filter:(permanent_type:Some(Creature),required_subtypes:[],exclude_source:true,source_only:false,excluded_types:[],any_subtypes:[],token:None,owner:None,any_of:None)),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"rat_b_1_1_cant_block",count:1,who:Controller,tapped:false,sacrifice_timing:None)]), (ability_id:"triggered_02",presentation:OracleLines([2]),trigger:WheneverCreatureDies(controller:Controller,filter:(permanent_type:Some(Creature),required_subtypes:[],exclude_source:true,source_only:false,excluded_types:[],any_subtypes:[],token:None,owner:None,any_of:None)),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)])],
 )

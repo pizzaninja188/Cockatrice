@@ -8,5 +8,5 @@
   power: 5,
   toughness: 4,
   keywords: [Trample],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 5)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 5)])],
 )

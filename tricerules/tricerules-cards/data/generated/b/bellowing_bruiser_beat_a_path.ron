@@ -19,7 +19,7 @@
       mana_cost: "{2}{R}",
       types: ["Sorcery", "Adventure"],
       spell_effect: [ApplyCombatRestriction(scope:Chosen((any_of:None,kind:Creature,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)),restriction:(cant_attack:false,cant_block:true,cant_be_blocked:false,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:None))],
-      targeting: Some((groups:[(min:0,max:2,prompt:"Choose up to two target creatures",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+      targeting: Some((groups:[(min:0,max:2,prompt:"Choose up to two target creatures",effect_indices:[0])])),
     ),
   ],
 )

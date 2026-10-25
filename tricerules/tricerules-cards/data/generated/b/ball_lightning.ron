@@ -8,5 +8,5 @@
   power: 6,
   toughness: 1,
   keywords: [Trample, Haste],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([3]),trigger:AtBeginningOfEndStep(player:AnyPlayer),effect:[Sacrifice(subject:Source)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([3]),trigger:AtBeginningOfEndStep(player:AnyPlayer),effect:[Sacrifice(subject:Source)])],
 )

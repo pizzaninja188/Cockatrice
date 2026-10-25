@@ -7,6 +7,6 @@
   types: ["Creature", "Human", "Warrior", "Performer"],
   power: 4,
   toughness: 4,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:SelfCombatRestriction(restriction:(cant_attack:false,cant_block:false,cant_be_blocked:false,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:Some(1)),condition:None))],
 )

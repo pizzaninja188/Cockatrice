@@ -8,5 +8,5 @@
   power: 2,
   toughness: 1,
   cast_cost_groups: [(group_id:"additional_cost",presentation:OracleLines([1]),min:1,max:1,options:[Behold(option_id:"behold",presentation:OracleLines([1]),criterion:(required_subtype:"Kithkin")),Mana(option_id:"pay_mana",presentation:OracleLines([1]),kind:AdditionalPayment,cost:"{2}")])],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPermanentEntersBattlefield(controller:Controller,filter:(permanent_type:Some(Creature),required_subtypes:[],exclude_source:true,source_only:false,excluded_types:[],any_subtypes:[],token:None,owner:None,any_of:None),creature_filter:None),effect:[PumpTarget(power:1,toughness:1,scale:None,subject:Source)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPermanentEntersBattlefield(controller:Controller,filter:(permanent_type:Some(Creature),required_subtypes:[],exclude_source:true,source_only:false,excluded_types:[],any_subtypes:[],token:None,owner:None,any_of:None),creature_filter:None),effect:[PumpTarget(power:1,toughness:1,scale:None,subject:Source)])],
 )

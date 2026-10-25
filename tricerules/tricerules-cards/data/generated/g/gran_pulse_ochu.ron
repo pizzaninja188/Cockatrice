@@ -8,5 +8,5 @@
   power: 1,
   toughness: 1,
   keywords: [Deathtouch],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{8}")],cost_modifiers:[],effect:[PumpTarget(power:0,toughness:0,scale:Some((basis:Amount(Count(GraveyardCards(owners:Controller,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[Instant,Sorcery],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))))),power_per_unit:1,toughness_per_unit:1)),subject:Source)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{8}")],effect:[PumpTarget(power:0,toughness:0,scale:Some((basis:Amount(Count(GraveyardCards(owners:Controller,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[Instant,Sorcery],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))))),power_per_unit:1,toughness_per_unit:1)),subject:Source)])],
 )

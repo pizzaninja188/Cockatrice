@@ -26,6 +26,8 @@ mechanical facts, not semantic approval. No new index, schema, packet or timing 
 routine work; use optional tools only when they save work on the actual batch.
 The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) is the broader migration target;
 its proposed types and operations are not all accepted authoring syntax.
+Checked-in generated RON uses compact typed renderers; unresolved clone drafts retain explicit
+defaults and review sentinels.
 
 ## Routine cards: reuse first
 

@@ -8,5 +8,5 @@
   power: 2,
   toughness: 2,
   keywords: [Deathtouch],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[GrantKeywords(subject:Chosen((any_of:None,kind:Creature,tapped:None,combat_role:None,not_color:None,is_color:None,controller:You,owner:Any,excluded_objects:[Source],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)),keywords:[Deathtouch])],modal:None,targeting:Some((groups:[(min:1,max:1,prompt:"Choose another target creature you control",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[GrantKeywords(subject: Chosen((kind:Creature,controller:You,excluded_objects:[Source])), keywords: [Deathtouch])],targeting:Some((groups:[(min:1,max:1,prompt:"Choose another target creature you control",effect_indices:[0])])))],
 )

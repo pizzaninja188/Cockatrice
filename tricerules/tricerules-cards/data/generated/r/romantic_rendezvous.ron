@@ -5,5 +5,5 @@
   face_id: "romantic_rendezvous",
   mana_cost: "{1}{R}",
   types: ["Sorcery"],
-  spell_program: Some((body:(steps:[(id:"discard_cards",bind:[],input:None,kind:Perform(Discard(who:Controller,quantity:Exact(1)))),(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:2)))],yields:[]))),
+  spell_program: Some((body:(steps:[(id:"discard_cards",kind:Perform(Discard(who:Controller,quantity:Exact(1)))),(id:"draw_cards",kind:Perform(Draw(count: 2)))]))),
 )

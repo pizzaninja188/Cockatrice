@@ -5,6 +5,6 @@
   face_id: "ancestors_aid",
   mana_cost: "{1}{R}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 2, toughness: 0), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike]), CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)],
-  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target creature",effect_indices:[0,1],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+  spell_effect: [PumpTarget(power: 2, toughness: 0), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [FirstStrike]), CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)],
+  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target creature",effect_indices:[0,1])])),
 )

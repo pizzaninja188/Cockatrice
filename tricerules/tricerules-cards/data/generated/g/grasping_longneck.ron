@@ -8,5 +8,5 @@
   power: 4,
   toughness: 2,
   keywords: [Reach],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfDies,effect:[GainLife(amount:2)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfDies,effect:[GainLife(amount: 2)])],
 )

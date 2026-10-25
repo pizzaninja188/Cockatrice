@@ -7,6 +7,6 @@
   types: ["Artifact", "Creature", "Beast"],
   power: 3,
   toughness: 3,
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfUpkeep(player:Controller),effect:[Mill(count:1,who:Controller)],modal:None,targeting:None,may:true,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfUpkeep(player:Controller),effect:[Mill(count:1,who:Controller)],may:true)],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:SelfCombatRestriction(restriction:(cant_attack:true,cant_block:true,cant_be_blocked:false,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:None),condition:Some(GraveyardAggregate(owners:Controller,aggregate:DistinctCardTypes,filter:None,min:None,max:Some(3)))))],
 )

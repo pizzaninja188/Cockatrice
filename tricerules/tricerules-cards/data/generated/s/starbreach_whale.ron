@@ -9,5 +9,5 @@
   power: 3,
   toughness: 5,
   keywords: [Flying],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:2,top_min:0,top_max:None,kind:Surveil)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:2,top_min:0,top_max:None,kind:Surveil)])],
 )

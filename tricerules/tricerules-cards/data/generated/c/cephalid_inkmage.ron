@@ -7,6 +7,6 @@
   types: ["Creature", "Octopus", "Wizard"],
   power: 2,
   toughness: 2,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:3,top_min:0,top_max:None,kind:Surveil)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:3,top_min:0,top_max:None,kind:Surveil)])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:SelfCombatRestriction(restriction:(cant_attack:false,cant_block:false,cant_be_blocked:true,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:None),condition:Some(GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:None,min:Some(7),max:None))))],
 )

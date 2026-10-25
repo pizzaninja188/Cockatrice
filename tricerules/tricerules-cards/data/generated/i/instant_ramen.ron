@@ -6,6 +6,6 @@
   mana_cost: "{2}",
   types: ["Artifact", "Food"],
   keywords: [Flash],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Battlefield,costs:[Mana("{2}"),Tap,SacrificeSelf],cost_modifiers:[],effect:[GainLife(amount:3)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),costs:[Mana("{2}"),Tap,SacrificeSelf],effect:[GainLife(amount: 3)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Draw(count: 1)])],
 )

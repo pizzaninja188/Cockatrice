@@ -5,5 +5,5 @@
   face_id: "direct_hit",
   mana_cost: "{2}{R}",
   types: ["Sorcery"],
-  spell_effect: [DamageTarget(amount:5,target:(any_of:None,kind:Creature,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None))],
+  spell_effect: [DamageTarget(amount:5,target:(kind:Creature))],
 )

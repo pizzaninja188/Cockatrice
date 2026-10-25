@@ -7,5 +7,5 @@
   types: ["Creature", "Shark", "Pirate"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[ReturnToOwnersHand(subject:Chosen((any_of:None,kind:Creature,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Opponent,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)))],modal:None,targeting:Some((groups:[(min:1,max:1,prompt:"Choose target creature an opponent controls",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[ReturnToOwnersHand(subject:Chosen((kind:Creature,controller:Opponent)))],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target creature an opponent controls",effect_indices:[0])])))],
 )

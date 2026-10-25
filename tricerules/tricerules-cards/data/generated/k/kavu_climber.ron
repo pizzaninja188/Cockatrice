@@ -7,5 +7,5 @@
   types: ["Creature", "Kavu"],
   power: 3,
   toughness: 3,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[Draw(count: 1)])],
 )

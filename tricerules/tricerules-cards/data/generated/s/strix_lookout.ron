@@ -8,5 +8,5 @@
   power: 1,
   toughness: 2,
   keywords: [Flying, Vigilance],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{1}{U}"),Tap],cost_modifiers:[],effect:[],program:Some((body:(steps:[(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:1))),(id:"discard_cards",bind:[],input:None,kind:Perform(Discard(who:Controller,quantity:Exact(1))))],yields:[]))),targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{1}{U}"),Tap],effect:[],program:Some((body:(steps:[(id:"draw_cards",kind:Perform(Draw(count: 1))),(id:"discard_cards",kind:Perform(Discard(who:Controller,quantity:Exact(1))))]))))],
 )

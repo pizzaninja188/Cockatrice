@@ -8,5 +8,5 @@
   power: 5,
   toughness: 3,
   keywords: [Reach],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{2}{R}"),SacrificePermanent(filter:(any_of:None,kind:AnyPermanent,tapped:None,combat_role:None,not_color:None,is_color:None,controller:You,owner:Any,excluded_objects:[],permanent_types:[Land],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None))],cost_modifiers:[],effect:[Draw(who:Controller,count:1)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{2}{R}"),SacrificePermanent(filter:(any_of:None,kind:AnyPermanent,tapped:None,combat_role:None,not_color:None,is_color:None,controller:You,owner:Any,excluded_objects:[],permanent_types:[Land],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None))],effect:[Draw(count: 1)])],
 )

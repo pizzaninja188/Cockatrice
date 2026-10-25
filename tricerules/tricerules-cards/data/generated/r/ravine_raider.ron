@@ -8,5 +8,5 @@
   power: 1,
   toughness: 1,
   keywords: [Menace],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{1}{B}")],cost_modifiers:[],effect:[PumpTarget(power:1,toughness:1,scale:None,subject:Source)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{1}{B}")],effect:[PumpTarget(power:1,toughness:1,scale:None,subject:Source)])],
 )

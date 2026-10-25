@@ -5,5 +5,5 @@
   face_id: "terramorphic_expanse",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([1]),source_zone:Battlefield,costs:[Tap,SacrificeSelf],cost_modifiers:[],effect:[SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(BasicLand),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Battlefield(tapped:true),conditional_destination:None,shuffle:true,reveal:false)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([1]),costs:[Tap,SacrificeSelf],effect:[SearchLibrary(filter:Some((card_type:Some(BasicLand))),destination:Battlefield(tapped:true))])],
 )

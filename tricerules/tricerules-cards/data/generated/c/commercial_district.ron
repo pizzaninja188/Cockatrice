@@ -5,6 +5,6 @@
   face_id: "commercial_district",
   mana_cost: "",
   types: ["Land", "Mountain", "Forest"],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([3]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:1,top_min:0,top_max:None,kind:Surveil)])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:EntersTapped(affected:Self_,condition:None,unless_cost:None))],
 )

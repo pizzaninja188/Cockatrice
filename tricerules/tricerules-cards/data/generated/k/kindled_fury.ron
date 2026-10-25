@@ -5,6 +5,6 @@
   face_id: "kindled_fury",
   mana_cost: "{R}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 1, toughness: 0), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike])],
-  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target creature",effect_indices:[0,1],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+  spell_effect: [PumpTarget(power: 1, toughness: 0), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [FirstStrike])],
+  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target creature",effect_indices:[0,1])])),
 )

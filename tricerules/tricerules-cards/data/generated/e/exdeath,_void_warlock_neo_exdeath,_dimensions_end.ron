@@ -12,7 +12,7 @@
       supertypes: ["Legendary"],
       power: 3,
       toughness: 3,
-      triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)]), (ability_id:"triggered_02",presentation:OracleLines([2]),trigger:AtBeginningOfEndStep(player:Controller),effect:[ChangeSourceFace(action:Transform)],modal:None,targeting:None,may:false,intervening_if:Some(GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[Instant,Sorcery],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)),min:Some(6),max:None)),triggers_only_once:false,max_triggers_per_turn:None)],
+      triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 3)]), (ability_id:"triggered_02",presentation:OracleLines([2]),trigger:AtBeginningOfEndStep(player:Controller),effect:[ChangeSourceFace(action:Transform)],intervening_if:Some(GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[Instant,Sorcery],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)),min:Some(6),max:None)))],
     ),
     (
       name: "Neo Exdeath, Dimension's End",

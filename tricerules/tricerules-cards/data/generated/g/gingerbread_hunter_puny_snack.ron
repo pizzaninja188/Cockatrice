@@ -11,7 +11,7 @@
       types: ["Creature", "Giant"],
       power: 5,
       toughness: 5,
-      triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"food",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+      triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"food",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
     ),
     (
       name: "Puny Snack",

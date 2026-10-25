@@ -5,5 +5,5 @@
   face_id: "offer_immortality",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  spell_effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Deathtouch, Indestructible])],
+  spell_effect: [GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Deathtouch, Indestructible])],
 )

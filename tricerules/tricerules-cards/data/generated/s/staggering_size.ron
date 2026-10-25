@@ -5,5 +5,5 @@
   face_id: "staggering_size",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 3, toughness: 3), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample])],
+  spell_effect: [PumpTarget(power: 3, toughness: 3), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Trample])],
 )

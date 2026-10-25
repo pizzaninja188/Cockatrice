@@ -8,5 +8,5 @@
   power: 1,
   toughness: 3,
   keywords: [Trample],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPlayerCastsSpell(caster:Controller,filter:(any_of:None,card_type:None,is_color:None,targeted_permanent_type:None,required_subtypes:[],min_mana_value:Some(4),max_mana_value:None,origin:None),ordinal:None,ordinal_scope:AllSpells),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPlayerCastsSpell(caster:Controller,filter:(any_of:None,card_type:None,is_color:None,targeted_permanent_type:None,required_subtypes:[],min_mana_value:Some(4),max_mana_value:None,origin:None),ordinal:None,ordinal_scope:AllSpells),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)])],
 )

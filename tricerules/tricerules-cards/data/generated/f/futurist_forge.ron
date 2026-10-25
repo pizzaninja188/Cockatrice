@@ -5,6 +5,6 @@
   face_id: "futurist_forge",
   mana_cost: "{1}{U}",
   types: ["Artifact"],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{3}{U}"),SacrificeSelf],cost_modifiers:[],effect:[Draw(who:Controller,count:2)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{3}{U}"),SacrificeSelf],effect:[Draw(count: 2)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[Draw(count: 1)])],
 )

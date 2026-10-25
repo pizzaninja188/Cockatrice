@@ -5,5 +5,5 @@
   face_id: "high_stride",
   mana_cost: "{G}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 1, toughness: 3), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]), Untap(subject: Chosen((kind: Creature)))],
+  spell_effect: [PumpTarget(power: 1, toughness: 3), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Reach]), Untap(subject: Chosen((kind:Creature)))],
 )

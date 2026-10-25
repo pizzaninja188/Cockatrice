@@ -8,5 +8,5 @@
   power: 1,
   toughness: 2,
   keywords: [Vigilance],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPlayerDrawsNthCard(drawer:Controller,ordinal:2),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPlayerDrawsNthCard(drawer:Controller,ordinal:2),effect:[PutCounters(counter:PlusOnePlusOne,count:1,subject:Source)])],
 )

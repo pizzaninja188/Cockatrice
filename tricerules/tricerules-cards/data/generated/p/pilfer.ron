@@ -6,5 +6,5 @@
   mana_cost: "{1}{B}",
   types: ["Sorcery"],
   spell_effect: [ChooseHandCards(action:Discard,count:1,target:(any_of:None,kind:OpponentPlayer,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None),chooser:Controller,card_filter:Some(Nonland),optional:false,visibility:PublicReveal)],
-  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target opponent",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target opponent",effect_indices:[0])])),
 )

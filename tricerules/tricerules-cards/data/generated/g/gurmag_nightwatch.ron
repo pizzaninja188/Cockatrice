@@ -7,5 +7,5 @@
   types: ["Creature", "Human", "Ranger"],
   power: 3,
   toughness: 3,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:3,top_min:0,top_max:Some(1),kind:Look)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:3,top_min:0,top_max:Some(1),kind:Look)])],
 )

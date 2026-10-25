@@ -5,5 +5,5 @@
   face_id: "give_in_to_violence",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Lifelink])],
+  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Lifelink])],
 )

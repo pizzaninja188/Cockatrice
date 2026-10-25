@@ -5,5 +5,5 @@
   face_id: "dive_down",
   mana_cost: "{U}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 0, toughness: 3, subject: Chosen((kind: Creature, controller: You))), GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof])],
+  spell_effect: [PumpTarget(power: 0, toughness: 3, subject: Chosen((kind:Creature,controller:You))), GrantKeywords(subject: Chosen((kind:Creature,controller:You)), keywords: [Hexproof])],
 )

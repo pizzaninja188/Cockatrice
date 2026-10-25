@@ -7,5 +7,5 @@
   types: ["Creature", "Human", "Rogue"],
   power: 2,
   toughness: 2,
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[],program:Some((body:(steps:[(id:"discard_one",bind:["discarded"],input:None,kind:Perform(Discard(who:Controller,quantity:OptionalExact(1)))),(id:"draw_if_discarded",bind:[],input:None,kind:IfResult(condition:DiscardOutcome(result:"discarded",outcome:ChosenToPay),yes:(steps:[(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:1)))],yields:[]),no:(steps:[],yields:[])))],yields:[]))),modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,program:Some((body:(steps:[(id:"discard_one",bind:["discarded"],kind:Perform(Discard(who:Controller,quantity:OptionalExact(1)))),(id:"draw_if_discarded",kind:IfResult(condition:DiscardOutcome(result:"discarded",outcome:ChosenToPay),yes:(steps:[(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:1)))],yields:[]),no:(steps:[],yields:[])))]))))],
 )

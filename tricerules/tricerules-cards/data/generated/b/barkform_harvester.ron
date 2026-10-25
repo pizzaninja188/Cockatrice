@@ -9,5 +9,5 @@
   toughness: 3,
   characteristic_defining_abilities: [(ability_id:"characteristic_01",presentation:OracleLines([1]),definition:Changeling)],
   keywords: [Reach],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Battlefield,costs:[Mana("{2}")],cost_modifiers:[],effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:None),destination:LibraryBottom,linked_exile_id:None,entry_modifiers:[])],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target card from your graveyard",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),costs:[Mana("{2}")],effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:None),destination:LibraryBottom,linked_exile_id:None,entry_modifiers:[])],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target card from your graveyard",effect_indices:[0])])))],
 )

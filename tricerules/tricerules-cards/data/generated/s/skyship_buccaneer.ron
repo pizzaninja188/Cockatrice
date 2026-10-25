@@ -8,5 +8,5 @@
   power: 4,
   toughness: 3,
   keywords: [Flying],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Draw(who:Controller,count:1)],modal:None,targeting:None,may:false,intervening_if:Some(AttackedThisTurn(players:Controller)),triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[Draw(count: 1)],intervening_if:Some(AttackedThisTurn(players:Controller)))],
 )

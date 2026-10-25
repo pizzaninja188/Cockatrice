@@ -5,5 +5,5 @@
   face_id: "bestow_greatness",
   mana_cost: "{2}{G}",
   types: ["Instant"],
-  spell_effect: [PumpTarget(power: 4, toughness: 4), GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample])],
+  spell_effect: [PumpTarget(power: 4, toughness: 4), GrantKeywords(subject: Chosen((kind:Creature)), keywords: [Trample])],
 )

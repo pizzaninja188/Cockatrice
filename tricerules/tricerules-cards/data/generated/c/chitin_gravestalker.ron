@@ -8,5 +8,5 @@
   power: 5,
   toughness: 4,
   cost_modifiers: [GenericReduction(amount:Count(GraveyardCards(owners:Controller,filter:Some((any_of:Some([(any_of:None,exact_name:None,card_type:Some(Artifact),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None),(any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)]),exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)))))],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Hand,costs:[Mana("{2}"),DiscardSelf],cost_modifiers:[],effect:[Draw(who:Controller,count:1)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Hand,costs:[Mana("{2}"),DiscardSelf],effect:[Draw(count: 1)])],
 )

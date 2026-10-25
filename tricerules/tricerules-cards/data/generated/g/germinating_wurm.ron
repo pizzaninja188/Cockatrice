@@ -8,5 +8,5 @@
   types: ["Creature", "Plant", "Wurm"],
   power: 5,
   toughness: 5,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfEntersBattlefield,effect:[GainLife(amount: 2)])],
 )

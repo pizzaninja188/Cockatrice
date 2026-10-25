@@ -88,8 +88,14 @@ fn generic_equipment_receipt_registry() -> &'static tricerules_cards::CardRegist
             "token:\"ally_w_1_1\",count:1,who:Controller,tapped:false,sacrifice_timing:None",
             "token:\"soldier_w_1_1\",count:2,who:SourceController,tapped:true,sacrifice_timing:Some(NextEndStep)",
         );
+        let attachment_source = "(id:\"attach_created_tokens\",input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))])";
+        assert_eq!(
+            card.matches(attachment_source).count(),
+            1,
+            "the generated attachment instruction must match exactly once"
+        );
         let card = card.replace(
-            "(id:\"attach_created_tokens\",bind:[],input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[])",
+            attachment_source,
             "(id:\"choose_attachment\",bind:[],input:None,kind:Choose(choice:\"attach_created_cohort\",chooser:Controller,optional:false,branches:[(branch_id:\"attach\",presentation:Fallback,cost:None,requirement:Always,body:(steps:[(id:\"attach_created_tokens\",bind:[],input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[]))],otherwise:(steps:[],yields:[]))),(id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1)))],yields:[])",
         );
         assert!(card.contains("token:\"soldier_w_1_1\",count:2"));

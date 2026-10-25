@@ -7,5 +7,5 @@
   types: ["Creature", "Elemental", "Soldier"],
   power: 1,
   toughness: 3,
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[Draw(who:Controller,count:1)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[Draw(count: 1)])],
 )

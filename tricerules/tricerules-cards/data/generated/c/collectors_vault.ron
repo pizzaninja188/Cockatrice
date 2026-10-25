@@ -5,5 +5,5 @@
   face_id: "collector_s_vault",
   mana_cost: "{2}",
   types: ["Artifact"],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([1]),source_zone:Battlefield,costs:[Mana("{2}"),Tap],cost_modifiers:[],effect:[Draw(who:Controller,count:1),Discard(who:Controller,quantity:Exact(1)),CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([1]),costs:[Mana("{2}"),Tap],effect:[Draw(count: 1),Discard(who:Controller,quantity:Exact(1)),CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

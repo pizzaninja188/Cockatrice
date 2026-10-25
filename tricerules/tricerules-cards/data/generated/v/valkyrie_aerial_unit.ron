@@ -9,5 +9,5 @@
   toughness: 4,
   keywords: [Flying],
   cost_modifiers: [BattlefieldCountGenericReduction(amount_per_match:1,filter:(token:None,any_of:None,controllers:Controller,card_type:Some(Artifact),color:None,name:None,required_subtypes:[],exclude_source:false),aggregate:Count)],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [LibraryPartition(count:2,top_min:0,top_max:None,kind:Surveil)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([3]),trigger:WhenSelfEntersBattlefield,effect:[LibraryPartition(count:2,top_min:0,top_max:None,kind:Surveil)])],
 )

@@ -7,5 +7,5 @@
   types: ["Artifact", "Creature", "Boar", "Toy"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

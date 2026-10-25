@@ -8,5 +8,5 @@
   power: 1,
   toughness: 1,
   keywords: [Flash],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"ally_w_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"ally_w_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

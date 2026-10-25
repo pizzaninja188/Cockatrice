@@ -8,5 +8,5 @@
   power: 2,
   toughness: 2,
   keywords: [Convoke, Flying, Vigilance],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"merfolk_wu_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([3]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"merfolk_wu_1_1",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

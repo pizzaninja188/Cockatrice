@@ -24,20 +24,21 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use flate2::read::GzDecoder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{
     CastCostGroupDef, CastCostOptionDef, EffectSubject, EntersTappedAffected, EntryCost,
     ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PlayerRecipient,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetSchema, TargetingDef,
+    SearchDestination, SearchZoneSelection, StaticAbilityDef, TargetChooser, TargetController,
+    TargetFilter, TargetGroupDef, TargetKind, TargetSchema, TargetingDef, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
     CastCostOptionRef, CharacteristicDefiningAbility, ChoiceId, Color, GameCondition,
     IdentifiedAbility, Keyword, ManaAmount, ManaCost, ModalDef, ModeDef, ModeId, SpellCostModifier,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    SpellEffectKind, TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -74,7 +75,7 @@ use recipes::{
 #[cfg(test)]
 use tricerules_cards::primitives::{
     CompiledProgram, EffectContext, GraveyardDestination, InstructionKind, LifeAmount,
-    PermanentEventFilter, ProgramTargetReference, ProgramTargetRole, ZoneCardFilter,
+    PermanentEventFilter, ProgramTargetReference, ProgramTargetRole,
 };
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
@@ -1777,19 +1778,19 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     if let Some(program) = &face.spell_program {
         s.push_str(&format!(
             "{indent}spell_program: Some({}),\n",
-            ron::ser::to_string(program).expect("generated spell program should serialize")
+            render_card_program(program)
         ));
     }
     if let Some(targeting) = &face.targeting {
         s.push_str(&format!(
-            "{indent}targeting: {},\n",
-            ron::ser::to_string(&Some(targeting)).expect("generated targeting should serialize")
+            "{indent}targeting: Some({}),\n",
+            render_targeting(targeting)
         ));
     }
     if let Some(modal_spell) = &face.modal_spell {
         s.push_str(&format!(
             "{indent}modal_spell: {},\n",
-            ron::ser::to_string(modal_spell).expect("generated modal spell should serialize")
+            render_modal(modal_spell)
         ));
     }
     if !face.activated_abilities.is_empty() {
@@ -1824,54 +1825,412 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     }
 }
 
-fn render_chosen_creature_subject(subject: &EffectSubject) -> Option<&'static str> {
-    let EffectSubject::Chosen(filter) = subject else {
-        return None;
-    };
-    if **filter == TargetFilter::default_creature() {
-        return Some("Chosen((kind: Creature))");
+fn ron_value<T: Serialize + ?Sized>(value: &T) -> String {
+    ron::ser::to_string(value).expect("generated value should serialize")
+}
+
+fn push_ron_field_if_nondefault<T: Serialize + PartialEq>(
+    fields: &mut Vec<String>,
+    name: &str,
+    value: &T,
+    default: &T,
+) {
+    if value != default {
+        fields.push(format!("{name}:{}", ron_value(value)));
     }
-    (**filter
-        == TargetFilter {
-            kind: tricerules_cards::primitives::TargetKind::Creature,
-            controller: TargetController::You,
-            ..TargetFilter::default()
-        })
-    .then_some("Chosen((kind: Creature, controller: You))")
+}
+
+fn push_ron_some_field<T: Serialize>(fields: &mut Vec<String>, name: &str, value: Option<&T>) {
+    if let Some(value) = value {
+        fields.push(format!("{name}:Some({})", ron_value(value)));
+    }
+}
+
+fn push_rendered_some_field<T>(
+    fields: &mut Vec<String>,
+    name: &str,
+    value: Option<&T>,
+    render: impl FnOnce(&T) -> String,
+) {
+    if let Some(value) = value {
+        fields.push(format!("{name}:Some({})", render(value)));
+    }
+}
+
+fn push_ron_list_field<T: Serialize>(fields: &mut Vec<String>, name: &str, values: &[T]) {
+    if !values.is_empty() {
+        fields.push(format!("{name}:{}", ron_value(values)));
+    }
+}
+
+fn ron_rendered_list<T>(values: &[T], render: impl Fn(&T) -> String) -> String {
+    format!(
+        "[{}]",
+        values.iter().map(render).collect::<Vec<_>>().join(",")
+    )
+}
+
+fn push_rendered_list_field<T>(
+    fields: &mut Vec<String>,
+    name: &str,
+    values: &[T],
+    render: impl Fn(&T) -> String,
+) {
+    if !values.is_empty() {
+        fields.push(format!("{name}:{}", ron_rendered_list(values, render)));
+    }
+}
+
+fn ron_fields(fields: Vec<String>) -> String {
+    format!("({})", fields.join(","))
+}
+
+macro_rules! push_defaulted_ron_fields {
+    ($fields:expr, $value:ident, $default:ident; $($name:ident),+ $(,)?) => {
+        $(push_ron_field_if_nondefault(
+            $fields,
+            stringify!($name),
+            &$value.$name,
+            &$default.$name,
+        );)+
+    };
+}
+
+fn render_target_filter(filter: &TargetFilter) -> String {
+    let default = TargetFilter::default();
+    let mut fields = Vec::new();
+    if let Some(branches) = &filter.any_of {
+        fields.push(format!(
+            "any_of:Some({})",
+            ron_rendered_list(branches, render_target_filter)
+        ));
+    }
+    push_defaulted_ron_fields!(
+        &mut fields,
+        filter,
+        default;
+        kind,
+        tapped,
+        combat_role,
+        not_color,
+        is_color,
+        controller,
+        owner,
+        excluded_objects,
+        permanent_types,
+        required_subtypes,
+        excluded_subtypes,
+        required_supertypes,
+        excluded_supertypes,
+        power,
+        toughness,
+        required_keywords,
+        excluded_keywords,
+        token,
+        excluded_permanent_types,
+        min_mana_value,
+        max_mana_value,
+        was_dealt_damage_this_turn,
+        dealt_damage_this_turn,
+        required_counter,
+    );
+    ron_fields(fields)
+}
+
+fn render_zone_card_filter(filter: &ZoneCardFilter) -> String {
+    let default = ZoneCardFilter::default();
+    let mut fields = Vec::new();
+    if let Some(branches) = &filter.any_of {
+        fields.push(format!(
+            "any_of:Some({})",
+            ron_rendered_list(branches, render_zone_card_filter)
+        ));
+    }
+    push_defaulted_ron_fields!(
+        &mut fields,
+        filter,
+        default;
+        exact_name,
+        card_type,
+        excluded_card_types,
+        is_colorless,
+        min_mana_value,
+        max_mana_value,
+        required_subtypes,
+        excluded_subtypes,
+        required_supertypes,
+        has_adventure,
+        printed_power,
+    );
+    ron_fields(fields)
+}
+
+fn render_search_library(effect: &SpellEffectKind) -> String {
+    let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
+        count,
+        count_by_cast_cost,
+        filter,
+        selection_constraint,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+        selection_bounds,
+    } = effect
+    else {
+        unreachable!("search renderer only accepts SearchLibrary")
+    };
+    let mut fields = Vec::new();
+    push_ron_field_if_nondefault(&mut fields, "who", who, &PlayerRecipient::Controller);
+    push_ron_field_if_nondefault(&mut fields, "optional", optional, &false);
+    push_ron_field_if_nondefault(&mut fields, "count", count, &1);
+    push_ron_some_field(
+        &mut fields,
+        "count_by_cast_cost",
+        count_by_cast_cost.as_ref(),
+    );
+    push_rendered_some_field(
+        &mut fields,
+        "filter",
+        filter.as_ref(),
+        render_zone_card_filter,
+    );
+    push_ron_some_field(
+        &mut fields,
+        "selection_constraint",
+        selection_constraint.as_ref(),
+    );
+    push_ron_list_field(&mut fields, "slots", slots);
+    push_ron_field_if_nondefault(&mut fields, "zones", zones, &SearchZoneSelection::default());
+    push_ron_field_if_nondefault(
+        &mut fields,
+        "destination",
+        destination,
+        &SearchDestination::default(),
+    );
+    push_ron_some_field(
+        &mut fields,
+        "conditional_destination",
+        conditional_destination.as_ref(),
+    );
+    push_ron_field_if_nondefault(&mut fields, "shuffle", shuffle, &true);
+    push_ron_field_if_nondefault(&mut fields, "reveal", reveal, &false);
+    push_ron_some_field(&mut fields, "selection_bounds", selection_bounds.as_ref());
+    format!("SearchLibrary{}", ron_fields(fields))
+}
+
+fn render_target_group(group: &TargetGroupDef) -> String {
+    let mut fields = Vec::new();
+    push_ron_field_if_nondefault(
+        &mut fields,
+        "chooser",
+        &group.chooser,
+        &TargetChooser::Controller,
+    );
+    fields.push(format!("min:{}", group.min));
+    fields.push(format!("max:{}", group.max));
+    fields.push(format!("prompt:{}", ron_value(&group.prompt)));
+    fields.push(format!(
+        "effect_indices:{}",
+        ron_value(&group.effect_indices)
+    ));
+    push_ron_list_field(&mut fields, "distinct_from", &group.distinct_from);
+    push_ron_field_if_nondefault(&mut fields, "same_graveyard", &group.same_graveyard, &false);
+    push_ron_some_field(
+        &mut fields,
+        "cast_cost_expansion",
+        group.cast_cost_expansion.as_ref(),
+    );
+    ron_fields(fields)
+}
+
+fn render_targeting(targeting: &TargetingDef) -> String {
+    ron_fields(vec![format!(
+        "groups:{}",
+        ron_rendered_list(&targeting.groups, render_target_group)
+    )])
+}
+
+fn render_modal(modal: &ModalDef) -> String {
+    let mut fields = vec![
+        format!("min_modes:{}", modal.min_modes),
+        format!("max_modes:{}", modal.max_modes),
+    ];
+    push_ron_some_field(
+        &mut fields,
+        "all_modes_cast_cost",
+        modal.all_modes_cast_cost.as_ref(),
+    );
+    push_ron_some_field(
+        &mut fields,
+        "trigger_mode_selection_restriction",
+        modal.trigger_mode_selection_restriction.as_ref(),
+    );
+    fields.push(format!(
+        "modes:{}",
+        ron_rendered_list(&modal.modes, render_mode)
+    ));
+    ron_fields(fields)
+}
+
+fn render_mode(mode: &ModeDef) -> String {
+    let mut fields = vec![
+        format!("mode_id:{}", ron_value(&mode.mode_id)),
+        format!("presentation:{}", render_presentation(&mode.presentation)),
+    ];
+    push_ron_some_field(
+        &mut fields,
+        "linked_cast_cost",
+        mode.linked_cast_cost.as_ref(),
+    );
+    if !mode.effects.is_empty() {
+        push_rendered_list_field(
+            &mut fields,
+            "effects",
+            &mode.effects,
+            render_generated_effect,
+        );
+    }
+    push_rendered_some_field(
+        &mut fields,
+        "program",
+        mode.program.as_ref(),
+        render_card_program,
+    );
+    push_rendered_some_field(
+        &mut fields,
+        "targeting",
+        mode.targeting.as_ref(),
+        render_targeting,
+    );
+    ron_fields(fields)
+}
+
+fn render_card_program(program: &tricerules_cards::CardProgram) -> String {
+    let mut fields = vec![format!("body:{}", render_authored_block(&program.body))];
+    push_ron_list_field(&mut fields, "target_bindings", &program.target_bindings);
+    push_ron_list_field(&mut fields, "target_aliases", &program.target_aliases);
+    ron_fields(fields)
+}
+
+fn render_authored_block(block: &tricerules_cards::primitives::AuthoredBlock) -> String {
+    let mut fields = Vec::new();
+    push_rendered_list_field(&mut fields, "steps", &block.steps, render_instruction);
+    push_ron_list_field(&mut fields, "yields", &block.yields);
+    ron_fields(fields)
+}
+
+fn render_instruction(instruction: &tricerules_cards::primitives::Instruction) -> String {
+    let mut fields = vec![format!("id:{}", ron_value(&instruction.id))];
+    push_ron_list_field(&mut fields, "bind", &instruction.bind);
+    push_ron_some_field(&mut fields, "input", instruction.input.as_ref());
+    fields.push(format!(
+        "kind:{}",
+        render_instruction_kind(&instruction.kind)
+    ));
+    ron_fields(fields)
+}
+
+fn render_choose_branch(branch: &tricerules_cards::primitives::AuthoredChooseBranch) -> String {
+    let mut fields = vec![
+        format!("branch_id:{}", ron_value(&branch.branch_id)),
+        format!("presentation:{}", render_presentation(&branch.presentation)),
+        format!("cost:{}", ron_value(&branch.cost)),
+    ];
+    push_ron_field_if_nondefault(
+        &mut fields,
+        "requirement",
+        &branch.requirement,
+        &tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+    );
+    fields.push(format!("body:{}", render_authored_block(&branch.body)));
+    ron_fields(fields)
+}
+
+fn render_instruction_kind(kind: &tricerules_cards::primitives::InstructionKind) -> String {
+    use tricerules_cards::primitives::InstructionKind;
+    match kind {
+        InstructionKind::Perform(effect) => format!("Perform({})", render_generated_effect(effect)),
+        InstructionKind::Choose {
+            choice,
+            chooser,
+            optional,
+            branches,
+            otherwise,
+        } => format!(
+            "Choose(choice:{},chooser:{},optional:{},branches:[{}],otherwise:{})",
+            ron_value(choice),
+            ron_value(chooser),
+            optional,
+            branches
+                .iter()
+                .map(render_choose_branch)
+                .collect::<Vec<_>>()
+                .join(","),
+            render_authored_block(otherwise)
+        ),
+        _ => ron_value(kind),
+    }
+}
+
+fn render_effect_subject(subject: &EffectSubject) -> String {
+    match subject {
+        EffectSubject::Chosen(filter) => format!("Chosen({})", render_target_filter(filter)),
+        _ => ron_value(subject),
+    }
 }
 
 fn render_generated_effect(effect: &SpellEffectKind) -> String {
     match effect {
+        SpellEffectKind::SearchLibrary { .. } => return render_search_library(effect),
+        SpellEffectKind::DamageTarget { amount, target } => {
+            return format!(
+                "DamageTarget(amount:{},target:{})",
+                ron_value(amount),
+                render_target_filter(target)
+            );
+        }
+        SpellEffectKind::Destroy { subject }
+            if *subject == EffectSubject::Chosen(Box::new(TargetFilter::default_creature())) =>
+        {
+            return "Destroy()".into();
+        }
         SpellEffectKind::PumpTarget {
             power,
             toughness,
             scale: None,
             subject,
         } => {
-            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
-                if rendered_subject == "Chosen((kind: Creature))" {
+            if let EffectSubject::Chosen(filter) = subject {
+                if **filter == TargetFilter::default_creature() {
                     return format!("PumpTarget(power: {power}, toughness: {toughness})");
                 }
                 return format!(
-                    "PumpTarget(power: {power}, toughness: {toughness}, subject: {rendered_subject})"
+                    "PumpTarget(power: {power}, toughness: {toughness}, subject: {})",
+                    render_effect_subject(subject)
                 );
             }
         }
         SpellEffectKind::GrantKeywords { subject, keywords } => {
-            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
+            if let EffectSubject::Chosen(_) = subject {
                 let rendered_keywords = keywords
                     .iter()
                     .map(|keyword| format!("{keyword:?}"))
                     .collect::<Vec<_>>()
                     .join(", ");
                 return format!(
-                    "GrantKeywords(subject: {rendered_subject}, keywords: [{rendered_keywords}])"
+                    "GrantKeywords(subject: {}, keywords: [{rendered_keywords}])",
+                    render_effect_subject(subject)
                 );
             }
         }
         SpellEffectKind::Untap { subject } => {
-            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
-                return format!("Untap(subject: {rendered_subject})");
+            if let EffectSubject::Chosen(_) = subject {
+                return format!("Untap(subject: {})", render_effect_subject(subject));
             }
         }
         _ => {}
@@ -1922,6 +2281,23 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
                     .join(", ")
             )
         }
+        SpellEffectKind::Destroy { subject } => {
+            format!("Destroy(subject:{})", render_effect_subject(subject))
+        }
+        SpellEffectKind::ReturnToOwnersHand { subject } => format!(
+            "ReturnToOwnersHand(subject:{})",
+            render_effect_subject(subject)
+        ),
+        SpellEffectKind::PutCounters {
+            counter,
+            count,
+            subject,
+        } if matches!(subject, EffectSubject::Chosen(_)) => format!(
+            "PutCounters(counter:{},count:{},subject:{})",
+            ron_value(counter),
+            ron_value(count),
+            render_effect_subject(subject)
+        ),
         _ => ron::ser::to_string(effect).expect("generated effect should serialize"),
     }
 }
@@ -1957,55 +2333,98 @@ fn render_presentation(presentation: &AbilityPresentation) -> String {
 }
 
 fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
-    if ability.source_zone == AbilitySourceZone::Battlefield
-        && ability.costs == [AbilityCost::Tap]
-        && ability.targeting.is_none()
-        && ability.timing == ActivationTiming::Normal
-        && ability.conditions.is_empty()
-        && ability.activation_limit.is_none()
-    {
-        return format!(
-            "(ability_id: {:?}, presentation: {}{}, costs: [Tap], effect: [{}])",
-            ability.ability_id.as_str(),
-            render_presentation(&ability.presentation),
-            if ability.intrinsic_land_mana {
-                ", intrinsic_land_mana: true"
-            } else {
-                ""
-            },
-            ability
-                .effect
-                .iter()
-                .map(render_generated_effect)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+    let mut fields = vec![
+        format!("ability_id:{}", ron_value(&ability.ability_id)),
+        format!(
+            "presentation:{}",
+            render_presentation(&ability.presentation)
+        ),
+    ];
+    if ability.intrinsic_land_mana {
+        fields.push("intrinsic_land_mana:true".into());
     }
-    ron::ser::to_string(ability).expect("generated activated ability should serialize")
+    push_ron_field_if_nondefault(
+        &mut fields,
+        "source_zone",
+        &ability.source_zone,
+        &AbilitySourceZone::Battlefield,
+    );
+    fields.push(format!("costs:{}", ron_value(&ability.costs)));
+    push_ron_list_field(&mut fields, "cost_modifiers", &ability.cost_modifiers);
+    fields.push(format!(
+        "effect:{}",
+        ron_rendered_list(&ability.effect, render_generated_effect)
+    ));
+    push_rendered_some_field(
+        &mut fields,
+        "program",
+        ability.program.as_ref(),
+        render_card_program,
+    );
+    push_rendered_some_field(
+        &mut fields,
+        "targeting",
+        ability.targeting.as_ref(),
+        render_targeting,
+    );
+    push_ron_field_if_nondefault(
+        &mut fields,
+        "timing",
+        &ability.timing,
+        &ActivationTiming::Normal,
+    );
+    push_ron_list_field(&mut fields, "conditions", &ability.conditions);
+    push_ron_some_field(
+        &mut fields,
+        "activation_limit",
+        ability.activation_limit.as_ref(),
+    );
+    ron_fields(fields)
 }
 
 fn render_generated_triggered_ability(ability: &TriggeredAbilityDef) -> String {
-    if ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
-        && ability.program.is_none()
-        && ability.modal.is_none()
-        && ability.targeting.is_none()
-        && !ability.may
-        && ability.intervening_if.is_none()
-        && !ability.triggers_only_once
-    {
-        return format!(
-            "(ability_id: {:?}, presentation: {}, trigger: WhenSelfEntersBattlefield, effect: [{}])",
-            ability.ability_id.as_str(),
-            render_presentation(&ability.presentation),
-            ability
-                .effect
-                .iter()
-                .map(render_generated_effect)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+    let mut fields = vec![
+        format!("ability_id:{}", ron_value(&ability.ability_id)),
+        format!(
+            "presentation:{}",
+            render_presentation(&ability.presentation)
+        ),
+        format!("trigger:{}", ron_value(&ability.trigger)),
+    ];
+    push_rendered_list_field(
+        &mut fields,
+        "effect",
+        &ability.effect,
+        render_generated_effect,
+    );
+    push_rendered_some_field(
+        &mut fields,
+        "program",
+        ability.program.as_ref(),
+        render_card_program,
+    );
+    push_rendered_some_field(&mut fields, "modal", ability.modal.as_ref(), render_modal);
+    push_rendered_some_field(
+        &mut fields,
+        "targeting",
+        ability.targeting.as_ref(),
+        render_targeting,
+    );
+    if ability.may {
+        fields.push("may:true".into());
     }
-    ron::ser::to_string(ability).expect("generated triggered ability should serialize")
+    push_ron_some_field(
+        &mut fields,
+        "intervening_if",
+        ability.intervening_if.as_ref(),
+    );
+    if ability.triggers_only_once {
+        fields.push("triggers_only_once:true".into());
+    }
+    if let Some(max) = ability.max_triggers_per_turn {
+        fields.push(format!("max_triggers_per_turn:Some({max})"));
+    }
+    ron_fields(fields)
 }
 
 fn render_generated_static_ability(ability: &IdentifiedAbility<StaticAbilityDef>) -> String {
@@ -5302,6 +5721,96 @@ mod tests {
         assert!(ron.contains("spell_effect: [PumpTarget(power: 4, toughness: 4)],"));
         assert!(!ron.contains("targeting:None"));
         assert!(!ron.contains("required_subtypes"));
+
+        let abrade = normal_card(
+            "Abrade",
+            "{1}{R}",
+            "Instant",
+            "Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.",
+            None,
+        );
+        let abrade_ron = evaluate_fresh(&abrade).unwrap().to_ron("fixture");
+        for default in [
+            "all_modes_cast_cost:None",
+            "trigger_mode_selection_restriction:None",
+            "any_of:None",
+            "linked_cast_cost:None",
+            "distinct_from:[]",
+            "same_graveyard:false",
+            "cast_cost_expansion:None",
+        ] {
+            assert!(
+                !abrade_ron.contains(default),
+                "Abrade should omit typed modal/targeting defaults: {default}"
+            );
+        }
+
+        let campus_guide = normal_card(
+            "Campus Guide",
+            "{2}",
+            "Artifact Creature — Golem",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            Some(("2", "1")),
+        );
+        let campus_guide_ron = evaluate_fresh(&campus_guide).unwrap().to_ron("fixture");
+        for default in [
+            "bind:[]",
+            "input:None",
+            "steps:[]",
+            "yields:[]",
+            "requirement:Always",
+            "count_by_cast_cost:None",
+            "any_of:None",
+            "excluded_card_types:[]",
+            "conditional_destination:None",
+            "may:false",
+            "intervening_if:None",
+            "triggers_only_once:false",
+            "max_triggers_per_turn:None",
+        ] {
+            assert!(
+                !campus_guide_ron.contains(default),
+                "Campus Guide should omit typed program/search/ability defaults: {default}"
+            );
+        }
+        let parsed = parse_generated(&campus_guide_ron);
+        let ability = &parsed.triggered_abilities[0];
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        let program = ability
+            .program
+            .as_ref()
+            .expect("search program stays present");
+        assert_eq!(program.body.steps[0].id, "search_choice");
+
+        let hand_search_card =
+            parse_generated(include_str!("../../data/generated/b/balamb_t-rexaur.ron"));
+        let ability = &hand_search_card.activated_abilities[0];
+        assert_eq!(ability.source_zone, AbilitySourceZone::Hand);
+        let rendered = render_generated_activated_ability(ability);
+        for default in [
+            "cost_modifiers:[]",
+            "targeting:None",
+            "timing:Normal",
+            "conditions:[]",
+            "activation_limit:None",
+            "count_by_cast_cost:None",
+            "shuffle:true",
+        ] {
+            assert!(
+                !rendered.contains(default),
+                "hand-search activated ability should omit typed defaults: {default}"
+            );
+        }
+        assert!(rendered.contains("source_zone:Hand"));
+        assert!(rendered.contains("Mana(\"{2}\")"));
+        assert!(rendered.contains("DiscardSelf"));
+        assert!(rendered.contains("required_subtypes:[\"Forest\"]"));
+        assert!(rendered.contains("reveal:true"));
+        let roundtripped: ActivatedAbilityDef = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+            .from_str(&rendered)
+            .expect("typed activated renderer should roundtrip");
+        assert_eq!(&roundtripped, ability);
     }
 
     #[test]

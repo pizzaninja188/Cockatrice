@@ -5,6 +5,6 @@
   face_id: "refute",
   mana_cost: "{1}{U}{U}",
   types: ["Instant"],
-  spell_program: Some((body:(steps:[(id:"counter_spell",bind:[],input:None,kind:Perform(CounterTargetSpell(spell_filter:(any_of:None,card_type:None,is_color:None,min_mana_value:None,max_mana_value:None),unless_controller_pays:None,unless_controller_pays_by_cast_cost:None))),(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:1))),(id:"discard_one",bind:[],input:None,kind:Perform(Discard(who:Controller,quantity:Exact(1))))],yields:[]),target_bindings:[(instruction_id:"counter_spell",role:Spell,target_group_index:0)])),
-  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target spell",effect_indices:[],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
+  spell_program: Some((body:(steps:[(id:"counter_spell",kind:Perform(CounterTargetSpell(spell_filter: (), unless_controller_pays: None))),(id:"draw_cards",kind:Perform(Draw(count: 1))),(id:"discard_one",kind:Perform(Discard(who:Controller,quantity:Exact(1))))]),target_bindings:[(instruction_id:"counter_spell",role:Spell,target_group_index:0)])),
+  targeting: Some((groups:[(min:1,max:1,prompt:"Choose target spell",effect_indices:[])])),
 )

@@ -8,5 +8,5 @@
   power: 3,
   toughness: 3,
   keywords: [Menace],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"rat_b_1_1_cant_block",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[CreateTokens(token:"rat_b_1_1_cant_block",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

@@ -7,6 +7,6 @@
   types: ["Artifact", "Creature", "Goblin", "Construct"],
   power: 1,
   toughness: 4,
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),source_zone:Battlefield,costs:[Mana("{2}"),Tap],cost_modifiers:[],effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None,entry_modifiers:[])],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target card from a graveyard",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),timing:Normal,conditions:[],activation_limit:None)],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([2]),costs:[Mana("{2}"),Tap],effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None,entry_modifiers:[])],targeting:Some((groups:[(min:1,max:1,prompt:"Choose target card from a graveyard",effect_indices:[0])])))],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([1]),trigger:WhenSelfDies,effect:[CreateTokens(token:"treasure",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )
