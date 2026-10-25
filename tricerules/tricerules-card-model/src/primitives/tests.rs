@@ -4644,7 +4644,7 @@ fn resolution_cost_supports_exact_hand_card_bottom_payment() {
 }
 
 #[test]
-fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
+fn typed_optional_exile_result_is_available_for_ability_programs() {
     let program: crate::primitives::CardProgram = ron::from_str(
         r#"(body: (steps: [
             (id: "exile_target", bind: ["exiled"], input: None,
@@ -4663,11 +4663,11 @@ fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
             (instruction_id: "exile_target", role: Subject, target_group_index: 0),
         ])"#,
     )
-    .expect("Koya's typed Exile-to-delayed-trigger Program parses");
+    .expect("a typed Exile-to-delayed-trigger Program parses");
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "koya,_death_from_above".into(),
-        face_id: crate::CardFaceId::new("koya_death_from_above").unwrap(),
-        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        card_id: "reusable_exile_ability".into(),
+        face_id: crate::CardFaceId::new("reusable_exile_ability").unwrap(),
+        ability_path: vec![crate::AbilityId::new("ability_01").unwrap()],
     });
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
@@ -4687,10 +4687,10 @@ fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
         &program,
         Some(&targeting),
     )
-    .expect("only the exact Koya owner admits this typed Exile result flow");
+    .expect("a non-Koya ability admits a typed optional Exile result");
 
     let [exile, schedule_return] = compiled.body.steps.as_slice() else {
-        panic!("Koya keeps the Exile producer and observer adjacent");
+        panic!("the basic ability fixture has a direct Exile result and consumer");
     };
     let [exiled_slot] = exile.outputs.as_slice() else {
         panic!("the exact optional Exile writes one typed result slot");
@@ -4706,6 +4706,262 @@ fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
     );
     assert_eq!(schedule_return.input, Some(*exiled_slot));
     assert!(schedule_return.outputs.is_empty());
+}
+
+#[test]
+fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "generic_exile_ability_fixture".into(),
+        face_id: crate::CardFaceId::new("generic_exile_ability_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+    });
+    let delayed_consumer = r#"CreateDelayedTrigger(
+        subject: Some(PreviousEffectObject),
+        ability: (
+            ability_id: "delayed_01", presentation: Fallback,
+            trigger: AtBeginningOfNextEndStep,
+            program: Some((body: (steps: [
+                (id: "tail", kind: Perform(GainLife(who: Controller, amount: 1)))
+            ], yields: []))),
+        ),
+    )"#;
+    let compile =
+        |filter: &str, group_min: u32, group_max: u32, group_index: u32, consumer: &str| {
+            let source = r#"(body: (steps: [
+            (id: "untap_target", bind: [], input: None,
+                kind: Perform(Untap(subject: Chosen((kind: Creature))))),
+            (id: "exile_target", bind: ["exiled"], input: None,
+                kind: Perform(Exile(subject: Chosen(__FILTER__)))),
+            (id: "nested_consumer", bind: [], input: None,
+                kind: If(condition: Void,
+                    yes: (steps: [
+                        (id: "schedule_return", bind: [], input: Some("exiled"),
+                            kind: Perform(__CONSUMER__))
+                    ], yields: []),
+                    no: (steps: [], yields: [])))
+        ], yields: []), target_bindings: [
+            (instruction_id: "untap_target", role: Target, target_group_index: 0),
+            (instruction_id: "exile_target", role: Subject,
+                target_group_index: __GROUP_INDEX__)
+        ])"#
+            .replace("__FILTER__", filter)
+            .replace("__GROUP_INDEX__", &group_index.to_string())
+            .replace("__CONSUMER__", consumer);
+            let program: crate::primitives::CardProgram =
+                ron::from_str(&source).unwrap_or_else(|error| {
+                    panic!("valid generic Exile ability Program fixture: {error}\n{source}")
+                });
+            let target_group = |min, max| crate::primitives::TargetGroupDef {
+                chooser: crate::primitives::TargetChooser::Controller,
+                min,
+                max,
+                prompt: "Choose a permanent".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            };
+            let targeting = crate::primitives::TargetingDef {
+                groups: vec![target_group(1, 1), target_group(group_min, group_max)],
+            };
+            crate::primitives::CompiledProgram::compile_with_targeting(
+                owner.clone(),
+                EffectContext::Ability,
+                &program,
+                Some(&targeting),
+            )
+        };
+
+    let valid_filters = [
+        "(kind: Creature, controller: Opponent, tapped: Some(false))",
+        "(kind: AnyPermanent, permanent_types: [Artifact])",
+        "(any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
+    ];
+    for filter in valid_filters {
+        let compiled = compile(filter, 0, 1, 1, delayed_consumer).unwrap_or_else(|error| {
+            panic!("valid permanent Exile filter {filter} failed: {error}")
+        });
+        let [_, exile, nested] = compiled.body.steps.as_slice() else {
+            panic!("the fixture keeps its producer in the parent block and consumer nested");
+        };
+        let crate::primitives::CompiledInstructionKind::If { yes, .. } = &nested.kind else {
+            panic!("the typed input is consumed under the nested branch");
+        };
+        assert_eq!(exile.outputs.len(), 1);
+        assert_eq!(yes.steps[0].input, Some(exile.outputs[0]));
+        assert!(matches!(
+            compiled
+                .slot(exile.outputs[0])
+                .map(|slot| &slot.result_type),
+            Some(crate::primitives::ResultType::ExiledObject {
+                cardinality: crate::primitives::Cardinality {
+                    min: 0,
+                    max: Some(1)
+                }
+            })
+        ));
+    }
+
+    compile(valid_filters[0], 1, 1, 1, delayed_consumer)
+        .expect("a required singleton target group is also supported");
+
+    for filter in [
+        "(kind: AnyTarget)",
+        "(kind: AnyPlayer)",
+        "(any_of: Some([(kind: Creature), (kind: AnyTarget)]))",
+        "(kind: Creature, controller: DefendingPlayer)",
+        "(kind: Creature, excluded_objects: [AttachedObject])",
+    ] {
+        assert!(
+            compile(filter, 0, 1, 1, delayed_consumer).is_err(),
+            "non-permanent Exile filter must fail closed: {filter}"
+        );
+    }
+    assert!(compile(valid_filters[0], 0, 2, 1, delayed_consumer).is_err());
+    assert!(compile(valid_filters[0], 2, 2, 1, delayed_consumer).is_err());
+    assert!(compile(valid_filters[0], 0, 1, 2, delayed_consumer).is_err());
+    assert!(compile(
+        valid_filters[0],
+        0,
+        1,
+        1,
+        &delayed_consumer.replace("AtBeginningOfNextEndStep", "AtBeginningOfNextTurnUpkeep")
+    )
+    .is_err());
+
+    let compile_scope_fixture = |steps: &str| {
+        let source = format!(
+            r#"(body: (steps: [
+                (id: "untap_target", bind: [], input: None,
+                    kind: Perform(Untap(subject: Chosen((kind: Creature))))),
+                {steps}
+            ], yields: []), target_bindings: [
+                (instruction_id: "untap_target", role: Target, target_group_index: 0),
+                (instruction_id: "exile_target", role: Subject, target_group_index: 1)
+            ])"#
+        );
+        let program: crate::primitives::CardProgram =
+            ron::from_str(&source).expect("scoped Exile receipt fixture parses");
+        let target_group = |min, max| crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min,
+            max,
+            prompt: "Choose a permanent".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        };
+        let targeting = crate::primitives::TargetingDef {
+            groups: vec![target_group(1, 1), target_group(0, 1)],
+        };
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner.clone(),
+            EffectContext::Ability,
+            &program,
+            Some(&targeting),
+        )
+    };
+    let exile_step = r#"(id: "exile_target", bind: ["exiled"], input: None,
+        kind: Perform(Exile(subject: Chosen((kind: Creature))))),"#;
+    let delayed_step = format!(
+        r#"(id: "schedule_return", bind: [], input: Some("exiled"),
+            kind: Perform({delayed_consumer})),"#
+    );
+    let forward = format!("{delayed_step}{exile_step}");
+    assert!(
+        compile_scope_fixture(&forward).is_err(),
+        "a consumer cannot read a forward Exile result"
+    );
+    let sibling_branch = format!(
+        r#"(id: "separate_paths", bind: [], input: None,
+            kind: If(condition: Void,
+                yes: (steps: [{exile_step}], yields: []),
+                no: (steps: [{delayed_step}], yields: []))),"#
+    );
+    assert!(
+        compile_scope_fixture(&sibling_branch).is_err(),
+        "a result in one branch cannot feed an unyielded sibling branch"
+    );
+}
+
+#[test]
+fn non_koya_spell_can_bind_optional_exile_into_an_authored_delayed_child() {
+    let fixture = r#"(id: "spell_exile_reuse_fixture", name: "Spell Exile Reuse Fixture",
+        face_id: "spell_exile_reuse_fixture", mana_cost: "{1}{B}", types: ["Instant"],
+        targeting: Some((groups: [(min: 0, max: 1,
+            prompt: "Choose up to one target permanent", effect_indices: [])])),
+        spell_program: Some((body: (steps: [
+            (id: "exile_target", bind: ["exiled"], input: None,
+                kind: Perform(Exile(subject: Chosen((kind: AnyPermanent))))),
+            (id: "schedule_return", bind: [], input: Some("exiled"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObject),
+                    ability: (
+                        ability_id: "delayed_01", presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep,
+                        program: Some((body: (steps: [
+                            (id: "choose_return", kind: Choose(
+                                choice: "pay_or_return", chooser: Controller,
+                                optional: true,
+                                branches: [(branch_id: "pay", presentation: Fallback,
+                                    cost: Mana("{1}"), requirement: Always,
+                                    body: (steps: [], yields: []))],
+                                otherwise: (steps: [
+                                    (id: "return", kind: Perform(ReturnTriggeredCard(
+                                        reference: ExactTriggerObject, from: [Exile],
+                                        destination: Battlefield, controller: Owner,
+                                    )))
+                                ], yields: []),
+                            )),
+                            (id: "tail", kind: Perform(GainLife(who: Controller, amount: 1)))
+                        ], yields: []))),
+                    ),
+                ))),
+        ], yields: []), target_bindings: [(
+            instruction_id: "exile_target", role: Subject, target_group_index: 0,
+        )])))"#;
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("a non-Koya spell may bind its exact optional Exile result to a delayed child");
+    let parent_owner = crate::ProgramOwnerId::face(
+        "spell_exile_reuse_fixture",
+        crate::CardFaceId::new("spell_exile_reuse_fixture").unwrap(),
+    );
+    let parent = registry
+        .compiled_program_for_owner(&parent_owner)
+        .expect("the spell face owns its parent Program");
+    assert_eq!(parent.body.steps[0].outputs.len(), 1);
+    assert_eq!(
+        parent.body.steps[1].input,
+        Some(parent.body.steps[0].outputs[0])
+    );
+
+    let child_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "spell_exile_reuse_fixture".into(),
+        face_id: crate::CardFaceId::new("spell_exile_reuse_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
+    });
+    let child = registry
+        .compiled_program_for_owner(&child_owner)
+        .expect("the delayed child is registered under its exact derived ability owner");
+    assert_eq!(child.owner, child_owner);
+    assert_eq!(
+        child.required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::CapturedTriggerObjectRef]
+    );
+    assert!(matches!(
+        &child.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Choose { otherwise, .. }
+            if matches!(
+                otherwise.steps[0].kind,
+                crate::primitives::CompiledInstructionKind::Perform(ref effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ReturnTriggeredCard {
+                        reference: crate::primitives::TriggeredCardReference::ExactTriggerObject,
+                        ..
+                    })
+            )
+    ));
 }
 
 #[test]

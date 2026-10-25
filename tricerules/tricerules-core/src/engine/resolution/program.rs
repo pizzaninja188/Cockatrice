@@ -2539,7 +2539,7 @@ fn capture_program_outputs_inner(
                 ProgramValue::ExiledObject(optional_physical_output(
                     result,
                     cardinality,
-                    "Koya Exile result exceeded its compiled cardinality",
+                    "Exile result exceeded its compiled cardinality",
                 )?)
             }
             ResultType::CreatedTokenBatch { cardinality } => {

@@ -40,15 +40,15 @@
   "semantic_fixtures": [
     {
       "test": "deck_registry::deck_coverage_koya::koya_triggered_program_compiles_from_the_actual_definition",
-      "covers": "The exact Koya ability owner compiles in Ability context with its optional singleton target group, Creature-excluding-Source filter, outer instruction order, delayed child, and full child owner path."
+      "covers": "The actual Koya ability compiles in Ability context with its optional singleton target group, authored Creature-excluding-Source filter, outer instruction order, delayed child, and full child owner path."
     },
     {
       "test": "deck_registry::deck_coverage_koya::koya_exile_producer_accepts_arbitrary_and_discarded_output_bindings",
-      "covers": "The owner-specific Exile producer accepts an arbitrary result name or a deliberately discarded result."
+      "covers": "On the real Koya fixture, the generic typed Exile producer accepts an arbitrary result name or a deliberately discarded result without requiring a card-specific slot name."
     },
     {
-      "test": "deck_registry::deck_coverage_koya::koya_exile_producer_and_delayed_consumer_reject_near_misses",
-      "covers": "The profile rejects a different owner, target maximum or filter, delayed subject or timing, unknown or wrong-type input, and a nonadjacent producer."
+      "test": "deck_registry::deck_coverage_koya::koya_exile_consumer_rejects_near_misses_and_producer_is_generic",
+      "covers": "The producer accepts alternate ability IDs and valid permanent Creature filters while rejecting linked Exile, player-capable filters, invalid target maxima or bindings, and the consumer's wrong subject, affected-player override, timing, missing or unknown input, or wrong result type. A resultless sibling may intervene."
     },
     {
       "test": "scenario issue_241_koya::issue_241_zero_targets_creates_no_delayed_trigger_and_self_is_illegal",
@@ -77,6 +77,14 @@
     {
       "test": "scenario issue_241_koya::issue_241_exiled_token_still_creates_the_delayed_payment_choice",
       "covers": "A token target is watched through its exact Exile generation and still creates the delayed payment choice after the token ceases to exist."
+    },
+    {
+      "test": "scenario issue_241_koya::non_koya_spell_returns_exact_opponent_owned_noncreature_after_payment_decline",
+      "covers": "A non-Koya Spell Program Exiles an opponent-owned noncreature permanent through AnyPermanent, carries its exact post-Exile generation into its next-end-step child, returns it under its Owner after payment is declined, and resumes the child tail once."
+    },
+    {
+      "test": "scenario issue_241_koya::non_koya_spell_optional_empty_exile_creates_no_delayed_observer",
+      "covers": "The generic Spell Program completes with an empty optional Exile result and creates no delayed observer."
     }
   ],
   "tokens": []

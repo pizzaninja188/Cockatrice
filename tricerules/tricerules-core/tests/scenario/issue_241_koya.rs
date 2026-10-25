@@ -28,6 +28,119 @@ fn select_payment_branch() -> RuledCommand {
     }
 }
 
+const NON_KOYA_EXILE_SPELL_FIXTURE: &str = r#"(id: "spell_exile_reuse_fixture", name: "Spell Exile Reuse Fixture",
+    face_id: "spell_exile_reuse_fixture", mana_cost: "{1}{B}", types: ["Instant"],
+    targeting: Some((groups: [(min: 0, max: 1,
+        prompt: "Choose up to one target permanent", effect_indices: [])])),
+    spell_program: Some((body: (steps: [
+        (id: "exile_target", bind: ["exiled"], input: None,
+            kind: Perform(Exile(subject: Chosen((kind: AnyPermanent))))),
+        (id: "schedule_return", bind: [], input: Some("exiled"),
+            kind: Perform(CreateDelayedTrigger(
+                subject: Some(PreviousEffectObject),
+                ability: (
+                    ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextEndStep,
+                    program: Some((body: (steps: [
+                        (id: "choose_return", kind: Choose(
+                            choice: "pay_or_return", chooser: Controller,
+                            optional: true,
+                            branches: [(branch_id: "pay", presentation: Fallback,
+                                cost: Mana("{1}"), requirement: Always,
+                                body: (steps: [], yields: []))],
+                            otherwise: (steps: [
+                                (id: "return", kind: Perform(ReturnTriggeredCard(
+                                    reference: ExactTriggerObject, from: [Exile],
+                                    destination: Battlefield, controller: Owner,
+                                )))
+                            ], yields: []),
+                        )),
+                        (id: "tail", kind: Perform(GainLife(who: Controller, amount: 1)))
+                    ], yields: []))),
+                ),
+            ))),
+    ], yields: []), target_bindings: [(
+        instruction_id: "exile_target", role: Subject, target_group_index: 0,
+    )])))"#;
+
+fn non_koya_exile_spell_engine(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                NON_KOYA_EXILE_SPELL_FIXTURE,
+                include_str!("../../../tricerules-cards/data/explosive_apparatus.ron"),
+                include_str!("../../../tricerules-cards/data/plains.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("non-Koya typed Exile scenario registry validates"),
+    ));
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            vec!["plains".to_owned(); 40],
+            vec!["forest".to_owned(); 40],
+        ]),
+        true,
+    )
+    .expect("non-Koya typed Exile scenario engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn cast_non_koya_exile_spell(engine: &mut GameEngine, target: Option<u32>) {
+    let slot = hand_index_for_card(engine, 0, "spell_exile_reuse_fixture");
+    give_mana(
+        engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(slot, target.map_or_else(Vec::new, target_object)),
+        )
+        .expect("cast the non-Koya optional permanent Exile spell");
+    pass_both_players(engine);
+}
+
+fn advance_non_koya_exile_child_to_payment(engine: &mut GameEngine) {
+    for _ in 0..10 {
+        if engine.state.turn_step == TurnStep::EndStep {
+            break;
+        }
+        let active = engine.state.active_player_id();
+        engine
+            .apply_scenario_command(active, &primitive_yield())
+            .expect("advance to the delayed exact-object return");
+    }
+    assert_eq!(engine.state.turn_step, TurnStep::EndStep);
+    assert_eq!(engine.state.stack.len(), 1);
+    let delayed = engine.state.stack.last().expect("authored delayed trigger");
+    assert!(delayed
+        .triggered_ability
+        .as_ref()
+        .is_some_and(|ability| ability.program.is_some()));
+    assert_eq!(
+        delayed.ability_program_owner(),
+        Some(ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: "spell_exile_reuse_fixture".into(),
+            face_id: CardFaceId::new("spell_exile_reuse_fixture").unwrap(),
+            ability_path: vec![AbilityId::new("delayed_01").unwrap()],
+        }))
+    );
+    pass_both_players(engine);
+    assert!(engine.state.pending_resolution.is_some());
+}
+
 fn setup(seed: u64) -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
@@ -552,6 +665,64 @@ fn issue_241_same_parent_delayed_occurrences_have_independent_answers() {
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.active_event_observers.is_empty());
+}
+
+#[test]
+fn non_koya_spell_returns_exact_opponent_owned_noncreature_after_payment_decline() {
+    let mut engine = non_koya_exile_spell_engine(241_100);
+    let target = inject_permanent_on_battlefield(&mut engine, 1, "explosive_apparatus");
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&target)
+        .copied()
+        .unwrap_or_default();
+    inject_card_into_hand(&mut engine, 0, "spell_exile_reuse_fixture");
+
+    cast_non_koya_exile_spell(&mut engine, Some(target));
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&target].owner, 1);
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        generation_before + 1,
+        "the result stores the exact new Exile incarnation"
+    );
+    assert_eq!(engine.state.active_event_observers.len(), 1);
+
+    advance_non_koya_exile_child_to_payment(&mut engine);
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+        )
+        .expect("decline the optional payment and return the exact object");
+
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&target].owner, 1);
+    assert_eq!(engine.state.objects[&target].controller, 1);
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        generation_before + 2,
+        "the exact object changes generation once on Exile and once on return"
+    );
+    assert!(engine.state.players[1].battlefield.contains(&target));
+    assert_eq!(engine.state.players[0].life, 21, "the child tail runs once");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.active_event_observers.is_empty());
+}
+
+#[test]
+fn non_koya_spell_optional_empty_exile_creates_no_delayed_observer() {
+    let mut engine = non_koya_exile_spell_engine(241_101);
+    inject_card_into_hand(&mut engine, 0, "spell_exile_reuse_fixture");
+
+    cast_non_koya_exile_spell(&mut engine, None);
+
+    assert!(engine.state.active_event_observers.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].life, 20);
 }
 
 #[test]

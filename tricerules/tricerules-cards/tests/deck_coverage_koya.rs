@@ -155,15 +155,35 @@ fn koya_exile_producer_accepts_arbitrary_and_discarded_output_bindings() {
 }
 
 #[test]
-fn koya_exile_producer_and_delayed_consumer_reject_near_misses() {
+fn koya_exile_consumer_rejects_near_misses_and_producer_is_generic() {
     let wrong_owner = replace_once(
         KOYA_RON,
         "ability_id: \"triggered_01\"",
         "ability_id: \"different_trigger\"",
     );
     assert!(
-        !compiles(&wrong_owner),
-        "only triggered_01 owns the profile"
+        compiles(&wrong_owner),
+        "the typed producer does not depend on the parent ability ID"
+    );
+
+    let generic_creature_filter = replace_once(
+        KOYA_RON,
+        "excluded_objects: [Source]",
+        "excluded_objects: []",
+    );
+    assert!(
+        compiles(&generic_creature_filter),
+        "a valid Creature filter need not equal Koya's authored Source exclusion"
+    );
+
+    let linked_exile = replace_once(
+        KOYA_RON,
+        "kind: Perform(Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))))),",
+        "kind: Perform(Exile(subject: Chosen((kind: Creature, excluded_objects: [Source])), linked_exile_id: Some(\"linked\"))),",
+    );
+    assert!(
+        !compiles(&linked_exile),
+        "the generic ExiledObject result excludes linked Exile receipts"
     );
 
     let wrong_max = replace_once(KOYA_RON, "max: 1,\n      prompt:", "max: 2,\n      prompt:");
@@ -189,14 +209,30 @@ fn koya_exile_producer_and_delayed_consumer_reject_near_misses() {
         "an extra binding of another role cannot hide behind the Subject lookup"
     );
 
-    let wrong_filter = replace_once(
+    let wrong_role_binding = replace_once(
         KOYA_RON,
-        "excluded_objects: [Source]",
-        "excluded_objects: []",
+        "instruction_id: \"exile_target\", role: Subject",
+        "instruction_id: \"exile_target\", role: Target",
     );
     assert!(
+        !compiles(&wrong_role_binding),
+        "the Exile operation requires a Subject target binding"
+    );
+
+    let missing_subject_binding = replace_once(
+        KOYA_RON,
+        "(instruction_id: \"exile_target\", role: Subject, target_group_index: 0)",
+        "",
+    );
+    assert!(
+        !compiles(&missing_subject_binding),
+        "the Exile operation cannot omit its authored target binding"
+    );
+
+    let wrong_filter = replace_once(KOYA_RON, "kind: Creature", "kind: AnyTarget");
+    assert!(
         !compiles(&wrong_filter),
-        "the target must exclude Koya itself"
+        "the ExiledObject producer rejects player-capable target filters"
     );
 
     let wrong_subject = replace_once(
@@ -207,6 +243,16 @@ fn koya_exile_producer_and_delayed_consumer_reject_near_misses() {
     assert!(
         !compiles(&wrong_subject),
         "the observer watches the Exile result"
+    );
+
+    let wrong_affected_player = replace_once(
+        KOYA_RON,
+        "subject: Some(PreviousEffectObject),",
+        "subject: Some(PreviousEffectObject),\n            affected_player: Some(Controller),",
+    );
+    assert!(
+        !compiles(&wrong_affected_player),
+        "the delayed consumer has no affected-player override"
     );
 
     let wrong_timing = replace_once(
@@ -227,6 +273,12 @@ fn koya_exile_producer_and_delayed_consumer_reject_near_misses() {
     assert!(
         !compiles(&wrong_input),
         "the input must name a bound Exile result"
+    );
+
+    let missing_input = replace_once(KOYA_RON, "input: Some(\"exiled\")", "input: None");
+    assert!(
+        !compiles(&missing_input),
+        "the delayed observer requires an explicit input naming the Exile result"
     );
 
     let wrong_type = replace_once(

@@ -741,21 +741,25 @@ Icewrought Sentry pays before creating its reflexive tap trigger; and Sparktongu
 creating its reflexive damage trigger. Keep each real card's ordered actions and fallback in its
 source-backed program; do not flatten the payment into a legacy branch effect.
 
-One bounded outer-and-child case is admitted for Koya, Death from Above. Only the exact
-`koya,_death_from_above` `triggered_01` owner may use the outer Program profile. Its triggered
-ability keeps one optional target group (`min: 0`, `max: 1`, no legacy `effect_indices`); the group
-binds as `Subject` to the direct `Exile(Chosen(Creature except Source))` instruction.
-The compiler carries that operation's exact post-move object as a private zero-or-one
-`ExiledObject` result, including its object ID, zone-change generation, and controller snapshot.
-The same-block `CreateDelayedTrigger(PreviousEffectObject)` consumes that result for
-`AtBeginningOfNextEndStep` and the exact `delayed_01` child; an intervening resultless sibling is
-allowed. A completed optional-target Exile with
-no target binds `None` and creates no observer; if the trigger fizzles before the Exile instruction,
-there is no completed result to consume. Resolution never searches the Exile zone for a substitute.
-These identity and source-departure rules follow CR 400.7j, 113.7a, and 608.2h. The observer is
-created before a declared commander owner receives the state-based command-zone choice (CR 704.6d,
-903.9a); once that choice moves the object to Command, the captured Exile incarnation cannot be
-returned from there.
+An unlinked `Exile(Chosen(filter))` may bind its exact post-move object as an `ExiledObject` result
+when `filter.is_permanent_only()` succeeds and ordinary effect and target validation pass. Each
+terminal filter leaf must be `Creature` or `AnyPermanent`, including every branch of a pure
+`any_of`; player-capable and nonpermanent filters are rejected. Bind the `Subject` role to one
+authored target group at any index. That group may be optional or required (`min: 0` or `1`) and
+must be singleton (`max: 1`). The result keeps its exact object ID, zone-change generation, and
+controller snapshot, with cardinality 0..1.
+
+A `CreateDelayedTrigger` may consume that result only through an explicit input naming the exact
+slot and `subject: Some(PreviousEffectObject)`, with no `affected_player` and an
+`AtBeginningOfNextEndStep` child. This shape is available in Spell and Ability Programs without an
+owner-ID exception; the input may flow from a parent block into a nested `If` or `Choose` child
+while remaining subject to ordinary lexical scope. No guard is needed for an optional empty result:
+a completed Exile with no target creates no observer, and a trigger that fizzles before Exile has no
+completed result to consume. Resolution never searches the Exile zone for a substitute. These
+identity and source-departure rules follow CR 400.7j, 113.7a, and 608.2h. The observer is created
+before a declared commander owner receives the state-based command-zone choice (CR 704.6d, 903.9a);
+once that choice moves the object to Command, the captured Exile incarnation cannot be returned
+from there. Koya retains its authored Creature-excluding-Source filter and exact delayed child.
 
 The child is compiled under the full parent-and-child ability identity. Its exact exiled object is
 an inferred `CapturedTriggerObjectRef` input, distinct from the current/last-known copy snapshot
@@ -767,15 +771,11 @@ supported program instructions may compose before, inside, or after that return;
 `Return`→`GainLife` fixture verifies that a following instruction resumes. The child program retains
 its cursor across Clone's entry-copy choice. `ReturnTriggeredCard`
 also serves Abnormal Endurance's legacy graveyard return, but that different operation shape remains
-on its existing legacy path. Koya's object-capture profile remains distinct from the typed
-target-controller delayed child described below. It fails closed for a missing or wrong same-block
-producer, other
-delayed timings, plural or other previous-effect subjects, modal or targetful child bodies, `may`,
-`once`, and maximum-use metadata; do not generalize it to arbitrary effect-created or activated
-abilities. Koya's exact trigger, target filters, and target bounds remain in its card definition and
-ordinary targeting validation.
-The actual definition, closed owner/consumer profile, completed-empty versus fizzled execution, and
-commander choice are indexed by the [Koya review map](review-maps/koya,_death_from_above.json).
+on its existing legacy path. The exact-object Exile result above remains distinct from the
+typed target-controller delayed child described below. Keep Koya's exact trigger, target filter, and
+target bounds in its card definition and ordinary targeting validation. The actual definition,
+generic ExiledObject compiler boundary, completed-empty versus fizzled execution, and commander
+choice are indexed by the [Koya review map](review-maps/koya,_death_from_above.json).
 
 `CounterTargetSpell` may bind one optional `TargetedSpellController` result in a finite spell Program
 when both payment fields are `None` and the instruction has an explicit `Spell` target binding.
@@ -889,8 +889,9 @@ triggered program may also use `EachOtherPlayerThanAffectedPlayer` with that req
 player. Activated programs have no trigger input and cannot use these event-player forms. If the
 captured chooser has left, the pending decision delegates with a fresh per-deciding-player prompt
 ID; this does not change the ability controller or a compiled payer. Effect-created activated or triggered
-abilities cannot own authored programs (including modal program bodies) except for the Koya and
-Arcane Denial child shapes specified above. Do not author targetful activated abilities with `ChosenOpponent` target
+abilities cannot own authored programs (including modal program bodies) except for the exact-object
+next-end-step child specified above and Arcane Denial's child shape. Do not author targetful
+activated abilities with `ChosenOpponent` target
 groups from Hand or Graveyard: the opponent-choice activation path is
 available only for battlefield sources, and model/registry validation rejects this authored shape.
 This boundary is specific to opponent-selected groups; direct controller-chosen target groups are
