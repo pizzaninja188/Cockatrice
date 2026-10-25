@@ -17,7 +17,7 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::IntoTheWilds",
+      "symbol": "SpellEffectKind::LookChooseBattlefield",
       "typed_path": "/faces/0/triggered_abilities/0/effect/0"
     }
   ],

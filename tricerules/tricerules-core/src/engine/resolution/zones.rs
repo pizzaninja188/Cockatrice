@@ -6452,29 +6452,15 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     Ok(EffectOutcome::Suspended)
 }
 
-/// Look privately at the current top card, including a nonland that must be acknowledged.
-/// The optional placement reuses normal library-origin entry after this choice is answered.
-pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
-    look_choose_battlefield(cx, PendingLibraryLookStage::IntoTheWilds)
-}
-
-pub(super) fn deploy_the_gatewatch(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
-    look_choose_battlefield(cx, PendingLibraryLookStage::DeployTheGatewatch)
-}
-
-/// The two shipped library-entry looks share private image publication, not hand/search logic.
-fn look_choose_battlefield(
+/// Look at a bounded library prefix, privately acknowledge every looked card, and offer eligible
+/// permanents for the existing simultaneous library-origin entry path.
+pub(super) fn look_choose_battlefield(
     cx: &mut EffectCx<'_>,
-    stage: PendingLibraryLookStage,
+    count: u32,
+    card_type: tricerules_card_model::primitives::CardTypeFilter,
+    max_selected: u32,
+    remainder: tricerules_card_model::primitives::LibraryLookRemainderPolicy,
 ) -> Result<EffectOutcome, EngineError> {
-    use tricerules_card_model::primitives::CardTypeFilter;
-    let (count, card_type, limit, prompt) = match stage {
-        PendingLibraryLookStage::IntoTheWilds => (1, CardTypeFilter::Land, 1,
-            "Look at the top card. You may put it onto the battlefield if it is a land."),
-        PendingLibraryLookStage::DeployTheGatewatch => (7, CardTypeFilter::Planeswalker, 2,
-            "Look at the top seven cards. You may put up to two planeswalker cards onto the battlefield."),
-        _ => return Err(EngineError::Illegal("unsupported battlefield look stage")),
-    };
     let engine = &mut *cx.engine;
     let controller = cx.controller;
     let Some(idx) = engine.state.player_idx(controller) else {
@@ -6483,7 +6469,7 @@ fn look_choose_battlefield(
     let looked: Vec<ObjectId> = engine.state.players[idx]
         .library
         .iter()
-        .take(count)
+        .take(count as usize)
         .copied()
         .collect();
     if looked.is_empty() {
@@ -6517,9 +6503,22 @@ fn look_choose_battlefield(
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
     let n = looked.len() as u32;
     let min = 0;
-    let max = (legal.len() as u32).min(limit);
+    let max = (legal.len() as u32).min(max_selected);
     // Wording must not disclose the hidden card's type to waiting recipients.
-    let prompt = prompt.to_string();
+    let look_phrase = if count == 1 {
+        "the top card".to_string()
+    } else {
+        format!("the top {count} cards")
+    };
+    let noun = card_type.noun();
+    let noun = if max_selected == 1 {
+        noun.to_string()
+    } else {
+        format!("{noun}s")
+    };
+    let prompt = format!(
+        "Look at {look_phrase}. You may put up to {max_selected} {noun} onto the battlefield."
+    );
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -6594,7 +6593,11 @@ fn look_choose_battlefield(
                     )
                 })
                 .collect(),
-            stage,
+            stage: PendingLibraryLookStage::ChooseBattlefield {
+                filter: card_type,
+                max_selected,
+                remainder,
+            },
         },
     });
     Ok(EffectOutcome::Suspended)

@@ -5,11 +5,11 @@ use tricerules_card_model::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CounterPaymentOutcome, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
-    LibraryBottomOrder, LibraryPlacement, LinkedExiledCardDestination, LinkedExiledCardPlayKind,
-    ManaAmount, ManaSpendingRestriction, ObjectCastCostKind, PermanentChoiceConstraint,
-    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionConstraint,
-    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
-    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    LibraryBottomOrder, LibraryLookRemainderPolicy, LibraryPlacement, LinkedExiledCardDestination,
+    LinkedExiledCardPlayKind, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
+    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination,
+    SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect,
+    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
@@ -1630,8 +1630,11 @@ pub enum PendingLibraryPartitionKind {
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)]
 pub enum PendingLibraryLookStage {
-    IntoTheWilds,
-    DeployTheGatewatch,
+    ChooseBattlefield {
+        filter: CardTypeFilter,
+        max_selected: u32,
+        remainder: LibraryLookRemainderPolicy,
+    },
     /// Thassa's Oracle retains the devotion value captured when its trigger began resolving.
     ThassaOracle {
         devotion_x: u32,
@@ -2880,9 +2883,10 @@ pub(crate) enum ZoneEntryCompletion {
         object_id: ObjectId,
         generation: u64,
     },
-    DeployRandomBottom {
+    LibraryLookRemainder {
         library_owner: PlayerId,
         looked_refs: Vec<(ObjectId, u64)>,
+        policy: LibraryLookRemainderPolicy,
     },
     /// Audacious Reshapers returns the first revealed artifact through normal entry processing,
     /// then randomizes only the rest of the original prefix to the library bottom.

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, PlayerRecipient, SearchDestination, SpellEffectKind,
+    CardTypeFilter, LibraryLookRemainderPolicy, PlayerRecipient, SearchDestination, SpellEffectKind,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -25,7 +25,15 @@ fn deploy_the_gatewatch_complete_definition_and_identity_are_exact() {
             && face.triggered_abilities.is_empty()
     );
     assert!(face.targeting.is_none());
-    assert_eq!(face.spell_effect, [SpellEffectKind::DeployTheGatewatch]);
+    assert_eq!(
+        face.spell_effect,
+        [SpellEffectKind::LookChooseBattlefield {
+            count: 7,
+            filter: CardTypeFilter::Planeswalker,
+            max_selected: 2,
+            remainder: LibraryLookRemainderPolicy::RandomBottom,
+        }]
+    );
     face.spell_effect[0]
         .validate(tricerules_cards::EffectContext::Spell)
         .unwrap();
@@ -306,10 +314,15 @@ fn into_the_wilds_complete_definition_and_oracle_presentation_are_exact() {
             player: CastTriggerPlayer::Controller
         }
     ));
-    assert!(matches!(
-        ability.effect.as_slice(),
-        [SpellEffectKind::IntoTheWilds]
-    ));
+    assert_eq!(
+        ability.effect,
+        [SpellEffectKind::LookChooseBattlefield {
+            count: 1,
+            filter: CardTypeFilter::Land,
+            max_selected: 1,
+            remainder: LibraryLookRemainderPolicy::KeepPosition,
+        }]
+    );
 }
 
 #[test]

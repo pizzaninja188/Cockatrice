@@ -4456,6 +4456,68 @@ fn issue_230_discard_alternatives_validate_both_real_card_filters() {
 }
 
 #[test]
+fn library_look_choose_battlefield_requires_bounded_permanent_selection() {
+    use crate::primitives::{
+        CardTypeFilter, EffectContext, LibraryLookRemainderPolicy, SpellEffectKind,
+    };
+
+    let effect = |count, filter, max_selected, remainder| SpellEffectKind::LookChooseBattlefield {
+        count,
+        filter,
+        max_selected,
+        remainder,
+    };
+    assert!(effect(
+        1,
+        CardTypeFilter::Land,
+        1,
+        LibraryLookRemainderPolicy::KeepPosition,
+    )
+    .validate(EffectContext::Ability)
+    .is_ok());
+    assert!(effect(
+        7,
+        CardTypeFilter::Planeswalker,
+        2,
+        LibraryLookRemainderPolicy::RandomBottom,
+    )
+    .validate(EffectContext::Spell)
+    .is_ok());
+
+    for invalid in [
+        effect(
+            0,
+            CardTypeFilter::Land,
+            1,
+            LibraryLookRemainderPolicy::KeepPosition,
+        ),
+        effect(
+            1,
+            CardTypeFilter::Land,
+            0,
+            LibraryLookRemainderPolicy::KeepPosition,
+        ),
+        effect(
+            1,
+            CardTypeFilter::Land,
+            2,
+            LibraryLookRemainderPolicy::KeepPosition,
+        ),
+        effect(
+            1,
+            CardTypeFilter::Instant,
+            1,
+            LibraryLookRemainderPolicy::KeepPosition,
+        ),
+    ] {
+        assert!(
+            invalid.validate(EffectContext::Spell).is_err(),
+            "accepted invalid battlefield look: {invalid:?}"
+        );
+    }
+}
+
+#[test]
 fn amount_count_expression_reads_cards_drawn_this_turn() {
     let expression: CountExpression = ron::from_str("CardsDrawnThisTurn(players: Controller)")
         .expect("the controller's committed draw count should parse as an amount expression");

@@ -1917,8 +1917,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChooseCard { .. }
         | SpellEffectKind::ChooseLinkedExiledCard { .. }
         | SpellEffectKind::PlayLinkedExiledCard { .. }
-        | SpellEffectKind::IntoTheWilds
-        | SpellEffectKind::DeployTheGatewatch
+        | SpellEffectKind::LookChooseBattlefield { .. }
         | SpellEffectKind::Hideaway { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }

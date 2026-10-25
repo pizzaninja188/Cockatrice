@@ -472,15 +472,16 @@ impl GameEngine {
             return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
         }
 
-        if matches!(
-            stage,
-            PendingLibraryLookStage::IntoTheWilds | PendingLibraryLookStage::DeployTheGatewatch
-        ) {
+        if let PendingLibraryLookStage::ChooseBattlefield {
+            filter,
+            max_selected,
+            remainder,
+        } = &stage
+        {
             let ResolutionContinuation::LibraryLook { candidates, .. } = &pending.continuation
             else {
                 unreachable!("validated library-look continuation")
             };
-            let deploy = matches!(stage, PendingLibraryLookStage::DeployTheGatewatch);
             let current_top = !candidates.is_empty()
                 && candidates
                     .iter()
@@ -492,35 +493,25 @@ impl GameEngine {
                         .copied())
                 && stack.item.controller == controller;
             let legal_accept = chosen.is_empty()
-                || (chosen.len() <= if deploy { 2 } else { 1 } && chosen.iter().all(|oid| {
-                    candidates.iter().any(|(candidate, _)| candidate == oid)
-                        && zone_card_matches_filter(
-                            &self.state,
-                            self.registry,
-                            *oid,
-                            Some(&ZoneCardFilter {
-                                card_type: Some(if deploy {
-                                    tricerules_card_model::primitives::CardTypeFilter::Planeswalker
-                                } else {
-                                    tricerules_card_model::primitives::CardTypeFilter::Land
+                || (chosen.len() <= *max_selected as usize
+                    && chosen.iter().enumerate().all(|(index, oid)| {
+                        !chosen[..index].contains(oid)
+                            && candidates.iter().any(|(candidate, _)| candidate == oid)
+                            && zone_card_matches_filter(
+                                &self.state,
+                                self.registry,
+                                *oid,
+                                Some(&ZoneCardFilter {
+                                    card_type: Some(*filter),
+                                    ..Default::default()
                                 }),
-                                ..Default::default()
-                            }),
-                        )
-                }));
+                            )
+                    }));
             if !current_top || !legal_accept {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
                     "stale battlefield-look top or eligibility",
                 ));
-            }
-            if chosen.is_empty() && !deploy {
-                return self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    ev,
-                );
             }
             let entries = chosen
                 .iter()
@@ -555,11 +546,14 @@ impl GameEngine {
                     applied_effects: Vec::new(),
                 })
                 .collect();
-            let completion =
-                deploy.then(|| crate::state::ZoneEntryCompletion::DeployRandomBottom {
-                    library_owner: controller,
-                    looked_refs: candidates.clone(),
-                });
+            let completion = (*remainder
+                == tricerules_card_model::primitives::LibraryLookRemainderPolicy::RandomBottom
+                || chosen.is_empty())
+            .then_some(crate::state::ZoneEntryCompletion::LibraryLookRemainder {
+                library_owner: controller,
+                looked_refs: candidates.clone(),
+                policy: *remainder,
+            });
             let label = object_display_name(&self.state, self.registry, stack.item.id);
             let Some(stack) = self.begin_zone_entry_batch(
                 stack,
@@ -718,7 +712,7 @@ impl GameEngine {
 }
 
 #[cfg(test)]
-mod into_the_wilds_tests {
+mod library_look_choose_battlefield_tests {
     use super::*;
 
     #[test]
@@ -758,7 +752,16 @@ mod into_the_wilds_tests {
                 .primary_face()
                 .triggered_abilities[0]
                 .clone();
-            ability.effect = vec![SpellEffectKind::DeployTheGatewatch, tail];
+            ability.effect = vec![
+                SpellEffectKind::LookChooseBattlefield {
+                    count: 7,
+                    filter: tricerules_card_model::primitives::CardTypeFilter::Planeswalker,
+                    max_selected: 2,
+                    remainder:
+                        tricerules_card_model::primitives::LibraryLookRemainderPolicy::RandomBottom,
+                },
+                tail,
+            ];
             item.triggered_ability = Some(ability);
             let mut stack = ParkedStackResolution::new(item);
             stack.resume_effect_index = Some(1);
@@ -790,7 +793,12 @@ mod into_the_wilds_tests {
                 },
                 continuation: ResolutionContinuation::LibraryLook {
                     stack,
-                    stage: PendingLibraryLookStage::DeployTheGatewatch,
+                    stage: PendingLibraryLookStage::ChooseBattlefield {
+                        filter: tricerules_card_model::primitives::CardTypeFilter::Planeswalker,
+                        max_selected: 2,
+                        remainder:
+                            tricerules_card_model::primitives::LibraryLookRemainderPolicy::RandomBottom,
+                    },
                     candidates: looked.iter().map(|&oid| (oid, 0)).collect(),
                 },
             });
@@ -953,7 +961,16 @@ mod into_the_wilds_tests {
                 .primary_face()
                 .triggered_abilities[0]
                 .clone();
-            ability.effect = vec![SpellEffectKind::IntoTheWilds, tail];
+            ability.effect = vec![
+                SpellEffectKind::LookChooseBattlefield {
+                    count: 1,
+                    filter: tricerules_card_model::primitives::CardTypeFilter::Land,
+                    max_selected: 1,
+                    remainder:
+                        tricerules_card_model::primitives::LibraryLookRemainderPolicy::KeepPosition,
+                },
+                tail,
+            ];
             item.triggered_ability = Some(ability);
             let mut stack = ParkedStackResolution::new(item);
             stack.resume_effect_index = Some(1);
@@ -985,7 +1002,12 @@ mod into_the_wilds_tests {
                 },
                 continuation: ResolutionContinuation::LibraryLook {
                     stack,
-                    stage: PendingLibraryLookStage::IntoTheWilds,
+                    stage: PendingLibraryLookStage::ChooseBattlefield {
+                        filter: tricerules_card_model::primitives::CardTypeFilter::Land,
+                        max_selected: 1,
+                        remainder:
+                            tricerules_card_model::primitives::LibraryLookRemainderPolicy::KeepPosition,
+                    },
                     candidates: vec![(forest, 0)],
                 },
             });
@@ -1079,7 +1101,12 @@ mod into_the_wilds_tests {
             },
             continuation: ResolutionContinuation::LibraryLook {
                 stack,
-                stage: PendingLibraryLookStage::IntoTheWilds,
+                stage: PendingLibraryLookStage::ChooseBattlefield {
+                    filter: tricerules_card_model::primitives::CardTypeFilter::Land,
+                    max_selected: 1,
+                    remainder:
+                        tricerules_card_model::primitives::LibraryLookRemainderPolicy::KeepPosition,
+                },
                 candidates: Vec::new(),
             },
             resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,

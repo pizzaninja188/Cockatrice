@@ -552,6 +552,15 @@ pub enum LibraryBottomOrder {
     Chosen,
 }
 
+/// How unselected cards from a private battlefield look remain in their library.
+/// Into the Wilds keeps its unselected top land in place; Deploy the Gatewatch randomizes its
+/// unselected looked-at planeswalkers to the bottom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryLookRemainderPolicy {
+    KeepPosition,
+    RandomBottom,
+}
+
 /// Rules meaning attached to a top-library partition.
 ///
 /// `Surveil` is the CR 701.25 keyword action and therefore emits the corresponding completed
@@ -1138,10 +1147,16 @@ pub enum SpellEffectKind {
     /// graveyard. The choice is private, logged, and resumable through the engine's library
     /// picker. Bashful Beastie, Innocuous Rat, Manifest Dread, and Twist Reality.
     ManifestDread,
-    /// Into the Wilds: private top-card look followed by optional ordinary land entry.
-    IntoTheWilds,
-    /// Private top-seven look, optional simultaneous planeswalker entry, then random bottom.
-    DeployTheGatewatch,
+    /// Look at a bounded library prefix, choose up to max_selected matching permanents for
+    /// simultaneous battlefield entry, then apply the remainder policy.
+    /// Into the Wilds (1, Land, 1, KeepPosition) and Deploy the Gatewatch
+    /// (7, Planeswalker, 2, RandomBottom) share this private LibraryLook continuation.
+    LookChooseBattlefield {
+        count: u32,
+        filter: CardTypeFilter,
+        max_selected: u32,
+        remainder: LibraryLookRemainderPolicy,
+    },
     /// CR 702.75 / 406.3: look at the top `count`, exile one face down, and put the rest on the
     /// bottom in a random order. Mosswort Bridge and Smuggler's Buggy use the same linked entry.
     Hideaway {
@@ -3792,8 +3807,7 @@ impl SpellEffectKind {
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
             | SpellEffectKind::RevealUntilArtifact
             | SpellEffectKind::ManifestDread
-            | SpellEffectKind::IntoTheWilds
-            | SpellEffectKind::DeployTheGatewatch
+            | SpellEffectKind::LookChooseBattlefield { .. }
             | SpellEffectKind::Hideaway { .. }
             | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
@@ -6135,8 +6149,28 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
-            SpellEffectKind::IntoTheWilds => Ok(()),
-            SpellEffectKind::DeployTheGatewatch => Ok(()),
+            SpellEffectKind::LookChooseBattlefield {
+                count,
+                filter,
+                max_selected,
+                ..
+            } => {
+                if *count == 0 {
+                    return Err("LookChooseBattlefield requires a positive look count".into());
+                }
+                if *max_selected == 0 || *max_selected > *count {
+                    return Err(
+                        "LookChooseBattlefield max_selected must be positive and no greater than count"
+                            .into(),
+                    );
+                }
+                if !filter.proves_permanent_library_match() {
+                    return Err(
+                        "LookChooseBattlefield filter must match only permanent cards".into(),
+                    );
+                }
+                Ok(())
+            }
             SpellEffectKind::Hideaway { count, .. } => {
                 if *count == 0 {
                     Err("Hideaway requires a positive look count".into())

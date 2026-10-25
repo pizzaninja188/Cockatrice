@@ -98,8 +98,12 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::Cascade { .. } => zones::cascade(cx, effect)?,
         effect @ SpellEffectKind::Explore { .. } => zones::explore(cx, effect)?,
         SpellEffectKind::ManifestDread => zones::manifest_dread(cx)?,
-        SpellEffectKind::IntoTheWilds => zones::into_the_wilds(cx)?,
-        SpellEffectKind::DeployTheGatewatch => zones::deploy_the_gatewatch(cx)?,
+        SpellEffectKind::LookChooseBattlefield {
+            count,
+            filter,
+            max_selected,
+            remainder,
+        } => zones::look_choose_battlefield(cx, count, filter, max_selected, remainder)?,
         SpellEffectKind::ChaosWarp => chaos_warp::chaos_warp(cx)?,
         // No card admits this instruction until its simultaneous movement and
         // end-to-end pair publication have passed the remaining capability gates.

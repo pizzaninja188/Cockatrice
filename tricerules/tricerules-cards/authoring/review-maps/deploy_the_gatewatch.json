@@ -86,7 +86,7 @@
   "primitive_references": [
     {
       "typed_path": "/faces/0/spell_effect/0",
-      "symbol": "SpellEffectKind::DeployTheGatewatch"
+      "symbol": "SpellEffectKind::LookChooseBattlefield"
     }
   ]
 }

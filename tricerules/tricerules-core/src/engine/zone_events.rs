@@ -1,7 +1,9 @@
 //! CR 603.2c / 603.10a: an explicit rules-event boundary, independent of command and
 //! trigger-flush boundaries. Three Tree Scribe counts departures; Mortipede counts batches.
 use super::*;
-use tricerules_card_model::primitives::{EventZone, ZoneEventCardinality, ZoneEventDestination};
+use tricerules_card_model::primitives::{
+    EventZone, LibraryLookRemainderPolicy, ZoneEventCardinality, ZoneEventDestination,
+};
 
 pub(super) struct CompletedZoneEntryBatch {
     pub(super) stack: ParkedStackResolution,
@@ -279,9 +281,10 @@ impl GameEngine {
                 return false;
             }
         }
-        if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
+        if let Some(crate::state::ZoneEntryCompletion::LibraryLookRemainder {
             library_owner,
             looked_refs,
+            ..
         }) = &batch.completion
         {
             let Some(idx) = self.state.player_idx(*library_owner) else {
@@ -596,31 +599,41 @@ impl GameEngine {
                     events,
                 );
             }
-        } else if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
+        } else if let Some(crate::state::ZoneEntryCompletion::LibraryLookRemainder {
             library_owner,
             looked_refs,
+            policy,
         }) = completion
         {
-            let idx = self
-                .state
-                .player_idx(library_owner)
-                .ok_or(EngineError::Illegal("looking player missing"))?;
-            // Only known committed entry moves leave the cohort. Skipped entrants stay in rest.
-            let mut remaining: Vec<ObjectId> = looked_refs
-                .into_iter()
-                .filter_map(|(oid, _)| (!committed.contains(&oid)).then_some(oid))
-                .collect();
-            shuffle_object_ids_for_current_command(&self.state, library_owner, &mut remaining);
-            self.state.players[idx]
-                .library
-                .retain(|oid| !remaining.contains(oid));
-            self.state.players[idx]
-                .library
-                .extend(remaining.iter().copied());
-            events.push(events::ev_log(format!(
-                "P{library_owner} puts {} cards on the bottom of their library in a random order.",
-                remaining.len()
-            )));
+            match policy {
+                LibraryLookRemainderPolicy::KeepPosition => {}
+                LibraryLookRemainderPolicy::RandomBottom => {
+                    let idx = self
+                        .state
+                        .player_idx(library_owner)
+                        .ok_or(EngineError::Illegal("looking player missing"))?;
+                    // Only known committed entry moves leave the cohort. Skipped entrants stay in rest.
+                    let mut remaining: Vec<ObjectId> = looked_refs
+                        .into_iter()
+                        .filter_map(|(oid, _)| (!committed.contains(&oid)).then_some(oid))
+                        .collect();
+                    shuffle_object_ids_for_current_command(
+                        &self.state,
+                        library_owner,
+                        &mut remaining,
+                    );
+                    self.state.players[idx]
+                        .library
+                        .retain(|oid| !remaining.contains(oid));
+                    self.state.players[idx]
+                        .library
+                        .extend(remaining.iter().copied());
+                    events.push(events::ev_log(format!(
+                        "P{library_owner} puts {} cards on the bottom of their library in a random order.",
+                        remaining.len()
+                    )));
+                }
+            }
         } else if let Some(crate::state::ZoneEntryCompletion::RevealUntilArtifact {
             library_owner,
             found_ref,

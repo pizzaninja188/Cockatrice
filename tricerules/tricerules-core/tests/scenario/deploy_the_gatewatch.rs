@@ -103,6 +103,49 @@ fn actual_deploy_private_images_have_engine_eligibility_and_constant_waiting_wor
 }
 
 #[test]
+fn actual_deploy_random_bottom_keeps_unselected_declared_commander_in_the_same_library_zone() {
+    let (mut engine, looked, suffix) = paid_look(202_610_101, &MIXED);
+    let commander = looked[1];
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&commander)
+        .copied()
+        .unwrap_or(0);
+    // This engine-state fixture exercises a declared commander's same-zone reorder; deck legality
+    // is outside this rules-path test.
+    engine.state.players[0]
+        .declared_commander_object_ids
+        .push(commander);
+
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .unwrap();
+
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Library);
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&commander)
+            .copied()
+            .unwrap_or(0),
+        generation
+    );
+    assert_eq!(engine.state.players[0].command_zone, Vec::<u32>::new());
+    let library = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(&library[..suffix.len()], &suffix);
+    let bottomed = &library[suffix.len()..];
+    assert_eq!(bottomed.len(), looked.len());
+    assert!(looked.iter().all(|object_id| bottomed.contains(object_id)));
+    assert!(bottomed.contains(&commander));
+}
+
+#[test]
 fn actual_deploy_requires_two_white_mana_and_rejects_unaffordable_cast_atomically() {
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
