@@ -116,13 +116,8 @@ pub enum CountExpression {
     /// Mill result. This is deliberately a fieldless result consumer: its valid source, action,
     /// and player are fixed by the sibling-effect contract.
     PreviousMillManaValueSum,
-    /// Audacious Reshapers reads the exact number of library cards revealed by the immediately
-    /// preceding specialized reveal instruction. This receipt survives a parked battlefield
-    /// entry and is never reconstructed from the later library.
-    PreviousEffectRevealedCount,
-    /// Minds Aglow reads the checked total accepted by the immediately preceding Join Forces
-    /// contribution instruction. The total is captured from committed payment selections.
-    PreviousJoinForcesManaPaid,
+    /// A direct, explicitly bound scalar input to one finite resolution Program instruction.
+    ProgramInputCount,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -258,8 +253,7 @@ impl CountExpression {
                                 | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
                                 | Self::PreviousMillManaValueSum
-                                | Self::PreviousEffectRevealedCount
-                                | Self::PreviousJoinForcesManaPaid
+                                | Self::ProgramInputCount
                         )
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
@@ -281,8 +275,7 @@ impl CountExpression {
             | CountExpression::MaximumCardsMatchingResult { .. }
             | CountExpression::CardResultCharacteristicSum { .. }
             | CountExpression::PreviousMillManaValueSum
-            | CountExpression::PreviousEffectRevealedCount
-            | CountExpression::PreviousJoinForcesManaPaid => Ok(()),
+            | CountExpression::ProgramInputCount => Ok(()),
         }
     }
 
@@ -296,22 +289,12 @@ impl CountExpression {
         }
     }
 
-    fn uses_previous_effect_revealed_count(&self) -> bool {
+    fn uses_program_input_count(&self) -> bool {
         match self {
-            Self::PreviousEffectRevealedCount => true,
+            Self::ProgramInputCount => true,
             Self::Affine { terms, .. } => terms
                 .iter()
-                .any(|term| term.quantity.uses_previous_effect_revealed_count()),
-            _ => false,
-        }
-    }
-
-    fn uses_previous_join_forces_mana_paid(&self) -> bool {
-        match self {
-            Self::PreviousJoinForcesManaPaid => true,
-            Self::Affine { terms, .. } => terms
-                .iter()
-                .any(|term| term.quantity.uses_previous_join_forces_mana_paid()),
+                .any(|term| term.quantity.uses_program_input_count()),
             _ => false,
         }
     }
@@ -387,18 +370,10 @@ impl Amount {
         }
     }
 
-    pub(crate) fn uses_previous_effect_revealed_count(&self) -> bool {
+    pub(crate) fn uses_program_input_count(&self) -> bool {
         match self {
-            Self::Count(expression) => expression.uses_previous_effect_revealed_count(),
-            Self::DivideRoundedDown { amount, .. } => amount.uses_previous_effect_revealed_count(),
-            _ => false,
-        }
-    }
-
-    pub(crate) fn uses_previous_join_forces_mana_paid(&self) -> bool {
-        match self {
-            Self::Count(expression) => expression.uses_previous_join_forces_mana_paid(),
-            Self::DivideRoundedDown { amount, .. } => amount.uses_previous_join_forces_mana_paid(),
+            Self::Count(expression) => expression.uses_program_input_count(),
+            Self::DivideRoundedDown { amount, .. } => amount.uses_program_input_count(),
             _ => false,
         }
     }
@@ -430,20 +405,13 @@ impl Amount {
     }
 
     pub(crate) fn validate_entry(&self, intrinsic: bool) -> Result<(), String> {
-        if self.uses_previous_effect_revealed_count() {
-            return Err(
-                "PreviousEffectRevealedCount requires an immediately preceding RevealUntilArtifact result".into(),
-            );
-        }
         if self.uses_previous_mill_mana_value_sum() {
             return Err(
                 "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
             );
         }
-        if self.uses_previous_join_forces_mana_paid() {
-            return Err(
-                "PreviousJoinForcesManaPaid requires an immediate JoinForces result".into(),
-            );
+        if self.uses_program_input_count() {
+            return Err("ProgramInputCount requires a direct typed Program input".into());
         }
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             if !intrinsic {
@@ -567,20 +535,13 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
-        if self.uses_previous_effect_revealed_count() {
-            return Err(
-                "PreviousEffectRevealedCount requires an immediately preceding RevealUntilArtifact result".into(),
-            );
-        }
         if self.uses_previous_mill_mana_value_sum() {
             return Err(
                 "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
             );
         }
-        if self.uses_previous_join_forces_mana_paid() {
-            return Err(
-                "PreviousJoinForcesManaPaid requires an immediate JoinForces result".into(),
-            );
+        if self.uses_program_input_count() {
+            return Err("ProgramInputCount requires a direct typed Program input".into());
         }
         if self.uses_affected_player_result() {
             return Err(

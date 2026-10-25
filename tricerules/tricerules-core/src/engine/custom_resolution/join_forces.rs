@@ -142,14 +142,7 @@ impl GameEngine {
             return Ok(finish_with_events(self, events));
         }
 
-        let mut previous_result = stack.previous_result;
-        previous_result.mana_paid = Some(total_paid);
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            previous_result,
-            events,
-        )
+        self.complete_join_forces_operation(stack, total_paid, events)
     }
 
     /// A departing payer's current Join Forces choice is not delegated. Advance to the next
@@ -218,15 +211,34 @@ impl GameEngine {
             return Ok(());
         }
 
-        let mut previous_result = stack.previous_result;
-        previous_result.mana_paid = Some(total_paid);
-        let completed = self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            previous_result,
-            std::mem::take(events),
-        )?;
+        let completed =
+            self.complete_join_forces_operation(stack, total_paid, std::mem::take(events))?;
         *events = completed.events;
         Ok(())
+    }
+
+    fn complete_join_forces_operation(
+        &mut self,
+        stack: ParkedStackResolution,
+        total_paid: u32,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if stack.program.is_some() {
+            let operation_result = EffectResult {
+                mana_paid: Some(total_paid),
+                program_value: Some(ProgramValue::Count(total_paid)),
+                ..EffectResult::default()
+            };
+            self.complete_parked_stack_with_previous(stack, operation_result, events)
+        } else {
+            let mut previous_result = stack.previous_result;
+            previous_result.mana_paid = Some(total_paid);
+            self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                previous_result,
+                events,
+            )
+        }
     }
 }

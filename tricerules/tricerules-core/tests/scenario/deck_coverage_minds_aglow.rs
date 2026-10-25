@@ -56,6 +56,29 @@ fn contribute(engine: &mut GameEngine, player: i32, mana: PaymentMana) {
         .expect("the current player accepts this exact mana contribution");
 }
 
+fn pending_program_cursor(engine: &GameEngine) -> serde_json::Value {
+    fn find(value: &serde_json::Value) -> Option<serde_json::Value> {
+        if let Some(program) = value.get("program").filter(|program| program.is_object()) {
+            return Some(program.clone());
+        }
+        match value {
+            serde_json::Value::Array(values) => values.iter().find_map(find),
+            serde_json::Value::Object(values) => values.values().find_map(find),
+            _ => None,
+        }
+    }
+
+    let pending = serde_json::to_value(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Join Forces contribution remains pending"),
+    )
+    .expect("pending resolution serializes");
+    find(&pending).expect("Join Forces retains its Program cursor")
+}
+
 #[test]
 fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total() {
     let decks = Some(vec![vec!["island".into(); 20]; PLAYERS.len()]);
@@ -110,6 +133,12 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
             .expect("first contribution prompt")
             .deciding_player,
         PLAYERS[0]
+    );
+    let parked_program = pending_program_cursor(&engine);
+    assert_eq!(
+        parked_program["in_flight"].as_array().map(Vec::len),
+        Some(1),
+        "Join Forces result remains in flight while the first payer answers"
     );
     let command_index_before_wrong_payer = engine.state.command_index;
     let wrong_payer = resolution_payment(
@@ -183,6 +212,11 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
             .deciding_player,
         PLAYERS[1]
     );
+    assert_eq!(
+        pending_program_cursor(&engine),
+        parked_program,
+        "the same typed Program cursor survives the first contribution"
+    );
     contribute(
         &mut engine,
         PLAYERS[1],
@@ -199,6 +233,11 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
             .expect("zero contribution prompt")
             .deciding_player,
         PLAYERS[2]
+    );
+    assert_eq!(
+        pending_program_cursor(&engine),
+        parked_program,
+        "the same typed Program cursor survives every payer prompt"
     );
     let tap_mountain = activate_ability_for(&engine, third_player_mountain, 0, vec![]);
     engine
@@ -390,6 +429,12 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
             .deciding_player,
         FOUR_PLAYERS[0]
     );
+    let parked_program = pending_program_cursor(&engine);
+    assert_eq!(
+        parked_program["in_flight"].as_array().map(Vec::len),
+        Some(1),
+        "Join Forces retains its scalar producer before any payer departs"
+    );
 
     engine
         .apply_scenario_command(FOUR_PLAYERS[0], &concede())
@@ -403,6 +448,11 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
             .expect("the resolving spell survives its controller's departure")
             .deciding_player,
         FOUR_PLAYERS[1]
+    );
+    assert_eq!(
+        pending_program_cursor(&engine),
+        parked_program,
+        "the typed Program cursor survives the controller's departure"
     );
 
     contribute(
@@ -430,6 +480,288 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
             library_sizes_before[index] - player.library.len(),
             3,
             "each surviving player draws the total of one plus two mana"
+        );
+    }
+}
+
+#[test]
+fn minds_aglow_keeps_accepted_contribution_when_a_later_payer_concedes() {
+    const FOUR_PLAYERS: [i32; 4] = [4, 9, 27, 31];
+    let decks = Some(vec![vec!["island".into(); 20]; FOUR_PLAYERS.len()]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_704,
+        &FOUR_PLAYERS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, MINDS_AGLOW);
+    give_mana(
+        &mut engine,
+        FOUR_PLAYERS[0],
+        ManaGift {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut engine,
+        FOUR_PLAYERS[1],
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut engine,
+        FOUR_PLAYERS[2],
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let library_sizes_before = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.library.len())
+        .collect::<Vec<_>>();
+    let cards_drawn_before =
+        FOUR_PLAYERS.map(|player| engine.state.turn_history.current.player(player).cards_drawn);
+
+    let hand_index = hand_index_for_card(&engine, 0, MINDS_AGLOW);
+    engine
+        .apply_scenario_command(FOUR_PLAYERS[0], &cast_spell(hand_index, vec![]))
+        .expect("cast Minds Aglow");
+    pass_priority_round(&mut engine);
+    let initial_pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("first contribution prompt");
+    assert_eq!(initial_pending.deciding_player, FOUR_PLAYERS[0]);
+    let source_object_id = initial_pending.presentation.source_object_id;
+    let initial_cursor = pending_program_cursor(&engine);
+
+    contribute(
+        &mut engine,
+        FOUR_PLAYERS[0],
+        PaymentMana {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let after_first_contribution = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the next payer is prompted after the accepted contribution");
+    assert_eq!(after_first_contribution.deciding_player, FOUR_PLAYERS[1]);
+    assert_eq!(
+        after_first_contribution.presentation.source_object_id, source_object_id,
+        "the same resolving spell retains the payer prompt"
+    );
+    let cursor_after_first_contribution = pending_program_cursor(&engine);
+    assert_eq!(
+        cursor_after_first_contribution, initial_cursor,
+        "the Join Forces Program cursor remains parked after an accepted contribution"
+    );
+
+    engine
+        .apply_scenario_command(FOUR_PLAYERS[1], &concede())
+        .expect("the current payer may concede before contributing");
+    assert!(engine.state.players[1].has_lost);
+    let after_departure = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the resolving spell resumes for the next living payer");
+    assert_eq!(after_departure.deciding_player, FOUR_PLAYERS[2]);
+    assert_eq!(
+        after_departure.presentation.source_object_id, source_object_id,
+        "the resolving spell survives the current payer's departure"
+    );
+    assert_eq!(
+        pending_program_cursor(&engine),
+        cursor_after_first_contribution,
+        "the parked Program cursor survives a later payer's departure"
+    );
+
+    contribute(
+        &mut engine,
+        FOUR_PLAYERS[2],
+        PaymentMana {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the final payer receives a zero-contribution prompt")
+            .deciding_player,
+        FOUR_PLAYERS[3]
+    );
+    contribute(&mut engine, FOUR_PLAYERS[3], PaymentMana::default());
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    for (index, player) in engine.state.players.iter().enumerate() {
+        if index != 1 {
+            assert_eq!(
+                library_sizes_before[index] - player.library.len(),
+                3,
+                "each living player draws the sum of the accepted one-plus-two contributions"
+            );
+        }
+        let expected_draws = if index == 1 { 0 } else { 3 };
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(FOUR_PLAYERS[index])
+                .cards_drawn
+                - cards_drawn_before[index],
+            expected_draws,
+            "the departed payer is excluded from draws while other players draw the accepted total"
+        );
+    }
+}
+
+#[test]
+fn minds_aglow_completes_with_accepted_total_when_last_payer_concedes() {
+    const FOUR_PLAYERS: [i32; 4] = [4, 9, 27, 31];
+    let decks = Some(vec![vec!["island".into(); 20]; FOUR_PLAYERS.len()]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_705,
+        &FOUR_PLAYERS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, MINDS_AGLOW);
+    give_mana(
+        &mut engine,
+        FOUR_PLAYERS[0],
+        ManaGift {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut engine,
+        FOUR_PLAYERS[1],
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let library_sizes_before = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.library.len())
+        .collect::<Vec<_>>();
+    let cards_drawn_before =
+        FOUR_PLAYERS.map(|player| engine.state.turn_history.current.player(player).cards_drawn);
+
+    let hand_index = hand_index_for_card(&engine, 0, MINDS_AGLOW);
+    engine
+        .apply_scenario_command(FOUR_PLAYERS[0], &cast_spell(hand_index, vec![]))
+        .expect("cast Minds Aglow");
+    pass_priority_round(&mut engine);
+    let first_prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("first contribution prompt");
+    assert_eq!(first_prompt.deciding_player, FOUR_PLAYERS[0]);
+    let source_object_id = first_prompt.presentation.source_object_id;
+    let parked_cursor = pending_program_cursor(&engine);
+
+    contribute(
+        &mut engine,
+        FOUR_PLAYERS[0],
+        PaymentMana {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let second_prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the second payer receives a prompt");
+    assert_eq!(second_prompt.deciding_player, FOUR_PLAYERS[1]);
+    assert_eq!(
+        second_prompt.presentation.source_object_id,
+        source_object_id
+    );
+    assert_eq!(pending_program_cursor(&engine), parked_cursor);
+
+    contribute(
+        &mut engine,
+        FOUR_PLAYERS[1],
+        PaymentMana {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let third_prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the third payer receives a prompt");
+    assert_eq!(third_prompt.deciding_player, FOUR_PLAYERS[2]);
+    assert_eq!(third_prompt.presentation.source_object_id, source_object_id);
+    assert_eq!(pending_program_cursor(&engine), parked_cursor);
+
+    contribute(&mut engine, FOUR_PLAYERS[2], PaymentMana::default());
+    let last_prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the final payer receives a prompt");
+    assert_eq!(last_prompt.deciding_player, FOUR_PLAYERS[3]);
+    assert_eq!(last_prompt.presentation.source_object_id, source_object_id);
+    assert_eq!(pending_program_cursor(&engine), parked_cursor);
+
+    engine
+        .apply_scenario_command(FOUR_PLAYERS[3], &concede())
+        .expect("the last current payer may concede before contributing");
+    assert!(engine.state.players[3].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    for (index, player) in engine.state.players.iter().enumerate() {
+        if index != 3 {
+            assert_eq!(
+                library_sizes_before[index] - player.library.len(),
+                3,
+                "each living player draws the accepted one-plus-two total exactly once"
+            );
+        }
+        let expected_draws = if index == 3 { 0 } else { 3 };
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(FOUR_PLAYERS[index])
+                .cards_drawn
+                - cards_drawn_before[index],
+            expected_draws,
+            "terminal departure draws only for the living players"
         );
     }
 }

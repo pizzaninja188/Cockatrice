@@ -5,9 +5,9 @@ use tricerules_card_model::primitives::{EventZone, ZoneEventCardinality, ZoneEve
 
 pub(super) struct CompletedZoneEntryBatch {
     pub(super) stack: ParkedStackResolution,
-    /// Captured before the batch consumes its completion metadata. This only controls where a
-    /// validated resultless program operation resumes; it does not admit program shapes.
-    pub(super) resume_program: bool,
+    /// Captured before the batch consumes its completion metadata. Typed operation results are
+    /// resumed through the parked Program cursor; legacy lists retain their flat effect cursor.
+    pub(super) program_operation_result: Option<EffectResult>,
 }
 
 #[derive(Clone)]
@@ -111,14 +111,10 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let CompletedZoneEntryBatch {
             stack,
-            resume_program,
+            program_operation_result,
         } = completion;
-        if resume_program {
-            return self.complete_parked_stack_with_previous(
-                stack,
-                EffectResult::default(),
-                events,
-            );
+        if let Some(operation_result) = program_operation_result {
+            return self.complete_parked_stack_with_previous(stack, operation_result, events);
         }
 
         self.complete_parked_resolution_with_previous(
@@ -279,6 +275,7 @@ impl GameEngine {
             library_owner,
             found_ref,
             revealed_refs,
+            ..
         }) = &batch.completion
         {
             let Some(idx) = self.state.player_idx(*library_owner) else {
@@ -391,13 +388,22 @@ impl GameEngine {
                 "zone-entry counters were not processed by the replacement planner",
             ));
         }
-        // The typed completion fact must be captured while the validated LibrarySearch
-        // transaction is still present; the loop below consumes its result metadata.
-        let resume_program = self.is_typed_resultless_library_search_completion(
+        // Capture typed Program outputs before the entry transaction consumes its completion:
+        // resultless searches resume with an empty operation result, while Audacious Reshapers
+        // carries the exact prefix count produced before entry and bottoming.
+        let program_operation_result = if self.is_typed_resultless_library_search_completion(
             &stack,
             batch.origin,
             batch.completion.as_ref(),
-        );
+        ) {
+            Some(EffectResult::default())
+        } else {
+            self.typed_reveal_until_artifact_program_result(
+                &stack,
+                batch.origin,
+                batch.completion.as_ref(),
+            )?
+        };
         self.prune_invalid_zone_entry_auras(&mut batch)?;
         let mut completion = batch.completion;
         let mut committed = HashSet::new();
@@ -561,6 +567,7 @@ impl GameEngine {
             library_owner,
             found_ref,
             revealed_refs,
+            ..
         }) = completion
         {
             self.bottom_revealed_library_refs(
@@ -572,8 +579,57 @@ impl GameEngine {
         }
         Ok(CompletedZoneEntryBatch {
             stack,
-            resume_program,
+            program_operation_result,
         })
+    }
+
+    fn typed_reveal_until_artifact_program_result(
+        &self,
+        stack: &ParkedStackResolution,
+        origin: Zone,
+        completion: Option<&crate::state::ZoneEntryCompletion>,
+    ) -> Result<Option<EffectResult>, EngineError> {
+        let Some(crate::state::ZoneEntryCompletion::RevealUntilArtifact {
+            library_owner,
+            program_result,
+            ..
+        }) = completion
+        else {
+            return Ok(None);
+        };
+        let Some(program) = stack.program.as_ref() else {
+            return Ok(None);
+        };
+        let effect = self.current_program_perform(program)?;
+        if !matches!(effect, SpellEffectKind::RevealUntilArtifact) {
+            return Ok(None);
+        }
+        if origin != Zone::Library
+            || program
+                .in_flight
+                .as_ref()
+                .is_none_or(|outputs| outputs.len() != 1)
+        {
+            return Err(EngineError::ProgramInvariant(
+                "Audacious Reshapers entry lost its typed operation boundary",
+            ));
+        }
+        let program_result = program_result
+            .as_deref()
+            .ok_or(EngineError::ProgramInvariant(
+                "Audacious Reshapers entry lost its exact Program result",
+            ))?;
+        if *library_owner != stack.item.controller
+            || !matches!(
+                program_result.program_value.as_ref(),
+                Some(crate::state::ProgramValue::Count(_))
+            )
+        {
+            return Err(EngineError::ProgramInvariant(
+                "Audacious Reshapers entry retained an invalid scalar result",
+            ));
+        }
+        Ok(Some(program_result.clone()))
     }
 
     /// Randomize the still-current revealed objects to the bottom and renew their object

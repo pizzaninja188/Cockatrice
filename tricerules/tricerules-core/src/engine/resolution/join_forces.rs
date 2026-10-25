@@ -33,6 +33,7 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
         .collect::<Vec<_>>();
     let Some(&first_payer) = payer_order.first() else {
         cx.effect_result.mana_paid = Some(0);
+        cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(0));
         return Ok(EffectOutcome::Continue);
     };
 
@@ -61,7 +62,7 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
             unique_names: false,
         },
         continuation: ResolutionContinuation::JoinForces {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: cx.parked_stack(),
             payment,
             payer_order,
             next_payer: 0,

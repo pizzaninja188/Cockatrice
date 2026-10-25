@@ -6,7 +6,10 @@
       "face_id": "audacious_reshapers",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/activated_abilities/0"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1"
+      ]
     }
   ],
   "primitive_references": [
@@ -20,19 +23,19 @@
     },
     {
       "symbol": "SpellEffectKind::RevealUntilArtifact",
-      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform"
     },
     {
       "symbol": "SpellEffectKind::DamagePlayer",
-      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/DamagePlayer"
     },
     {
-      "symbol": "CountExpression::PreviousEffectRevealedCount",
-      "typed_path": "/faces/0/activated_abilities/0/effect/1/DamagePlayer/amount/Count"
+      "symbol": "CountExpression::ProgramInputCount",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/DamagePlayer/amount/Count"
     },
     {
       "symbol": "PlayerRecipient::Controller",
-      "typed_path": "/faces/0/activated_abilities/0/effect/1/DamagePlayer/who"
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/DamagePlayer/who"
     }
   ],
   "tokens": [],

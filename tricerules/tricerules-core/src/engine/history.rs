@@ -2204,16 +2204,12 @@ impl GameEngine {
                 .map_or(0, |(previous, top)| {
                     super::resolution::card_result_mana_value_sum(self, top, previous)
                 }),
-            CountExpression::PreviousEffectRevealedCount => context
+            CountExpression::ProgramInputCount => context
                 .previous_effect_result
-                .and_then(|previous| match previous.receipt {
-                    Some(ResolutionReceipt::RevealedCardsCount(count)) => Some(count),
+                .and_then(|previous| match previous.program_value.as_ref() {
+                    Some(crate::state::ProgramValue::Count(value)) => Some(*value),
                     _ => None,
                 })
-                .map_or(0, i64::from),
-            CountExpression::PreviousJoinForcesManaPaid => context
-                .previous_effect_result
-                .and_then(|previous| previous.mana_paid)
                 .map_or(0, i64::from),
             CountExpression::MaximumCardsMatchingResult { filter } => context
                 .previous_effect_result

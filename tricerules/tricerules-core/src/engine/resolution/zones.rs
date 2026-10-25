@@ -5265,7 +5265,7 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
 
 pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
-        cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(0));
+        cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(0));
         return Ok(EffectOutcome::Continue);
     };
     let library: Vec<ObjectId> = cx.engine.state.players[player_idx]
@@ -5300,9 +5300,7 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
     }
     let revealed_count = u32::try_from(revealed_refs.len())
         .map_err(|_| EngineError::Illegal("revealed library prefix is too large"))?;
-    cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(
-        revealed_count,
-    ));
+    cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(revealed_count));
     let object_ids: Vec<_> = revealed_refs
         .iter()
         .map(|(object_id, _)| *object_id)
@@ -5317,15 +5315,25 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
 
     if let Some(found_ref) = found {
         let entry = plain_return_entry(cx.engine, found_ref.0, cx.controller);
+        let program_result = cx
+            .program_state
+            .as_ref()
+            .map(|_| Box::new(cx.effect_result.clone()));
         let completion = crate::state::ZoneEntryCompletion::RevealUntilArtifact {
             library_owner: cx.controller,
             found_ref,
             revealed_refs,
+            program_result,
+        };
+        let parked_stack = if cx.program_state.is_some() {
+            cx.parked_stack()
+        } else {
+            ParkedStackResolution::new(cx.top.clone())
         };
         if cx
             .engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(cx.top.clone()),
+                parked_stack,
                 vec![entry],
                 Zone::Library,
                 cx.spell_label,
@@ -5424,7 +5432,6 @@ fn resolve_library_cast_offer(
     let resume_effect_index = cx.effect_index + 1;
     let spell_label = cx.spell_label.to_string();
     let Some(player_index) = cx.engine.state.player_idx(controller) else {
-        cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(0));
         return Ok(EffectOutcome::Continue);
     };
     let library = cx.engine.state.players[player_index]
@@ -5462,11 +5469,6 @@ fn resolve_library_cast_offer(
         }
     }
 
-    let revealed_count = u32::try_from(prefix.len())
-        .map_err(|_| EngineError::Illegal("library cast prefix is too large"))?;
-    cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(
-        revealed_count,
-    ));
     let object_ids = prefix
         .iter()
         .map(|(object_id, _)| *object_id)

@@ -1361,7 +1361,8 @@ impl GameEngine {
                             ProgramValue::ExiledObject(None) => {}
                             value @ (ProgramValue::FoundLibraryCohort(_)
                             | ProgramValue::RevealedLibraryCohort(_)
-                            | ProgramValue::CardPartition(_)) => {
+                            | ProgramValue::CardPartition(_)
+                            | ProgramValue::Count(_)) => {
                                 previous.program_value = Some(value.clone());
                             }
                             _ => {
@@ -2329,6 +2330,14 @@ fn capture_program_outputs_inner(
                 _ => {
                     return Err(EngineError::ProgramInvariant(
                         "cohort reveal did not publish its typed result",
+                    ));
+                }
+            },
+            ResultType::Count(_) => match result.program_value.as_ref() {
+                Some(value @ ProgramValue::Count(_)) => value.clone(),
+                _ => {
+                    return Err(EngineError::ProgramInvariant(
+                        "scalar-count instruction did not publish its typed result",
                     ));
                 }
             },

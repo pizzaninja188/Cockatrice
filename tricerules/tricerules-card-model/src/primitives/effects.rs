@@ -3402,6 +3402,16 @@ impl SpellEffectKind {
         })
     }
 
+    /// A primitive effect list cannot read an explicitly bound scalar result; only a finite
+    /// Program operation can provide the input slot and producer metadata.
+    pub(crate) fn contains_program_input_count(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| {
+            effect
+                .result_consuming_amount()
+                .is_some_and(Amount::uses_program_input_count)
+        })
+    }
+
     /// Owner-library movement is only admitted through its typed, generation-bound Program
     /// operation. The legacy effect list remains available for shared engine callers such as
     /// replacement processing, but authored lists cannot select that path.
@@ -4040,6 +4050,12 @@ impl SpellEffectKind {
         }
         if effects
             .iter()
+            .any(SpellEffectKind::contains_program_input_count)
+        {
+            return Err("ProgramInputCount requires a direct typed Program input".into());
+        }
+        if effects
+            .iter()
             .any(SpellEffectKind::contains_legacy_flat_owner_library_placement)
         {
             return Err(
@@ -4274,37 +4290,6 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
-            }
-            if amount.is_some_and(Amount::uses_previous_effect_revealed_count) {
-                let exact_damage_consumer = matches!(
-                    effect,
-                    SpellEffectKind::DamagePlayer {
-                        amount: Amount::Count(CountExpression::PreviousEffectRevealedCount),
-                        who: PlayerRecipient::Controller,
-                    }
-                );
-                if !exact_damage_consumer
-                    || !matches!(previous, Some(SpellEffectKind::RevealUntilArtifact))
-                {
-                    return Err(
-                        "PreviousEffectRevealedCount requires an immediately preceding RevealUntilArtifact and direct controller DamagePlayer consumer"
-                            .into(),
-                    );
-                }
-            }
-            if amount.is_some_and(Amount::uses_previous_join_forces_mana_paid)
-                && (!matches!(
-                    effect,
-                    SpellEffectKind::Draw {
-                        who: PlayerRecipient::EachPlayer,
-                        count: Amount::Count(CountExpression::PreviousJoinForcesManaPaid),
-                    }
-                ) || !matches!(previous, Some(SpellEffectKind::JoinForces)))
-            {
-                return Err(
-                    "PreviousJoinForcesManaPaid requires an immediately preceding JoinForces and direct EachPlayer Draw consumer"
-                        .into(),
-                );
             }
             if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
                 let expected = TargetFilter {
@@ -6644,43 +6629,59 @@ mod conditional_mass_untap_tests {
 }
 
 #[cfg(test)]
-mod previous_effect_revealed_count_tests {
+mod program_input_count_flat_admission_tests {
     use super::*;
 
-    fn damage(who: PlayerRecipient, amount: Amount) -> SpellEffectKind {
-        SpellEffectKind::DamagePlayer { amount, who }
-    }
-
-    fn revealed_count() -> Amount {
-        Amount::Count(CountExpression::PreviousEffectRevealedCount)
+    fn program_input_count() -> Amount {
+        Amount::Count(CountExpression::ProgramInputCount)
     }
 
     #[test]
-    fn revealed_count_requires_the_direct_controller_damage_consumer() {
-        let valid = [
-            SpellEffectKind::RevealUntilArtifact,
-            damage(PlayerRecipient::Controller, revealed_count()),
-        ];
-        assert!(SpellEffectKind::validate_list(&valid).is_ok());
+    fn flat_program_input_counts_are_rejected_directly_and_when_nested() {
+        let direct = [SpellEffectKind::DamagePlayer {
+            amount: program_input_count(),
+            who: PlayerRecipient::Controller,
+        }];
+        assert!(SpellEffectKind::validate_list(&direct)
+            .unwrap_err()
+            .contains("ProgramInputCount requires a direct typed Program input"));
 
-        let wrong_player = [
-            SpellEffectKind::RevealUntilArtifact,
-            damage(PlayerRecipient::AffectedPlayer, revealed_count()),
-        ];
-        assert!(SpellEffectKind::validate_list(&wrong_player).is_err());
+        let wrong_recipient = [SpellEffectKind::DamagePlayer {
+            amount: program_input_count(),
+            who: PlayerRecipient::AffectedPlayer,
+        }];
+        assert!(SpellEffectKind::validate_list(&wrong_recipient)
+            .unwrap_err()
+            .contains("ProgramInputCount requires a direct typed Program input"));
 
-        let missing_producer = [damage(PlayerRecipient::Controller, revealed_count())];
-        assert!(SpellEffectKind::validate_list(&missing_producer).is_err());
-
-        let intervening_effect = [
-            SpellEffectKind::RevealUntilArtifact,
-            SpellEffectKind::Draw {
-                who: PlayerRecipient::Controller,
-                count: Amount::Fixed(1),
+        let nested = [SpellEffectKind::Draw {
+            who: PlayerRecipient::EachPlayer,
+            count: Amount::DivideRoundedDown {
+                amount: Box::new(program_input_count()),
+                divisor: 2,
             },
-            damage(PlayerRecipient::Controller, revealed_count()),
-        ];
-        assert!(SpellEffectKind::validate_list(&intervening_effect).is_err());
+        }];
+        assert!(SpellEffectKind::validate_list(&nested)
+            .unwrap_err()
+            .contains("ProgramInputCount requires a direct typed Program input"));
+
+        let behold_success = [SpellEffectKind::MayBehold {
+            who: PlayerRecipient::Controller,
+            choice_id: ChoiceId::new("behold").unwrap(),
+            hand_filter: ZoneCardFilter::default(),
+            permanent_filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+            if_beheld: vec![SpellEffectKind::DamagePlayer {
+                amount: program_input_count(),
+                who: PlayerRecipient::Controller,
+            }],
+        }];
+        assert!(SpellEffectKind::validate_list(&behold_success)
+            .unwrap_err()
+            .contains("ProgramInputCount requires a direct typed Program input"));
     }
 }
 

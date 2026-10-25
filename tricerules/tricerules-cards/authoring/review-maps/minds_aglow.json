@@ -5,17 +5,24 @@
       "face_id": "minds_aglow",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1"]
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::JoinForces",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
     },
     {
       "symbol": "SpellEffectKind::Draw",
-      "typed_path": "/faces/0/spell_effect/1"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "CountExpression::ProgramInputCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count"
     }
   ],
   "tokens": [],
@@ -31,6 +38,14 @@
     {
       "test": "scenario deck_coverage_minds_aglow::minds_aglow_resumes_when_its_controller_concedes_during_join_forces",
       "covers": "the parked sorcery continues through remaining payers when its controller concedes"
+    },
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_keeps_accepted_contribution_when_a_later_payer_concedes",
+      "covers": "an accepted contribution remains in the shared total when a later current payer concedes, then only the living players draw that total"
+    },
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_completes_with_accepted_total_when_last_payer_concedes",
+      "covers": "terminal departure of the final payer completes the operation with prior accepted contributions, drawing only for living players"
     },
     {
       "test": "scenario deck_coverage_minds_aglow::minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments",

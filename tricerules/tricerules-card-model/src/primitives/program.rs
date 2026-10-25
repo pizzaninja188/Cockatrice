@@ -279,6 +279,14 @@ pub struct Cardinality {
     pub max: Option<u32>,
 }
 
+/// Producer meaning attached to a shared scalar count slot. Consumers must check this metadata;
+/// a numeric count from an unrelated operation is not interchangeable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CountResultKind {
+    RevealedPrefix,
+    JoinForcesManaPaid,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultType {
     CounterPaymentOutcome,
@@ -350,6 +358,7 @@ pub enum ResultType {
     },
     FoundLibraryCohort,
     RevealedLibraryCohort,
+    Count(CountResultKind),
     CardPartition,
     /// Exact replacement-expanded TriggerObject token cohort from one admitted copy effect.
     TokenCopyBatch,
@@ -1538,6 +1547,25 @@ impl Compiler<'_> {
                     if effect.contains_program_input_player() && !supported_program_input_consumer {
                         return Err(
                             "ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger through a typed Program input".into(),
+                        );
+                    }
+                    let direct_count_input = matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::DamagePlayer {
+                            amount: Amount::Count(CountExpression::ProgramInputCount),
+                            who: PlayerRecipient::Controller,
+                        } | SpellEffectKind::Draw {
+                            who: PlayerRecipient::EachPlayer,
+                            count: Amount::Count(CountExpression::ProgramInputCount),
+                        }
+                    );
+                    if effect
+                        .result_consuming_amount()
+                        .is_some_and(Amount::uses_program_input_count)
+                        && !direct_count_input
+                    {
+                        return Err(
+                            "ProgramInputCount is supported only by direct Controller DamagePlayer or EachPlayer Draw Program inputs".into(),
                         );
                     }
                     let input = compile_input(
@@ -3083,6 +3111,14 @@ fn compile_input(
         EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
             Some("CardResultCohort")
         }
+        EffectOp::DamagePlayer {
+            amount: Amount::Count(CountExpression::ProgramInputCount),
+            who: PlayerRecipient::Controller,
+        }
+        | EffectOp::Draw {
+            who: PlayerRecipient::EachPlayer,
+            count: Amount::Count(CountExpression::ProgramInputCount),
+        } => Some("Count"),
         EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
             Some("DiscardResult")
         }
@@ -3150,6 +3186,20 @@ fn compile_input(
                 EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
                     matches!(actual.result_type, ResultType::DiscardResult { .. })
                 }
+                EffectOp::DamagePlayer {
+                    amount: Amount::Count(CountExpression::ProgramInputCount),
+                    who: PlayerRecipient::Controller,
+                } => matches!(
+                    actual.result_type,
+                    ResultType::Count(CountResultKind::RevealedPrefix)
+                ),
+                EffectOp::Draw {
+                    who: PlayerRecipient::EachPlayer,
+                    count: Amount::Count(CountExpression::ProgramInputCount),
+                } => matches!(
+                    actual.result_type,
+                    ResultType::Count(CountResultKind::JoinForcesManaPaid)
+                ),
                 EffectOp::RevealCohort => {
                     matches!(actual.result_type, ResultType::FoundLibraryCohort)
                 }
@@ -3672,6 +3722,7 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
         (ResultType::RevealedLibraryCohort, ResultType::RevealedLibraryCohort) => {
             ResultType::RevealedLibraryCohort
         }
+        (ResultType::Count(a), ResultType::Count(b)) if a == b => ResultType::Count(*a),
         (ResultType::CardPartition, ResultType::CardPartition) => ResultType::CardPartition,
         (ResultType::TokenCopyBatch, ResultType::TokenCopyBatch) => ResultType::TokenCopyBatch,
         (
@@ -3731,6 +3782,16 @@ fn validate_and_result_types(
             "CounterTargetAbility in a resolution program requires a spell or ability owner"
                 .into(),
         ),
+        SpellEffectKind::RevealUntilArtifact if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::Count(CountResultKind::RevealedPrefix)])
+        }
+        SpellEffectKind::JoinForces => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::Count(
+                CountResultKind::JoinForcesManaPaid,
+            )])
+        }
         SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
             effect.validate(context)?;
             Ok(vec![ResultType::ManifestedPermanent {
@@ -3930,8 +3991,22 @@ fn validate_and_result_types(
                 *who,
                 context,
                 count.card_result_filter().is_some(),
+                matches!(
+                    count,
+                    Amount::Count(CountExpression::ProgramInputCount)
+                ),
             )?;
-            if count.card_result_filter().is_some() {
+            if matches!(
+                count,
+                Amount::Count(CountExpression::ProgramInputCount)
+            ) {
+                if *who != PlayerRecipient::EachPlayer {
+                    return Err(
+                        "ProgramInputCount Draw input requires the EachPlayer recipient".into(),
+                    );
+                }
+                validate_program_amount(count)?;
+            } else if count.card_result_filter().is_some() {
                 // The exact count shape and explicitly bound DiscardResult slot are checked
                 // together during block compilation.
                 if program_draw_result_count_profile(count).is_none() {
@@ -4296,6 +4371,19 @@ fn validate_and_result_types(
                 }
             }
             validate_program_target_filter(target, "DamageTarget target")?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::DamagePlayer {
+            amount,
+            who: PlayerRecipient::Controller,
+        } if matches!(amount, Amount::Count(CountExpression::ProgramInputCount)) => {
+            if context != EffectContext::Ability {
+                return Err(
+                    "ProgramInputCount Controller DamagePlayer input is ability-only".into(),
+                );
+            }
+            effect.validate(context)?;
+            validate_program_amount(amount)?;
             Ok(Vec::new())
         }
         SpellEffectKind::DamagePlayer {
@@ -5220,10 +5308,11 @@ fn validate_program_draw_recipient(
     recipient: PlayerRecipient,
     context: EffectContext,
     has_discard_result_count: bool,
+    has_program_count_input: bool,
 ) -> Result<(), String> {
     if recipient == PlayerRecipient::EachPlayer
-        && context == EffectContext::Spell
-        && has_discard_result_count
+        && ((context == EffectContext::Spell && has_discard_result_count)
+            || has_program_count_input)
     {
         return Ok(());
     }
@@ -5650,6 +5739,9 @@ fn validate_program_create_tokens_amount(
 }
 
 fn validate_program_amount(amount: &Amount) -> Result<(), String> {
+    if matches!(amount, Amount::Count(CountExpression::ProgramInputCount)) {
+        return Ok(());
+    }
     amount.validate_live()?;
     if amount.card_result_filter().is_some() {
         return Err("program amounts cannot read an implicit card result; result consumers require typed bindings".into());
@@ -5715,5 +5807,196 @@ mod result_type_join_tests {
             join_result_types(&exile, &cohort(CardResultAction::Destroy, 0)).is_none(),
             "different card actions cannot join even when they share a target group"
         );
+    }
+}
+
+#[cfg(test)]
+mod scalar_program_input_tests {
+    use super::*;
+
+    fn ability_owner() -> ProgramOwnerId {
+        ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "scalar_fixture".into(),
+            face_id: crate::CardFaceId::new("scalar_fixture_face").expect("valid face ID"),
+            ability_path: vec![AbilityId::new("activated_01").expect("valid ability ID")],
+        })
+    }
+
+    fn instruction(
+        id: &str,
+        bind: &[&str],
+        input: Option<&str>,
+        effect: SpellEffectKind,
+    ) -> Instruction {
+        Instruction {
+            id: id.into(),
+            bind: bind.iter().map(|name| (*name).into()).collect(),
+            input: input.map(str::to_owned),
+            kind: InstructionKind::Perform(Box::new(effect)),
+        }
+    }
+
+    fn compile_ability(steps: Vec<Instruction>) -> Result<CompiledProgram, String> {
+        CompiledProgram::compile(
+            ability_owner(),
+            EffectContext::Ability,
+            &CardProgram {
+                body: AuthoredBlock {
+                    steps,
+                    yields: Vec::new(),
+                },
+                target_bindings: Vec::new(),
+            },
+        )
+    }
+
+    fn reveal_prefix() -> SpellEffectKind {
+        SpellEffectKind::RevealUntilArtifact
+    }
+
+    fn join_forces() -> SpellEffectKind {
+        SpellEffectKind::JoinForces
+    }
+
+    fn scry_zero() -> SpellEffectKind {
+        SpellEffectKind::Scry {
+            count: Amount::Fixed(0),
+        }
+    }
+
+    fn damage_input(who: PlayerRecipient) -> SpellEffectKind {
+        SpellEffectKind::DamagePlayer {
+            amount: Amount::Count(CountExpression::ProgramInputCount),
+            who,
+        }
+    }
+
+    fn draw_input(who: PlayerRecipient) -> SpellEffectKind {
+        SpellEffectKind::Draw {
+            who,
+            count: Amount::Count(CountExpression::ProgramInputCount),
+        }
+    }
+
+    #[test]
+    fn scalar_results_keep_their_producer_meaning_across_a_targetless_step() {
+        let revealed = compile_ability(vec![
+            instruction("reveal", &["prefix"], None, reveal_prefix()),
+            instruction("intervening_noop", &[], None, scry_zero()),
+            instruction(
+                "damage",
+                &[],
+                Some("prefix"),
+                damage_input(PlayerRecipient::Controller),
+            ),
+        ])
+        .expect("RevealUntilArtifact count remains available across Scry(0)");
+        assert_eq!(
+            revealed.slots[0].result_type,
+            ResultType::Count(CountResultKind::RevealedPrefix)
+        );
+        assert_eq!(revealed.body.steps[2].input, Some(ResultSlotId(0)));
+
+        let joined = compile_ability(vec![
+            instruction("join_forces", &["total"], None, join_forces()),
+            instruction("intervening_noop", &[], None, scry_zero()),
+            instruction(
+                "draw",
+                &[],
+                Some("total"),
+                draw_input(PlayerRecipient::EachPlayer),
+            ),
+        ])
+        .expect("Join Forces total remains available across Scry(0)");
+        assert_eq!(
+            joined.slots[0].result_type,
+            ResultType::Count(CountResultKind::JoinForcesManaPaid)
+        );
+        assert_eq!(joined.body.steps[2].input, Some(ResultSlotId(0)));
+    }
+
+    #[test]
+    fn scalar_input_rejects_missing_and_wrong_producer_semantics() {
+        let wrong_join_for_revealed_count = compile_ability(vec![
+            instruction("join_forces", &["total"], None, join_forces()),
+            instruction(
+                "damage",
+                &[],
+                Some("total"),
+                damage_input(PlayerRecipient::Controller),
+            ),
+        ]);
+        assert!(wrong_join_for_revealed_count
+            .unwrap_err()
+            .contains("wrong type"));
+
+        let wrong_reveal_for_join_count = compile_ability(vec![
+            instruction("reveal", &["prefix"], None, reveal_prefix()),
+            instruction(
+                "draw",
+                &[],
+                Some("prefix"),
+                draw_input(PlayerRecipient::EachPlayer),
+            ),
+        ]);
+        assert!(wrong_reveal_for_join_count
+            .unwrap_err()
+            .contains("wrong type"));
+
+        let no_producer = compile_ability(vec![instruction(
+            "damage",
+            &[],
+            Some("missing"),
+            damage_input(PlayerRecipient::Controller),
+        )]);
+        assert!(no_producer.unwrap_err().contains("not in scope"));
+
+        let no_explicit_input = compile_ability(vec![
+            instruction("reveal", &["prefix"], None, reveal_prefix()),
+            instruction(
+                "damage",
+                &[],
+                None,
+                damage_input(PlayerRecipient::Controller),
+            ),
+        ]);
+        assert!(no_explicit_input
+            .unwrap_err()
+            .contains("explicitly bound input"));
+    }
+
+    #[test]
+    fn scalar_input_rejects_wrong_recipients_and_nested_count_reads() {
+        let wrong_recipient = compile_ability(vec![
+            instruction("reveal", &["prefix"], None, reveal_prefix()),
+            instruction(
+                "damage",
+                &[],
+                Some("prefix"),
+                damage_input(PlayerRecipient::AffectedPlayer),
+            ),
+        ]);
+        assert!(wrong_recipient
+            .unwrap_err()
+            .contains("supported only by direct Controller DamagePlayer or EachPlayer Draw"));
+
+        let nested = compile_ability(vec![
+            instruction("join_forces", &["total"], None, join_forces()),
+            instruction(
+                "draw",
+                &[],
+                Some("total"),
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::EachPlayer,
+                    count: Amount::DivideRoundedDown {
+                        amount: Box::new(Amount::Count(CountExpression::ProgramInputCount)),
+                        divisor: 2,
+                    },
+                },
+            ),
+        ]);
+        assert!(nested
+            .unwrap_err()
+            .contains("supported only by direct Controller DamagePlayer or EachPlayer Draw"));
     }
 }

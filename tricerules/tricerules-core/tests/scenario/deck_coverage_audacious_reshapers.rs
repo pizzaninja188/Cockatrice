@@ -122,6 +122,17 @@ fn reveal_cards(batch: &RuledEventBatch) -> Vec<tricerules_proto::ruled::v1::Rev
         .unwrap_or_default()
 }
 
+fn serialized_program_cursor(value: &serde_json::Value) -> Option<serde_json::Value> {
+    if let Some(program) = value.get("program").filter(|program| program.is_object()) {
+        return Some(program.clone());
+    }
+    match value {
+        serde_json::Value::Array(values) => values.iter().find_map(serialized_program_cursor),
+        serde_json::Value::Object(values) => values.values().find_map(serialized_program_cursor),
+        _ => None,
+    }
+}
+
 #[test]
 fn audacious_reshapers_has_a_complete_card_definition() {
     let card = tricerules_cards::registry::global()
@@ -243,6 +254,15 @@ fn revealed_count_survives_a_parked_battlefield_entry_choice() {
     let result = resolve_one(&mut engine);
 
     assert!(engine.state.pending_resolution.is_some());
+    let pending = serde_json::to_value(engine.state.pending_resolution.as_ref())
+        .expect("pending replacement resolution serializes");
+    let program = serialized_program_cursor(&pending)
+        .expect("parked Audacious Reshapers retains its Program cursor");
+    assert_eq!(
+        program["in_flight"].as_array().map(Vec::len),
+        Some(1),
+        "the exact RevealUntilArtifact output remains in flight across entry processing"
+    );
     assert_eq!(
         reveal_cards(&result)
             .iter()

@@ -235,7 +235,6 @@ pub(crate) struct EffectResult {
     /// Provenance required by plural token-copy follow-ups. A general many-object result is not
     /// interchangeable with the exact cohort produced by one replacement-expanded copy effect.
     pub produced_object_provenance: Option<ProducedObjectProvenance>,
-    pub receipt: Option<ResolutionReceipt>,
     /// Accepted outcome of one fixed-cost soft-counter instruction, captured in that program's
     /// private result slot after the payment decision is committed.
     pub counter_payment_outcome: Option<CounterPaymentOutcome>,
@@ -282,11 +281,6 @@ pub(crate) struct CounterPlacementReceipt {
     pub after: u32,
 }
 
-#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ResolutionReceipt {
-    RevealedCardsCount(u32),
-}
-
 impl From<CardResultCohort> for EffectResult {
     fn from(cohort: CardResultCohort) -> Self {
         Self {
@@ -295,7 +289,6 @@ impl From<CardResultCohort> for EffectResult {
             produced_objects: Vec::new(),
             selected_hand_cards: Vec::new(),
             produced_object_provenance: None,
-            receipt: None,
             counter_payment_outcome: None,
             mana_paid: None,
             counter_placements: Vec::new(),
@@ -1443,6 +1436,8 @@ pub(crate) enum ProgramValue {
     CardResultCohort(CardResultCohort),
     FoundLibraryCohort(Vec<ProgramCardRef>),
     RevealedLibraryCohort(ProgramRevealedLibraryCohort),
+    /// An explicitly bound, identity-free scalar emitted by one finite Program operation.
+    Count(u32),
     CardPartition(ProgramCardPartition),
     /// Exact generation-bound tokens created by one copy operation, retained with the
     /// TokenCreationBatch provenance required by the shared Haste and delayed-exile consumers.
@@ -2893,6 +2888,8 @@ pub(crate) enum ZoneEntryCompletion {
         library_owner: PlayerId,
         found_ref: (ObjectId, u64),
         revealed_refs: Vec<(ObjectId, u64)>,
+        /// Exact in-flight Program operation result, retained until entry and bottoming commit.
+        program_result: Option<Box<EffectResult>>,
     },
 }
 
