@@ -34,7 +34,7 @@
   `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`
   and `tricerules/tricerules-card-model/src/primitives/targeting.rs#TargetingDef::validate_optional`; activation and target validation:
   `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability` and
-  `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets`; consumer:
+  `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets_with_context_and_program`; consumer:
   `tricerules/tricerules-core/src/engine/resolution/misc.rs#untap`.
 - **Evidence and limits:** The cited scenarios check cost payment before resolution, unchanged
   source state afterward, self-targeting, the no-op on an untapped artifact, and nonartifact
@@ -86,7 +86,7 @@
 
 ## Review provenance
 
-- **Reviewed revision:** `8cdfb09388b74cd98ff41d7940e54487c3899779`.
+- **Reviewed revision:** `539f6c9038c1ceec5dbf920ce86d85c70afc9cbc`.
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/voltaic_key.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/voltaic_key.json`

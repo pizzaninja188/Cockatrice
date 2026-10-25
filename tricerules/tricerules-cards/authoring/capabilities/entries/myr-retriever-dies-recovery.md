@@ -29,7 +29,7 @@
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
   `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
   and `tricerules/tricerules-card-model/src/primitives/targeting.rs#TargetingDef::validate_optional`; target validator:
-  `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets`; consumer:
+  `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets_with_context_and_program`; consumer:
   `tricerules/tricerules-core/src/engine/resolution/zones.rs#move_graveyard_cards`.
 - **Evidence and limits:** After a board wipe, the test checks the simultaneous-death artifact is
   offered, the source, a nonartifact, and an opponent's artifact are excluded, self-selection is
@@ -61,7 +61,7 @@
 
 ## Review provenance
 
-- **Reviewed revision:** `34bb8f7ccaee20e69ae3d0c90dde65edaf23f76b`.
+- **Reviewed revision:** `539f6c9038c1ceec5dbf920ce86d85c70afc9cbc`.
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/myr_retriever.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/myr_retriever.json`

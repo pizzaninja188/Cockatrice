@@ -69,14 +69,16 @@
 
 ## Review provenance
 
-- **Reviewed revision:** `34bb8f7ccaee20e69ae3d0c90dde65edaf23f76b`.
+- **Reviewed revision:** `539f6c9038c1ceec5dbf920ce86d85c70afc9cbc`.
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/quicksmith_genius.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/quicksmith_genius.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_quicksmith_genius.rs`
   - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
   - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/program.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/triggers.rs`
+  - `tricerules/tricerules-core/src/engine/resolution/program.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`
 - **Review note:** Existing assertions were inspected but not rerun in this documentation phase. No GUI acceptance is claimed.
