@@ -1034,7 +1034,7 @@ pub enum SpellEffectKind {
         amount: Amount,
     },
     /// Myr Battlesphere's inseparable resolution-time tap/count, source bonus and attack
-    /// recipient damage. Consumes the immediately preceding optional controlled Myr choice.
+    /// recipient damage. Consumes a bound optional controlled untapped Myr selection.
     MyrBattlesphereAttack,
     /// Damage each chosen target using the declared division mode. ChooseAtCast distributes a
     /// total (Fire); EvenAtResolution divides a total among legal targets (Fireball); PerTarget
@@ -4292,19 +4292,10 @@ impl SpellEffectKind {
                 }
             }
             if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
-                let expected = TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    controller: TargetController::You,
-                    tapped: Some(false),
-                    required_subtypes: vec!["Myr".into()],
-                    ..Default::default()
-                };
-                if !matches!(previous, Some(SpellEffectKind::ChoosePermanents {
-                    chooser: PlayerRecipient::Controller, filter, min: 0, max: u32::MAX, constraints,
-                }) if *filter == expected && constraints.is_empty())
-                {
-                    return Err("MyrBattlesphereAttack requires an immediately preceding optional controlled untapped Myr choice".into());
-                }
+                return Err(
+                    "MyrBattlesphereAttack requires an explicitly bound Program input result"
+                        .into(),
+                );
             }
             if matches!(effect, SpellEffectKind::UntapChosenPermanents)
                 && !matches!(previous, Some(SpellEffectKind::ChoosePermanents { .. }))

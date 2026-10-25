@@ -1596,6 +1596,7 @@ impl Compiler<'_> {
                         self.allow_koya_outer_exile_result,
                     )?;
                     validate_return_to_owners_hand_input(effect, input, &self.slots)?;
+                    validate_myr_battlesphere_attack_input(effect, input, &self.slots)?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -3062,6 +3063,42 @@ fn validate_return_to_owners_hand_input(
     Ok(())
 }
 
+fn validate_myr_battlesphere_attack_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !matches!(effect, EffectOp::MyrBattlesphereAttack) {
+        return Ok(());
+    }
+    let invalid = || {
+        "MyrBattlesphereAttack input result must be the optional Controller choice of controlled untapped Myr permanents with cardinality 0..=u32::MAX".to_string()
+    };
+    let input = input.ok_or_else(invalid)?;
+    let Some(ResultType::PermanentSelection {
+        chooser,
+        filter,
+        cardinality: Cardinality {
+            min: 0,
+            max: Some(u32::MAX),
+        },
+    }) = slots.get(input.0 as usize).map(|slot| &slot.result_type)
+    else {
+        return Err(invalid());
+    };
+    let expected_filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: super::TargetController::You,
+        tapped: Some(false),
+        required_subtypes: vec!["Myr".into()],
+        ..TargetFilter::default()
+    };
+    if *chooser != PlayerRecipient::Controller || **filter != expected_filter {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
@@ -3080,6 +3117,7 @@ fn compile_input(
             ..
         } => Some("TargetedSpellController"),
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
+        EffectOp::MyrBattlesphereAttack => Some("PermanentSelection"),
         EffectOp::GrantKeywords {
             subject: EffectSubject::PreviousEffectObject,
             ..
@@ -4835,6 +4873,10 @@ fn validate_and_result_types(
                     )
                 }
             }
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::MyrBattlesphereAttack => {
             effect.validate(context)?;
             Ok(Vec::new())
         }

@@ -634,6 +634,10 @@ impl ActivatedAbilityDef {
             .effect
             .iter()
             .any(SpellEffectKind::requires_attack_trigger)
+            || self
+                .program
+                .as_ref()
+                .is_some_and(program_requires_attack_trigger)
         {
             return Err("attack-recipient effects require an attack trigger".into());
         }
@@ -1910,11 +1914,19 @@ impl TriggeredAbilityDef {
             .effect
             .iter()
             .any(SpellEffectKind::requires_attack_trigger)
+            || self
+                .program
+                .as_ref()
+                .is_some_and(program_requires_attack_trigger)
             || self.modal.as_ref().is_some_and(|modal| {
                 modal.modes.iter().any(|mode| {
                     mode.effects
                         .iter()
                         .any(SpellEffectKind::requires_attack_trigger)
+                        || mode
+                            .program
+                            .as_ref()
+                            .is_some_and(program_requires_attack_trigger)
                 })
             });
         if requires_attack && !matches!(self.trigger, TriggerCondition::WheneverSelfAttacks { .. })
@@ -1961,6 +1973,35 @@ impl TriggeredAbilityDef {
             TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
         }
     }
+}
+
+fn program_requires_attack_trigger(program: &crate::CardProgram) -> bool {
+    fn block_requires_attack_trigger(block: &crate::primitives::AuthoredBlock) -> bool {
+        block
+            .steps
+            .iter()
+            .any(|instruction| match &instruction.kind {
+                crate::primitives::InstructionKind::Perform(effect) => {
+                    effect.requires_attack_trigger()
+                }
+                crate::primitives::InstructionKind::If { yes, no, .. }
+                | crate::primitives::InstructionKind::IfResult { yes, no, .. } => {
+                    block_requires_attack_trigger(yes) || block_requires_attack_trigger(no)
+                }
+                crate::primitives::InstructionKind::Choose {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    block_requires_attack_trigger(otherwise)
+                        || branches
+                            .iter()
+                            .any(|branch| block_requires_attack_trigger(&branch.body))
+                }
+                crate::primitives::InstructionKind::ImportCastPayment => false,
+            })
+    }
+    block_requires_attack_trigger(&program.body)
 }
 
 /// A triggered ability created by an action taken during resolution (CR 603.12). It has no
