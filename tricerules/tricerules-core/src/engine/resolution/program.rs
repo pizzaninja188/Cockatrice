@@ -1476,7 +1476,7 @@ impl GameEngine {
                         .and_then(|definition| definition.face(top.face_index))
                         .map(|face| face.name.to_string())
                         .unwrap_or_else(|| top.card_id.clone());
-                    if is_kyoshi_equipment_receipt_attach(compiled, instruction, &effect) {
+                    if is_created_token_receipt_equipment_attach(compiled, instruction, &effect) {
                         if let Some(source_id) = top.source_permanent_id {
                             if let Some(equipment) = super::current_equipment_receipt_source(
                                 self,
@@ -1515,7 +1515,9 @@ impl GameEngine {
                                             .ok_or(EngineError::ProgramInvariant(
                                                 "current Equipment controller is missing from turn order",
                                             ))?;
-                                        let prompt = "Choose one of the Ally creatures created by Kyoshi Battle Fan.".to_string();
+                                        let prompt = format!(
+                                            "Choose one of the creatures created by {label}."
+                                        );
                                         let mut stack = ParkedStackResolution::new(top.clone())
                                             .with_previous_result(previous_result.clone());
                                         stack.program = Some(program_state.clone());
@@ -1569,7 +1571,7 @@ impl GameEngine {
                             }
                         }
                     }
-                    let outcome = if is_kyoshi_equipment_receipt_attach(
+                    let outcome = if is_created_token_receipt_equipment_attach(
                         compiled,
                         instruction,
                         &effect,
@@ -2081,33 +2083,24 @@ struct ProgramTargetContext {
     target_group_indices: Vec<u32>,
 }
 
-/// This runtime continuation belongs only to Kyoshi Battle Fan's exact compiled receipt
-/// consumer. The model compiler separately rejects widened owners and consumer shapes.
-fn is_kyoshi_equipment_receipt_attach(
+/// Route the structural CreatedTokenBatch receipt into its generation-safe chooser. The model
+/// compiler proves the same-block producer and consumer relationship.
+fn is_created_token_receipt_equipment_attach(
     compiled: &CompiledProgram,
     instruction: &tricerules_card_model::primitives::CompiledInstruction,
     effect: &SpellEffectKind,
 ) -> bool {
-    use tricerules_card_model::{AbilityDefinitionId, AbilityId, CardFaceId, ProgramOwnerId};
-
-    let expected_owner = ProgramOwnerId::ability(AbilityDefinitionId {
-        card_id: "kyoshi_battle_fan".into(),
-        face_id: CardFaceId::new("kyoshi_battle_fan").expect("static face id"),
-        ability_path: vec![AbilityId::new("triggered_01").expect("static ability id")],
-    });
-    compiled.owner == expected_owner
-        && matches!(
-            effect,
-            SpellEffectKind::AttachEquipment {
-                equipment: tricerules_card_model::primitives::EffectSubject::Source,
-                creature: tricerules_card_model::primitives::EffectSubject::PreviousEffectObjects,
-            }
-        )
-        && instruction.input.is_some_and(|slot_id| {
-            compiled.slot(slot_id).is_some_and(|slot| {
-                matches!(slot.result_type, ResultType::CreatedTokenBatch { .. })
-            })
-        })
+    matches!(
+        effect,
+        SpellEffectKind::AttachEquipment {
+            equipment: tricerules_card_model::primitives::EffectSubject::Source,
+            creature: tricerules_card_model::primitives::EffectSubject::PreviousEffectObjects,
+        }
+    ) && instruction.input.is_some_and(|slot_id| {
+        compiled
+            .slot(slot_id)
+            .is_some_and(|slot| matches!(slot.result_type, ResultType::CreatedTokenBatch { .. }))
+    })
 }
 
 pub(in crate::engine) fn equipment_receipt_choice_event(
@@ -2131,7 +2124,7 @@ pub(in crate::engine) fn equipment_receipt_choice_event(
                 .get(object_id)
                 .and_then(|object| engine.registry.get(&object.card_id))
                 .map(|definition| definition.name.to_string())
-                .unwrap_or_else(|| "Ally token".to_string())
+                .unwrap_or_else(|| "Creature".to_string())
         })
         .collect();
     Some(rv1::RuledEvent {
@@ -4603,8 +4596,9 @@ mod invariant_rollback_tests {
 
         let owner = tricerules_card_model::ProgramOwnerId::ability(
             tricerules_card_model::AbilityDefinitionId {
-                card_id: "kyoshi_battle_fan".into(),
-                face_id: tricerules_card_model::CardFaceId::new("kyoshi_battle_fan").unwrap(),
+                card_id: "equipment_receipt_fixture".into(),
+                face_id: tricerules_card_model::CardFaceId::new("equipment_receipt_fixture")
+                    .unwrap(),
                 ability_path: vec![tricerules_card_model::AbilityId::new("triggered_01").unwrap()],
             },
         );
@@ -4684,7 +4678,7 @@ mod invariant_rollback_tests {
             &[ResultSlotId(0)],
             &crate::state::EffectResult::default(),
         )
-        .expect("the exact Equipment receipt permits a completed empty token cohort");
+        .expect("a typed CreateTokens receipt records its completed empty cohort");
         assert!(matches!(
             run.slots[0],
             Some(ProgramValue::CreatedTokenBatch(ref objects)) if objects.is_empty()

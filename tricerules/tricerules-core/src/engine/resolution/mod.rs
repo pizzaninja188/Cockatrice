@@ -95,7 +95,7 @@ pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
 mod tokens;
 pub(in crate::engine) mod zones;
 
-/// Resolve the current attachable incarnation of Kyoshi Battle Fan's exact `Source` object.
+/// Resolve the current attachable incarnation of the Program's exact `Source` Equipment object.
 /// Object IDs are insufficient here because a source that leaves and returns is a new object.
 pub(in crate::engine) fn current_equipment_receipt_source(
     engine: &GameEngine,

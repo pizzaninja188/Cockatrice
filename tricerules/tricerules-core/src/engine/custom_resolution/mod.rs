@@ -70,6 +70,18 @@ pub(in crate::engine) fn can_preserve_player_set_discard_after_controller_depart
             .all(|choice| !choice.optional_exact && choice.alternative_filter.is_none())
 }
 
+fn equipment_receipt_source_label(
+    engine: &GameEngine,
+    stack: &crate::state::ParkedStackResolution,
+) -> String {
+    engine
+        .registry
+        .get(&stack.item.card_id)
+        .and_then(|definition| definition.face(stack.item.face_index))
+        .map(|face| face.name.to_string())
+        .unwrap_or_else(|| stack.item.card_id.clone())
+}
+
 impl GameEngine {
     pub(in crate::engine) fn optional_triggered_ability_choice_event(
         &self,
@@ -1628,7 +1640,7 @@ impl GameEngine {
         }
     }
 
-    /// Apply one answer to Kyoshi Battle Fan's exact token receipt without letting generic
+    /// Apply one answer to the exact created-token receipt without letting generic
     /// refresh/choice handling mutate the parked state before validating it.
     fn finish_equipment_receipt_attach_choice(
         &mut self,
@@ -1676,6 +1688,7 @@ impl GameEngine {
         if !current_candidates.contains(&(chosen, expected_generation)) {
             return Err(EngineError::Illegal("stale Equipment receipt choice"));
         }
+        let source_label = equipment_receipt_source_label(self, &attachment.stack);
 
         let pending = self
             .state
@@ -1696,7 +1709,7 @@ impl GameEngine {
             self,
             attachment.equipment.object_id,
             chosen,
-            "Kyoshi Battle Fan",
+            &source_label,
             &mut events,
         ) {
             self.state.pending_resolution = Some(PendingResolution {
@@ -2992,7 +3005,7 @@ impl GameEngine {
         Ok(())
     }
 
-    /// Reconcile the captured Kyoshi token cohort after an authoritative departure or
+    /// Reconcile the captured token cohort after an authoritative departure or
     /// controller change. The first chooser's seat cursor is retained for CR 800.4h delegation.
     pub(in crate::engine) fn refresh_equipment_receipt_attach_departure(
         &mut self,
@@ -3008,6 +3021,7 @@ impl GameEngine {
             return Ok(());
         };
         let mut attachment = *attachment;
+        let source_label = equipment_receipt_source_label(self, &attachment.stack);
         let previous_equipment_controller = attachment.equipment.controller_at_event;
         let Some(equipment) = super::resolution::current_equipment_receipt_source(
             self,
@@ -3043,7 +3057,7 @@ impl GameEngine {
                 self,
                 equipment.object_id,
                 *candidate,
-                "Kyoshi Battle Fan",
+                &source_label,
                 &mut attach_events,
             );
             let completed = self.complete_parked_stack_with_previous(
@@ -3126,12 +3140,12 @@ impl GameEngine {
         refreshed.presentation.candidates =
             candidates.iter().map(|(object_id, _)| *object_id).collect();
         refreshed.presentation.prompt =
-            "Choose one of the Ally creatures created by Kyoshi Battle Fan.".into();
+            format!("Choose one of the creatures created by {source_label}.");
         self.state.pending_resolution = Some(refreshed);
         events.push(ev_log(if chooser_changed {
-            format!("P{next_decider} now makes Kyoshi Battle Fan's Equipment receipt choice.")
+            format!("P{next_decider} now makes {source_label}'s Equipment receipt choice.")
         } else {
-            "Kyoshi Battle Fan's available Ally choices have changed.".into()
+            format!("{source_label}'s available creature choices have changed.")
         }));
         events.push(
             super::resolution::equipment_receipt_choice_event(self).ok_or(

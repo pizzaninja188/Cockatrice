@@ -204,25 +204,35 @@ assertions. The runtime has a direct skipped-entry disposition, but the current 
 not provide a scenario that produces that disposition; report that evidence as deferred rather
 than treating ordinary successful entry coverage as proof of it.
 
-Kyoshi Battle Fan's `triggered_01` has its own exact token-receipt profile: an ordinary untapped
-`CreateTokens(token: ally_w_1_1, count: 1, who: Controller)` binds `CreatedTokenBatch(0..*)`,
-consumed by a same-block `AttachEquipment(input: created_tokens, equipment: Source,
-creature: PreviousEffectObjects)`; an intervening resultless instruction is allowed. The receipt is the complete replacement-expanded token cohort,
-including a completed empty result, with each token's exact object and generation. Only this
-producer, binding, input, owner and recipient shape is admitted; this specialized use records the
-whole cohort because one created token auto-attaches, several require a choice, and an empty batch
-does nothing. `AttachEquipment` also supports distinct mechanics with targeted subjects on
-Swordsman and Sharp Scoundrel, and a selected Equipment on Vow to Erebor; those do not consume this
-token receipt.
+For token-cohort attachment, bind a `CreateTokens` result as `CreatedTokenBatch(0..*)` and consume
+that exact same-block `CreateTokens` result with
+`AttachEquipment(input: created_tokens, equipment: Source, creature: PreviousEffectObjects)`.
+An intervening resultless instruction is allowed. The receipt is the complete
+replacement-expanded cohort, including a completed empty result, with each token's exact object
+and generation. The compiler applies the existing `CreateTokens` validity checks and token
+registration; token identity, amount, recipient, tapped state and sacrifice timing are not further
+restricted by the Equipment-receipt profile. At resolution, an empty cohort does nothing, one legal
+creature attaches automatically, and several legal creatures are offered to the current Equipment
+controller through the generation-safe chooser. Kyoshi Battle Fan is one consumer of this
+structural path. `ManifestDread -> ManifestedPermanent -> AttachEquipment` remains a different
+typed receipt, while `AttachEquipment` also supports targeted-subject mechanics on Swordsman and
+Sharp Scoundrel.
 
-Vow to Erebor's spell Program is admitted only for its exact face and target shape. Bind the same
-caster-controlled creature target to untap and +2/+2, test that target for the Dwarf subtype in a
-resolution-time `GameCondition(ObjectMatches(...))` branch, then offer zero or one of the caster's
-Equipment with `EquipmentAttachableTo(ChosenTarget(0, 0))`. Attach only the exact selected Equipment
-to that already-targeted creature. The selection is optional and is not an additional target
-(CR 115.10, 608.2d). This narrow owner profile permits the chosen-target reference needed by the
-live Dwarf guard and attachment constraint; it does not admit widened target filters, constraints,
-or conditions for other owners.
+For selected-Equipment attachment, bind the same target group to
+`AttachEquipment(equipment: PreviousEffectObject, creature: Chosen(creature))`. A same-block
+`ChoosePermanents` instruction must declare `min: 0` or `1`, `max: 1`, and an Equipment filter; its
+`EquipmentAttachableTo(ChosenTarget(group, 0))` constraint must reference that attachment's
+single-target creature group. Its typed selection receipt remains cardinality `0..1` because no
+legal candidate can complete empty. The creature target group may be optional or required and must
+have `max: 1`; every bound role must be creature-only. The Equipment selection is not an
+additional target (CR 115.10a, 608.2d). This optional-target admission applies to authored
+Programs; legacy flat-effect target constraints retain their existing required-singleton rule. A
+`GameCondition(ObjectMatches(ChosenTarget(...)))` guard can inspect
+that same typed creature reference; target-group existence, index and creature-role checks remain
+in `TargetSchema`, including when the target is optional. Card-specific guard logic belongs in the
+Program: Vow to Erebor uses a live Dwarf check, while another owner may use a different guard or no
+guard. The shared runtime still filters choices with current attachment legality and completes an
+empty optional selection without repeating later instructions.
 
 The finite tree has `Perform` leaves and nested `If`/`IfResult`/`Choose` blocks; no loops, jumps or
 authored functions. `Choose` consumes no prior result and requires at least one branch; its chooser

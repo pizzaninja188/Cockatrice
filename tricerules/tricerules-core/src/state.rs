@@ -1445,8 +1445,8 @@ pub(crate) enum ProgramValue {
     /// Exact generation-bound tokens created by one copy operation, retained with the
     /// TokenCreationBatch provenance required by the shared Haste and delayed-exile consumers.
     TokenCopyBatch(Vec<TriggerObjectRef>),
-    /// Exact replacement-expanded ordinary tokens created by Kyoshi Battle Fan's authored
-    /// `CreateTokens` instruction. An empty vector is a completed batch, not an unwritten slot.
+    /// Exact replacement-expanded ordinary tokens created by a typed `CreateTokens` instruction.
+    /// An empty vector is a completed batch, not an unwritten slot.
     CreatedTokenBatch(Vec<TriggerObjectRef>),
     /// The exact new current linked-Exile member produced by a typed Exile instruction.
     /// `None` is a proven attempted Exile with no current linked object.
@@ -1554,7 +1554,7 @@ pub(crate) struct ProgramRunState {
     pub in_flight_produced_object_provenance: Option<ProducedObjectProvenance>,
 }
 
-/// Kyoshi Battle Fan's receipt-scoped recipient selection. `turn_order_cursor` records the last
+/// A Program's receipt-scoped recipient selection. `turn_order_cursor` records the last
 /// player offered this rule-required choice so departure delegation advances from that seat even
 /// after CR 800.4a changes the Equipment controller.
 #[derive(serde::Serialize, Debug, Clone)]

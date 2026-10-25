@@ -406,6 +406,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             {
                 return Err("targeted program instruction has no authored target group".into());
             }
+            validate_program_creature_target_references(&program.body, &[])?;
             return Ok(Self {
                 groups: Vec::new(),
                 effect_role_counts,
@@ -735,6 +736,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             );
         }
 
+        validate_program_creature_target_references(&program.body, &groups)?;
         Ok(Self {
             groups,
             effect_role_counts,
@@ -916,28 +918,12 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                             .into(),
                     );
                 };
-                if *target_index != 0 {
-                    return Err(
-                        "Equipment attachment choice requires the first target of an exactly-one group"
-                            .into(),
-                    );
-                }
-                let group = schema.groups.get(*group_index as usize).ok_or_else(|| {
-                    "Equipment attachment choice references an unknown target group".to_string()
-                })?;
-                if group.min != 1
-                    || group.max != 1
-                    || group.bindings.is_empty()
-                    || group
-                        .bindings
-                        .iter()
-                        .any(|binding| !binding.role.is_creature_only())
-                {
-                    return Err(
-                        "Equipment attachment choice requires an exactly-one creature target group"
-                            .into(),
-                    );
-                }
+                validate_singleton_creature_target_reference(
+                    &schema.groups,
+                    *group_index,
+                    *target_index,
+                    false,
+                )?;
             }
             Ok(())
         }
@@ -947,6 +933,149 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         }
         Ok(())
     }
+}
+
+fn validate_program_creature_target_references(
+    block: &CompiledBlock,
+    groups: &[TargetGroupSchema<'_, '_>],
+) -> Result<(), String> {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            CompiledInstructionKind::Perform(effect) => {
+                validate_program_effect_target_references(effect, groups)?;
+            }
+            CompiledInstructionKind::If {
+                condition, yes, no, ..
+            } => {
+                validate_program_condition_target_references(condition, groups)?;
+                validate_program_creature_target_references(yes, groups)?;
+                validate_program_creature_target_references(no, groups)?;
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    if let super::CompiledChooseRequirement::GameCondition(condition) =
+                        &branch.requirement
+                    {
+                        validate_game_condition_target_references(condition, groups)?;
+                    }
+                    validate_program_creature_target_references(&branch.body, groups)?;
+                }
+                validate_program_creature_target_references(otherwise, groups)?;
+            }
+            CompiledInstructionKind::ImportCastPayment => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_program_effect_target_references(
+    effect: &SpellEffectKind,
+    groups: &[TargetGroupSchema<'_, '_>],
+) -> Result<(), String> {
+    match effect {
+        SpellEffectKind::ChoosePermanents { constraints, .. } => {
+            for constraint in constraints {
+                let PermanentChoiceConstraint::EquipmentAttachableTo { recipient } = constraint;
+                let ConditionObjectRef::ChosenTarget {
+                    group_index,
+                    target_index,
+                } = recipient
+                else {
+                    return Err(
+                        "Equipment attachment choice must reference a chosen creature target"
+                            .into(),
+                    );
+                };
+                validate_singleton_creature_target_reference(
+                    groups,
+                    *group_index,
+                    *target_index,
+                    true,
+                )?;
+            }
+        }
+        SpellEffectKind::Conditional { condition, effect } => {
+            validate_game_condition_target_references(condition, groups)?;
+            validate_program_effect_target_references(effect, groups)?;
+        }
+        SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            validate_program_effect_target_references(effect, groups)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_program_condition_target_references(
+    condition: &super::CompiledProgramCondition,
+    groups: &[TargetGroupSchema<'_, '_>],
+) -> Result<(), String> {
+    if let super::CompiledProgramCondition::Game(condition) = condition {
+        validate_game_condition_target_references(condition, groups)?;
+    }
+    Ok(())
+}
+
+fn validate_game_condition_target_references(
+    condition: &super::GameCondition,
+    groups: &[TargetGroupSchema<'_, '_>],
+) -> Result<(), String> {
+    match condition {
+        super::GameCondition::ObjectMatches {
+            object:
+                ConditionObjectRef::ChosenTarget {
+                    group_index,
+                    target_index,
+                },
+            ..
+        } => {
+            validate_singleton_creature_target_reference(groups, *group_index, *target_index, true)
+        }
+        super::GameCondition::AllOf(branches) | super::GameCondition::AnyOf(branches) => {
+            for branch in branches {
+                validate_game_condition_target_references(branch, groups)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_singleton_creature_target_reference(
+    groups: &[TargetGroupSchema<'_, '_>],
+    group_index: u32,
+    target_index: u32,
+    optional_target_allowed: bool,
+) -> Result<(), String> {
+    if target_index != 0 {
+        return Err("chosen creature reference requires the first target of its group".into());
+    }
+    let group = groups
+        .get(group_index as usize)
+        .ok_or_else(|| "chosen creature reference uses an unknown target group".to_string())?;
+    if (!optional_target_allowed && group.min != 1)
+        || (optional_target_allowed && group.min > 1)
+        || group.max != 1
+        || group.bindings.is_empty()
+        || group
+            .bindings
+            .iter()
+            .any(|binding| !binding.role.is_creature_only())
+    {
+        let cardinality = if optional_target_allowed {
+            "an optional or required singleton"
+        } else {
+            "a required singleton"
+        };
+        return Err(format!(
+            "chosen creature reference requires {cardinality} creature target group"
+        ));
+    }
+    Ok(())
 }
 
 fn collect_program_target_roles<'a>(

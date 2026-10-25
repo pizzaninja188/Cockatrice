@@ -6301,10 +6301,6 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
 
     for (label, near_miss) in [
         (
-            "wrong token identity",
-            source.replace("ally_w_1_1", "soldier_w_1_1"),
-        ),
-        (
             "unbound producer",
             source.replace("bind: [\"created_tokens\"]", "bind: []"),
         ),
@@ -6357,7 +6353,7 @@ fn equipment_receipt_program_compiler_admits_exact_created_token_batch_consumer(
 }
 
 #[test]
-fn equipment_receipt_program_compiler_admits_only_exact_vow_dwarf_target_guard() {
+fn equipment_selection_program_compiler_admits_generic_target_guard_and_attachment_choice() {
     let exact = "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))";
     let compiled = compile_vow_equipment_program(exact, "vow_to_erebor");
     assert!(
@@ -6383,40 +6379,47 @@ fn equipment_receipt_program_compiler_admits_only_exact_vow_dwarf_target_guard()
     );
     assert!(branches[0].body.steps[1].outputs.is_empty());
 
-    for (label, card_id, widened) in [
+    for (label, widened) in [
         (
             "another target group",
-            "vow_to_erebor",
             "ObjectMatches(object: ChosenTarget(group_index: 1, target_index: 0), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))",
         ),
         (
             "another target index",
-            "vow_to_erebor",
             "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 1), filter: (kind: Creature, required_subtypes: [\"Dwarf\"]))",
         ),
+    ] {
+        assert!(
+            compile_vow_equipment_program(widened, "vow_to_erebor").is_err(),
+            "Equipment target schema must reject {label}"
+        );
+    }
+
+    for (label, guard) in [
         (
-            "widened permanent filter",
-            "vow_to_erebor",
+            "alternate permanent-shaped guard",
             "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: AnyPermanent, required_subtypes: [\"Dwarf\"]))",
         ),
         (
-            "missing Dwarf restriction",
-            "vow_to_erebor",
+            "guard without a Dwarf restriction",
             "ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0), filter: (kind: Creature))",
         ),
-        ("wrong face owner", "vow_fixture", exact),
     ] {
         assert!(
-            compile_vow_equipment_program(widened, card_id).is_err(),
-            "Vow compiler must reject {label}"
+            compile_vow_equipment_program(guard, "vow_to_erebor").is_ok(),
+            "generic Program conditions should admit {label}"
         );
     }
+    assert!(
+        compile_vow_equipment_program(exact, "vow_fixture").is_ok(),
+        "the structural Equipment compiler must not depend on the owning card name"
+    );
 
     let widened_target_filter =
         vow_equipment_program_ron(exact).replacen("controller: You", "controller: Any", 1);
     assert!(
-        compile_vow_equipment_program_source(&widened_target_filter, "vow_to_erebor").is_err(),
-        "Vow's target-bound effect filter must not widen beyond a creature controlled by its caster"
+        compile_vow_equipment_program_source(&widened_target_filter, "vow_to_erebor").is_ok(),
+        "generic target bindings should admit a supported alternate creature controller filter"
     );
 
     let unbounded_equipment_choice = vow_equipment_program_ron(exact).replace(
@@ -6444,6 +6447,184 @@ fn equipment_receipt_program_compiler_admits_only_exact_vow_dwarf_target_guard()
         .is_err(),
         "Vow's equipment selection must retain the exact live attachment constraint"
     );
+}
+
+fn equipment_reuse_program_owner() -> crate::ProgramOwnerId {
+    crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "equipment_reuse_fixture".into(),
+        face_id: crate::CardFaceId::new("equipment_reuse_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    })
+}
+
+fn equipment_selection_program_ron(
+    guard_group: u32,
+    constraint_group: Option<u32>,
+    constraint_target: u32,
+    equipment_min: u32,
+    equipment_max: u32,
+) -> String {
+    let constraints = constraint_group.map_or_else(
+        || "[]".to_string(),
+        |group| {
+            format!(
+                "[EquipmentAttachableTo(recipient: ChosenTarget(group_index: {group}, target_index: {constraint_target}))]"
+            )
+        },
+    );
+    format!(
+        r#"(body: (steps: [
+            (id: "tap_target", bind: [], input: None,
+                kind: Perform(Tap(subject: Chosen((kind: Creature, controller: Any))))),
+            (id: "dwarf_gate", bind: [], input: None, kind: Choose(
+                choice: "dwarf_gate", chooser: Controller, optional: false,
+                branches: [(
+                    branch_id: "elf", presentation: Fallback, cost: None,
+                    requirement: GameCondition(ObjectMatches(
+                        object: ChosenTarget(group_index: {guard_group}, target_index: 0),
+                        filter: (kind: Creature, required_subtypes: ["Elf"]),
+                    )),
+                    body: (steps: [
+                        (id: "choose_equipment", bind: ["selected_equipment"], input: None,
+                            kind: Perform(ChoosePermanents(
+                                chooser: Controller,
+                                filter: (kind: AnyPermanent, controller: Any,
+                                    required_subtypes: ["Equipment"]),
+                                min: {equipment_min}, max: {equipment_max},
+                                constraints: {constraints},
+                            ))),
+                        (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
+                            kind: Perform(AttachEquipment(
+                                equipment: PreviousEffectObject,
+                                creature: Chosen((kind: Creature, controller: Any))))),
+                    ], yields: []),
+                )],
+                otherwise: (steps: [], yields: []),
+            )),
+            (id: "tail", bind: [], input: None, kind: Perform(GainLife(amount: 1))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "tap_target", role: Target, target_group_index: 0),
+            (instruction_id: "attach_equipment", role: Target, target_group_index: 1),
+        ])"#
+    )
+}
+
+fn compile_equipment_selection_program(
+    source: &str,
+    target_min: u32,
+) -> Result<super::CompiledProgram, String> {
+    let program: super::CardProgram = ron::from_str(source).expect("Equipment Program parses");
+    let targeting: super::TargetingDef = ron::from_str(&format!(
+        r#"(groups: [
+            (min: 1, max: 1, prompt: "Choose target creature to tap", effect_indices: []),
+            (min: {target_min}, max: 1, prompt: "Choose an optional target creature", effect_indices: []),
+        ])"#
+    ))
+    .expect("Equipment target groups parse");
+    super::CompiledProgram::compile_with_targeting(
+        equipment_reuse_program_owner(),
+        super::EffectContext::Ability,
+        &program,
+        Some(&targeting),
+    )
+}
+
+#[test]
+fn equipment_receipt_program_compiler_admits_structural_token_batch() {
+    let source = r#"(body: (steps: [
+            (id: "create_tokens", bind: ["created_tokens"], input: None,
+                kind: Perform(CreateTokens(token: "soldier_w_1_1", count: 2,
+                    who: SourceController, tapped: true,
+                    sacrifice_timing: Some(NextEndStep)))),
+            (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
+                kind: Perform(AttachEquipment(
+                    equipment: Source, creature: PreviousEffectObjects))),
+        ], yields: []), target_bindings: [])"#;
+    let program: super::CardProgram = ron::from_str(source).expect("structural Program parses");
+    let compiled = super::CompiledProgram::compile(
+        equipment_reuse_program_owner(),
+        super::EffectContext::Ability,
+        &program,
+    );
+    assert!(
+        compiled.is_ok(),
+        "a registered two-token, tapped, delayed-sacrifice cohort must produce a structural receipt: {compiled:?}"
+    );
+    let compiled = compiled.unwrap();
+    assert!(matches!(
+        compiled
+            .slot(compiled.body.steps[0].outputs[0])
+            .map(|slot| &slot.result_type),
+        Some(super::ResultType::CreatedTokenBatch {
+            cardinality: super::Cardinality { min: 0, max: None }
+        })
+    ));
+}
+
+#[test]
+fn equipment_selection_program_admits_generic_optional_target_and_constraint() {
+    let source = equipment_selection_program_ron(1, Some(1), 0, 1, 1);
+    let compiled = compile_equipment_selection_program(&source, 0);
+    assert!(
+        compiled.is_ok(),
+        "a non-Vow ability may choose one Equipment for its optional group-1 creature target under a generic Elf guard: {compiled:?}"
+    );
+    let compiled = compiled.unwrap();
+    assert!(compiled
+        .target_bindings
+        .iter()
+        .any(|binding| binding.target_group_index == 1));
+    let receipt = compiled
+        .slots
+        .iter()
+        .find(|slot| slot.name == "selected_equipment")
+        .expect("Equipment selection receipt is bound");
+    assert!(matches!(
+        receipt.result_type,
+        super::ResultType::PermanentSelection {
+            cardinality: super::Cardinality {
+                min: 0,
+                max: Some(1)
+            },
+            ..
+        }
+    ));
+    assert!(
+        compile_equipment_selection_program(
+            &equipment_selection_program_ron(1, Some(1), 0, 1, 1),
+            1,
+        )
+        .is_ok(),
+        "mandatory singleton creature targets remain valid"
+    );
+
+    for (label, invalid) in [
+        (
+            "choice constraint group mismatch",
+            equipment_selection_program_ron(1, Some(0), 0, 1, 1),
+        ),
+        (
+            "choice constraint target index",
+            equipment_selection_program_ron(1, Some(1), 1, 1, 1),
+        ),
+        (
+            "unknown guard group",
+            equipment_selection_program_ron(2, Some(1), 0, 1, 1),
+        ),
+        (
+            "unconstrained Equipment selection",
+            equipment_selection_program_ron(1, None, 0, 1, 1),
+        ),
+        (
+            "multi-Equipment selection",
+            equipment_selection_program_ron(1, Some(1), 0, 1, 2),
+        ),
+    ] {
+        assert!(
+            compile_equipment_selection_program(&invalid, 0).is_err(),
+            "Equipment selection Program must reject {label}"
+        );
+    }
 }
 
 #[test]
@@ -8097,8 +8278,9 @@ fn registry_checks_cast_snapshot_references_inside_nested_if_result_blocks() {
 #[test]
 fn spell_program_create_tokens_accepts_typed_graveyard_count() {
     use crate::primitives::{
-        Amount, CompiledInstructionKind, CompiledProgram, CountExpression, EffectContext,
-        PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+        Amount, CompiledInstructionKind, CompiledProgram, CountExpression,
+        DelayedTokenSacrificeTiming, EffectContext, PlayerRecipient, RelativePlayerSet,
+        SpellEffectKind,
     };
 
     let compile =
@@ -8192,16 +8374,39 @@ fn spell_program_create_tokens_accepts_typed_graveyard_count() {
         );
     }
 
-    for (label, who, sacrifice) in [
-        ("spell source controller", "SourceController", "None"),
-        ("delayed sacrifice", "Controller", "Some(NextEndStep)"),
-    ] {
+    {
+        let (label, who, sacrifice) = ("spell source controller", "SourceController", "None");
         let id = format!("unsupported_{}", label.replace(' ', "_"));
         assert!(
             compile(&id, count, "generic_token", who, false, sacrifice,).is_err(),
             "the spell token profile rejects {label}"
         );
     }
+
+    let delayed = compile(
+        "spell_delayed_sacrifice",
+        count,
+        "generic_token",
+        "Controller",
+        false,
+        "Some(NextEndStep)",
+    )
+    .expect("spell Programs may create a delayed-sacrifice token cohort");
+    let [instruction] = delayed.body.steps.as_slice() else {
+        panic!("delayed token creation remains one instruction")
+    };
+    assert!(matches!(
+        &instruction.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::CreateTokens {
+                    who: PlayerRecipient::Controller,
+                    sacrifice_timing: Some(DelayedTokenSacrificeTiming::NextEndStep),
+                    ..
+                }
+            )
+    ));
 }
 
 #[test]
