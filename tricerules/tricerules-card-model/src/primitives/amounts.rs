@@ -118,6 +118,20 @@ pub enum CountExpression {
     PreviousMillManaValueSum,
     /// A direct, explicitly bound scalar input to one finite resolution Program instruction.
     ProgramInputCount,
+    /// Authoring-only count marker. The Program compiler projects source, action, and player scope
+    /// from the instruction's explicitly bound typed result slot before storing the effect.
+    BoundCardResultCount {
+        aggregation: ProgramBoundResultAggregation,
+        card_type: Option<CardTypeFilter>,
+    },
+}
+
+/// Aggregation choices accepted by the authoring-only bound card-result count marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProgramBoundResultAggregation {
+    Total,
+    ForAffectedPlayer,
+    MaximumPerPlayer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,6 +268,7 @@ impl CountExpression {
                                 | Self::CardResultCharacteristicSum { .. }
                                 | Self::PreviousMillManaValueSum
                                 | Self::ProgramInputCount
+                                | Self::BoundCardResultCount { .. }
                         )
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
@@ -276,6 +291,10 @@ impl CountExpression {
             | CountExpression::CardResultCharacteristicSum { .. }
             | CountExpression::PreviousMillManaValueSum
             | CountExpression::ProgramInputCount => Ok(()),
+            CountExpression::BoundCardResultCount { .. } => Err(
+                "BoundCardResultCount must be lowered from an explicitly bound typed Program input"
+                    .into(),
+            ),
         }
     }
 
@@ -295,6 +314,16 @@ impl CountExpression {
             Self::Affine { terms, .. } => terms
                 .iter()
                 .any(|term| term.quantity.uses_program_input_count()),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn uses_bound_card_result_count(&self) -> bool {
+        match self {
+            Self::BoundCardResultCount { .. } => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .any(|term| term.quantity.uses_bound_card_result_count()),
             _ => false,
         }
     }
@@ -374,6 +403,14 @@ impl Amount {
         match self {
             Self::Count(expression) => expression.uses_program_input_count(),
             Self::DivideRoundedDown { amount, .. } => amount.uses_program_input_count(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn uses_bound_card_result_count(&self) -> bool {
+        match self {
+            Self::Count(expression) => expression.uses_bound_card_result_count(),
+            Self::DivideRoundedDown { amount, .. } => amount.uses_bound_card_result_count(),
             _ => false,
         }
     }

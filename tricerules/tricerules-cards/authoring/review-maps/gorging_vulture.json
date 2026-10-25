@@ -18,7 +18,7 @@
         "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Mill",
         "/faces/0/triggered_abilities/0/program/body/steps/1/input",
         "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife",
-        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/CardsMatchingResult"
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/BoundCardResultCount"
       ]
     }
   ],
@@ -40,8 +40,8 @@
       "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife"
     },
     {
-      "symbol": "CountExpression::CardsMatchingResult",
-      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/CardsMatchingResult"
+      "symbol": "CountExpression::BoundCardResultCount",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/GainLife/amount/Count/BoundCardResultCount"
     }
   ],
   "tokens": [],

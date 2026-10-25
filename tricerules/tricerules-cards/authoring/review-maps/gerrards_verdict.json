@@ -14,7 +14,7 @@
         "/faces/0/spell_program/body/steps/1/input",
         "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife",
         "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine",
-        "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/CardsMatchingResult"
+        "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/BoundCardResultCount"
       ]
     }
   ],
@@ -41,8 +41,8 @@
       "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine"
     },
     {
-      "symbol": "CountExpression::CardsMatchingResult",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/CardsMatchingResult"
+      "symbol": "CountExpression::BoundCardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/GainLife/amount/Count/Affine/terms/0/quantity/BoundCardResultCount"
     }
   ],
   "semantic_fixtures": [

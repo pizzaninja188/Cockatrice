@@ -1,9 +1,8 @@
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
-    Amount, CardResultAction, CardResultFilter, CardResultSource, CountExpression, DiscardQuantity,
-    InstructionKind, LibraryDrawReplacement, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
-    StaticAbilityDef,
+    Amount, CountExpression, DiscardQuantity, InstructionKind, LibraryDrawReplacement,
+    PlayerRecipient, ProgramBoundResultAggregation, SpellEffectKind, StaticAbilityDef,
 };
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision, SubmitResolutionChoice};
@@ -130,13 +129,9 @@ fn flux_has_its_complete_oracle_effect_sequence() {
         InstructionKind::Perform(effect)
             if matches!(effect.as_ref(), SpellEffectKind::Draw {
                 who: PlayerRecipient::EachPlayer,
-                count: Amount::Count(CountExpression::CardsMatchingResultForAffectedPlayer {
-                    filter: CardResultFilter {
-                        source: CardResultSource::PreviousEffect,
-                        action: CardResultAction::Discard,
-                        players: RelativePlayerSet::All,
-                        card_type: None,
-                    },
+                count: Amount::Count(CountExpression::BoundCardResultCount {
+                    aggregation: ProgramBoundResultAggregation::ForAffectedPlayer,
+                    card_type: None,
                 }),
             })
     ));

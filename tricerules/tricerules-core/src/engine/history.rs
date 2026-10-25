@@ -2211,6 +2211,9 @@ impl GameEngine {
                     _ => None,
                 })
                 .map_or(0, i64::from),
+            CountExpression::BoundCardResultCount { .. } => {
+                unreachable!("BoundCardResultCount must be lowered before runtime evaluation")
+            }
             CountExpression::MaximumCardsMatchingResult { filter } => context
                 .previous_effect_result
                 .zip(context.stack_item)

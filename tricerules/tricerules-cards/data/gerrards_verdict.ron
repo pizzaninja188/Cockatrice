@@ -14,10 +14,9 @@
         card_filter: None, optional: false))),
     (id: "gain_life", bind: [], input: Some("discarded"),
       kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
-        (coefficient: 3, quantity: CardsMatchingResult(filter: (
-          source: PreviousEffect, action: Discard, players: All,
-          card_type: Some(Land),
-        )))
+        (coefficient: 3, quantity: BoundCardResultCount(
+          aggregation: Total, card_type: Some(Land),
+        ))
       ])))))
   ], yields: []), target_bindings: [
     (instruction_id: "discard", role: Target, target_group_index: 0),

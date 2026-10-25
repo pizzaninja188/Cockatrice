@@ -12729,7 +12729,12 @@ fn program_gain_life_result_count_rejects_wrong_scope_shape_and_overflow() {
     );
     let error = crate::CardRegistry::from_chunks_and_tokens(&[&unbounded], &[])
         .expect_err("the producer receipt must have a finite upper bound");
-    assert!(error.to_string().contains("finite matching"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("finite typed result-slot cardinality"),
+        "{error}"
+    );
 
     let mismatched_filter = program_gain_life_result_fixture(
         "gain_life_result_mismatched_filter",
@@ -13780,6 +13785,537 @@ fn spell_program_draw_counts_read_the_explicit_discard_result_slot() {
         crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
             .expect_err(&format!("unsupported typed Draw count must reject: {case}"));
     }
+}
+
+#[test]
+fn bound_card_result_count_lowers_to_existing_mill_count() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "mill", bind: ["milled"], kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "gain", input: Some("milled"), kind: Perform(GainLife(amount: Count(
+                BoundCardResultCount(aggregation: Total, card_type: Some(Creature))
+            ))))
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the bound count marker lowers through the exact typed Mill result slot");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture face owns its compiled Program");
+    assert_no_bound_card_result_count(&compiled.body);
+    let crate::primitives::CompiledInstructionKind::Perform(gain) = &compiled.body.steps[1].kind
+    else {
+        panic!("the bound result count stays a GainLife instruction");
+    };
+    assert!(
+        !gain.contains_bound_card_result_count(),
+        "a successful compiled effect contains no authoring-only count marker"
+    );
+    assert_eq!(
+        gain.as_ref(),
+        &crate::primitives::SpellEffectKind::GainLife {
+            amount: crate::primitives::Amount::Count(
+                crate::primitives::CountExpression::CardsMatchingResult {
+                    filter: crate::primitives::CardResultFilter {
+                        source: crate::primitives::CardResultSource::PreviousEffect,
+                        action: crate::primitives::CardResultAction::Mill,
+                        players: crate::primitives::RelativePlayerSet::Controller,
+                        card_type: Some(crate::primitives::CardTypeFilter::Creature),
+                    },
+                }
+            ),
+        }
+    );
+}
+
+fn assert_no_bound_card_result_count(block: &crate::primitives::CompiledBlock) {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            crate::primitives::CompiledInstructionKind::Perform(effect) => assert!(
+                !effect.contains_bound_card_result_count(),
+                "compiled instruction '{}' contains no authoring-only count marker",
+                instruction.id,
+            ),
+            crate::primitives::CompiledInstructionKind::If { yes, no, .. } => {
+                assert_no_bound_card_result_count(yes);
+                assert_no_bound_card_result_count(no);
+            }
+            crate::primitives::CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    assert_no_bound_card_result_count(&branch.body);
+                }
+                assert_no_bound_card_result_count(otherwise);
+            }
+            crate::primitives::CompiledInstructionKind::ImportCastPayment => {}
+        }
+    }
+}
+
+#[test]
+fn bound_card_result_count_is_lowered_in_nested_compiled_branches() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+            (id: "game_if", input: None, kind: If(condition: Void,
+                yes: (steps: [
+                    (id: "result_if", input: None, kind: IfResult(
+                        condition: DiscardOutcome(
+                            result: "discarded", outcome: Performed,
+                        ),
+                        yes: (steps: [
+                            (id: "gain_if_result", input: Some("discarded"),
+                                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                                    aggregation: Total, card_type: None
+                                ))))),
+                        ], yields: []),
+                        no: (steps: [], yields: []),
+                    )),
+                ], yields: []),
+                no: (steps: [
+                    (id: "choose", input: None, kind: Choose(
+                        choice: "count_after_discard", chooser: Controller, optional: false,
+                        branches: [(branch_id: "gain", presentation: Fallback,
+                            cost: None, requirement: Always,
+                            body: (steps: [
+                                (id: "gain_choose_branch", input: Some("discarded"),
+                                    kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                                        aggregation: Total, card_type: None
+                                    ))))),
+                            ], yields: []),
+                        )],
+                        otherwise: (steps: [
+                            (id: "gain_choose_otherwise", input: Some("discarded"),
+                                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                                    aggregation: Total, card_type: None
+                                ))))),
+                        ], yields: []),
+                    )),
+                ], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("the nested bound-count Program compiles each authored branch");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture face owns its compiled Program");
+    let [_, game_if] = compiled.body.steps.as_slice() else {
+        panic!("the top-level discard precedes its conditional tree");
+    };
+    let crate::primitives::CompiledInstructionKind::If { yes, no, .. } = &game_if.kind else {
+        panic!("the game condition compiles to an If node");
+    };
+    let [result_if] = yes.steps.as_slice() else {
+        panic!("the true game branch contains one result condition");
+    };
+    assert!(matches!(
+        &result_if.kind,
+        crate::primitives::CompiledInstructionKind::If {
+            condition,
+            yes,
+            no: _
+        } if matches!(condition.as_ref(), crate::primitives::CompiledProgramCondition::Result(_))
+            && yes.steps.len() == 1
+    ));
+    let [choose] = no.steps.as_slice() else {
+        panic!("the false game branch contains one Choose node");
+    };
+    assert!(matches!(
+        &choose.kind,
+        crate::primitives::CompiledInstructionKind::Choose {
+            branches,
+            otherwise,
+            ..
+        } if branches.len() == 1 && otherwise.steps.len() == 1
+    ));
+    assert_no_bound_card_result_count(&compiled.body);
+}
+
+#[test]
+fn bound_card_result_count_lowers_typed_cohort_families() {
+    let sacrifice = ability_program_fixture(
+        "bound_count_sacrifice_fixture",
+        r#"(steps: [
+            (id: "sacrifice", bind: ["sacrificed"], input: None,
+                kind: Perform(Sacrifice(subject: Source))),
+            (id: "gain", bind: [], input: Some("sacrificed"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: None
+                )))))
+        ], yields: [])"#,
+    )
+    .expect("an explicitly bound Sacrifice cohort supplies its action and player scope");
+    assert_no_bound_card_result_count(&sacrifice.body);
+    let CompiledInstructionKind::Perform(gain) = &sacrifice.body.steps[1].kind else {
+        panic!("the second instruction remains GainLife");
+    };
+    assert_eq!(
+        gain.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Sacrifice,
+                    players: RelativePlayerSet::Controller,
+                    card_type: None,
+                },
+            }),
+        }
+    );
+
+    let discard = ability_program_fixture(
+        "bound_count_discard_result_fixture",
+        r#"(steps: [
+            (id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(Discard(who: Controller, quantity: Exact(2)))),
+            (id: "gain", bind: [], input: Some("discarded"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))
+        ], yields: [])"#,
+    )
+    .expect("DiscardResult's privacy-aware evaluator permits a typed count");
+    assert_no_bound_card_result_count(&discard.body);
+    let CompiledInstructionKind::Perform(gain) = &discard.body.steps[1].kind else {
+        panic!("the second instruction remains GainLife");
+    };
+    assert_eq!(
+        gain.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Discard,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+            }),
+        }
+    );
+
+    let exile_program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "exile", bind: ["exiled"], input: None,
+                kind: Perform(MoveGraveyardCards(
+                    filter: (owner: AnyPlayer), destination: Exile,
+                    linked_exile_id: None, entry_modifiers: [],
+                ))),
+            (id: "gain", bind: [], input: Some("exiled"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "exile", role: Target, target_group_index: 0),
+        ])"#,
+    )
+    .expect("the targeted graveyard Exile Program parses");
+    let exile_targeting: crate::primitives::TargetingDef = ron::from_str(
+        r#"(groups: [(
+            min: 0, max: 2,
+            prompt: "Choose up to two target cards from a single graveyard",
+            effect_indices: [], distinct_from: [], same_graveyard: true,
+            cast_cost_expansion: None,
+        )])"#,
+    )
+    .expect("one owner-local same-graveyard group parses");
+    let exile = crate::primitives::CompiledProgram::compile_with_targeting(
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "bound_count_target_exile_fixture".into(),
+            face_id: crate::CardFaceId::new("bound_count_target_exile_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        }),
+        crate::primitives::EffectContext::Ability,
+        &exile_program,
+        Some(&exile_targeting),
+    )
+    .expect("the typed TargetCardResult Exile slot permits a public type filter");
+    assert_no_bound_card_result_count(&exile.body);
+    let CompiledInstructionKind::Perform(gain) = &exile.body.steps[1].kind else {
+        panic!("the second instruction remains GainLife");
+    };
+    assert_eq!(
+        gain.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Exile,
+                    players: RelativePlayerSet::All,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+            }),
+        }
+    );
+
+    let linked = r#"(
+        id: "bound_count_linked_fixture", name: "Bound Count Linked Fixture",
+        face_id: "bound_count_linked_fixture", types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "exile_graveyards", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [ExileGraveyards(players: All, linked_exile_id: Some("linked_cards"))],
+        )],
+        activated_abilities: [(
+            ability_id: "count_linked", presentation: Fallback,
+            source_zone: Battlefield, costs: [Tap], effect: [],
+            program: Some((body: (steps: [
+                (id: "choose", bind: ["chosen"], input: None,
+                    kind: Perform(ChooseLinkedExiledCard(
+                        producer_ability_id: "exile_graveyards",
+                        linked_exile_id: "linked_cards",
+                        filter: (card_type: Some(Creature)),
+                        destination: OwnerGraveyard, optional: false,
+                    ))),
+                (id: "gain", bind: [], input: Some("chosen"),
+                    kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                        aggregation: Total, card_type: Some(Creature)
+                    )))))
+            ], yields: []), target_bindings: [])),
+        )],
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[linked], &[])
+        .expect("a linked OwnerGraveyard choice supplies a public typed result cohort");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "bound_count_linked_fixture".into(),
+        face_id: crate::CardFaceId::new("bound_count_linked_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("count_linked").unwrap()],
+    });
+    let linked = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact activated ability owns its compiled Program");
+    assert_no_bound_card_result_count(&linked.body);
+    let CompiledInstructionKind::Perform(gain) = &linked.body.steps[1].kind else {
+        panic!("the second instruction remains GainLife");
+    };
+    assert_eq!(
+        gain.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::ChooseLinkedExiledCard,
+                    players: RelativePlayerSet::All,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+            }),
+        }
+    );
+}
+
+#[test]
+fn bound_card_result_count_rejects_unsafe_and_mismatched_shapes() {
+    let legacy_spell = r#"(id: "bound_count_legacy_fixture",
+        name: "Bound Count Legacy Fixture", face_id: "bound_count_legacy_fixture",
+        mana_cost: "{1}{W}", types: ["Instant"],
+        spell_effect: [GainLife(amount: Count(BoundCardResultCount(
+            aggregation: Total, card_type: None
+        )))])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[legacy_spell], &[])
+        .expect_err("the authoring-only marker must fail closed in a legacy effect list");
+    assert!(error.to_string().contains("must be lowered"), "{error}");
+
+    let filtered_sacrifice = ability_program_fixture(
+        "bound_count_filtered_sacrifice_fixture",
+        r#"(steps: [
+            (id: "sacrifice", bind: ["sacrificed"], input: None,
+                kind: Perform(Sacrifice(subject: Source))),
+            (id: "gain", bind: [], input: Some("sacrificed"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))
+        ], yields: [])"#,
+    )
+    .expect_err("a Sacrifice result may be counted but its captured type cannot be exposed");
+    assert!(
+        filtered_sacrifice.contains("unsafe"),
+        "{filtered_sacrifice}"
+    );
+
+    const TARGET_BINDINGS: &str =
+        r#"[(instruction_id: "destroy", role: Subject, target_group_index: 0)]"#;
+    const TARGETING: &str = r#"Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])]))"#;
+    let filtered_destroy = program_gain_life_result_fixture(
+        "bound_count_filtered_destroy_fixture",
+        r#"(id: "destroy", bind: ["destroyed"], input: None,
+                kind: Perform(Destroy(subject: Chosen((kind: Creature))))),
+            (id: "gain", bind: [], input: Some("destroyed"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))"#,
+        TARGET_BINDINGS,
+        TARGETING,
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&filtered_destroy], &[])
+        .expect_err("Destroy can carry hidden type facts through a replacement");
+    assert!(error.to_string().contains("unsafe"), "{error}");
+
+    let cast_payment = r#"(id: "bound_count_cast_payment_fixture",
+        name: "Bound Count Cast Payment Fixture", face_id: "bound_count_cast_payment_fixture",
+        mana_cost: "{1}{R}", types: ["Sorcery"], additional_costs: [DiscardCard],
+        spell_program: Some((body: (steps: [
+            (id: "import", bind: ["paid"], input: None, kind: ImportCastPayment),
+            (id: "gain", bind: [], input: Some("paid"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: None
+                )))))
+        ], yields: []), target_bindings: [])))"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[cast_payment], &[])
+        .expect_err("CastPayment is rehydrated but excluded as a privacy-sensitive cohort");
+    assert!(error.to_string().contains("CastPaymentCohort"), "{error}");
+
+    let wrong_draw = program_gain_life_result_fixture(
+        "bound_count_wrong_draw_pairing_fixture",
+        r#"(id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(Discard(who: EachPlayer, quantity: AnyNumber))),
+            (id: "draw", bind: [], input: Some("discarded"),
+                kind: Perform(Draw(who: EachPlayer, count: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: None
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_draw], &[])
+        .expect_err("EachPlayer Draw does not accept total aggregation");
+    assert!(error.to_string().contains("matching producer"), "{error}");
+
+    let filtered_draw = program_gain_life_result_fixture(
+        "bound_count_filtered_draw_fixture",
+        r#"(id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(Discard(who: Controller, quantity: Exact(2)))),
+            (id: "draw", bind: [], input: Some("discarded"),
+                kind: Perform(Draw(who: Controller, count: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&filtered_draw], &[])
+        .expect_err("Draw remains unfiltered even when its input is typed");
+    assert!(error.to_string().contains("unfiltered"), "{error}");
+
+    let divided = program_gain_life_result_fixture(
+        "bound_count_divided_fixture",
+        r#"(id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "gain", bind: [], input: Some("milled"),
+                kind: Perform(GainLife(amount: DivideRoundedDown(
+                    amount: Count(BoundCardResultCount(
+                        aggregation: Total, card_type: Some(Creature)
+                    )), divisor: 2
+                ))))"#,
+        "[]",
+        "None",
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[&divided], &[]).is_err(),
+        "the authoring marker does not expand into DivideRoundedDown"
+    );
+
+    let unsupported_effect = program_gain_life_result_fixture(
+        "bound_count_unsupported_effect_fixture",
+        r#"(id: "scry", bind: [], input: None,
+                kind: Perform(Scry(count: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: None
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_effect], &[])
+        .expect_err("the source-only marker is not an evaluator for arbitrary effects");
+    assert!(error.to_string().contains("explicitly bound"), "{error}");
+
+    let missing_input = program_gain_life_result_fixture(
+        "bound_count_missing_input_fixture",
+        r#"(id: "gain", bind: [], input: None,
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&missing_input], &[])
+        .expect_err("a bound count requires the instruction's explicit typed input");
+    assert!(error.to_string().contains("explicitly bound"), "{error}");
+
+    let unbounded = program_gain_life_result_fixture(
+        "bound_count_unbounded_fixture",
+        r#"(id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(
+                    count: Count(CardsInHand(players: Relative(Controller))),
+                    who: Controller
+                ))),
+            (id: "gain", bind: [], input: Some("milled"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unbounded], &[])
+        .expect_err("GainLife keeps requiring a finite input cohort bound");
+    assert!(
+        error
+            .to_string()
+            .contains("finite typed result-slot cardinality"),
+        "{error}"
+    );
+
+    let overflow = program_gain_life_result_fixture(
+        "bound_count_overflow_fixture",
+        r#"(id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "gain", bind: [], input: Some("milled"),
+                kind: Perform(GainLife(amount: Count(Affine(constant: 0, terms: [
+                    (coefficient: 2147483647, quantity: BoundCardResultCount(
+                        aggregation: Total, card_type: Some(Creature)
+                    ))
+                ])))))"#,
+        "[]",
+        "None",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&overflow], &[])
+        .expect_err("the existing coefficient-times-maximum proof still applies");
+    assert!(error.to_string().contains("can exceed u32::MAX"), "{error}");
+
+    let prior_slot = program_gain_life_result_fixture(
+        "bound_count_exact_prior_slot_fixture",
+        r#"(id: "first_mill", bind: ["first"], input: None,
+                kind: Perform(Mill(count: 2, who: Controller))),
+            (id: "second_mill", bind: ["second"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "gain", bind: [], input: Some("first"),
+                kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+                    aggregation: Total, card_type: Some(Creature)
+                )))))"#,
+        "[]",
+        "None",
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&prior_slot], &[])
+        .expect("the named typed input can be older than a later matching producer");
+    let owner = crate::ProgramOwnerId::face(
+        "bound_count_exact_prior_slot_fixture",
+        crate::CardFaceId::new("bound_count_exact_prior_slot_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact face owns its Program");
+    let [first_mill, _second_mill, gain] = compiled.body.steps.as_slice() else {
+        panic!("both Mill slots precede the bound consumer");
+    };
+    assert_eq!(gain.input, first_mill.outputs.first().copied());
 }
 
 #[test]

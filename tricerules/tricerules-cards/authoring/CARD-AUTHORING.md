@@ -316,31 +316,38 @@ retired together while the live accepted prefix and its generations remain fixed
 800.4a). Observer restoration republishes that same transaction with a fresh prompt ID. This runtime
 hardening does not admit new syntax; spell, optional and alternative-cost departure behavior is
 unchanged. Permanent choosers must be `Controller`; hand-selection counts remain fixed literals.
-`GainLife` normally uses a fixed literal, with one bounded result-count form: it may
-consume the explicitly bound result of a prior same-block direct unfiltered target `Discard`
-(`CardsMatchingResult` with `players: All`) or `Mill(who: Controller)` (`players: Controller`). A
-resultless sibling may intervene; the consumer must still name the exact producer slot.
-The filter must use `source: PreviousEffect` and match that producer's action and player set. The
-amount may be the direct count or exactly one positive term in `Affine(constant: 0, ...)`; its
-producer must have a finite result maximum and the coefficient times that maximum must fit in
-`u32`. This Program-only path uses the committed typed cohort, including an empty cohort as zero;
-it does not reopen result leaves in general affine quantities. Gerrard's Verdict uses the target
-Discard form, counting only Land cards in the committed discard cohort (CR 608.2c, 701.9a–c).
+Spell and Ability Programs can author
+`Count(BoundCardResultCount(aggregation: ..., card_type: ...))` when a consumer uses an explicitly
+bound card-result slot. The compiler takes the producer action and
+player set from that exact typed `input` slot, then lowers the marker to an existing
+`CountExpression`; do not write a separate `PreviousEffect` filter for this form. A consumer may
+name an earlier slot even when a later matching producer exists, and resultless siblings may
+intervene.
 
-Spell Programs admit a second, non-identifying discard receipt for ordered Discard→Draw effects.
-Bind a `Discard` step's `DiscardResult` and pass it explicitly to a later `Draw`; the slot may cross
-an intervening targetless step because it is a named Program value, not an ambient previous-effect
-read. The accepted unfiltered counts are `CardsMatchingResult` with `players: Controller` for a
-controller discard and controller draw, `CardsMatchingResultForAffectedPlayer` with `players: All`
-for an `EachPlayer` discard and matching `EachPlayer` draw, and `MaximumCardsMatchingResult` with
-`players: All` for an `EachPlayer` discard followed by each player drawing the greatest individual
+`GainLife` accepts `aggregation: Total` directly or as the single positive term of
+`Affine(constant: 0, ...)`. Its typed producer must have a finite result maximum, and the
+coefficient times that maximum must fit in `u32`. `card_type` filters are currently permitted only
+for Mill cohorts, target Discard cohorts, privacy-aware `DiscardResult` counts, linked Exile choices
+returned to an owner's graveyard, and the ability-owned face-up graveyard-to-Exile path. Hidden or
+replacement-sensitive `Destroy` and `Sacrifice` cohorts cannot be filtered; `GainLife` also rejects
+`CastPaymentCohort` because its hidden cast-cost discards cannot be safely typed. Gerrard's Verdict
+counts only Land cards in its bound target Discard cohort (CR 608.2c, 701.9a–c).
+
+The same authoring marker supports ordered Discard→Draw effects, but Draw must remain unfiltered and
+match the bound `DiscardResult` producer and recipient: `Total` pairs a Controller discard with a
+Controller draw; `ForAffectedPlayer` pairs an `EachPlayer` discard with an `EachPlayer` draw; and
+`MaximumPerPlayer` pairs an `EachPlayer` discard with an `EachPlayer` draw of the greatest individual
 discard count. Spell Programs admit `Discard(EachPlayer, AnyNumber)` and `Discard(EachPlayer, All)`
-for these profiles; an `EachPlayer` draw needs one of the matching bound result-count forms. The
-count uses committed discard entries, including hidden Library-of-Leng destinations when
-unfiltered, and never reconstructs physical card identity. A completed empty or skipped Discard
-produces a present empty result; an unavailable bound slot is an invariant error. Flux, Tolarian
-Winds and Windfall exercise the three count forms respectively (CR 121.2, 608.2c, 701.9a/c,
-800.4a/i).
+for these profiles. The count uses committed discard entries, including hidden Library-of-Leng
+destinations when unfiltered, and never reconstructs physical card identity. A completed empty or
+skipped Discard produces a present empty result; an unavailable bound slot is an invariant error.
+Flux, Tolarian Winds and Windfall exercise the three count forms respectively (CR 121.2, 608.2c,
+701.9a/c, 800.4a/i).
+
+The marker is authoring-only: it requires a supported typed Program consumer and explicit input,
+and fails closed in legacy effect lists or if it survives compilation. Existing unmarked
+`PreviousEffect` count forms remain supported only under their existing exact typed-input checks;
+they are compatibility syntax, not an ambient result lookup.
 
 `GrantKeywordsAll` is also an accepted resultless `Perform` leaf when the ordinary effect
 validator accepts its complete `CreatureScopeFilter`. Every untargeted validated scope can use it

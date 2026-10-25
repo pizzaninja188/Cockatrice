@@ -10,12 +10,9 @@
       (id: "discard", bind: ["discarded"],
         kind: Perform(Discard(who: EachPlayer, quantity: All))),
       (id: "draw_each_player", input: Some("discarded"),
-        kind: Perform(Draw(who: EachPlayer, count: Count(MaximumCardsMatchingResult(filter: (
-          source: PreviousEffect,
-          action: Discard,
-          players: All,
-          card_type: None,
-        )))))),
+        kind: Perform(Draw(who: EachPlayer, count: Count(
+          BoundCardResultCount(aggregation: MaximumPerPlayer, card_type: None),
+        )))),
     ],
     yields: [],
   ))),

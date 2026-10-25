@@ -2939,6 +2939,16 @@ impl SpellEffectKind {
         }
     }
 
+    pub(crate) fn contains_bound_card_result_count(&self) -> bool {
+        self.result_consuming_amount()
+            .is_some_and(Amount::uses_bound_card_result_count)
+            || matches!(
+                self,
+                SpellEffectKind::DamageTargets { amount, .. }
+                    if amount.uses_bound_card_result_count()
+            )
+    }
+
     /// Registry admission and runtime dispatch share this bounded conditional vocabulary.
     pub fn supports_conditional_instruction(&self) -> bool {
         matches!(
@@ -3330,7 +3340,8 @@ impl SpellEffectKind {
                     .card_result_filter()
                     .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
                     || amount.uses_previous_mill_mana_value_sum()
-            }) || effect.has_previous_effect_object_reference()
+            }) || effect.contains_bound_card_result_count()
+                || effect.has_previous_effect_object_reference()
         })
     }
 

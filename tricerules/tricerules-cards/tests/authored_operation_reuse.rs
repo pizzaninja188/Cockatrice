@@ -11,7 +11,147 @@ use tricerules_cards::primitives::{
     SearchZoneSelection, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
     TargetKind, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityDefinitionId, EffectContext, ProgramOwnerId};
+use tricerules_cards::{
+    AbilityDefinitionId, CardProgram, EffectContext, InstructionKind, ProgramOwnerId,
+};
+
+fn replace_bound_count(
+    program: &mut CardProgram,
+    instruction_id: &str,
+    previous_count: CountExpression,
+) {
+    let instruction = program
+        .body
+        .steps
+        .iter_mut()
+        .find(|instruction| instruction.id == instruction_id)
+        .unwrap_or_else(|| panic!("{instruction_id} is an authored instruction"));
+    let InstructionKind::Perform(effect) = &mut instruction.kind else {
+        panic!("{instruction_id} is an authored Perform instruction");
+    };
+    let amount = match effect.as_mut() {
+        SpellEffectKind::GainLife { amount } => amount,
+        SpellEffectKind::Draw { count, .. } => count,
+        _ => panic!("{instruction_id} consumes the bound result count"),
+    };
+    let Amount::Count(count) = amount else {
+        panic!("{instruction_id} uses a CountExpression");
+    };
+    match count {
+        CountExpression::BoundCardResultCount { .. } => *count = previous_count,
+        CountExpression::Affine { constant, terms }
+            if *constant == 0 && terms.len() == 1 && terms[0].coefficient == 3 =>
+        {
+            let [term] = terms.as_mut_slice() else {
+                unreachable!("the affine count has exactly one term");
+            };
+            assert!(
+                matches!(term.quantity, CountExpression::BoundCardResultCount { .. }),
+                "{instruction_id} contains the one authoring-only bound-count term"
+            );
+            term.quantity = previous_count;
+        }
+        _ => panic!("{instruction_id} contains only the expected bound-count form"),
+    }
+}
+
+fn assert_pre_migration_count_compiles_to_registered_program(
+    card_id: &str,
+    raw_program: &CardProgram,
+    owner: ProgramOwnerId,
+    context: EffectContext,
+    targeting: Option<&tricerules_cards::primitives::TargetingDef>,
+    instruction_id: &str,
+    previous_count: CountExpression,
+) {
+    let registry = tricerules_cards::registry::global();
+    let registered = registry
+        .compiled_program_for_owner(&owner)
+        .unwrap_or_else(|| panic!("{card_id} exact owner has a registered compiled Program"));
+    let mut pre_migration = raw_program.clone();
+    replace_bound_count(&mut pre_migration, instruction_id, previous_count);
+    let rebuilt =
+        CompiledProgram::compile_with_targeting(owner, context, &pre_migration, targeting)
+            .unwrap_or_else(|error| panic!("{card_id} pre-migration Program compiles: {error}"));
+    assert_eq!(
+        &rebuilt, registered,
+        "{card_id} pre-migration expression compiles to the full current owner Program"
+    );
+}
+
+fn previous_result_count(
+    action: CardResultAction,
+    players: RelativePlayerSet,
+    card_type: Option<CardTypeFilter>,
+) -> CountExpression {
+    CountExpression::CardsMatchingResult {
+        filter: CardResultFilter {
+            source: CardResultSource::PreviousEffect,
+            action,
+            players,
+            card_type,
+        },
+    }
+}
+
+fn assert_face_pre_migration_count(
+    card_id: &str,
+    instruction_id: &str,
+    previous_count: CountExpression,
+) {
+    let registry = tricerules_cards::registry::global();
+    let face = registry
+        .get(card_id)
+        .unwrap_or_else(|| panic!("missing {card_id}"))
+        .primary_face();
+    let raw_program = face
+        .spell_program
+        .as_ref()
+        .unwrap_or_else(|| panic!("{card_id} has an authored face Program"));
+    assert_pre_migration_count_compiles_to_registered_program(
+        card_id,
+        raw_program,
+        ProgramOwnerId::face(card_id, face.face_id.clone()),
+        EffectContext::Spell,
+        face.targeting.as_ref(),
+        instruction_id,
+        previous_count,
+    );
+}
+
+fn assert_triggered_pre_migration_count(
+    card_id: &str,
+    ability_index: usize,
+    instruction_id: &str,
+    previous_count: CountExpression,
+) {
+    let registry = tricerules_cards::registry::global();
+    let face = registry
+        .get(card_id)
+        .unwrap_or_else(|| panic!("missing {card_id}"))
+        .primary_face();
+    let ability = face
+        .triggered_abilities
+        .get(ability_index)
+        .unwrap_or_else(|| panic!("{card_id} has triggered ability {ability_index}"));
+    let raw_program = ability
+        .program
+        .as_ref()
+        .unwrap_or_else(|| panic!("{card_id} triggered ability has an authored Program"));
+    assert_pre_migration_count_compiles_to_registered_program(
+        card_id,
+        raw_program,
+        ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: card_id.to_owned(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        }),
+        EffectContext::Ability,
+        ability.targeting.as_ref(),
+        instruction_id,
+        previous_count,
+    );
+}
 
 fn face_program(card_id: &str) -> &'static tricerules_cards::primitives::CompiledProgram {
     let registry = tricerules_cards::registry::global();
@@ -485,6 +625,143 @@ fn authored_gorging_vulture_uses_typed_mill_result_gain_life_program() {
                     card_type: Some(CardTypeFilter::Creature),
                 },
             }),
+        },
+    );
+}
+
+#[test]
+fn authored_bound_result_counts_lower_to_existing_expressions() {
+    let verdict = face_program("gerrards_verdict");
+    let [discard, gain_life] = verdict.body.steps.as_slice() else {
+        panic!("Gerrard's Verdict keeps its target discard before life gain");
+    };
+    let [discarded] = discard.outputs.as_slice() else {
+        panic!("the target discard binds its exact result cohort");
+    };
+    assert_eq!(gain_life.input, Some(*discarded));
+    let CompiledInstructionKind::Perform(gain_effect) = &gain_life.kind else {
+        panic!("the second instruction remains GainLife");
+    };
+    assert_eq!(
+        gain_effect.as_ref(),
+        &SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::Affine {
+                constant: 0,
+                terms: vec![tricerules_cards::primitives::QuantityTerm {
+                    coefficient: 3,
+                    quantity: CountExpression::CardsMatchingResult {
+                        filter: CardResultFilter {
+                            source: CardResultSource::PreviousEffect,
+                            action: CardResultAction::Discard,
+                            players: RelativePlayerSet::All,
+                            card_type: Some(CardTypeFilter::Land),
+                        },
+                    },
+                }],
+            }),
+        }
+    );
+
+    let flux = face_program("flux");
+    let [discard, draw_each_player, draw_controller] = flux.body.steps.as_slice() else {
+        panic!("Flux preserves each player's discard before its two draws");
+    };
+    let [discarded] = discard.outputs.as_slice() else {
+        panic!("Flux's discard binds a shared player cohort");
+    };
+    assert_eq!(draw_each_player.input, Some(*discarded));
+    let CompiledInstructionKind::Perform(draw_effect) = &draw_each_player.kind else {
+        panic!("Flux's first draw remains a Draw instruction");
+    };
+    assert_eq!(
+        draw_effect.as_ref(),
+        &SpellEffectKind::Draw {
+            who: PlayerRecipient::EachPlayer,
+            count: Amount::Count(CountExpression::CardsMatchingResultForAffectedPlayer {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Discard,
+                    players: RelativePlayerSet::All,
+                    card_type: None,
+                },
+            }),
+        }
+    );
+    assert_perform(
+        draw_controller,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    );
+
+    let windfall = face_program("windfall");
+    let [discard, draw_each_player] = windfall.body.steps.as_slice() else {
+        panic!("Windfall preserves its discard then maximum-count draw");
+    };
+    let [discarded] = discard.outputs.as_slice() else {
+        panic!("Windfall's discard binds its shared player cohort");
+    };
+    assert_eq!(draw_each_player.input, Some(*discarded));
+    let CompiledInstructionKind::Perform(draw_effect) = &draw_each_player.kind else {
+        panic!("Windfall's draw remains a Draw instruction");
+    };
+    assert_eq!(
+        draw_effect.as_ref(),
+        &SpellEffectKind::Draw {
+            who: PlayerRecipient::EachPlayer,
+            count: Amount::Count(CountExpression::MaximumCardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Discard,
+                    players: RelativePlayerSet::All,
+                    card_type: None,
+                },
+            }),
+        }
+    );
+
+    assert_triggered_pre_migration_count(
+        "gorging_vulture",
+        0,
+        "gain_life",
+        previous_result_count(
+            CardResultAction::Mill,
+            RelativePlayerSet::Controller,
+            Some(CardTypeFilter::Creature),
+        ),
+    );
+    assert_face_pre_migration_count(
+        "gerrards_verdict",
+        "gain_life",
+        previous_result_count(
+            CardResultAction::Discard,
+            RelativePlayerSet::All,
+            Some(CardTypeFilter::Land),
+        ),
+    );
+    assert_face_pre_migration_count(
+        "flux",
+        "draw_each_player",
+        CountExpression::CardsMatchingResultForAffectedPlayer {
+            filter: CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Discard,
+                players: RelativePlayerSet::All,
+                card_type: None,
+            },
+        },
+    );
+    assert_face_pre_migration_count(
+        "windfall",
+        "draw_each_player",
+        CountExpression::MaximumCardsMatchingResult {
+            filter: CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Discard,
+                players: RelativePlayerSet::All,
+                card_type: None,
+            },
         },
     );
 }

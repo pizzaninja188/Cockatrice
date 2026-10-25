@@ -555,8 +555,8 @@ fn windfall_two_deckout_losses_leave_the_nonconsecutive_survivor_as_winner() {
 #[test]
 fn windfall_exact_identity_face_and_complete_typed_effects() {
     use tricerules_cards::primitives::{
-        Amount, CardResultAction, CardResultSource, CountExpression, DiscardQuantity,
-        InstructionKind, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+        Amount, CountExpression, DiscardQuantity, InstructionKind, PlayerRecipient,
+        ProgramBoundResultAggregation, SpellEffectKind,
     };
     let definition = tricerules_cards::registry::global()
         .get("windfall")
@@ -592,10 +592,10 @@ fn windfall_exact_identity_face_and_complete_typed_effects() {
         InstructionKind::Perform(effect)
             if matches!(effect.as_ref(), SpellEffectKind::Draw {
                 who: PlayerRecipient::EachPlayer,
-                count: Amount::Count(CountExpression::MaximumCardsMatchingResult { filter })
-            } if filter.source == CardResultSource::PreviousEffect
-                && filter.action == CardResultAction::Discard
-                && filter.players == RelativePlayerSet::All
-                && filter.card_type.is_none())
+                count: Amount::Count(CountExpression::BoundCardResultCount {
+                    aggregation: ProgramBoundResultAggregation::MaximumPerPlayer,
+                    card_type: None,
+                })
+            })
     ));
 }

@@ -29,8 +29,8 @@
       "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
     },
     {
-      "symbol": "CountExpression::CardsMatchingResultForAffectedPlayer",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/CardsMatchingResultForAffectedPlayer"
+      "symbol": "CountExpression::BoundCardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/BoundCardResultCount"
     },
     {
       "symbol": "SpellEffectKind::Draw",

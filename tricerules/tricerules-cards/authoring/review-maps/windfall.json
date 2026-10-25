@@ -22,8 +22,8 @@
       "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
     },
     {
-      "symbol": "CountExpression::MaximumCardsMatchingResult",
-      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/MaximumCardsMatchingResult"
+      "symbol": "CountExpression::BoundCardResultCount",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw/count/Count/BoundCardResultCount"
     }
   ],
   "tokens": [],

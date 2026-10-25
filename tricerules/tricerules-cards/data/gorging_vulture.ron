@@ -19,12 +19,9 @@
         (id: "mill", bind: ["milled"], input: None,
           kind: Perform(Mill(count: 4, who: Controller))),
         (id: "gain_life", bind: [], input: Some("milled"),
-          kind: Perform(GainLife(amount: Count(CardsMatchingResult(filter: (
-            source: PreviousEffect,
-            action: Mill,
-            players: Controller,
-            card_type: Some(Creature),
-          )))))),
+          kind: Perform(GainLife(amount: Count(BoundCardResultCount(
+            aggregation: Total, card_type: Some(Creature),
+          ))))),
       ], yields: []))),
     ),
   ],

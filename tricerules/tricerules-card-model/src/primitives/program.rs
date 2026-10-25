@@ -19,10 +19,11 @@ use super::{
     Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
     CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
     CountExpression, EffectContext, EffectSubject, GameCondition, GraveyardDestination,
-    LibraryBottomOrder, LifeAmount, PlayerRecipient, QuantityTerm, RelativePlayerSet,
-    ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
-    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
-    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
+    LibraryBottomOrder, LifeAmount, PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm,
+    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration,
+    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
+    SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
+    ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -1594,27 +1595,35 @@ impl Compiler<'_> {
                     }
                     let input =
                         compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
+                    let authored_effect = effect;
+                    let lowered_effect = if authored_effect.contains_bound_card_result_count() {
+                        let mut lowered = authored_effect.as_ref().clone();
+                        lower_bound_card_result_count(&mut lowered, input, &self.slots)?;
+                        Some(Box::new(lowered))
+                    } else {
+                        None
+                    };
+                    let effect = lowered_effect.as_ref().unwrap_or(authored_effect);
                     validate_search_result_input(
-                        effect,
+                        effect.as_ref(),
                         input,
                         &self.search_result_slots,
                         &self.slots,
                     )?;
                     validate_program_gain_life_result_count_input(
-                        effect,
+                        effect.as_ref(),
                         input,
-                        &steps,
                         &self.slots,
                     )?;
-                    validate_program_draw_result_count_input(effect, input, &self.slots)?;
+                    validate_program_draw_result_count_input(effect.as_ref(), input, &self.slots)?;
                     validate_previous_mill_mana_value_sum_input(
-                        effect,
+                        effect.as_ref(),
                         input,
                         &steps,
                         &self.slots,
                     )?;
-                    validate_return_to_owners_hand_input(effect, input, &self.slots)?;
-                    validate_myr_battlesphere_attack_input(effect, input, &self.slots)?;
+                    validate_return_to_owners_hand_input(effect.as_ref(), input, &self.slots)?;
+                    validate_myr_battlesphere_attack_input(effect.as_ref(), input, &self.slots)?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -1986,7 +1995,9 @@ impl Compiler<'_> {
                     (
                         input,
                         result_types,
-                        CompiledInstructionKind::Perform(effect.clone()),
+                        CompiledInstructionKind::Perform(
+                            lowered_effect.unwrap_or_else(|| authored_effect.clone()),
+                        ),
                     )
                 }
                 InstructionKind::If { condition, yes, no } => {
@@ -2819,30 +2830,161 @@ fn program_gain_life_result_count_profile(amount: &Amount) -> Option<(&CardResul
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProgramDrawResultCount {
-    Controller,
-    ForAffectedPlayer,
-    MaximumPerPlayer,
-}
-
 fn program_draw_result_count_profile(
     amount: &Amount,
-) -> Option<(&CardResultFilter, ProgramDrawResultCount)> {
+) -> Option<(&CardResultFilter, ProgramBoundResultAggregation)> {
     let Amount::Count(expression) = amount else {
         return None;
     };
     match expression {
         CountExpression::CardsMatchingResult { filter } => {
-            Some((filter, ProgramDrawResultCount::Controller))
+            Some((filter, ProgramBoundResultAggregation::Total))
         }
         CountExpression::CardsMatchingResultForAffectedPlayer { filter } => {
-            Some((filter, ProgramDrawResultCount::ForAffectedPlayer))
+            Some((filter, ProgramBoundResultAggregation::ForAffectedPlayer))
         }
         CountExpression::MaximumCardsMatchingResult { filter } => {
-            Some((filter, ProgramDrawResultCount::MaximumPerPlayer))
+            Some((filter, ProgramBoundResultAggregation::MaximumPerPlayer))
         }
         _ => None,
+    }
+}
+
+fn result_cardinality(result_type: &ResultType) -> Option<&Cardinality> {
+    match result_type {
+        ResultType::DiscardResult { cardinality, .. }
+        | ResultType::CardResultCohort { cardinality, .. }
+        | ResultType::LinkedExileCardResultCohort { cardinality, .. }
+        | ResultType::TargetCardResultCohort { cardinality, .. } => Some(cardinality),
+        _ => None,
+    }
+}
+
+fn project_bound_card_result_filter(
+    slot: &CompiledSlot,
+    card_type: Option<CardTypeFilter>,
+) -> Result<CardResultFilter, String> {
+    let (action, players) = match &slot.result_type {
+        ResultType::CardResultCohort { action, who, .. } => (
+            *action,
+            if *who == PlayerRecipient::Controller {
+                RelativePlayerSet::Controller
+            } else {
+                RelativePlayerSet::All
+            },
+        ),
+        ResultType::TargetCardResultCohort { action, .. } => (*action, RelativePlayerSet::All),
+        ResultType::LinkedExileCardResultCohort { .. } => (
+            CardResultAction::ChooseLinkedExiledCard,
+            RelativePlayerSet::All,
+        ),
+        ResultType::DiscardResult { who, .. } => (
+            CardResultAction::Discard,
+            match who {
+                PlayerRecipient::Controller => RelativePlayerSet::Controller,
+                PlayerRecipient::EachPlayer => RelativePlayerSet::All,
+                _ => {
+                    return Err(
+                        "BoundCardResultCount requires a Controller or EachPlayer DiscardResult"
+                            .into(),
+                    );
+                }
+            },
+        ),
+        ResultType::CastPaymentCohort { action, .. } => (*action, RelativePlayerSet::Controller),
+        _ => {
+            return Err(
+                "BoundCardResultCount requires a compatible typed previous-effect card-result slot"
+                    .into(),
+            );
+        }
+    };
+    Ok(CardResultFilter {
+        source: CardResultSource::PreviousEffect,
+        action,
+        players,
+        card_type,
+    })
+}
+
+fn lower_bound_card_result_count(
+    effect: &mut SpellEffectKind,
+    input: Option<ResultSlotId>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !effect.contains_bound_card_result_count() {
+        return Ok(());
+    }
+    let input = input.ok_or_else(|| {
+        "BoundCardResultCount requires an explicitly bound typed Program input".to_string()
+    })?;
+    let slot = slots
+        .get(input.0 as usize)
+        .ok_or_else(|| "BoundCardResultCount input slot is unavailable".to_string())?;
+
+    let expression = match effect {
+        SpellEffectKind::GainLife {
+            amount: Amount::Count(expression),
+        }
+        | SpellEffectKind::Draw {
+            count: Amount::Count(expression),
+            ..
+        } => expression,
+        _ => return Ok(()),
+    };
+    lower_bound_card_result_count_expression(expression, slot)
+}
+
+fn lower_bound_card_result_count_expression(
+    expression: &mut CountExpression,
+    slot: &CompiledSlot,
+) -> Result<(), String> {
+    match expression {
+        CountExpression::BoundCardResultCount {
+            aggregation,
+            card_type,
+        } => {
+            let filter = project_bound_card_result_filter(slot, *card_type)?;
+            *expression = match aggregation {
+                ProgramBoundResultAggregation::Total => {
+                    CountExpression::CardsMatchingResult { filter }
+                }
+                ProgramBoundResultAggregation::ForAffectedPlayer => {
+                    CountExpression::CardsMatchingResultForAffectedPlayer { filter }
+                }
+                ProgramBoundResultAggregation::MaximumPerPlayer => {
+                    CountExpression::MaximumCardsMatchingResult { filter }
+                }
+            };
+        }
+        CountExpression::Affine { terms, .. } => {
+            for term in terms {
+                lower_bound_card_result_count_expression(&mut term.quantity, slot)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn bound_card_result_type_filter_is_safe(result_type: &ResultType) -> bool {
+    match result_type {
+        ResultType::CardResultCohort {
+            action: CardResultAction::Mill,
+            ..
+        }
+        | ResultType::TargetCardResultCohort {
+            action: CardResultAction::Discard,
+            ..
+        }
+        | ResultType::LinkedExileCardResultCohort { .. }
+        | ResultType::DiscardResult { .. } => true,
+        // This currently comes only from the ability-owned, face-up graveyard-to-Exile path.
+        ResultType::TargetCardResultCohort {
+            action: CardResultAction::Exile,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
@@ -2867,10 +3009,11 @@ fn validate_program_draw_result_count_input(
         .get(input.0 as usize)
         .ok_or_else(|| "Program Draw DiscardResult input slot is unavailable".to_string())?;
     let (expected_who, expected_players) = match profile {
-        ProgramDrawResultCount::Controller => {
+        ProgramBoundResultAggregation::Total => {
             (PlayerRecipient::Controller, RelativePlayerSet::Controller)
         }
-        ProgramDrawResultCount::ForAffectedPlayer | ProgramDrawResultCount::MaximumPerPlayer => {
+        ProgramBoundResultAggregation::ForAffectedPlayer
+        | ProgramBoundResultAggregation::MaximumPerPlayer => {
             (PlayerRecipient::EachPlayer, RelativePlayerSet::All)
         }
     };
@@ -2899,105 +3042,50 @@ fn validate_program_draw_result_count_input(
 fn validate_program_gain_life_result_count_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
     let EffectOp::GainLife { amount } = effect else {
         return Ok(());
     };
-    let Some(filter) = amount.card_result_filter() else {
+    if amount.card_result_filter().is_none() {
         return Ok(());
-    };
-    let Some((profile_filter, coefficient)) = program_gain_life_result_count_profile(amount) else {
+    }
+    let Some((filter, coefficient)) = program_gain_life_result_count_profile(amount) else {
         return Err(
             "Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into(),
         );
     };
-    debug_assert_eq!(filter, profile_filter);
 
     let input = input.ok_or_else(|| {
         "Program GainLife result count requires an explicitly bound input result".to_string()
     })?;
-    let previous = same_block_direct_perform_producer(steps, Some(input)).ok_or_else(|| {
-        "Program GainLife result count requires a same-block direct Discard or Controller Mill result".to_string()
-    })?;
-
-    let (action, players, producer_max) = match &previous.kind {
-        CompiledInstructionKind::Perform(producer) => match producer.as_ref() {
-            SpellEffectKind::ChooseHandCards {
-                action: super::HandCardAction::Discard,
-                count,
-                ..
-            } => (
-                CardResultAction::Discard,
-                RelativePlayerSet::All,
-                Some(*count),
-            ),
-            SpellEffectKind::Mill {
-                count,
-                who: PlayerRecipient::Controller,
-            } => (
-                CardResultAction::Mill,
-                RelativePlayerSet::Controller,
-                amount_upper_bound(count),
-            ),
-            _ => {
-                return Err(
-                    "Program GainLife result count requires a same-block matching Discard or Controller Mill result".into(),
-                );
-            }
-        },
-        _ => {
-            return Err(
-                "Program GainLife result count requires a same-block matching Discard or Controller Mill result".into(),
-            );
-        }
-    };
-
-    if filter.source != CardResultSource::PreviousEffect
-        || filter.action != action
-        || filter.players != players
-    {
-        return Err(
-            "Program GainLife result count must match its same-block Discard or Controller Mill action and player set".into(),
-        );
-    }
-
     let slot = slots
         .get(input.0 as usize)
         .ok_or_else(|| "Program GainLife input result slot is unavailable".to_string())?;
-    let result_max = match (&slot.result_type, action) {
-        (
-            ResultType::TargetCardResultCohort {
-                action: CardResultAction::Discard,
-                cardinality:
-                    Cardinality {
-                        min: 0,
-                        max: Some(max),
-                    },
-                ..
-            },
-            CardResultAction::Discard,
-        ) => Some(*max),
-        (
-            ResultType::CardResultCohort {
-                action: CardResultAction::Mill,
-                who: PlayerRecipient::Controller,
-                cardinality:
-                    Cardinality {
-                        min: 0,
-                        max: Some(max),
-                    },
-            },
-            CardResultAction::Mill,
-        ) => Some(*max),
-        _ => None,
-    };
-    let Some(max) = result_max.filter(|max| producer_max == Some(*max)) else {
+    if matches!(slot.result_type, ResultType::CastPaymentCohort { .. }) {
         return Err(
-            "Program GainLife result count requires a finite matching Discard or Controller Mill result".into(),
+            "Program GainLife BoundCardResultCount excludes CastPaymentCohort because payment card types can expose hidden cast-cost discards".into(),
         );
-    };
+    }
+    if filter.card_type.is_some() && !bound_card_result_type_filter_is_safe(&slot.result_type) {
+        return Err(
+            "Program GainLife BoundCardResultCount card_type is unsafe for this result cohort"
+                .into(),
+        );
+    }
+    let expected_filter = project_bound_card_result_filter(slot, filter.card_type)?;
+    if *filter != expected_filter {
+        return Err(
+            "Program GainLife result count must match its explicitly bound typed result cohort"
+                .into(),
+        );
+    }
+    let max = result_cardinality(&slot.result_type)
+        .and_then(|cardinality| cardinality.max)
+        .ok_or_else(|| {
+            "Program GainLife result count requires a finite typed result-slot cardinality"
+                .to_string()
+        })?;
     if coefficient.checked_mul(max).is_none() {
         return Err("Program GainLife result count can exceed u32::MAX".into());
     }
@@ -3248,6 +3336,9 @@ fn compile_input(
         EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
             Some("CardResultCohort")
         }
+        EffectOp::GainLife { amount } if amount.uses_bound_card_result_count() => {
+            Some("bound card-result cohort")
+        }
         EffectOp::DamagePlayer {
             amount: Amount::Count(CountExpression::ProgramInputCount),
             who: PlayerRecipient::Controller,
@@ -3258,6 +3349,9 @@ fn compile_input(
         } => Some("Count"),
         EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
             Some("DiscardResult")
+        }
+        EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
+            Some("bound DiscardResult")
         }
         EffectOp::RevealCohort => Some("FoundLibraryCohort"),
         EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
@@ -3323,7 +3417,20 @@ fn compile_input(
                         }
                     )
                 }
+                EffectOp::GainLife { amount } if amount.uses_bound_card_result_count() => {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort { .. }
+                            | ResultType::TargetCardResultCohort { .. }
+                            | ResultType::LinkedExileCardResultCohort { .. }
+                            | ResultType::CastPaymentCohort { .. }
+                            | ResultType::DiscardResult { .. }
+                    )
+                }
                 EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
+                    matches!(actual.result_type, ResultType::DiscardResult { .. })
+                }
+                EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
                     matches!(actual.result_type, ResultType::DiscardResult { .. })
                 }
                 EffectOp::DamagePlayer {
