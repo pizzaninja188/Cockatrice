@@ -1685,6 +1685,11 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
                     "unsupported subject for multi-subject library shuffle",
                 ));
             }
+            EffectSubject::TargetAlias(_) => {
+                return Err(EngineError::Illegal(
+                    "unlowered target alias reached library shuffle resolution",
+                ));
+            }
         }
     }
 

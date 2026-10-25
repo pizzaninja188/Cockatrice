@@ -1479,7 +1479,7 @@ impl GameEngine {
                 condition.matches_value(count)
             }
             GameCondition::ObjectWasDealtDamageThisTurn { object } => self
-                .condition_object_identity(*object, context)
+                .condition_object_identity(object.clone(), context)
                 .is_some_and(|identity| {
                     self.state
                         .turn_history
@@ -1489,7 +1489,7 @@ impl GameEngine {
                 }),
             GameCondition::ObjectTapped { object, tapped } => {
                 let Some((object_id, expected_generation)) =
-                    self.condition_object_identity(*object, context)
+                    self.condition_object_identity(object.clone(), context)
                 else {
                     return false;
                 };
@@ -1521,7 +1521,7 @@ impl GameEngine {
                 observed_tapped == Some(*tapped)
             }
             GameCondition::ObjectMatches { object, filter } => self
-                .condition_object_identity(*object, context)
+                .condition_object_identity(object.clone(), context)
                 .is_some_and(|(object_id, expected_generation)| {
                     self.state
                         .zone_change_generation
@@ -1537,7 +1537,7 @@ impl GameEngine {
                         )
                 }),
             GameCondition::ObjectManaValue { object, .. } => self
-                .condition_object_identity(*object, context)
+                .condition_object_identity(object.clone(), context)
                 .and_then(|(object_id, expected_generation)| {
                     let current_generation = self
                         .state
@@ -1747,6 +1747,7 @@ impl GameEngine {
                 .produced_objects
                 .first()
                 .map(|object| (object.object_id, object.zone_change_generation)),
+            ConditionObjectRef::TargetAlias(_) => None,
         }
     }
 

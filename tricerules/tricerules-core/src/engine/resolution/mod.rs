@@ -473,6 +473,7 @@ impl EffectCx<'_> {
             EffectSubject::Chosen(_)
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject => Some(self.top.id),
+            EffectSubject::TargetAlias(_) => return None,
             EffectSubject::PreviousEffectObjects => return None,
         };
         Some((object_id, source_id))
@@ -1102,6 +1103,7 @@ fn resolve_effect_subject(
             .source_permanent_id
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
+        EffectSubject::TargetAlias(_) => None,
         EffectSubject::PreviousEffectObject => None,
         EffectSubject::PreviousEffectObjects => None,
         EffectSubject::TriggerObject => {

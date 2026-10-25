@@ -292,6 +292,13 @@ pub enum GameCondition {
     },
 }
 
+fn validate_condition_object_reference(object: &ConditionObjectRef) -> Result<(), String> {
+    if matches!(object, ConditionObjectRef::TargetAlias(_)) {
+        return Err("target alias markers are valid only in a CardProgram source".into());
+    }
+    Ok(())
+}
+
 impl GameCondition {
     pub(crate) fn requires_self_entry_spell_context(&self) -> bool {
         self.any_node_matches(|condition| {
@@ -475,8 +482,10 @@ impl GameCondition {
             | GameCondition::SelfWasCast
             | GameCondition::SelfWasBargained
             | GameCondition::TriggerObjectWasNotPutWithThisAbility
-            | GameCondition::TriggeringSpellManaSpent { .. }
-            | GameCondition::ObjectTapped { .. } => Ok(()),
+            | GameCondition::TriggeringSpellManaSpent { .. } => Ok(()),
+            GameCondition::ObjectTapped { object, .. } => {
+                validate_condition_object_reference(object)
+            }
             GameCondition::ControlsCreatureTiedForGreatestPower => Ok(()),
             GameCondition::ObservedObjectNameIsUnique => Ok(()),
             GameCondition::OpponentHasMoreThanYou { .. } => Ok(()),
@@ -522,11 +531,15 @@ impl GameCondition {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "bounded game condition")
             }
             GameCondition::AttackedThisTurn { .. } => Ok(()),
-            GameCondition::ObjectWasDealtDamageThisTurn { .. } => Ok(()),
-            GameCondition::ObjectMatches { filter, .. } => {
+            GameCondition::ObjectWasDealtDamageThisTurn { object } => {
+                validate_condition_object_reference(object)
+            }
+            GameCondition::ObjectMatches { object, filter } => {
+                validate_condition_object_reference(object)?;
                 filter.validate_characteristic_constraints()
             }
-            GameCondition::ObjectManaValue { min, max, .. } => {
+            GameCondition::ObjectManaValue { object, min, max } => {
+                validate_condition_object_reference(object)?;
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "ObjectManaValue")
             }
             GameCondition::BattlefieldCreatureCount { filter, min, max } => {
@@ -867,7 +880,7 @@ impl PermanentEventFilter {
 }
 
 /// Stable object reference available while evaluating a stack-bound condition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConditionObjectRef {
     Source,
     ChosenTarget {
@@ -877,6 +890,9 @@ pub enum ConditionObjectRef {
     /// The exact generation-bound object published by the immediately preceding resolution
     /// instruction. This is available only to an inline `Conditional` effect.
     PreviousEffectObject,
+    /// Source-only name resolved against the declaring CardProgram's target-alias table.
+    /// The Program compiler consumes this marker before producing executable instructions.
+    TargetAlias(String),
 }
 
 /// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate

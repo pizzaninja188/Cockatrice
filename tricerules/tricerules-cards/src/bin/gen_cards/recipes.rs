@@ -16273,6 +16273,7 @@ fn match_spell_create_horror_tapped_cast_from_graveyard_scales(
                     yields: Vec::new(),
                 },
                 target_bindings: Vec::new(),
+                target_aliases: Vec::new(),
             },
         }
     })

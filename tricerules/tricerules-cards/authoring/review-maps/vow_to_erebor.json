@@ -1,0 +1,91 @@
+{
+  "format_version": 1,
+  "exact_name": "Vow to Erebor",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "vow_to_erebor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/targeting/groups/0",
+        "/faces/0/spell_program/target_aliases/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Untap/subject",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/PumpTarget/subject",
+        "/faces/0/spell_program/body/steps/2/kind/Choose",
+        "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/requirement/GameCondition/ObjectMatches/object",
+        "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/body/steps/0/kind/Perform/ChoosePermanents/constraints/0/EquipmentAttachableTo/recipient",
+        "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/body/steps/1/kind/Perform/AttachEquipment/creature"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "ProgramTargetAlias",
+      "typed_path": "/faces/0/spell_program/target_aliases/0"
+    },
+    {
+      "symbol": "EffectSubject::TargetAlias",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Untap/subject"
+    },
+    {
+      "symbol": "EffectSubject::TargetAlias",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/PumpTarget/subject"
+    },
+    {
+      "symbol": "ConditionObjectRef::TargetAlias",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/requirement/GameCondition/ObjectMatches/object"
+    },
+    {
+      "symbol": "PermanentChoiceConstraint::EquipmentAttachableTo",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/body/steps/0/kind/Perform/ChoosePermanents/constraints/0/EquipmentAttachableTo/recipient"
+    },
+    {
+      "symbol": "EffectSubject::TargetAlias",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Choose/branches/0/body/steps/1/kind/Perform/AttachEquipment/creature"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_vow_chooses_and_attaches_one_legal_equipment_to_a_dwarf",
+      "covers": "The compiled target group untaps and pumps the chosen controlled creature, then a Dwarf takes the optional Equipment attach choice."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_vow_may_decline_the_equipment_choice",
+      "covers": "The Equipment choice is optional and declining it preserves the target's untap and pump without attachment."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_vow_skips_the_equipment_choice_for_a_non_dwarf",
+      "covers": "The target alias is read by the live Dwarf condition; a non-Dwarf does not receive the Equipment choice."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_vow_does_not_offer_equipment_that_cannot_legally_attach",
+      "covers": "The alias-backed EquipmentAttachableTo constraint removes Equipment that cannot legally attach to the chosen Dwarf."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_vow_rejects_the_same_equipment_object_after_it_returns_as_a_new_incarnation",
+      "covers": "The owner-local alias and constrained choice retain the exact target generation across a parked resolution choice."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_twincast_vow_copy_retargets_for_copy_controller_and_runs_alias_branch_once",
+      "covers": "Twincast retargets an actual Vow copy to its controller's Dwarf; the alias-backed untap, pump, constrained Equipment choice, and attachment complete once on that target while the original remains independent."
+    },
+    {
+      "test": "scenario issue_188_chosen_equipment_attachment::issue_188_twincast_vow_copy_with_no_legal_retarget_does_not_choose_a_late_substitute",
+      "covers": "When the copy controller has no legal target, keeping the original target does not substitute a later candidate; the copy fizzles and the still-legal original resolves independently."
+    },
+    {
+      "test": "scenario issue_109_temporary_exile::observer_restore_reenters_vow_equipment_choice_after_target_owner_concedes",
+      "covers": "A legal target controlled by the caster but owned by a departing opponent resolves through the target alias and re-enters the optional choice."
+    },
+    {
+      "test": "mechanic_registry::issue_201_multi_object_library::named_target_aliases_match_pre_migration_programs_for_both_owners",
+      "covers": "The entire compiled Vow Program matches its independently reconstructed explicit-filter, coordinate, and binding form."
+    }
+  ]
+}

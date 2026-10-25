@@ -141,6 +141,11 @@ pub(super) fn destroy(
                 "plural previous-object subject is unsupported for destroy",
             ));
         }
+        EffectSubject::TargetAlias(_) => {
+            return Err(EngineError::Illegal(
+                "unlowered target alias reached destroy resolution",
+            ));
+        }
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
@@ -208,6 +213,11 @@ pub(super) fn sacrifice(
         EffectSubject::PreviousEffectObjects => {
             return Err(EngineError::Illegal(
                 "plural previous-object subject is unsupported for sacrifice",
+            ));
+        }
+        EffectSubject::TargetAlias(_) => {
+            return Err(EngineError::Illegal(
+                "unlowered target alias reached sacrifice resolution",
             ));
         }
     };
@@ -646,6 +656,11 @@ pub(super) fn create_delayed_trigger(
                     cx.top.trigger_context,
                 )
             }),
+            EffectSubject::TargetAlias(_) => {
+                return Err(EngineError::Illegal(
+                    "unlowered target alias reached delayed-trigger resolution",
+                ));
+            }
         };
         let Some(watched_id) = watched_id else {
             return Ok(EffectOutcome::Continue);
@@ -905,6 +920,7 @@ fn attach_equipment_subject(
         EffectSubject::PreviousEffectObjects => None,
         EffectSubject::Source => resolve_effect_subject(cx.engine, cx.top, &[], subject),
         EffectSubject::AttachedObject | EffectSubject::TriggerObject => None,
+        EffectSubject::TargetAlias(_) => None,
     }
 }
 

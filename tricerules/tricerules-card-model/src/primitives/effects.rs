@@ -182,6 +182,9 @@ pub enum EffectSubject {
     /// this subject; single-object references keep using `PreviousEffectObject`.
     PreviousEffectObjects,
     Chosen(Box<TargetFilter>),
+    /// Source-only name resolved against the declaring CardProgram's target-alias table.
+    /// The Program compiler consumes this marker before producing executable instructions.
+    TargetAlias(String),
 }
 
 /// CR 707: Colorstorm Stallion copies its ability source, Cackling Counterpart copies one chosen
@@ -770,7 +773,7 @@ pub enum ResolutionBranchRequirement {
     CastCostReceipt(CastCostReceiptCondition),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionReceiptCondition {
     /// The immediately preceding counter instruction successfully placed this kind of counter on
     /// the exact generation-bound object selected by `object`.
@@ -3593,7 +3596,8 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects => None,
+                    | EffectSubject::PreviousEffectObjects
+                    | EffectSubject::TargetAlias(_) => None,
                 })
                 .collect(),
             SpellEffectKind::AttachEquipment {
@@ -3607,7 +3611,8 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects => None,
+                    | EffectSubject::PreviousEffectObjects
+                    | EffectSubject::TargetAlias(_) => None,
                 })
                 .collect(),
             SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => subjects
@@ -3618,7 +3623,8 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects => None,
+                    | EffectSubject::PreviousEffectObjects
+                    | EffectSubject::TargetAlias(_) => None,
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
@@ -3650,7 +3656,8 @@ impl SpellEffectKind {
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects => Vec::new(),
+                | EffectSubject::PreviousEffectObjects
+                | EffectSubject::TargetAlias(_) => Vec::new(),
             },
             SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
                 Some(EffectSubject::Chosen(target)) => vec![TargetRole::Filtered(target)],
@@ -3659,7 +3666,8 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects,
+                    | EffectSubject::PreviousEffectObjects
+                    | EffectSubject::TargetAlias(_),
                 )
                 | None => Vec::new(),
             },
@@ -4242,11 +4250,71 @@ impl SpellEffectKind {
         self.validate_inner(context, true)
     }
 
+    fn contains_unlowered_target_alias_marker(&self) -> bool {
+        let is_alias = |subject: &EffectSubject| matches!(subject, EffectSubject::TargetAlias(_));
+        match self {
+            Self::ApplyPermanentModifier { subject, .. }
+            | Self::Destroy { subject }
+            | Self::DestroyPreventingRegeneration { subject }
+            | Self::Sacrifice { subject }
+            | Self::PumpTarget { subject, .. }
+            | Self::Tap { subject }
+            | Self::Untap { subject }
+            | Self::SetPrepared { subject, .. }
+            | Self::RemoveAllAbilities { subject, .. }
+            | Self::GrantKeywords { subject, .. }
+            | Self::GrantKeywordChoice { subject, .. }
+            | Self::GrantProtection { subject, .. }
+            | Self::GrantTriggeredAbility { subject, .. }
+            | Self::AddTypes { subject, .. }
+            | Self::Exile { subject, .. }
+            | Self::ExileWithOwnerCastPermission { subject, .. }
+            | Self::ReturnToOwnersHand { subject }
+            | Self::PutInOwnersLibrary { subject, .. }
+            | Self::Regenerate { subject }
+            | Self::Explore { subject }
+            | Self::PutCounters { subject, .. }
+            | Self::RemoveCounters { subject, .. }
+            | Self::RemoveAllCounters { subject, .. }
+            | Self::PutCounterSnapshot { subject, .. } => is_alias(subject),
+            Self::Fight { first, second } => is_alias(first) || is_alias(second),
+            Self::AttachEquipment {
+                equipment,
+                creature,
+            } => is_alias(equipment) || is_alias(creature),
+            Self::ShufflePermanentsIntoOwnersLibraries { subjects } => {
+                subjects.iter().any(is_alias)
+            }
+            Self::CreateDelayedTrigger { subject, .. } => subject.as_ref().is_some_and(is_alias),
+            Self::ChoosePermanents { constraints, .. } => constraints.iter().any(|constraint| {
+                let PermanentChoiceConstraint::EquipmentAttachableTo { recipient } = constraint;
+                matches!(recipient, ConditionObjectRef::TargetAlias(_))
+            }),
+            Self::CreateReflexiveTrigger { when, .. } => when.as_ref().is_some_and(|condition| {
+                let object = match condition {
+                    ResolutionReceiptCondition::CountersPlaced { object, .. }
+                    | ResolutionReceiptCondition::Sacrificed { object } => object,
+                };
+                matches!(object, ConditionObjectRef::TargetAlias(_))
+            }),
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_unlowered_target_alias_marker()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_unlowered_target_alias_marker),
+            _ => false,
+        }
+    }
+
     fn validate_inner(
         &self,
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if self.contains_unlowered_target_alias_marker() {
+            return Err("target alias markers are valid only in a CardProgram source".into());
+        }
         let unsupported_retained_search_or_cohort = matches!(
             self,
             Self::SelectHandCards { .. }
@@ -4703,7 +4771,8 @@ impl SpellEffectKind {
                 EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects => {
+                | EffectSubject::PreviousEffectObjects
+                | EffectSubject::TargetAlias(_) => {
                     return Err("Explore requires Source or Chosen subject".into());
                 }
             }
@@ -4776,7 +4845,8 @@ impl SpellEffectKind {
                     EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects => {
+                    | EffectSubject::PreviousEffectObjects
+                    | EffectSubject::TargetAlias(_) => {
                         return Err(
                             "ShufflePermanentsIntoOwnersLibraries supports only Source and Chosen subjects"
                                 .into(),
@@ -4873,7 +4943,9 @@ impl SpellEffectKind {
                         "PreviousEffectObjects only supports the indefinite Haste modifier".into(),
                     );
                 }
-                EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+                EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject
+                | EffectSubject::TargetAlias(_) => {
                     return Err("permanent modifiers support only Source, Chosen, or an immediate PreviousEffectObject".into());
                 }
             }

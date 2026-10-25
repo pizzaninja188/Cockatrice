@@ -111,6 +111,64 @@ fn cast_vow_and_reach_choice(
         .expect("second pass")
 }
 
+fn issue_188_vow_copy_game(seed: u64) -> GameEngine {
+    let decks = Some(vec![
+        deck_with(
+            "plains",
+            &["vow_to_erebor", "dwarven_priest", "bonesplitter"],
+        ),
+        deck_with("island", &["twincast", "dwarven_priest", "bonesplitter"]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Vow and Twincast fixture cards validate");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn cast_vow_and_twincast_to_copy_target_choice(engine: &mut GameEngine, target: u32) -> u32 {
+    ensure_in_hand(engine, 0, "vow_to_erebor");
+    give_mana(
+        engine,
+        0,
+        ManaGift {
+            w: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let vow_slot = hand_index_for_card(engine, 0, "vow_to_erebor");
+    engine
+        .apply_scenario_command(0, &cast_spell(vow_slot, target_object(target)))
+        .expect("P0 casts Vow to Erebor");
+    let vow_id = engine.state.stack.last().expect("Vow on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("P0 gives P1 a chance to copy Vow");
+
+    ensure_in_hand(engine, 1, "twincast");
+    give_mana(
+        engine,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let twincast_slot = hand_index_for_card(engine, 1, "twincast");
+    engine
+        .apply_scenario_command(1, &cast_spell(twincast_slot, target_object(vow_id)))
+        .expect("P1 casts Twincast targeting Vow");
+    pass_priority_round(engine);
+    vow_id
+}
+
 #[test]
 fn issue_188_attachment_vocabulary_loads() {
     let vow = tricerules_cards::registry::global()
@@ -471,6 +529,219 @@ fn issue_188_vow_rejects_the_same_equipment_object_after_it_returns_as_a_new_inc
     assert_eq!(engine.state.objects[&equipment].attached_to, None);
     assert!(!engine.state.objects[&dwarf].tapped);
     assert_eq!(engine.effective_power(dwarf), Some(4));
+}
+
+#[test]
+fn issue_188_twincast_vow_copy_retargets_for_copy_controller_and_runs_alias_branch_once() {
+    let mut engine = issue_188_vow_copy_game(188_010);
+    let original_dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
+    let original_equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
+    let copy_dwarf = relocate_to_battlefield(&mut engine, 1, "dwarven_priest", true);
+    let copy_equipment = relocate_to_battlefield(&mut engine, 1, "bonesplitter", false);
+
+    let vow_id = cast_vow_and_twincast_to_copy_target_choice(&mut engine, original_dwarf);
+    let original_generation = engine
+        .state
+        .zone_change_generation
+        .get(&original_dwarf)
+        .copied()
+        .unwrap_or(0);
+    let copy_generation = engine
+        .state
+        .zone_change_generation
+        .get(&copy_dwarf)
+        .copied()
+        .unwrap_or(0);
+    let copy_target_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Twincast asks its controller to choose the copied target");
+    assert_eq!(copy_target_choice.deciding_player, 1);
+    assert_eq!(copy_target_choice.presentation.candidates, [copy_dwarf]);
+    assert_eq!(
+        (
+            copy_target_choice.presentation.min,
+            copy_target_choice.presentation.max
+        ),
+        (0, 1)
+    );
+    assert!(copy_target_choice
+        .presentation
+        .candidates
+        .contains(&copy_dwarf));
+    assert!(!copy_target_choice
+        .presentation
+        .candidates
+        .contains(&original_dwarf));
+
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![copy_dwarf]))
+        .expect("P1 retargets the copy at a creature P1 controls");
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy && item.card_id == "vow_to_erebor")
+        .expect("the copied Vow is waiting above the original");
+    assert_eq!(copy.targets.len(), 1);
+    assert_eq!(copy.targets[0].object_id, copy_dwarf);
+    assert_eq!(copy.targets[0].group_index, 0);
+    assert_eq!(
+        copy.targets[0].zone_change_generation,
+        Some(copy_generation)
+    );
+
+    let copy_resolution = pass_both_players_with_batch(&mut engine);
+    let copy_equipment_choice = find_resolution_choice(&copy_resolution)
+        .expect("copied Vow reaches its Dwarf Equipment branch");
+    assert_eq!(copy_equipment_choice.deciding_player_id, 1);
+    assert_eq!(
+        (copy_equipment_choice.min, copy_equipment_choice.max),
+        (0, 1)
+    );
+    assert_eq!(copy_equipment_choice.candidate_object_ids, [copy_equipment]);
+    assert!(!copy_equipment_choice
+        .candidate_object_ids
+        .contains(&original_equipment));
+    assert!(!engine.state.objects[&copy_dwarf].tapped);
+    assert_eq!(engine.effective_power(copy_dwarf), Some(4));
+    assert_eq!(engine.effective_toughness(copy_dwarf), Some(6));
+    assert!(engine.state.objects[&original_dwarf].tapped);
+    assert_eq!(engine.effective_power(original_dwarf), Some(2));
+    assert_eq!(engine.effective_toughness(original_dwarf), Some(4));
+
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![copy_equipment]))
+        .expect("P1 attaches exactly the offered Equipment to the copied target");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, vow_id);
+    assert!(!engine.state.stack[0].is_copy);
+    assert_eq!(
+        engine.state.objects[&copy_equipment].attached_to,
+        Some(AttachmentRecipient::Object(copy_dwarf))
+    );
+    assert_eq!(engine.state.objects[&original_equipment].attached_to, None);
+
+    let original_resolution = pass_both_players_with_batch(&mut engine);
+    let original_equipment_choice = find_resolution_choice(&original_resolution)
+        .expect("the original Vow independently reaches its Equipment branch");
+    assert_eq!(original_equipment_choice.deciding_player_id, 0);
+    assert_eq!(
+        original_equipment_choice.candidate_object_ids,
+        [original_equipment]
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&original_dwarf)
+            .copied()
+            .unwrap_or(0),
+        original_generation
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![original_equipment]))
+        .expect("P0 attaches Equipment to the original target");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&original_equipment].attached_to,
+        Some(AttachmentRecipient::Object(original_dwarf))
+    );
+    assert_eq!(engine.effective_power(original_dwarf), Some(4));
+    assert_eq!(engine.effective_toughness(original_dwarf), Some(6));
+    assert_eq!(engine.effective_power(copy_dwarf), Some(4));
+    assert_eq!(engine.effective_toughness(copy_dwarf), Some(6));
+}
+
+#[test]
+fn issue_188_twincast_vow_copy_with_no_legal_retarget_does_not_choose_a_late_substitute() {
+    let mut engine = issue_188_vow_copy_game(188_011);
+    let original_dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
+    let original_equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
+    let original_generation = engine
+        .state
+        .zone_change_generation
+        .get(&original_dwarf)
+        .copied()
+        .unwrap_or(0);
+
+    let vow_id = cast_vow_and_twincast_to_copy_target_choice(&mut engine, original_dwarf);
+    let copy_target_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Twincast still prompts when the copy has no legal new target");
+    assert_eq!(copy_target_choice.deciding_player, 1);
+    assert!(copy_target_choice.presentation.candidates.is_empty());
+    assert_eq!(
+        (
+            copy_target_choice.presentation.min,
+            copy_target_choice.presentation.max
+        ),
+        (0, 1)
+    );
+
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(Vec::new()))
+        .expect("P1 keeps the original target when no new target is legal for P1");
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy && item.card_id == "vow_to_erebor")
+        .expect("the copied Vow remains targeted at the original P0 creature");
+    assert_eq!(copy.targets.len(), 1);
+    assert_eq!(copy.targets[0].object_id, original_dwarf);
+    assert_eq!(copy.targets[0].group_index, 0);
+    assert_eq!(
+        copy.targets[0].zone_change_generation,
+        Some(original_generation)
+    );
+
+    let late_substitute = relocate_to_battlefield(&mut engine, 1, "dwarven_priest", true);
+    let late_equipment = relocate_to_battlefield(&mut engine, 1, "bonesplitter", false);
+    let copy_resolution = pass_both_players_with_batch(&mut engine);
+    assert!(
+        find_resolution_choice(&copy_resolution).is_none(),
+        "the copied spell's illegal target fizzles instead of substituting a newly legal target"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, vow_id);
+    assert!(!engine.state.stack[0].is_copy);
+    assert!(engine.state.objects[&original_dwarf].tapped);
+    assert_eq!(engine.effective_power(original_dwarf), Some(2));
+    assert_eq!(engine.effective_toughness(original_dwarf), Some(4));
+    assert!(engine.state.objects[&late_substitute].tapped);
+    assert_eq!(engine.effective_power(late_substitute), Some(2));
+    assert_eq!(engine.effective_toughness(late_substitute), Some(4));
+    assert_eq!(engine.state.objects[&late_equipment].attached_to, None);
+    assert_eq!(engine.state.objects[&original_equipment].attached_to, None);
+
+    let original_resolution = pass_both_players_with_batch(&mut engine);
+    let original_choice = find_resolution_choice(&original_resolution)
+        .expect("the independently legal original Vow still resolves on its target");
+    assert_eq!(original_choice.deciding_player_id, 0);
+    assert_eq!(original_choice.candidate_object_ids, [original_equipment]);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![original_equipment]))
+        .expect("resolve the original Vow without inheriting the copy's target choice");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.effective_power(original_dwarf), Some(4));
+    assert_eq!(engine.effective_toughness(original_dwarf), Some(6));
+    assert!(engine.state.objects[&late_substitute].tapped);
+    assert_eq!(engine.effective_power(late_substitute), Some(2));
+    assert_eq!(
+        engine.state.objects[&original_equipment].attached_to,
+        Some(AttachmentRecipient::Object(original_dwarf))
+    );
+    assert_eq!(engine.state.objects[&late_equipment].attached_to, None);
 }
 
 #[test]

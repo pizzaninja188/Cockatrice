@@ -4379,6 +4379,7 @@ fn optional_discard_then_draw_is_an_authored_payment_result_branch() {
     )
     .expect("optional discard program fixture parses");
     let program = crate::primitives::CardProgram {
+        target_aliases: Vec::new(),
         body,
         target_bindings: Vec::new(),
     };
@@ -10904,6 +10905,7 @@ fn manifest_dread_can_bind_its_exact_optional_object_for_attach_equipment() {
     };
 
     let program = CardProgram {
+        target_aliases: Vec::new(),
         body: AuthoredBlock {
             steps: vec![
                 Instruction {
@@ -11017,6 +11019,7 @@ fn program_compiler_types_fixed_cost_counter_payment_results() {
     )
     .expect("typed counter-payment result fixture parses");
     let program = crate::primitives::CardProgram {
+        target_aliases: Vec::new(),
         body,
         target_bindings: vec![crate::primitives::ProgramTargetReference {
             instruction_id: "counter".into(),
@@ -11078,6 +11081,7 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
             ron::from_str(&format!("(steps: [{steps}], yields: [])"))
                 .expect("counter-payment program fixture parses");
         let program = crate::primitives::CardProgram {
+            target_aliases: Vec::new(),
             body,
             target_bindings: vec![crate::primitives::ProgramTargetReference {
                 instruction_id: "counter".into(),
@@ -11342,6 +11346,7 @@ fn spell_program_accepts_subjectless_no_input_delayed_triggers_only() {
     let authored: crate::primitives::AuthoredBlock =
         ron::from_str(body).expect("the delayed trigger fixture parses");
     let ability_program = crate::primitives::CardProgram {
+        target_aliases: Vec::new(),
         body: authored,
         target_bindings: Vec::new(),
     };
@@ -11573,6 +11578,7 @@ fn public_program_compilers_reject_target_leaves_without_a_complete_schema() {
         crate::CardFaceId::new("public_target_compile_fixture").unwrap(),
     );
     let bound_program = super::CardProgram {
+        target_aliases: Vec::new(),
         body: body.clone(),
         target_bindings: vec![super::ProgramTargetReference {
             instruction_id: "damage".into(),
@@ -11581,6 +11587,7 @@ fn public_program_compilers_reject_target_leaves_without_a_complete_schema() {
         }],
     };
     let unbound_program = super::CardProgram {
+        target_aliases: Vec::new(),
         body,
         target_bindings: Vec::new(),
     };
@@ -11613,6 +11620,7 @@ fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
         ))
         .expect("leaf fixture parses");
         let program = super::CardProgram {
+            target_aliases: Vec::new(),
             body,
             target_bindings: Vec::new(),
         };
@@ -11685,6 +11693,7 @@ fn program_compiler_accepts_a_bound_mill_cohort_for_choose_card() {
     )
     .expect("the bounded Mill-to-ChooseCard authoring form should parse");
     let program = super::CardProgram {
+        target_aliases: Vec::new(),
         body,
         target_bindings: Vec::new(),
     };
@@ -12014,6 +12023,7 @@ fn program_compiler_rejects_unbound_incompatible_and_forward_choose_card_inputs(
     let compile = |body: &str| {
         let body: super::AuthoredBlock = ron::from_str(body).expect("invalid-input fixture parses");
         let program = super::CardProgram {
+            target_aliases: Vec::new(),
             body,
             target_bindings: Vec::new(),
         };
@@ -12145,6 +12155,788 @@ fn authored_program_accepts_targets_bound_by_program_instructions() {
             "expected {expected:?}, got {error}"
         );
     }
+}
+
+#[test]
+fn program_compiler_lowers_owner_local_named_target_alias() {
+    use crate::primitives::{
+        CompiledInstructionKind, CompiledProgram, EffectContext, EffectSubject, SpellEffectKind,
+        TargetChooser, TargetGroupDef, TargetKind, TargetSchema, TargetingDef,
+    };
+
+    let source = r#"(body: (steps: [
+        (id: "tap", bind: [], input: None,
+            kind: Perform(Tap(subject: TargetAlias("target_creature"))))
+    ], yields: []), target_bindings: [], target_aliases: [
+        (name: "target_creature", group_index: 0,
+            filter: (kind: Creature, controller: You))
+    ])"#;
+    let program: crate::CardProgram =
+        ron::from_str(source).expect("named target aliases must parse as CardProgram source");
+    let targeting = TargetingDef {
+        groups: vec![TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose target creature you control".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let compiled = CompiledProgram::compile_with_targeting(
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "named_target_alias_fixture".into(),
+            face_id: crate::CardFaceId::new("named_target_alias_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        }),
+        EffectContext::Ability,
+        &program,
+        Some(&targeting),
+    )
+    .expect("the alias should lower through ordinary target binding compilation");
+
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(compiled.target_bindings[0].role_index, 0);
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(filter),
+            } if filter.kind == TargetKind::Creature)
+    ));
+    assert_eq!(
+        TargetSchema::compile_program(&compiled, Some(&targeting))
+            .unwrap()
+            .groups
+            .len(),
+        1
+    );
+    assert_eq!(compiled.target_bindings[0].instruction_address, 0);
+}
+
+#[test]
+fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_uses() {
+    use crate::primitives::{
+        AuthoredBlock, CompiledProgram, EffectContext, ProgramTargetAlias, ProgramTargetReference,
+        ProgramTargetRole, TargetChooser, TargetFilter, TargetGroupDef, TargetKind, TargetSchema,
+        TargetingDef,
+    };
+
+    let owner = || {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "named_target_alias_validation_fixture".into(),
+            face_id: crate::CardFaceId::new("named_target_alias_validation_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        })
+    };
+    let targeting = |min, max| TargetingDef {
+        groups: vec![TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min,
+            max,
+            prompt: "Choose a creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let target_alias = || ProgramTargetAlias {
+        name: "target_creature".into(),
+        group_index: 0,
+        filter: TargetFilter {
+            kind: TargetKind::Creature,
+            ..TargetFilter::default()
+        },
+    };
+    let tap_body = || {
+        ron::from_str::<AuthoredBlock>(
+            r#"(steps: [
+            (id: "choose_equipment", bind: ["equipment"], input: None,
+                kind: Perform(ChoosePermanents(chooser: Controller,
+                    filter: (kind: AnyPermanent, controller: You,
+                        required_subtypes: ["Equipment"]), min: 0, max: 1,
+                    constraints: [EquipmentAttachableTo(recipient:
+                        TargetAlias("target_creature"))]))),
+            (id: "attach_equipment", bind: [], input: Some("equipment"),
+                kind: Perform(AttachEquipment(equipment: PreviousEffectObject,
+                    creature: TargetAlias("target_creature"))))
+        ], yields: [])"#,
+        )
+        .expect("the optional Equipment body parses")
+    };
+    let compile = |program: &crate::CardProgram, targeting: Option<&TargetingDef>| {
+        CompiledProgram::compile_with_targeting(owner(), EffectContext::Ability, program, targeting)
+    };
+
+    let optional = targeting(0, 1);
+    let optional_program = crate::CardProgram {
+        body: tap_body(),
+        target_bindings: Vec::new(),
+        target_aliases: vec![target_alias()],
+    };
+    let compiled = compile(&optional_program, Some(&optional))
+        .expect("an optional singleton alias preserves its target group");
+    assert_eq!(compiled.target_bindings.len(), 1);
+    assert_eq!(compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(compiled.target_bindings[0].role_index, 0);
+    assert!(matches!(
+        &compiled.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ChoosePermanents {
+                constraints,
+                ..
+            } if matches!(constraints.as_slice(), [
+                crate::primitives::PermanentChoiceConstraint::EquipmentAttachableTo {
+                    recipient: crate::primitives::ConditionObjectRef::ChosenTarget {
+                        group_index: 0,
+                        target_index: 0,
+                    }
+                }
+            ]))
+    ));
+    assert_eq!(
+        TargetSchema::compile_program(&compiled, Some(&optional))
+            .unwrap()
+            .groups[0]
+            .min,
+        0
+    );
+
+    let required = targeting(1, 1);
+    let duplicate = crate::CardProgram {
+        body: tap_body(),
+        target_bindings: Vec::new(),
+        target_aliases: vec![target_alias(), target_alias()],
+    };
+    assert!(compile(&duplicate, Some(&required))
+        .unwrap_err()
+        .contains("duplicate program target alias"));
+
+    let mut second_alias = target_alias();
+    second_alias.name = "same_group_other_name".into();
+    let duplicate_group: crate::CardProgram = crate::CardProgram {
+        body: ron::from_str(
+            r#"(steps: [
+                (id: "tap_first", bind: [], input: None,
+                    kind: Perform(Tap(subject: TargetAlias("target_creature")))),
+                (id: "untap_second", bind: [], input: None,
+                    kind: Perform(Untap(subject: TargetAlias("same_group_other_name"))))
+            ], yields: [])"#,
+        )
+        .expect("the distinct effect uses parse"),
+        target_bindings: Vec::new(),
+        target_aliases: vec![target_alias(), second_alias],
+    };
+    let duplicate_group_error = compile(&duplicate_group, Some(&required)).unwrap_err();
+    assert!(
+        duplicate_group_error.contains("program target aliases must use distinct target groups"),
+        "{duplicate_group_error}"
+    );
+
+    let mut unknown = optional_program.clone();
+    let AuthoredBlock { steps, .. } = &mut unknown.body;
+    let crate::primitives::InstructionKind::Perform(effect) = &mut steps[1].kind else {
+        unreachable!("the fixture has one AttachEquipment effect");
+    };
+    let crate::primitives::SpellEffectKind::AttachEquipment { creature, .. } = effect.as_mut()
+    else {
+        unreachable!("the fixture has one AttachEquipment effect");
+    };
+    *creature = crate::primitives::EffectSubject::TargetAlias("missing".into());
+    assert!(compile(&unknown, Some(&required))
+        .unwrap_err()
+        .contains("unknown program target alias"));
+
+    let mut out_of_range = optional_program.clone();
+    out_of_range.target_aliases[0].group_index = 1;
+    assert!(compile(&out_of_range, Some(&required))
+        .unwrap_err()
+        .contains("unknown target group"));
+
+    let multi_target = targeting(1, 2);
+    assert!(compile(&optional_program, Some(&multi_target))
+        .unwrap_err()
+        .contains("bounds"));
+
+    assert!(compile(&optional_program, None)
+        .unwrap_err()
+        .contains("require an authored target group"));
+
+    let explicit_and_generated = crate::CardProgram {
+        body: tap_body(),
+        target_bindings: vec![ProgramTargetReference {
+            instruction_id: "attach_equipment".into(),
+            role: ProgramTargetRole::Target,
+            target_group_index: 0,
+        }],
+        target_aliases: vec![target_alias()],
+    };
+    assert!(compile(&explicit_and_generated, Some(&required))
+        .unwrap_err()
+        .contains("cannot combine an explicit target binding"));
+
+    let no_alias_table = ron::from_str::<crate::CardProgram>(
+        r#"(body: (steps: [
+        (id: "tap", bind: [], input: None,
+            kind: Perform(Tap(subject: TargetAlias("target_creature"))))
+    ], yields: []), target_bindings: [])"#,
+    )
+    .expect("a marker without an alias table still parses as source data");
+    assert!(compile(&no_alias_table, Some(&required)).is_err());
+    let standalone_marker: crate::primitives::SpellEffectKind =
+        ron::from_str(r#"Tap(subject: TargetAlias("target_creature"))"#)
+            .expect("the source-only marker parses before validation");
+    let standalone_error = standalone_marker
+        .validate(crate::primitives::EffectContext::Ability)
+        .unwrap_err();
+    assert!(
+        standalone_error.contains("valid only in a CardProgram source"),
+        "{standalone_error}"
+    );
+
+    let unsupported_child_position: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+        (id: "tap", bind: [], input: None,
+            kind: Perform(Tap(subject: TargetAlias("target_creature")))),
+        (id: "delay", bind: [], input: None,
+            kind: Perform(CreateDelayedTrigger(
+                subject: Some(TargetAlias("target_creature")), affected_player: None,
+                ability: (ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextEndStep, effect: [ExileObservedObjects],
+                    modal: None, targeting: None, may: false, intervening_if: None,
+                    triggers_only_once: false, max_triggers_per_turn: None)
+            )))
+    ], yields: []), target_bindings: [], target_aliases: [
+        (name: "target_creature", group_index: 0, filter: (kind: Creature))
+    ])"#,
+    )
+    .expect("the delayed-trigger child isolation fixture parses");
+    assert!(compile(&unsupported_child_position, Some(&required)).is_err());
+    let delayed_child_marker: crate::primitives::SpellEffectKind = ron::from_str(
+        r#"CreateDelayedTrigger(
+            subject: Some(TargetAlias("target_creature")), affected_player: None,
+            ability: (ability_id: "delayed_01", presentation: Fallback,
+                trigger: AtBeginningOfNextEndStep, effect: [ExileObservedObjects],
+                modal: None, targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None)
+        )"#,
+    )
+    .expect("the delayed-child target marker parses before validation");
+    let unsupported_error = delayed_child_marker
+        .validate(crate::primitives::EffectContext::Ability)
+        .unwrap_err();
+    assert!(
+        unsupported_error.contains("valid only in a CardProgram source"),
+        "{unsupported_error}"
+    );
+
+    let child_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "named_target_alias_validation_fixture".into(),
+        face_id: crate::CardFaceId::new("named_target_alias_validation_fixture").unwrap(),
+        ability_path: vec![
+            crate::AbilityId::new("triggered_01").unwrap(),
+            crate::AbilityId::new("delayed_01").unwrap(),
+        ],
+    });
+    let supported_child_control: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "child_condition", bind: [], input: None, kind: If(
+                condition: ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
+                yes: (steps: [
+                    (id: "child_gain_life", bind: [], input: None,
+                        kind: Perform(GainLife(amount: 1)))
+                ], yields: []),
+                no: (steps: [], yields: []),
+            ))
+        ], yields: []), target_bindings: [], target_aliases: [])"#,
+    )
+    .expect("the targetless delayed-child control profile parses");
+    crate::primitives::CompiledProgram::compile_with_targeting(
+        child_owner.clone(),
+        crate::primitives::EffectContext::Ability,
+        &supported_child_control,
+        None,
+    )
+    .expect("the same child owner and targetless ability profile supports Source condition plus GainLife");
+
+    let nested_child_source = r#"(body: (steps: [
+        (id: "exile_target", bind: ["exiled"], input: None,
+            kind: Perform(Exile(subject: TargetAlias("target_creature"),
+                linked_exile_id: None))),
+        (id: "schedule_child", bind: [], input: Some("exiled"),
+            kind: Perform(CreateDelayedTrigger(
+                subject: Some(PreviousEffectObject), affected_player: None,
+                ability: (
+                    ability_id: "delayed_01", presentation: Fallback,
+                    trigger: AtBeginningOfNextEndStep, effect: [],
+                    program: Some((body: (steps: [
+                        (id: "child_condition", bind: [], input: None, kind: If(
+                            condition: ObjectMatches(
+                                object: TargetAlias("target_creature"),
+                                filter: (kind: AnyPermanent)),
+                            yes: (steps: [
+                                (id: "child_gain_life", bind: [], input: None,
+                                    kind: Perform(GainLife(amount: 1)))
+                            ], yields: []),
+                            no: (steps: [], yields: []),
+                        ))
+                    ], yields: []), target_bindings: [], target_aliases: [
+                        (name: "target_creature", group_index: 0,
+                            filter: (kind: Creature))
+                    ])),
+                    modal: None, targeting: None, may: false,
+                    intervening_if: None, triggers_only_once: false,
+                    max_triggers_per_turn: None,
+                )
+            )))
+    ], yields: []), target_bindings: [], target_aliases: [
+        (name: "target_creature", group_index: 0, filter: (kind: Creature))
+    ])"#;
+    let nested_child_parent: crate::CardProgram = ron::from_str(nested_child_source)
+        .expect("the targetless delayed child alias-isolation fixture parses");
+    let parent_compiled = compile(&nested_child_parent, Some(&required))
+        .expect("the parent's alias lowers without entering the nested child definition");
+    let child_program = match &nested_child_parent.body.steps[1].kind {
+        crate::primitives::InstructionKind::Perform(effect) => match effect.as_ref() {
+            crate::primitives::SpellEffectKind::CreateDelayedTrigger { ability, .. } => ability
+                .program
+                .as_ref()
+                .expect("the delayed child has its own source Program"),
+            _ => panic!("the parent step creates the delayed child"),
+        },
+        _ => panic!("the parent step is a Perform effect"),
+    };
+    assert_eq!(child_program.target_aliases.len(), 1);
+    assert_eq!(child_program.target_aliases[0].name, "target_creature");
+    assert!(matches!(
+        &child_program.body.steps[0].kind,
+        crate::primitives::InstructionKind::If {
+            condition,
+            yes,
+            ..
+        } if matches!(&**condition,
+            crate::primitives::GameCondition::ObjectMatches {
+                object: crate::primitives::ConditionObjectRef::TargetAlias(name),
+                filter,
+            } if name == "target_creature"
+                && filter.kind == crate::primitives::TargetKind::AnyPermanent)
+            && matches!(&yes.steps[0].kind,
+                crate::primitives::InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
+                        amount: crate::primitives::Amount::Fixed(1),
+                    }))
+    ));
+    let compiled_child_program = match &parent_compiled.body.steps[1].kind {
+        crate::primitives::CompiledInstructionKind::Perform(effect) => match effect.as_ref() {
+            crate::primitives::SpellEffectKind::CreateDelayedTrigger { ability, .. } => ability
+                .program
+                .as_ref()
+                .expect("the compiled parent retains raw nested child source data"),
+            _ => panic!("the compiled parent retains the delayed child effect"),
+        },
+        _ => panic!("the parent step remains a compiled Perform"),
+    };
+    assert!(matches!(
+        &compiled_child_program.body.steps[0].kind,
+        crate::primitives::InstructionKind::If {
+            condition,
+            yes,
+            ..
+        } if matches!(&**condition,
+            crate::primitives::GameCondition::ObjectMatches {
+                object: crate::primitives::ConditionObjectRef::TargetAlias(name),
+                filter,
+            } if name == "target_creature"
+                && filter.kind == crate::primitives::TargetKind::AnyPermanent)
+            && matches!(&yes.steps[0].kind,
+                crate::primitives::InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
+                        amount: crate::primitives::Amount::Fixed(1),
+                    }))
+    ));
+    let child_error = crate::primitives::CompiledProgram::compile_with_targeting(
+        child_owner.clone(),
+        crate::primitives::EffectContext::Ability,
+        child_program,
+        None,
+    )
+    .expect_err("the child owner cannot borrow its parent's alias or target group");
+    assert_eq!(
+        child_error, "program target aliases require an authored target group",
+        "a nested child that declares its own alias still receives no parent target group"
+    );
+
+    let mut child_without_alias_table = nested_child_parent.clone();
+    let clear_table_child_error = {
+        let child_program_without_alias_table = match &mut child_without_alias_table.body.steps[1]
+            .kind
+        {
+            crate::primitives::InstructionKind::Perform(effect) => match effect.as_mut() {
+                crate::primitives::SpellEffectKind::CreateDelayedTrigger { ability, .. } => ability
+                    .program
+                    .as_mut()
+                    .expect("the delayed child has its own source Program"),
+                _ => panic!("the parent step creates the delayed child"),
+            },
+            _ => panic!("the parent step is a Perform effect"),
+        };
+        child_program_without_alias_table.target_aliases.clear();
+        assert!(child_program_without_alias_table.target_aliases.is_empty());
+        let child_condition = match &child_program_without_alias_table.body.steps[0].kind {
+            crate::primitives::InstructionKind::If { condition, .. } => condition,
+            _ => panic!("the delayed child starts with its supported condition"),
+        };
+        assert!(matches!(
+            &**child_condition,
+            crate::primitives::GameCondition::ObjectMatches {
+                object: crate::primitives::ConditionObjectRef::TargetAlias(name),
+                filter,
+            } if name == "target_creature"
+                && filter.kind == crate::primitives::TargetKind::AnyPermanent
+        ));
+        assert_eq!(
+            child_condition.validate_live().unwrap_err(),
+            "target alias markers are valid only in a CardProgram source"
+        );
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            child_owner.clone(),
+            crate::primitives::EffectContext::Ability,
+            child_program_without_alias_table,
+            None,
+        )
+        .expect_err("the clear-table child cannot resolve its parent's alias")
+    };
+    assert!(
+        clear_table_child_error.contains("If condition uses context outside controller hand"),
+        "the existing Program condition profile rejects the unlowered child alias: {clear_table_child_error}"
+    );
+    let clear_table_parent_compiled = compile(&child_without_alias_table, Some(&required))
+        .expect("the parent compiler preserves a raw child marker without descending into it");
+    let compiled_clear_table_child = match &clear_table_parent_compiled.body.steps[1].kind {
+        crate::primitives::CompiledInstructionKind::Perform(effect) => match effect.as_ref() {
+            crate::primitives::SpellEffectKind::CreateDelayedTrigger { ability, .. } => ability
+                .program
+                .as_ref()
+                .expect("the compiled parent retains the clear-table child source"),
+            _ => panic!("the compiled parent retains the delayed child effect"),
+        },
+        _ => panic!("the parent step remains a compiled Perform"),
+    };
+    assert!(compiled_clear_table_child.target_aliases.is_empty());
+    assert!(matches!(
+        &compiled_clear_table_child.body.steps[0].kind,
+        crate::primitives::InstructionKind::If {
+            condition,
+            yes,
+            ..
+        } if matches!(&**condition,
+            crate::primitives::GameCondition::ObjectMatches {
+                object: crate::primitives::ConditionObjectRef::TargetAlias(name),
+                filter,
+            } if name == "target_creature"
+                && filter.kind == crate::primitives::TargetKind::AnyPermanent)
+            && matches!(&yes.steps[0].kind,
+                crate::primitives::InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
+                        amount: crate::primitives::Amount::Fixed(1),
+                    }))
+    ));
+}
+
+#[test]
+fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditions() {
+    use crate::primitives::{
+        CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram, EffectContext,
+        GameCondition, TargetChooser, TargetGroupDef, TargetKind, TargetSchema, TargetingDef,
+    };
+
+    let source = r#"(body: (steps: [
+        (id: "discard", bind: ["discarded"], input: None,
+            kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+        (id: "conditional_choose", bind: [], input: None, kind: IfResult(
+            condition: DiscardCount(result: "discarded", players: Controller,
+                card_type: None, min: Some(1), max: None),
+            yes: (steps: [(id: "choose", bind: [], input: None, kind: Choose(
+                choice: "choose", chooser: Controller, optional: false,
+                branches: [(
+                    branch_id: "if_matches", presentation: Fallback, cost: None,
+                    requirement: GameCondition(AllOf([
+                        ObjectMatches(object: TargetAlias("target_creature"),
+                            filter: (kind: Creature)),
+                        AnyOf([
+                            ObjectMatches(object: TargetAlias("target_creature"),
+                                filter: (kind: Creature, required_subtypes: ["Dwarf"])),
+                            ObjectMatches(object: TargetAlias("target_creature"),
+                                filter: (kind: Creature, required_subtypes: ["Elf"])),
+                        ]),
+                    ])),
+                    body: (steps: [(id: "tap", bind: [], input: None,
+                        kind: Perform(Tap(subject: TargetAlias("target_creature"))))], yields: []),
+                )],
+                otherwise: (steps: [(id: "untap", bind: [], input: None,
+                    kind: Perform(Untap(subject: TargetAlias("target_creature"))))], yields: []),
+            ))], yields: []),
+            no: (steps: [], yields: []),
+        )),
+        (id: "ordinary_if", bind: [], input: None, kind: If(
+            condition: ObjectMatches(object: TargetAlias("target_creature"),
+                filter: (kind: Creature)),
+            yes: (steps: [(id: "if_tap", bind: [], input: None,
+                kind: Perform(Tap(subject: TargetAlias("target_creature"))))], yields: []),
+            no: (steps: [(id: "if_untap", bind: [], input: None,
+                kind: Perform(Untap(subject: TargetAlias("target_creature"))))], yields: []),
+        ))
+    ], yields: []), target_bindings: [], target_aliases: [
+        (name: "target_creature", group_index: 0, filter: (kind: Creature))
+    ])"#;
+    let program: crate::CardProgram =
+        ron::from_str(source).expect("the recursive target-alias Program parses");
+    let targeting = TargetingDef {
+        groups: vec![TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let compiled = CompiledProgram::compile_with_targeting(
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "recursive_named_target_alias_fixture".into(),
+            face_id: crate::CardFaceId::new("recursive_named_target_alias_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+        }),
+        EffectContext::Ability,
+        &program,
+        Some(&targeting),
+    )
+    .expect("IfResult and Choose body markers lower through the one owner");
+
+    let CompiledInstructionKind::If { yes, .. } = &compiled.body.steps[1].kind else {
+        panic!("the result predicate compiles to an If instruction");
+    };
+    let CompiledInstructionKind::Choose {
+        branches,
+        otherwise,
+        ..
+    } = &yes.steps[0].kind
+    else {
+        panic!("the nested Choose remains inside the IfResult yes branch");
+    };
+    let [branch] = branches.as_slice() else {
+        panic!("the fixture has one Choose branch");
+    };
+    let CompiledChooseRequirement::GameCondition(condition) = &branch.requirement else {
+        panic!("the branch requirement remains a game condition");
+    };
+    let expected_condition: GameCondition = ron::from_str(
+        r#"AllOf([
+        ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0),
+            filter: (kind: Creature)),
+        AnyOf([
+            ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0),
+                filter: (kind: Creature, required_subtypes: ["Dwarf"])),
+            ObjectMatches(object: ChosenTarget(group_index: 0, target_index: 0),
+                filter: (kind: Creature, required_subtypes: ["Elf"])),
+        ]),
+    ])"#,
+    )
+    .expect("the expected compiled condition parses");
+    assert_eq!(condition, &expected_condition);
+    assert!(matches!(
+        &branch.body.steps[0].kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Tap {
+                subject: crate::primitives::EffectSubject::Chosen(filter)
+            } if filter.kind == TargetKind::Creature)
+    ));
+    assert!(matches!(
+        &otherwise.steps[0].kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Untap {
+                subject: crate::primitives::EffectSubject::Chosen(filter)
+            } if filter.kind == TargetKind::Creature)
+    ));
+    assert_eq!(compiled.target_bindings.len(), 4);
+    assert!(compiled
+        .target_bindings
+        .iter()
+        .all(|binding| binding.target_group_index == 0 && binding.role_index == 0));
+    assert_ne!(
+        compiled.target_bindings[0].instruction_address,
+        compiled.target_bindings[1].instruction_address
+    );
+    assert_eq!(
+        TargetSchema::compile_program(&compiled, Some(&targeting))
+            .unwrap()
+            .groups
+            .len(),
+        1
+    );
+    let CompiledInstructionKind::If { condition, yes, no } = &compiled.body.steps[2].kind else {
+        panic!("the ordinary source If remains a compiled If instruction");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Game(GameCondition::ObjectMatches {
+            object: crate::primitives::ConditionObjectRef::ChosenTarget {
+                group_index: 0,
+                target_index: 0,
+            },
+            filter,
+        }) if filter.kind == TargetKind::Creature
+    ));
+    for (block, expected_id) in [(yes, "if_tap"), (no, "if_untap")] {
+        assert_eq!(block.steps.len(), 1);
+        assert_eq!(block.steps[0].id, expected_id);
+        assert!(matches!(
+            &block.steps[0].kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(effect.as_ref(),
+                    crate::primitives::SpellEffectKind::Tap {
+                        subject: crate::primitives::EffectSubject::Chosen(_),
+                    } | crate::primitives::SpellEffectKind::Untap {
+                        subject: crate::primitives::EffectSubject::Chosen(_),
+                    })
+        ));
+    }
+}
+
+#[test]
+fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
+    use crate::primitives::{
+        CompiledProgram, EffectContext, ProgramTargetAlias, ProgramTargetReference,
+        ProgramTargetRole, TargetChooser, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
+    };
+
+    let owner = || {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "named_target_alias_role_fixture".into(),
+            face_id: crate::CardFaceId::new("named_target_alias_role_fixture").unwrap(),
+            ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+        })
+    };
+    let targeting = TargetingDef {
+        groups: vec![TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let alias_filter = TargetFilter {
+        kind: TargetKind::Creature,
+        ..TargetFilter::default()
+    };
+    let alias_program = |body: &str| {
+        let body: crate::primitives::AuthoredBlock =
+            ron::from_str(body).expect("the role fixture body parses");
+        crate::CardProgram {
+            body,
+            target_bindings: Vec::new(),
+            target_aliases: vec![ProgramTargetAlias {
+                name: "target_creature".into(),
+                group_index: 0,
+                filter: alias_filter.clone(),
+            }],
+        }
+    };
+    let exile_body = r#"(steps: [
+        (id: "exile_target", bind: ["exiled"], input: None,
+            kind: Perform(Exile(subject: TargetAlias("target_creature"),
+                linked_exile_id: None)))
+    ], yields: [])"#;
+    let exile_alias = alias_program(exile_body);
+    let exile_compiled = CompiledProgram::compile_with_targeting(
+        owner(),
+        EffectContext::Ability,
+        &exile_alias,
+        Some(&targeting),
+    )
+    .expect("the existing Subject-role Exile mapper accepts its source alias");
+    assert_eq!(exile_compiled.target_bindings.len(), 1);
+    assert_eq!(exile_compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(exile_compiled.target_bindings[0].role_index, 0);
+    let mut exile_explicit = exile_alias.clone();
+    exile_explicit.target_aliases.clear();
+    exile_explicit.target_bindings.push(ProgramTargetReference {
+        instruction_id: "exile_target".into(),
+        role: ProgramTargetRole::Subject,
+        target_group_index: 0,
+    });
+    let crate::primitives::InstructionKind::Perform(exile_effect) =
+        &mut exile_explicit.body.steps[0].kind
+    else {
+        panic!("the Exile role fixture has one effect");
+    };
+    let crate::primitives::SpellEffectKind::Exile { subject, .. } = exile_effect.as_mut() else {
+        panic!("the Exile role fixture uses Exile");
+    };
+    *subject = crate::primitives::EffectSubject::Chosen(Box::new(alias_filter.clone()));
+    let exile_explicit_compiled = CompiledProgram::compile_with_targeting(
+        owner(),
+        EffectContext::Ability,
+        &exile_explicit,
+        Some(&targeting),
+    )
+    .expect("the explicit Subject binding remains the existing form");
+    assert_eq!(exile_compiled, exile_explicit_compiled);
+
+    let shuffle_body = r#"(steps: [
+        (id: "shuffle_pair", bind: [], input: None,
+            kind: Perform(ShufflePermanentsIntoOwnersLibraries(
+                subjects: [Source, TargetAlias("target_creature")])) )
+    ], yields: [])"#;
+    let shuffle_alias = alias_program(shuffle_body);
+    let shuffle_compiled = CompiledProgram::compile_with_targeting(
+        owner(),
+        EffectContext::Ability,
+        &shuffle_alias,
+        Some(&targeting),
+    )
+    .expect("the existing single-Source/single-Chosen shuffle mapper accepts its alias");
+    assert_eq!(shuffle_compiled.target_bindings.len(), 1);
+    assert_eq!(shuffle_compiled.target_bindings[0].target_group_index, 0);
+    assert_eq!(shuffle_compiled.target_bindings[0].role_index, 0);
+    let mut shuffle_explicit = shuffle_alias.clone();
+    shuffle_explicit.target_aliases.clear();
+    shuffle_explicit
+        .target_bindings
+        .push(ProgramTargetReference {
+            instruction_id: "shuffle_pair".into(),
+            role: ProgramTargetRole::Target,
+            target_group_index: 0,
+        });
+    let crate::primitives::InstructionKind::Perform(shuffle_effect) =
+        &mut shuffle_explicit.body.steps[0].kind
+    else {
+        panic!("the shuffle role fixture has one effect");
+    };
+    let crate::primitives::SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } =
+        shuffle_effect.as_mut()
+    else {
+        panic!("the shuffle role fixture uses the supported primitive");
+    };
+    subjects[1] = crate::primitives::EffectSubject::Chosen(Box::new(alias_filter));
+    let shuffle_explicit_compiled = CompiledProgram::compile_with_targeting(
+        owner(),
+        EffectContext::Ability,
+        &shuffle_explicit,
+        Some(&targeting),
+    )
+    .expect("the explicit Target binding remains the existing form");
+    assert_eq!(shuffle_compiled, shuffle_explicit_compiled);
 }
 
 #[test]
@@ -15169,6 +15961,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
                    target_bindings: Vec<crate::primitives::ProgramTargetReference>,
                    targeting: &crate::primitives::TargetingDef| {
         let program = crate::primitives::CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str(body).expect("damage rider program fixture parses"),
             target_bindings,
         };
@@ -15421,6 +16214,7 @@ fn spell_program_admits_positive_fixed_damage_to_each_opponent() {
                 kind: Perform(DamagePlayer(amount: {amount}, who: EachOpponent)))], yields: [])"#
         );
         let program = crate::primitives::CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str(&body).expect("EachOpponent damage program parses"),
             target_bindings: Vec::new(),
         };
@@ -15482,6 +16276,7 @@ fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
                    target_bindings: Vec<crate::primitives::ProgramTargetReference>,
                    targeting: &crate::primitives::TargetingDef| {
         let program = crate::primitives::CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str(body).expect("damage rider program fixture parses"),
             target_bindings,
         };
@@ -17558,6 +18353,7 @@ fn choose_cast_cost_receipt_accepts_expected_unselected_and_rejects_ability_owne
     )
     .expect("ability-owner receipt fixture parses");
     let program = super::CardProgram {
+        target_aliases: Vec::new(),
         body,
         target_bindings: Vec::new(),
     };
@@ -19100,6 +19896,7 @@ mod combustible_gearhulk_program_compiler_tests {
         context: EffectContext,
     ) -> Result<CompiledProgram, String> {
         let program = CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(body)
                 .expect("the authored Program fixture parses"),
             target_bindings,
@@ -19742,6 +20539,7 @@ mod tidebinder_program_compiler_tests {
 
     fn single_counter_program(bind: &str) -> CardProgram {
         CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(&format!(
                 r#"(steps: [
                     (id: "counter", bind: {bind}, input: None,
@@ -19775,6 +20573,7 @@ mod tidebinder_program_compiler_tests {
 
     fn full_tidebinder_program(body: &str) -> CardProgram {
         CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(body)
                 .expect("the Tidebinder typed Program fixture parses"),
             target_bindings: vec![ProgramTargetReference {
@@ -19811,6 +20610,7 @@ mod tidebinder_program_compiler_tests {
     #[test]
     fn program_compiler_accepts_targeted_ability_counter_with_receipt_output() {
         let program = CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(
                 r#"(steps: [
                     (id: "counter", bind: ["countered_source"], input: None,
@@ -19960,6 +20760,7 @@ mod tidebinder_program_compiler_tests {
     fn ability_counter_contract_rejects_wrong_roles_oversized_groups_and_missing_groups() {
         let body = single_counter_program("[]").body;
         let wrong_role = CardProgram {
+            target_aliases: Vec::new(),
             body: body.clone(),
             target_bindings: vec![ProgramTargetReference {
                 instruction_id: "counter".into(),
@@ -20012,6 +20813,7 @@ mod tidebinder_program_compiler_tests {
             ),
         ] {
             let duplicate = CardProgram {
+                target_aliases: Vec::new(),
                 body: body.clone(),
                 target_bindings,
             };
@@ -20033,6 +20835,7 @@ mod tidebinder_program_compiler_tests {
             .contains("bounds"));
 
         let missing_group = CardProgram {
+            target_aliases: Vec::new(),
             body,
             target_bindings: vec![ProgramTargetReference {
                 instruction_id: "counter".into(),
@@ -20053,6 +20856,7 @@ mod tidebinder_program_compiler_tests {
     #[test]
     fn ability_counter_compiler_allows_other_valid_operations_and_additional_bound_groups() {
         let program = CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(
                 r#"(steps: [
                     (id: "draw", bind: [], input: None,
@@ -20093,6 +20897,7 @@ mod tidebinder_program_compiler_tests {
     #[test]
     fn ability_counter_result_predicate_requires_a_bound_compatible_receipt() {
         let missing = CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(
                 r#"(steps: [
                     (id: "counter", bind: [], input: None,
@@ -20124,6 +20929,7 @@ mod tidebinder_program_compiler_tests {
         .contains("not in scope"));
 
         let wrong_type = CardProgram {
+            target_aliases: Vec::new(),
             body: ron::from_str::<AuthoredBlock>(
                 r#"(steps: [
                     (id: "draw", bind: ["not_a_counter_receipt"], input: None,

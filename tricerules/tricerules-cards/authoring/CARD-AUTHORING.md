@@ -935,6 +935,18 @@ different requirements, including targetful leaves in separate conditional branc
 for the owner are announced and revalidated even when a branch is not selected. Mode groups are
 local to their mode, not flattened across sibling modes.
 
+When several supported instructions share one target filter and group, `CardProgram.target_aliases`
+can name that owner-local pair, for example `(name: "creature", group_index: 0,
+filter: (kind: Creature, controller: You))`. Use `TargetAlias("creature")` in supported effect
+subject and condition-object positions; the compiler lowers it to the existing `Chosen(filter)`,
+generated instruction binding, and `ChosenTarget(group_index, target_index: 0)` forms. An alias
+requires a singleton group with bounds `0..1` or `1..1`, retains that group's optionality, and must
+be used by a supported effect target. Keep `target_bindings` for non-alias roles; one instruction
+cannot combine an explicit binding with an alias-generated binding. Aliases belong only to their
+declaring `CardProgram`; they do not resolve inside nested child definitions or sibling owners.
+The source marker owns a `String`, so `ConditionObjectRef` and `ResolutionReceiptCondition` now
+implement `Clone` rather than `Copy`.
+
 For example, Calamitous Tide's return instruction uses its optional group 0; the following draw
 and discard steps have no target binding:
 

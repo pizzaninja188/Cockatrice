@@ -1328,6 +1328,35 @@ fn validate_effect_targets(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
+        SpellEffectKind::Tap {
+            subject: EffectSubject::TargetAlias(_),
+        }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::TargetAlias(_),
+        }
+        | SpellEffectKind::SetPrepared {
+            subject: EffectSubject::TargetAlias(_),
+            ..
+        }
+        | SpellEffectKind::Exile {
+            subject: EffectSubject::TargetAlias(_),
+            ..
+        }
+        | SpellEffectKind::ExileWithOwnerCastPermission {
+            subject: EffectSubject::TargetAlias(_),
+            ..
+        }
+        | SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::TargetAlias(_),
+            ..
+        }
+        | SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::TargetAlias(_),
+        } => {
+            return Err(EngineError::Illegal(
+                "unlowered target alias reached target validation",
+            ));
+        }
         SpellEffectKind::Conditional { effect, .. }
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             return validate_effect_targets(
@@ -1565,6 +1594,11 @@ fn validate_effect_targets(
                     ));
                 }
             }
+            EffectSubject::TargetAlias(_) => {
+                return Err(EngineError::Illegal(
+                    "unlowered target alias reached target validation",
+                ));
+            }
         },
         SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
             Some(EffectSubject::Chosen(filter)) => {
@@ -1581,6 +1615,11 @@ fn validate_effect_targets(
                 ) {
                     return Err(EngineError::Illegal("illegal delayed-trigger target"));
                 }
+            }
+            Some(EffectSubject::TargetAlias(_)) => {
+                return Err(EngineError::Illegal(
+                    "unlowered target alias reached target validation",
+                ));
             }
             Some(
                 EffectSubject::Source

@@ -8,12 +8,12 @@
   types: ["Instant"],
   spell_program: Some((body: (steps: [
     (id: "untap", bind: [], input: None,
-      kind: Perform(Untap(subject: Chosen((kind: Creature, controller: You))))),
+      kind: Perform(Untap(subject: TargetAlias("target_creature")))),
     (id: "pump", bind: [], input: None,
       kind: Perform(PumpTarget(
         power: 2,
         toughness: 2,
-        subject: Chosen((kind: Creature, controller: You)),
+        subject: TargetAlias("target_creature"),
       ))),
     (id: "dwarf_gate", bind: [], input: None, kind: Choose(
       choice: "dwarf_gate",
@@ -24,7 +24,7 @@
         presentation: OracleLines([1]),
         cost: None,
         requirement: GameCondition(ObjectMatches(
-          object: ChosenTarget(group_index: 0, target_index: 0),
+          object: TargetAlias("target_creature"),
           filter: (kind: Creature, required_subtypes: ["Dwarf"]),
         )),
         body: (steps: [
@@ -36,21 +36,20 @@
               min: 0,
               max: 1,
               constraints: [EquipmentAttachableTo(recipient:
-                ChosenTarget(group_index: 0, target_index: 0))],
+                TargetAlias("target_creature"))],
             ))),
           (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
             kind: Perform(AttachEquipment(
               equipment: PreviousEffectObject,
-              creature: Chosen((kind: Creature, controller: You)),
+              creature: TargetAlias("target_creature"),
             ))),
         ], yields: []),
       )],
       otherwise: (steps: [], yields: []),
     )),
-  ], yields: []), target_bindings: [
-    (instruction_id: "untap", role: Target, target_group_index: 0),
-    (instruction_id: "pump", role: Target, target_group_index: 0),
-    (instruction_id: "attach_equipment", role: Target, target_group_index: 0),
+  ], yields: []), target_bindings: [], target_aliases: [
+    (name: "target_creature", group_index: 0,
+      filter: (kind: Creature, controller: You)),
   ])),
   targeting: Some((groups: [(
     min: 1,

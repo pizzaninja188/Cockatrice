@@ -15,13 +15,13 @@
     effect: [],
     program: Some((body: (steps: [
       (id: "tap_target", bind: [], input: None,
-        kind: Perform(Tap(subject: Chosen((kind: Creature, controller: Opponent))))),
+        kind: Perform(Tap(subject: TargetAlias("target_creature")))),
       (id: "put_stun_counter", bind: [], input: None,
         kind: Perform(PutCounters(counter: Stun, count: 1,
-          subject: Chosen((kind: Creature, controller: Opponent))))),
-    ], yields: []), target_bindings: [
-      (instruction_id: "tap_target", role: Target, target_group_index: 0),
-      (instruction_id: "put_stun_counter", role: Target, target_group_index: 0),
+          subject: TargetAlias("target_creature")))),
+    ], yields: []), target_bindings: [], target_aliases: [
+      (name: "target_creature", group_index: 0,
+        filter: (kind: Creature, controller: Opponent)),
     ])),
     targeting: Some((groups: [(
       min: 1,

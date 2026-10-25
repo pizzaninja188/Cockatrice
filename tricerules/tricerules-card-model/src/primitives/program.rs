@@ -18,18 +18,19 @@
 use super::{
     Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
     CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
-    CountExpression, EffectContext, EffectSubject, GameCondition, GraveyardDestination,
-    LibraryBottomOrder, LifeAmount, PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm,
-    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration,
-    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
-    SpellEffectKind, TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
-    ZoneCardFilter,
+    ConditionObjectRef, CountExpression, EffectContext, EffectSubject, GameCondition,
+    GraveyardDestination, LibraryBottomOrder, LifeAmount, PermanentChoiceConstraint,
+    PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm, RelativePlayerSet,
+    ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
+    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
+    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
     ProgramOwnerId,
 };
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +40,18 @@ pub struct CardProgram {
     /// Stable instruction-to-group role references for this exact program owner.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub target_bindings: Vec<ProgramTargetReference>,
+    /// Owner-local source names for one target group and filter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_aliases: Vec<ProgramTargetAlias>,
+}
+
+/// One CardProgram-local target group and its reusable source filter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProgramTargetAlias {
+    pub name: String,
+    pub group_index: u32,
+    pub filter: TargetFilter,
 }
 
 /// The finite target roles that authored resolution programs may bind to target groups.
@@ -592,10 +605,12 @@ impl CompiledProgram {
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
+        let source_program = lower_program_target_aliases(program, targeting)?;
+        let source_program = source_program.as_ref();
         let mut compiled = Self::compile_internal(
             owner,
             context,
-            program,
+            source_program,
             targeting,
             cast_cost_groups,
             cast_payment_profile,
@@ -606,7 +621,7 @@ impl CompiledProgram {
             return Err("opponent target choices require a supported activated ability".into());
         }
         if let Some(targeting) = targeting {
-            for reference in &program.target_bindings {
+            for reference in &source_program.target_bindings {
                 if reference.target_group_index as usize >= targeting.groups.len() {
                     return Err("program target binding references an unknown target group".into());
                 }
@@ -633,7 +648,7 @@ impl CompiledProgram {
                         .map_err(|_| "target role index exceeds u32".to_string())?,
                 });
             }
-        } else if !program.target_bindings.is_empty() {
+        } else if !source_program.target_bindings.is_empty() {
             return Err("program target binding requires an authored target group".into());
         }
         validate_targeted_player_damage_pairs(&compiled)?;
@@ -703,6 +718,264 @@ impl CompiledProgram {
     pub fn slot(&self, id: ResultSlotId) -> Option<&CompiledSlot> {
         self.slots.get(id.0 as usize)
     }
+}
+
+struct TargetAliasLowering<'a> {
+    aliases: HashMap<&'a str, &'a ProgramTargetAlias>,
+    effect_uses: HashSet<String>,
+    bindings: Vec<ProgramTargetReference>,
+}
+
+fn lower_program_target_aliases<'a>(
+    program: &'a CardProgram,
+    targeting: Option<&TargetingDef>,
+) -> Result<Cow<'a, CardProgram>, String> {
+    if program.target_aliases.is_empty() {
+        return Ok(Cow::Borrowed(program));
+    }
+    let targeting = targeting
+        .ok_or_else(|| "program target aliases require an authored target group".to_string())?;
+    let mut aliases = HashMap::new();
+    let mut alias_groups = HashSet::new();
+    for alias in &program.target_aliases {
+        if alias.name.trim().is_empty() || alias.name.contains(char::is_whitespace) {
+            return Err(
+                "program target alias names must be nonempty and contain no whitespace".into(),
+            );
+        }
+        if aliases.insert(alias.name.as_str(), alias).is_some() {
+            return Err(format!("duplicate program target alias '{}'", alias.name));
+        }
+        if !alias_groups.insert(alias.group_index) {
+            return Err("program target aliases must use distinct target groups".into());
+        }
+        let group = targeting
+            .groups
+            .get(alias.group_index as usize)
+            .ok_or_else(|| {
+                format!(
+                    "program target alias '{}' references an unknown target group",
+                    alias.name
+                )
+            })?;
+        if group.max != 1 || group.min > 1 {
+            return Err(format!(
+                "program target alias '{}' requires a target group with bounds 0..1 or 1..1",
+                alias.name
+            ));
+        }
+    }
+    let mut lowered = program.clone();
+    let mut state = TargetAliasLowering {
+        aliases,
+        effect_uses: HashSet::new(),
+        bindings: Vec::new(),
+    };
+    lower_alias_block(&mut lowered.body, &mut state)?;
+    for alias in program.target_aliases.iter() {
+        if !state.effect_uses.contains(&alias.name) {
+            return Err(format!(
+                "program target alias '{}' must bind at least one supported effect target",
+                alias.name
+            ));
+        }
+    }
+    for generated in &state.bindings {
+        if program
+            .target_bindings
+            .iter()
+            .any(|existing| existing.instruction_id == generated.instruction_id)
+        {
+            return Err(format!(
+                "program instruction '{}' cannot combine an explicit target binding with a target alias",
+                generated.instruction_id
+            ));
+        }
+    }
+    lowered.target_bindings.extend(state.bindings);
+    Ok(Cow::Owned(lowered))
+}
+
+fn lower_alias_block(
+    block: &mut AuthoredBlock,
+    state: &mut TargetAliasLowering<'_>,
+) -> Result<(), String> {
+    for instruction in &mut block.steps {
+        match &mut instruction.kind {
+            InstructionKind::Perform(effect) => {
+                let mut uses = Vec::new();
+                lower_alias_effect(effect, state, &mut uses)?;
+                if uses.len() > 1 {
+                    return Err(format!(
+                        "program instruction '{}' has ambiguous target alias roles",
+                        instruction.id
+                    ));
+                }
+                if let Some(alias_name) = uses.pop() {
+                    let alias = state
+                        .aliases
+                        .get(alias_name.as_str())
+                        .expect("lowered alias came from the validated table");
+                    let roles = [
+                        ProgramTargetRole::Target,
+                        ProgramTargetRole::Spell,
+                        ProgramTargetRole::Source,
+                        ProgramTargetRole::Subject,
+                        ProgramTargetRole::StackAbility,
+                    ]
+                    .into_iter()
+                    .filter(|role| authored_target_role_index(effect, *role).is_some())
+                    .collect::<Vec<_>>();
+                    if roles.len() != 1 {
+                        return Err(format!(
+                            "program instruction '{}' does not expose one unambiguous target role for alias '{}'",
+                            instruction.id, alias_name
+                        ));
+                    }
+                    state.bindings.push(ProgramTargetReference {
+                        instruction_id: instruction.id.clone(),
+                        role: roles[0],
+                        target_group_index: alias.group_index,
+                    });
+                }
+            }
+            InstructionKind::If { condition, yes, no } => {
+                lower_alias_condition(condition, state)?;
+                lower_alias_block(yes, state)?;
+                lower_alias_block(no, state)?;
+            }
+            InstructionKind::IfResult { yes, no, .. } => {
+                lower_alias_block(yes, state)?;
+                lower_alias_block(no, state)?;
+            }
+            InstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    if let ResolutionBranchRequirement::GameCondition(condition) =
+                        &mut branch.requirement
+                    {
+                        lower_alias_condition(condition, state)?;
+                    }
+                    lower_alias_block(&mut branch.body, state)?;
+                }
+                lower_alias_block(otherwise, state)?;
+            }
+            InstructionKind::ImportCastPayment => {}
+        }
+    }
+    Ok(())
+}
+
+fn lower_alias_condition(
+    condition: &mut GameCondition,
+    state: &mut TargetAliasLowering<'_>,
+) -> Result<(), String> {
+    match condition {
+        GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
+            for branch in branches {
+                lower_alias_condition(branch, state)?;
+            }
+        }
+        GameCondition::ObjectWasDealtDamageThisTurn { object }
+        | GameCondition::ObjectTapped { object, .. }
+        | GameCondition::ObjectMatches { object, .. }
+        | GameCondition::ObjectManaValue { object, .. } => {
+            lower_alias_condition_object(object, state)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn lower_alias_condition_object(
+    object: &mut ConditionObjectRef,
+    state: &mut TargetAliasLowering<'_>,
+) -> Result<(), String> {
+    let ConditionObjectRef::TargetAlias(name) = object else {
+        return Ok(());
+    };
+    let alias = state
+        .aliases
+        .get(name.as_str())
+        .ok_or_else(|| format!("unknown program target alias '{name}'"))?;
+    *object = ConditionObjectRef::ChosenTarget {
+        group_index: alias.group_index,
+        target_index: 0,
+    };
+    Ok(())
+}
+
+fn lower_alias_subject(
+    subject: &mut EffectSubject,
+    state: &mut TargetAliasLowering,
+    uses: &mut Vec<String>,
+) -> Result<(), String> {
+    let EffectSubject::TargetAlias(name) = subject else {
+        return Ok(());
+    };
+    let alias = state
+        .aliases
+        .get(name.as_str())
+        .ok_or_else(|| format!("unknown program target alias '{name}'"))?;
+    uses.push(name.clone());
+    state.effect_uses.insert(name.clone());
+    *subject = EffectSubject::Chosen(Box::new(alias.filter.clone()));
+    Ok(())
+}
+
+fn lower_alias_effect(
+    effect: &mut SpellEffectKind,
+    state: &mut TargetAliasLowering,
+    uses: &mut Vec<String>,
+) -> Result<(), String> {
+    match effect {
+        SpellEffectKind::Tap { subject }
+        | SpellEffectKind::Untap { subject }
+        | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::PumpTarget { subject, .. }
+        | SpellEffectKind::ReturnToOwnersHand { subject }
+        | SpellEffectKind::PutInOwnersLibrary { subject, .. }
+        | SpellEffectKind::Destroy { subject }
+        | SpellEffectKind::Exile {
+            subject,
+            linked_exile_id: None,
+        } => lower_alias_subject(subject, state, uses)?,
+        SpellEffectKind::AttachEquipment { creature, .. } => {
+            lower_alias_subject(creature, state, uses)?;
+        }
+        SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => {
+            for subject in subjects {
+                lower_alias_subject(subject, state, uses)?;
+            }
+        }
+        SpellEffectKind::ChoosePermanents { constraints, .. } => {
+            for constraint in constraints {
+                let PermanentChoiceConstraint::EquipmentAttachableTo { recipient } = constraint;
+                lower_alias_condition_object(recipient, state)?;
+            }
+        }
+        SpellEffectKind::CreateReflexiveTrigger {
+            when:
+                Some(
+                    super::ResolutionReceiptCondition::CountersPlaced { object, .. }
+                    | super::ResolutionReceiptCondition::Sacrificed { object },
+                ),
+            ..
+        } => lower_alias_condition_object(object, state)?,
+        SpellEffectKind::Conditional { condition, effect } => {
+            lower_alias_condition(condition, state)?;
+            lower_alias_effect(effect, state, uses)?;
+        }
+        SpellEffectKind::WinGameIf { condition } => lower_alias_condition(condition, state)?,
+        SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            lower_alias_effect(effect, state, uses)?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn spell_destroy_target_group(
@@ -1096,6 +1369,10 @@ fn validate_target_card_result_groups(
 
 fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole) -> Option<usize> {
     match (effect, role) {
+        (SpellEffectKind::Conditional { effect, .. }, role)
+        | (SpellEffectKind::ConditionalCastCost { effect, .. }, role) => {
+            authored_target_role_index(effect, role)
+        }
         (SpellEffectKind::DamageTarget { .. }, ProgramTargetRole::Target)
         | (
             SpellEffectKind::DamagePlayer {
@@ -3772,7 +4049,7 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             },
         ) if ac == bc && ao == bo => ResultType::CounterPlacementReceipt {
             counter: *ac,
-            object: *ao,
+            object: ao.clone(),
             cardinality: union(*a, *b),
         },
         (
@@ -5964,6 +6241,7 @@ mod scalar_program_input_tests {
             ability_owner(),
             EffectContext::Ability,
             &CardProgram {
+                target_aliases: Vec::new(),
                 body: AuthoredBlock {
                     steps,
                     yields: Vec::new(),

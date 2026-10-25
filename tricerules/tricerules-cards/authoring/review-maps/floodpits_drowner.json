@@ -1,0 +1,108 @@
+{
+  "format_version": 1,
+  "exact_name": "Floodpits Drowner",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "floodpits_drowner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "floodpits_drowner",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/keywords/1"]
+    },
+    {
+      "face_id": "floodpits_drowner",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/targeting/groups/0",
+        "/faces/0/triggered_abilities/0/program/target_aliases/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Tap/subject",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/PutCounters/subject",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/PutCounters/counter"
+      ]
+    },
+    {
+      "face_id": "floodpits_drowner",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0/costs",
+        "/faces/0/activated_abilities/0/targeting/groups/0",
+        "/faces/0/activated_abilities/0/program/target_bindings/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/ShufflePermanentsIntoOwnersLibraries"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords/1"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    },
+    {
+      "symbol": "ProgramTargetAlias",
+      "typed_path": "/faces/0/triggered_abilities/0/program/target_aliases/0"
+    },
+    {
+      "symbol": "EffectSubject::TargetAlias",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Tap/subject"
+    },
+    {
+      "symbol": "EffectSubject::TargetAlias",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/PutCounters/subject"
+    },
+    {
+      "symbol": "CounterKind::Stun",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/PutCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost",
+      "typed_path": "/faces/0/activated_abilities/0/costs"
+    },
+    {
+      "symbol": "ProgramTargetReference",
+      "typed_path": "/faces/0/activated_abilities/0/program/target_bindings/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ShufflePermanentsIntoOwnersLibraries",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/ShufflePermanentsIntoOwnersLibraries"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_201_multi_object_library::issue_201_etb_program_taps_and_stuns_its_chosen_opponent_creature",
+      "covers": "The generated group accepts the opposing creature target through the compiled schema, taps that exact creature, and adds exactly one stun counter."
+    },
+    {
+      "test": "mechanic_registry::issue_201_multi_object_library::floodpits_drowner_has_current_oracle_shape",
+      "covers": "The direct RON owner has the exact identity, one alias-backed opponent-creature ETB target group, and the unchanged explicit activated target binding."
+    },
+    {
+      "test": "mechanic_registry::issue_201_multi_object_library::named_target_aliases_match_pre_migration_programs_for_both_owners",
+      "covers": "The entire Floodpits ETB compiled Program matches its independently reconstructed explicit-filter, coordinate, and binding form."
+    },
+    {
+      "test": "scenario issue_201_multi_object_library::issue_201_removed_counter_fizzles_the_entire_ability",
+      "covers": "The unchanged explicit activated target becomes illegal before resolution and the ability does not shuffle its source or target."
+    }
+  ]
+}

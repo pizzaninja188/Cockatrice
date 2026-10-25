@@ -202,7 +202,7 @@ pub(in crate::engine) fn current_targeted_player_permanent_candidates(
                 item.trigger_context,
             ) && constraints.iter().all(|constraint| match constraint {
                 PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => engine
-                    .condition_object_identity(*recipient, condition_context)
+                    .condition_object_identity(recipient.clone(), condition_context)
                     .is_some_and(|(recipient_id, expected_generation)| {
                         engine
                             .state
@@ -266,7 +266,7 @@ pub(in crate::engine) fn targeted_player_control_cohort_candidates(
             }
             let constraints_hold = constraints.iter().all(|constraint| match constraint {
                 PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => engine
-                    .condition_object_identity(*recipient, condition_context)
+                    .condition_object_identity(recipient.clone(), condition_context)
                     .is_some_and(|(recipient_id, expected_generation)| {
                         engine
                             .state
@@ -420,7 +420,7 @@ pub(super) fn choose_permanents(
                 ) && constraints.iter().all(|constraint| match constraint {
                     PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => cx
                         .engine
-                        .condition_object_identity(*recipient, condition_context)
+                        .condition_object_identity(recipient.clone(), condition_context)
                         .is_some_and(|(recipient_id, expected_generation)| {
                             cx.engine
                                 .state
@@ -1035,8 +1035,8 @@ fn previous_result_receipt_matches(
 
     match condition {
         ResolutionReceiptCondition::CountersPlaced { counter, object } => {
-            let Some((object_id, zone_change_generation)) =
-                engine.condition_object_identity(*object, ConditionContext::for_stack_item(top))
+            let Some((object_id, zone_change_generation)) = engine
+                .condition_object_identity(object.clone(), ConditionContext::for_stack_item(top))
             else {
                 return false;
             };
@@ -1048,8 +1048,8 @@ fn previous_result_receipt_matches(
             })
         }
         ResolutionReceiptCondition::Sacrificed { object } => {
-            let Some((object_id, zone_change_generation)) =
-                engine.condition_object_identity(*object, ConditionContext::for_stack_item(top))
+            let Some((object_id, zone_change_generation)) = engine
+                .condition_object_identity(object.clone(), ConditionContext::for_stack_item(top))
             else {
                 return false;
             };

@@ -2461,7 +2461,7 @@ fn capture_program_outputs_inner(
                 ProgramValue::CounterPlacementReceipt(counter_placement_output(
                     result,
                     *counter,
-                    *object,
+                    object.clone(),
                     cardinality,
                     top,
                 )?)
