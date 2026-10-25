@@ -3248,15 +3248,23 @@ impl GameEngine {
                 ),
                 _ => unreachable!("behold-choice continuation"),
             };
-        let effect_index = stack
-            .resume_effect_index
-            .and_then(|next| next.checked_sub(1))
-            .ok_or(EngineError::Illegal("Behold effect index missing"))?;
-        let mut item = stack.item;
+        let effect_index = if stack.program.is_none() {
+            Some(
+                stack
+                    .resume_effect_index
+                    .and_then(|next| next.checked_sub(1))
+                    .ok_or(EngineError::Illegal("Behold effect index missing"))?,
+            )
+        } else {
+            None
+        };
+        let mut item = stack.item.clone();
         let mut events = Vec::new();
 
         if chosen.is_empty() {
-            item.resolution_branch_choices.insert(effect_index, None);
+            if let Some(effect_index) = effect_index {
+                item.resolution_branch_choices.insert(effect_index, None);
+            }
             events.push(ev_log(format!(
                 "P{} declines to behold.",
                 pending.deciding_player
@@ -3325,12 +3333,20 @@ impl GameEngine {
                     pending.deciding_player
                 )));
             }
-            item.resolution_branch_choices.insert(effect_index, Some(0));
+            if let Some(effect_index) = effect_index {
+                item.resolution_branch_choices.insert(effect_index, Some(0));
+            } else {
+                self.execute_program_behold_untap(&stack, &mut events)?;
+            }
         }
 
+        if stack.program.is_some() {
+            let previous_result = stack.previous_result.clone();
+            return self.complete_parked_stack_with_previous(stack, previous_result, events);
+        }
         self.complete_parked_resolution_with_previous(
             item,
-            Some(effect_index),
+            effect_index,
             stack.previous_result,
             events,
         )

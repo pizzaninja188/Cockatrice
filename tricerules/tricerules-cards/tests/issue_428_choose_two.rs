@@ -109,7 +109,6 @@ fn issue_428_search_mode_tutors_a_basic_land_onto_the_battlefield_tapped() {
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: None,
         }]
     );

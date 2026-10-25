@@ -6955,7 +6955,7 @@ fn intuition_comparator_reverses_the_typed_partition_without_unique_names() {
                         selection_constraint: None, slots: [],
                         zones: Fixed([Library]), destination: KeepInLibrary,
                         conditional_destination: None, shuffle: false, reveal: false,
-                        result_id: None, selection_bounds: Some((min: 3, max: 3)),
+                        selection_bounds: Some((min: 3, max: 3)),
                     ))),
                 (id: "reveal", bind: ["revealed"], input: Some("found"),
                     kind: Perform(RevealCohort)),

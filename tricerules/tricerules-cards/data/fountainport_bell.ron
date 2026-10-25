@@ -38,7 +38,6 @@
               conditional_destination: None,
               shuffle: true,
               reveal: true,
-              result_id: None,
               selection_bounds: Some((min: 0, max: 1)),
             )))
           ], yields: []),

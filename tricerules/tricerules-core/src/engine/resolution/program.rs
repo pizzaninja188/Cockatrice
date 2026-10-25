@@ -175,7 +175,6 @@ mod source_sacrifice_receipt_tests {
             cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: Default::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
@@ -619,7 +618,7 @@ impl GameEngine {
         Ok(None)
     }
 
-    fn current_compiled_perform_instruction(
+    pub(in crate::engine) fn current_compiled_perform_instruction(
         &self,
         program_state: &ProgramRunState,
     ) -> Result<
@@ -670,6 +669,82 @@ impl GameEngine {
     ) -> Result<SpellEffectKind, EngineError> {
         let (_, effect) = self.current_compiled_perform_instruction(program_state)?;
         Ok(effect.clone())
+    }
+
+    pub(in crate::engine) fn execute_program_behold_untap(
+        &mut self,
+        stack: &ParkedStackResolution,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let program = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
+            "Behold continuation lost its typed Program",
+        ))?;
+        let (input, instruction_address) = {
+            let (instruction, effect) = self.current_compiled_perform_instruction(program)?;
+            if !matches!(effect, SpellEffectKind::MayBehold { .. }) {
+                return Err(EngineError::ProgramInvariant(
+                    "Behold continuation does not point at a MayBehold leaf",
+                ));
+            }
+            (
+                instruction.input.ok_or(EngineError::ProgramInvariant(
+                    "Behold Program leaf lost its explicit search result input",
+                ))?,
+                instruction.instruction_address,
+            )
+        };
+        let Some(Some(crate::state::ProgramValue::PermanentSelection(objects))) =
+            program.slots.get(input.0 as usize)
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "Behold Program input is not its typed permanent selection",
+            ));
+        };
+        let input_result = EffectResult {
+            produced_objects: objects.clone(),
+            ..EffectResult::default()
+        };
+        let mut result = EffectResult::default();
+        let empty_targets = Vec::new();
+        let label = self
+            .registry
+            .get(&stack.item.card_id)
+            .and_then(|definition| definition.face(stack.item.face_index))
+            .map(|face| face.name.to_string())
+            .unwrap_or_else(|| stack.item.card_id.clone());
+        let mut cx = EffectCx {
+            engine: self,
+            events,
+            targets: &empty_targets,
+            targets_by_role: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top: &stack.item,
+            controller: stack.item.controller,
+            affected_player: stack
+                .item
+                .trigger_context
+                .affected_player
+                .unwrap_or(stack.item.controller),
+            spell_label: &label,
+            previous_effect_result: &input_result,
+            resume_previous_result: Some(&stack.previous_result),
+            effect_result: &mut result,
+            effect_index: instruction_address,
+            program_state: Some(program.clone()),
+        };
+        let outcome = dispatch::execute_effect(
+            &mut cx,
+            SpellEffectKind::Untap {
+                subject: tricerules_card_model::primitives::EffectSubject::PreviousEffectObject,
+            },
+        )?;
+        if outcome != EffectOutcome::Continue {
+            return Err(EngineError::ProgramInvariant(
+                "Behold nested Untap did not complete synchronously",
+            ));
+        }
+        Ok(())
     }
 
     pub(in crate::engine) fn run_program_with_previous(
@@ -9069,7 +9144,7 @@ mod invariant_rollback_tests {
   (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
    who: Controller, optional: false, count: 1, count_by_cast_cost: None, filter: None,
    selection_constraint: None, slots: [], zones: Fixed([Library]), destination: KeepInLibrary,
-   conditional_destination: None, shuffle: false, reveal: false, result_id: None,
+   conditional_destination: None, shuffle: false, reveal: false,
    selection_bounds: Some((min: 1, max: 1)),
   ))),
   (id: "select", bind: ["selected"], input: None,
@@ -9088,7 +9163,7 @@ mod invariant_rollback_tests {
        who: Controller, optional: false, count: 1, count_by_cast_cost: None,
        filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
        slots: [], zones: Fixed([Library]), destination: TopOfLibrary,
-       conditional_destination: None, shuffle: true, reveal: true, result_id: None,
+       conditional_destination: None, shuffle: true, reveal: true,
        selection_bounds: Some((min: 0, max: 1)),
       )))
      ], yields: []))], otherwise: (steps: [], yields: []))),
@@ -9111,7 +9186,7 @@ mod invariant_rollback_tests {
        who: Controller, optional: false, count: 1, count_by_cast_cost: None,
        filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
        slots: [], zones: Fixed([Library]), destination: TopOfLibrary,
-       conditional_destination: None, shuffle: true, reveal: true, result_id: None,
+       conditional_destination: None, shuffle: true, reveal: true,
        selection_bounds: Some((min: 0, max: 1)),
       )))
      ], yields: []))], otherwise: (steps: [], yields: []))),

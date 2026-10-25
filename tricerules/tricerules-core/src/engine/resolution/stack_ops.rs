@@ -853,7 +853,6 @@ pub(super) fn copy_target_spell(
                 cast_by: None,
                 cast_cost_receipts: src.cast_cost_receipts.clone(),
                 payment_result: src.payment_result.clone(),
-                search_results: Default::default(),
                 exiled_cohorts: Default::default(),
                 chaos_warp_owner_instructions: Default::default(),
                 resolution_branch_choices: Default::default(),

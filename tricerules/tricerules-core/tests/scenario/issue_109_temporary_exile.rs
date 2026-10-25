@@ -1988,6 +1988,7 @@ fn observer_restore_rebuilds_behold_choice_after_candidate_owner_concedes() {
         .expect("find a basic land and reach Behold");
     let original_offer = find_resolution_choice(&behold_batch).expect("Behold offer");
     assert_eq!(original_offer.choice_kind(), ChoiceKind::Behold);
+    assert_eq!(original_offer.deciding_player_id, 0);
     assert!(original_offer.candidate_object_ids.contains(&stolen_elf));
     assert!(original_offer.candidate_object_ids.contains(&surviving_elf));
     assert_ne!(original_offer.resolution_prompt_id, 0);
@@ -2007,6 +2008,10 @@ fn observer_restore_rebuilds_behold_choice_after_candidate_owner_concedes() {
         )
     });
     assert_eq!(resumed_offer.choice_kind(), ChoiceKind::Behold);
+    assert_eq!(
+        resumed_offer.deciding_player_id, 0,
+        "the refreshed offer remains with Elven Passage's controller"
+    );
     assert_ne!(
         resumed_offer.resolution_prompt_id,
         original_offer.resolution_prompt_id
@@ -2015,6 +2020,52 @@ fn observer_restore_rebuilds_behold_choice_after_candidate_owner_concedes() {
     expected_candidates.retain(|candidate| *candidate != stolen_elf);
     assert_eq!(resumed_offer.candidate_object_ids, expected_candidates);
     assert!(resumed_offer.candidate_object_ids.contains(&surviving_elf));
+    let surviving_elf_index = resumed_offer
+        .candidate_object_ids
+        .iter()
+        .position(|candidate| *candidate == surviving_elf)
+        .expect("the surviving battlefield Elf remains an offered candidate");
+    assert_eq!(
+        resumed_offer.candidate_source_zones[surviving_elf_index],
+        tricerules_proto::ruled::v1::ChoiceCandidateSourceZone::Battlefield as i32
+    );
+    assert!(!concession.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+            _
+        ))
+    )));
+    assert!(!concession.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log))
+            if log.text == "P0 shuffles their library."
+    )));
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the refreshed Behold remains parked");
+    let serialized_pending =
+        serde_json::to_value(pending).expect("the refreshed continuation is serializable");
+    let search_receipt = &serialized_pending["continuation"]["BeholdChoice"]["stack"]["program"]
+        ["slots"][0]["PermanentSelection"][0];
+    assert_eq!(
+        search_receipt["object_id"].as_u64(),
+        Some(found_land as u64)
+    );
+    assert_eq!(
+        search_receipt["zone_change_generation"].as_u64(),
+        Some(
+            engine
+                .state
+                .zone_change_generation
+                .get(&found_land)
+                .copied()
+                .unwrap_or(0),
+        ),
+        "observer restoration preserves the typed search result's generation"
+    );
+    assert_eq!(search_receipt["controller_at_event"].as_i64(), Some(0));
 
     let before_stale_answer = format!("{:?}", engine.state);
     let before_stale_answer_index = engine.state.command_index;

@@ -506,7 +506,6 @@ fn issue_423_companion_abilities_are_registered_exactly() {
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: Some(
                 tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 2 },
             ),

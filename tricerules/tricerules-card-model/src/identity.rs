@@ -61,7 +61,6 @@ stable_id!(CardFaceId, "card face id");
 stable_id!(AbilityId, "ability id");
 stable_id!(ModeId, "mode id");
 stable_id!(ChoiceId, "choice id");
-stable_id!(SearchResultId, "search result id");
 stable_id!(ExiledCohortId, "exiled cohort id");
 stable_id!(AbilityLinkId, "ability link id");
 

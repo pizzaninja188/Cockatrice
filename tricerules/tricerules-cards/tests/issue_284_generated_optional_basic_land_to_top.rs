@@ -117,7 +117,6 @@ fn assert_optional_basic_land_to_top(
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds: Some(bounds),
     } = effect.as_ref()
     else {
@@ -140,7 +139,6 @@ fn assert_optional_basic_land_to_top(
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert!(*reveal);
-    assert!(result_id.is_none());
 
     let metadata = registry
         .presentation_face(id, face.face_id.as_str())

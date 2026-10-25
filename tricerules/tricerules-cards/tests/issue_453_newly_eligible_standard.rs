@@ -701,7 +701,6 @@ fn issue_453_landcycling_abilities_search_a_revealed_basic_land_to_hand() {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: true,
-                result_id: None,
                 selection_bounds: None,
             }],
             "{id}"

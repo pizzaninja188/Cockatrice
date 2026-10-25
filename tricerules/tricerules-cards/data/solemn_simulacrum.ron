@@ -31,7 +31,7 @@
               who: Controller, optional: false, count: 1, count_by_cast_cost: None,
               filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
               zones: Fixed([Library]), destination: Battlefield(tapped: true),
-              conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+              conditional_destination: None, shuffle: true, reveal: false,
               selection_bounds: Some((min: 0, max: 1)),
             )))], yields: []),
           )],

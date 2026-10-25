@@ -6,5 +6,5 @@
   mana_cost: "{2}{G}",
   harmonize_cost: Some("{4}{G}"),
   types: ["Sorcery"],
-  spell_effect: [SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(BasicLand),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Battlefield(tapped:true),conditional_destination:None,shuffle:true,reveal:false,result_id:None)],
+  spell_effect: [SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(BasicLand),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Battlefield(tapped:true),conditional_destination:None,shuffle:true,reveal:false)],
 )

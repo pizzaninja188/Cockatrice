@@ -8,6 +8,6 @@
   power: 6,
   toughness: 6,
   keywords: [Deathtouch],
-  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Hand,costs:[Mana("{2}"),DiscardSelf],cost_modifiers:[],effect:[SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:["Swamp"],excluded_subtypes:[],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Hand,conditional_destination:None,shuffle:true,reveal:true,result_id:None)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
+  activated_abilities: [(ability_id:"activated_01",presentation:OracleLines([3]),source_zone:Hand,costs:[Mana("{2}"),DiscardSelf],cost_modifiers:[],effect:[SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:["Swamp"],excluded_subtypes:[],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Hand,conditional_destination:None,shuffle:true,reveal:true)],targeting:None,timing:Normal,conditions:[],activation_limit:None)],
   triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [CreateTokens(token:"food",count:1,who:Controller,tapped:false,sacrifice_timing:None)])],
 )

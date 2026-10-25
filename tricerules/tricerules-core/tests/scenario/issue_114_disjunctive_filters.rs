@@ -558,7 +558,6 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
-                result_id: None,
                 selection_bounds: None,
             };
             let SpellEffectKind::SearchLibrary {

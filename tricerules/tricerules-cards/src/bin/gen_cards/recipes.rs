@@ -948,7 +948,6 @@ fn legendary_creature_search_effect() -> SpellEffectKind {
         shuffle: true,
         reveal: true,
         selection_constraint: None,
-        result_id: None,
     }
 }
 
@@ -4242,7 +4241,6 @@ fn match_modal_destroy_land_its_controller_search_basic(
                         shuffle: true,
                         reveal: false,
                         selection_constraint: None,
-                        result_id: None,
                     },
                 ],
                 modal_targeting("Choose target land", 0),
@@ -4406,7 +4404,6 @@ fn match_modal_search_artifact_reveal_hand(
                     shuffle: true,
                     reveal: true,
                     selection_constraint: None,
-                    result_id: None,
                 }],
                 None,
             )
@@ -4715,7 +4712,6 @@ fn match_modal_search_basic_land_tapped(text: &str, _: &RecipeContext) -> Option
                     shuffle: true,
                     reveal: false,
                     selection_constraint: None,
-                    result_id: None,
                 }],
                 None,
             )
@@ -5328,7 +5324,7 @@ fn match_self_enters_optional_search_basic_land_to_top(
                                 selection_constraint: None, slots: [],
                                 zones: Fixed([Library]), destination: TopOfLibrary,
                                 conditional_destination: None, shuffle: true, reveal: true,
-                                result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                                selection_bounds: Some((min: 0, max: 1)),
                             )))], yields: []))],
                         otherwise: (steps: [], yields: []),
                     ))"#,
@@ -8301,7 +8297,7 @@ fn match_station_etb_sac_land_search_two(
                                 zones: Fixed([Library]),
                                 destination: Battlefield(tapped: true),
                                 conditional_destination: None,
-                                shuffle: true, reveal: false, result_id: None,
+                                shuffle: true, reveal: false,
                                 selection_bounds: Some((min: 0, max: 2)),
                             )))], yields: []),
                         )],
@@ -8368,7 +8364,6 @@ fn match_station_attack_put_creature_from_hand(
                     shuffle: false,
                     reveal: false,
                     selection_constraint: None,
-                    result_id: None,
                 }],
             )
         })
@@ -10334,7 +10329,6 @@ fn match_land_tap_sacrifice_search_basic_tapped(
                     shuffle: true,
                     reveal: false,
                     selection_constraint: None,
-                    result_id: None,
                 }],
                 targeting: None,
                 timing: ActivationTiming::Normal,
@@ -10450,7 +10444,6 @@ fn typecycling_search(
             shuffle: true,
             reveal: true,
             selection_constraint: None,
-            result_id: None,
         },
     )
 }
@@ -10816,7 +10809,6 @@ fn match_spell_search_basic_land_battlefield_tapped(
             shuffle: true,
             reveal: false,
             selection_constraint: None,
-            result_id: None,
         })
     })
 }
@@ -13598,7 +13590,6 @@ fn match_etb_enchantment_search_two_basic_lands_tapped(
                 shuffle: true,
                 reveal: false,
                 selection_constraint: None,
-                result_id: None,
             }],
         )
     })
@@ -29578,7 +29569,6 @@ mod tests {
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
             selection_bounds,
             ..
         } = effect.as_ref()
@@ -29602,7 +29592,6 @@ mod tests {
         assert!(conditional_destination.is_none());
         assert!(*shuffle);
         assert!(*reveal);
-        assert!(result_id.is_none());
         assert_eq!(
             *selection_bounds,
             Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 1 })
@@ -35791,7 +35780,6 @@ mod tests {
                     shuffle: true,
                     reveal: false,
                     selection_constraint: None,
-                    result_id: None,
                 })
             );
         }
@@ -42165,7 +42153,6 @@ mod tests {
                 shuffle: true,
                 reveal: false,
                 selection_constraint: None,
-                result_id: None,
             }]
         );
         assert!(ability.targeting.is_none());
@@ -49073,7 +49060,6 @@ mod tests {
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
             selection_bounds,
             optional,
         } = effect.as_ref()
@@ -49099,7 +49085,6 @@ mod tests {
         );
         assert!(conditional_destination.is_none());
         assert!(!*reveal);
-        assert!(result_id.is_none());
         assert_eq!(
             *selection_bounds,
             Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 2 })
@@ -51415,7 +51400,6 @@ mod tests {
                         shuffle: true,
                         reveal: false,
                         selection_constraint: None,
-                        result_id: None,
                     },
                 ],
                 targeting: modal_targeting("Choose target land", 0),
@@ -51549,7 +51533,6 @@ mod tests {
                     shuffle: true,
                     reveal: true,
                     selection_constraint: None,
-                    result_id: None,
                 }],
                 targeting: None,
             }
@@ -52257,7 +52240,6 @@ mod tests {
                 shuffle: true,
                 reveal: false,
                 selection_constraint: None,
-                result_id: None,
             }]
         );
         assert!(emission.targeting.is_none());

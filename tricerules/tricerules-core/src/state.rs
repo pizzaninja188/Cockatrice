@@ -15,7 +15,7 @@ use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
 use tricerules_card_model::{
     is_creature_type, AbilityLinkId, CardFace, ChoiceId, DiscardResultOutcome, ExiledCohortId,
-    ManaCost, ManaSymbol, ModeId, ProgramOwnerId, SearchResultId,
+    ManaCost, ManaSymbol, ModeId, ProgramOwnerId,
 };
 use tricerules_proto::ruled::v1::{
     CardsRevealed, ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated,
@@ -1914,7 +1914,6 @@ pub enum ResolutionContinuation {
         conditional_destination: Option<ConditionalSearchDestination>,
         shuffle: bool,
         reveal: bool,
-        result_id: Option<SearchResultId>,
         #[serde(default)]
         commander_choice: Option<SearchLibraryCommanderChoice>,
     },
@@ -2899,7 +2898,9 @@ pub(crate) struct LibrarySearchCompletion {
     pub searcher: PlayerId,
     pub shuffle: bool,
     pub searched_library: bool,
-    pub result_id: Option<SearchResultId>,
+    /// The objects selected by this search; typed Program results are captured only after their
+    /// replacement-expanded Battlefield entries have committed.
+    pub selected_object_ids: Vec<ObjectId>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -2910,7 +2911,6 @@ pub(crate) struct LibrarySearchEntryProgress {
     pub tapped: bool,
     pub shuffle: bool,
     pub searched_library: bool,
-    pub result_id: Option<SearchResultId>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -3208,8 +3208,6 @@ pub struct StackItem {
     /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
     /// cohort under CR 707.10.
     pub(crate) payment_result: CardResultCohort,
-    /// Server-only generation-bound objects published by earlier library-search instructions.
-    pub search_results: BTreeMap<SearchResultId, TriggerObjectRef>,
     /// Server-only exact post-exile incarnations from this resolution; fresh spell copies
     /// start empty and parked continuations retain the same map.
     pub(crate) exiled_cohorts: BTreeMap<ExiledCohortId, Vec<TriggerObjectRef>>,

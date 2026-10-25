@@ -29,7 +29,7 @@
                 aggregate: Count, min: Some(1), max: None,
                 exclude_observed_object: false,
               ), destination: Battlefield(tapped: true))),
-              shuffle: true, reveal: true, result_id: None,
+              shuffle: true, reveal: true,
               selection_bounds: Some((min: 0, max: 1)),
             )))
           ], yields: []))],

@@ -518,6 +518,10 @@ struct Compiler<'a> {
     cast_payment_profile: Option<ProgramCastPaymentProfile>,
     cast_cost_options: HashMap<ChoiceId, HashSet<ChoiceId>>,
     slots: Vec<CompiledSlot>,
+    /// Result slots produced by the narrow direct tapped-Battlefield BasicLand search profile.
+    /// Kept compiler-local so consumers can prove the exact producer while preserving lexical
+    /// slot scope across nested blocks.
+    search_result_slots: HashSet<ResultSlotId>,
     instruction_ids: HashSet<String>,
     choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
@@ -675,6 +679,7 @@ impl CompiledProgram {
                 })
                 .collect(),
             slots: Vec::new(),
+            search_result_slots: HashSet::new(),
             instruction_ids: HashSet::new(),
             choice_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
@@ -1575,6 +1580,12 @@ impl Compiler<'_> {
                         &self.slots,
                         self.allow_koya_outer_exile_result,
                     )?;
+                    validate_search_result_input(
+                        effect,
+                        input,
+                        &self.search_result_slots,
+                        &self.slots,
+                    )?;
                     validate_program_gain_life_result_count_input(
                         effect,
                         input,
@@ -1797,13 +1808,19 @@ impl Compiler<'_> {
                             instruction.id
                         ));
                     }
-                    let mut result_types = validate_and_result_types(
-                        effect,
-                        self.context,
-                        target_group_index,
-                        target_group_max,
-                        self,
-                    )?;
+                    let mut result_types = if instruction.bind.is_empty()
+                        && is_resultful_direct_battlefield_search(effect)
+                    {
+                        validate_resultless_direct_battlefield_library_search(effect, self.context)?
+                    } else {
+                        validate_and_result_types(
+                            effect,
+                            self.context,
+                            target_group_index,
+                            target_group_max,
+                            self,
+                        )?
+                    };
                     if matches!(
                         effect.as_ref(),
                         SpellEffectKind::CounterTargetSpell {
@@ -1912,6 +1929,7 @@ impl Compiler<'_> {
                         } if !is_resultless_direct_top_library_search(effect)
                             && !is_resultless_direct_hand_library_search(effect)
                             && !is_resultless_direct_battlefield_library_search(effect)
+                            && !is_resultful_direct_battlefield_search(effect)
                             && !is_resultless_conditional_top_search(effect)
                     ) || matches!(
                         effect.as_ref(),
@@ -2458,6 +2476,20 @@ impl Compiler<'_> {
                 &mut names,
                 &mut self.slots,
             )?;
+            if matches!(
+                &instruction.kind,
+                InstructionKind::Perform(effect)
+                    if !instruction.bind.is_empty()
+                        && is_resultful_direct_battlefield_search(effect.as_ref())
+            ) {
+                let [output] = outputs.as_slice() else {
+                    return Err(format!(
+                        "instruction '{}' must bind its direct Battlefield search result",
+                        instruction.id
+                    ));
+                };
+                self.search_result_slots.insert(*output);
+            }
             steps.push(CompiledInstruction {
                 instruction_address,
                 id: instruction.id.clone(),
@@ -3063,6 +3095,83 @@ fn validate_return_to_owners_hand_input(
     Ok(())
 }
 
+fn direct_basic_land_search_result_type() -> ResultType {
+    ResultType::PermanentSelection {
+        chooser: PlayerRecipient::Controller,
+        filter: Box::new(TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: super::TargetController::You,
+            permanent_types: vec![super::PermanentTypeFilter::Land],
+            required_supertypes: vec!["Basic".into()],
+            ..TargetFilter::default()
+        }),
+        cardinality: Cardinality {
+            min: 0,
+            max: Some(1),
+        },
+    }
+}
+
+fn is_resultful_direct_battlefield_search(effect: &SpellEffectKind) -> bool {
+    effect.is_typed_resultful_direct_battlefield_search()
+}
+
+fn validate_resultful_direct_battlefield_search(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
+    if !is_resultful_direct_battlefield_search(effect) {
+        return Err("typed direct Battlefield SearchLibrary result supports only a mandatory controller one-BasicLand Library search with bounds 0..1, no reveal, and shuffle".into());
+    }
+    effect.validate_typed_program_search_result(context)?;
+    Ok(vec![direct_basic_land_search_result_type()])
+}
+
+fn is_search_result_behold_consumer(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::MayBehold {
+            who: PlayerRecipient::Controller,
+            if_beheld,
+            ..
+        } if if_beheld.as_slice() == [SpellEffectKind::Untap {
+                subject: EffectSubject::PreviousEffectObject,
+            }]
+    )
+}
+
+fn is_search_result_untap_consumer(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::Untap {
+            subject: EffectSubject::PreviousEffectObject,
+        }
+    )
+}
+
+fn validate_search_result_input(
+    effect: &SpellEffectKind,
+    input: Option<ResultSlotId>,
+    search_result_slots: &HashSet<ResultSlotId>,
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !is_search_result_behold_consumer(effect) && !is_search_result_untap_consumer(effect) {
+        return Ok(());
+    }
+    let invalid = || {
+        "direct Battlefield search consumer must use its bound one-BasicLand search result"
+            .to_string()
+    };
+    let input = input.ok_or_else(invalid)?;
+    if !search_result_slots.contains(&input)
+        || slots.get(input.0 as usize).map(|slot| &slot.result_type)
+            != Some(&direct_basic_land_search_result_type())
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 fn validate_myr_battlesphere_attack_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
@@ -3118,6 +3227,10 @@ fn compile_input(
         } => Some("TargetedSpellController"),
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
         EffectOp::MyrBattlesphereAttack => Some("PermanentSelection"),
+        EffectOp::Untap {
+            subject: EffectSubject::PreviousEffectObject,
+        } => Some("PermanentSelection"),
+        effect if is_search_result_behold_consumer(effect) => Some("PermanentSelection"),
         EffectOp::GrantKeywords {
             subject: EffectSubject::PreviousEffectObject,
             ..
@@ -4251,6 +4364,12 @@ fn validate_and_result_types(
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::Untap {
+            subject: EffectSubject::PreviousEffectObject,
+        } => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::SelectHandCards {
             count,
             ordered,
@@ -4283,6 +4402,11 @@ fn validate_and_result_types(
                 },
             }])
         }
+        effect if is_search_result_behold_consumer(effect) =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
             destination: SearchDestination::TopOfLibrary,
@@ -4299,6 +4423,14 @@ fn validate_and_result_types(
             destination: SearchDestination::Hand,
             ..
         } => validate_resultless_direct_hand_library_search(effect, context),
+        SpellEffectKind::SearchLibrary {
+            selection_bounds: Some(_),
+            destination: SearchDestination::Battlefield { .. },
+            ..
+        } if is_resultful_direct_battlefield_search(effect) =>
+        {
+            validate_resultful_direct_battlefield_search(effect, context)
+        }
         SpellEffectKind::SearchLibrary {
             selection_bounds: Some(_),
             destination: SearchDestination::Battlefield { .. },
@@ -5038,7 +5170,6 @@ fn validate_retained_library_search(
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds: Some(SearchSelectionBounds { min, max }),
     } = effect
     else {
@@ -5064,7 +5195,6 @@ fn validate_retained_library_search(
         || conditional_destination.is_some()
         || *shuffle
         || *reveal
-        || result_id.is_some()
     {
         return Err(
             "retained SearchLibrary supports only a mandatory controller library search with fixed bounds, optional DifferentNames, and KeepInLibrary"
@@ -5104,7 +5234,6 @@ fn is_resultless_direct_search_base(effect: &SpellEffectKind) -> bool {
         zones,
         conditional_destination,
         shuffle,
-        result_id,
         selection_bounds,
         ..
     } = effect
@@ -5121,7 +5250,6 @@ fn is_resultless_direct_search_base(effect: &SpellEffectKind) -> bool {
         && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
         && conditional_destination.is_none()
         && *shuffle
-        && result_id.is_none()
         && resultless_search_bounds_match(filter, *selection_bounds)
 }
 
@@ -5193,7 +5321,6 @@ fn is_resultless_direct_battlefield_library_search(effect: &SpellEffectKind) -> 
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = effect
     else {
@@ -5222,7 +5349,6 @@ fn is_resultless_direct_battlefield_library_search(effect: &SpellEffectKind) -> 
         && conditional_destination.is_none()
         && *shuffle
         && !*reveal
-        && result_id.is_none()
 }
 
 fn validate_resultless_direct_battlefield_library_search(
@@ -5297,7 +5423,6 @@ fn is_resultless_conditional_top_search(effect: &SpellEffectKind) -> bool {
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = effect
     else {
@@ -5325,7 +5450,6 @@ fn is_resultless_conditional_top_search(effect: &SpellEffectKind) -> bool {
         && exact_conditional_destination
         && *shuffle
         && *reveal
-        && result_id.is_none()
         && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
 }
 

@@ -101,7 +101,6 @@ fn assert_worldwagon_battlefield_search(branch: &CompiledChooseBranch) {
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
         }
     );
@@ -447,7 +446,6 @@ fn solemn_simulacrum_registry_programs_the_search_and_death_draw_owners() {
         destination,
         shuffle,
         reveal,
-        result_id,
         ..
     } = &**search
     else {
@@ -464,7 +462,7 @@ fn solemn_simulacrum_registry_programs_the_search_and_death_draw_owners() {
         destination,
         tricerules_cards::primitives::SearchDestination::Battlefield { tapped: true }
     ));
-    assert!(*shuffle && !*reveal && result_id.is_none());
+    assert!(*shuffle && !*reveal);
 
     assert_eq!(death.ability_id.as_str(), "triggered_02");
     assert_eq!(death.trigger, TriggerCondition::WhenSelfDies);

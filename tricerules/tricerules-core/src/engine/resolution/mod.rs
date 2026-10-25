@@ -472,8 +472,7 @@ impl EffectCx<'_> {
             EffectSubject::Source | EffectSubject::AttachedObject => self.top.source_permanent_id,
             EffectSubject::Chosen(_)
             | EffectSubject::TriggerObject
-            | EffectSubject::PreviousEffectObject
-            | EffectSubject::SearchedObject(_) => Some(self.top.id),
+            | EffectSubject::PreviousEffectObject => Some(self.top.id),
             EffectSubject::PreviousEffectObjects => return None,
         };
         Some((object_id, source_id))
@@ -1106,22 +1105,6 @@ fn resolve_effect_subject(
         EffectSubject::Chosen(_) => targets.first().copied(),
         EffectSubject::PreviousEffectObject => None,
         EffectSubject::PreviousEffectObjects => None,
-        EffectSubject::SearchedObject(result_id) => {
-            let searched = top.search_results.get(result_id)?;
-            let current_generation = engine
-                .state
-                .zone_change_generation
-                .get(&searched.object_id)
-                .copied()
-                .unwrap_or(0);
-            (current_generation == searched.zone_change_generation
-                && engine
-                    .state
-                    .objects
-                    .get(&searched.object_id)
-                    .is_some_and(|object| object.zone == Zone::Battlefield))
-            .then_some(searched.object_id)
-        }
         EffectSubject::TriggerObject => {
             let trigger_object = top.trigger_context.observed_object?;
             let current_generation = engine
@@ -2884,6 +2867,9 @@ impl GameEngine {
             ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
                 stack.clone()
             }
+            ResolutionContinuation::BeholdChoice { stack, .. } if stack.program.is_some() => {
+                stack.clone()
+            }
             _ => return Ok(false),
         };
         let Some(mut program) = stack.program.clone() else {
@@ -2931,6 +2917,9 @@ impl GameEngine {
                     ..
                 }
             ),
+            ResolutionContinuation::BeholdChoice { .. } => {
+                matches!(effect, SpellEffectKind::MayBehold { .. })
+            }
             _ => false,
         };
         if !chooser_leaf {
@@ -3409,7 +3398,6 @@ impl GameEngine {
             cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: BTreeMap::new(),
@@ -4782,7 +4770,6 @@ mod attached_subject_tests {
             cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
@@ -13276,7 +13263,6 @@ mod source_keyword_tests {
             cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
@@ -13315,7 +13301,6 @@ mod source_keyword_tests {
             cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),

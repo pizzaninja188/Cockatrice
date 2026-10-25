@@ -74,7 +74,7 @@ impl GameEngine {
 
     pub(in crate::engine) fn continue_library_search_battlefield_entries(
         &mut self,
-        mut stack: ParkedStackResolution,
+        stack: ParkedStackResolution,
         mut progress: LibrarySearchEntryProgress,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
@@ -154,21 +154,6 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
-            if let Some(result_id) = progress.result_id.take() {
-                stack.item.search_results.insert(
-                    result_id,
-                    TriggerObjectRef {
-                        object_id: oid,
-                        zone_change_generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0),
-                        controller_at_event: controller,
-                    },
-                );
-            }
         }
         for oid in progress.hand_object_ids {
             let card_label = self
@@ -279,7 +264,6 @@ impl GameEngine {
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id: None,
                 stack: stack.clone(),
             },
         )?;
@@ -375,7 +359,6 @@ impl GameEngine {
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id: None,
                 stack: stack.clone(),
             },
         )?;
@@ -1394,7 +1377,6 @@ self.state.pending_resolution = Some(PendingResolution {
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
         ) = match &pending.continuation {
             ResolutionContinuation::SearchLibrary {
                 stack,
@@ -1408,7 +1390,6 @@ self.state.pending_resolution = Some(PendingResolution {
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id,
                 commander_choice: None,
             } => (
                 stack.clone(),
@@ -1422,7 +1403,6 @@ self.state.pending_resolution = Some(PendingResolution {
                 conditional_destination.clone(),
                 *shuffle,
                 *reveal,
-                result_id.clone(),
             ),
             _ => return Err(EngineError::Illegal("library-search continuation missing")),
         };
@@ -1755,7 +1735,7 @@ self.state.pending_resolution = Some(PendingResolution {
                                     searcher,
                                     shuffle,
                                     searched_library,
-                                    result_id,
+                                    selected_object_ids: chosen.to_vec(),
                                 },
                             )),
                             &mut ev,
@@ -1774,7 +1754,6 @@ self.state.pending_resolution = Some(PendingResolution {
                             tapped,
                             shuffle,
                             searched_library,
-                            result_id,
                         },
                         ev,
                     );
@@ -1789,7 +1768,6 @@ self.state.pending_resolution = Some(PendingResolution {
                             tapped: true,
                             shuffle,
                             searched_library,
-                            result_id,
                         },
                         ev,
                     );
@@ -1811,7 +1789,7 @@ self.state.pending_resolution = Some(PendingResolution {
                 &mut ev,
             );
         }
-        if is_resultless_program_search(&stack) {
+        if is_resultless_program_search(&stack) || self.is_typed_resultful_library_search(&stack) {
             return self.complete_parked_stack_with_previous(
                 stack,
                 crate::state::EffectResult::default(),
@@ -1846,7 +1824,6 @@ self.state.pending_resolution = Some(PendingResolution {
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
             ..
         } = pending.continuation
         else {
@@ -1909,7 +1886,6 @@ self.state.pending_resolution = Some(PendingResolution {
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id,
                 commander_choice: Some(crate::state::SearchLibraryCommanderChoice {
                     object_id,
                     owner,
@@ -2211,7 +2187,6 @@ mod tests {
             cast_occurrence: None,
             cast_by: Some(0),
             payment_result: Default::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
@@ -3383,7 +3358,6 @@ mod tests {
                     conditional_destination: None,
                     shuffle: true,
                     reveal: false,
-                    result_id: None,
                     stack: ParkedStackResolution::new(item.clone()),
                 },
             )
@@ -3605,7 +3579,6 @@ mod tests {
                     conditional_destination: None,
                     shuffle: true,
                     reveal: false,
-                    result_id: None,
                     stack: ParkedStackResolution::new(item.clone()),
                 },
             )
@@ -3723,7 +3696,6 @@ mod tests {
             tapped: false,
             shuffle: true,
             searched_library: true,
-            result_id: None,
         };
 
         let batch = engine

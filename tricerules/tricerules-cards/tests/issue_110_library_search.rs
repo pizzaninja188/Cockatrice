@@ -113,7 +113,6 @@ fn issue_110_search_and_look_cards_use_the_shared_primitives() {
             conditional_destination: None,
             shuffle: true,
             reveal: true,
-            result_id: None,
             selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
         } if name == "Tempest Hawk"
             && zones == &[CardSearchZone::Library]
@@ -265,7 +264,6 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
             conditional_destination: Some(conditional),
             shuffle: true,
             reveal: true,
-            result_id: None,
             selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
         } if filter == &ZoneCardFilter {
                 card_type: Some(CardTypeFilter::BasicLand),

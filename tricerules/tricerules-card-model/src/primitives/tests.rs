@@ -5692,7 +5692,6 @@ fn issue_206_explore_rejects_unsupported_subjects_and_source_bound_spells() {
         EffectSubject::AttachedObject,
         EffectSubject::TriggerObject,
         EffectSubject::PreviousEffectObject,
-        EffectSubject::SearchedObject(crate::SearchResultId::new("search_01").unwrap()),
     ] {
         let error = SpellEffectKind::Explore { subject }
             .validate(EffectContext::Ability)
@@ -6467,7 +6466,7 @@ fn resultless_direct_hand_search_program(filter: &str) -> String {
                             selection_constraint: None, slots: [],
                             zones: Fixed([Library]), destination: Hand,
                             conditional_destination: None, shuffle: true, reveal: true,
-                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                            selection_bounds: Some((min: 0, max: 1)),
                         )))
                     ], yields: []))], otherwise: (steps: [], yields: []))),
         ], yields: [])"#
@@ -6526,7 +6525,6 @@ fn authored_choose_accepts_resultless_direct_hand_search_filters() {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: true,
-                result_id: None,
                 selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
                 ..
             } if zones == &[crate::primitives::CardSearchZone::Library]
@@ -6566,7 +6564,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
                             selection_constraint: None, slots: [],
                             zones: Fixed([Library]), destination: TopOfLibrary,
                             conditional_destination: None, shuffle: true, reveal: true,
-                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                            selection_bounds: Some((min: 0, max: 1)),
                         )))
                     ], yields: []))], otherwise: (steps: [], yields: []))),
         ], yields: [])"#,
@@ -6628,7 +6626,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = effect.as_ref()
     else {
@@ -6660,7 +6657,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert!(*reveal);
-    assert!(result_id.is_none());
     assert_eq!(
         *selection_bounds,
         Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 })
@@ -6707,10 +6703,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             ),
         ),
         (
-            "the operation remains resultless",
-            definition.replace("result_id: None", "result_id: Some(\"found\")"),
-        ),
-        (
             "bounds stay 0..1",
             definition.replace("min: 0, max: 1", "min: 1, max: 1"),
         ),
@@ -6748,7 +6740,7 @@ fn resultless_direct_battlefield_search_program(count: u32, max: u32) -> String 
                             zones: Fixed([Library]),
                             destination: Battlefield(tapped: true),
                             conditional_destination: None, shuffle: true, reveal: false,
-                            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                            selection_bounds: Some((min: 0, max: 1)),
                         )))
                     ], yields: []))], otherwise: (steps: [], yields: [])))
         ], yields: [])"#,
@@ -6777,7 +6769,7 @@ fn resultless_conditional_top_search_program() -> String {
                                 aggregate: Count, min: Some(1), max: None,
                                 exclude_observed_object: false,
                             ), destination: Battlefield(tapped: true))),
-                            shuffle: true, reveal: true, result_id: None,
+                            shuffle: true, reveal: true,
                             selection_bounds: Some((min: 0, max: 1)),
                         )))
                     ], yields: []))], otherwise: (steps: [], yields: [])))
@@ -6964,7 +6956,7 @@ fn program_reusable_operation_contract() {
                                 filter: {filter}, selection_constraint: None, slots: [],
                                 zones: Fixed([Library]), destination: {destination},
                                 conditional_destination: {conditional_destination},
-                                shuffle: true, reveal: {reveal}, result_id: None,
+                                shuffle: true, reveal: {reveal},
                                 selection_bounds: Some((min: {min}, max: 1)),
                             )))
                         ], yields: []))], otherwise: (steps: [], yields: []))),
@@ -7240,7 +7232,6 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             conditional_destination: Some(conditional),
             shuffle: true,
             reveal: true,
-            result_id: None,
             selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
         } if filter == &crate::primitives::ZoneCardFilter {
                 card_type: Some(crate::primitives::CardTypeFilter::BasicLand),
@@ -7309,10 +7300,6 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
         (
             "the search shuffles",
             definition.replace("shuffle: true", "shuffle: false"),
-        ),
-        (
-            "the leaf remains resultless",
-            definition.replace("result_id: None", "result_id: Some(\"found\")"),
         ),
         (
             "the bounds are 0..1",
@@ -7406,7 +7393,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_ta
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: Some(crate::primitives::SearchSelectionBounds { min: 0, max: 1 }),
         } if filter == &crate::primitives::ZoneCardFilter {
             card_type: Some(crate::primitives::CardTypeFilter::BasicLand),
@@ -7464,10 +7450,6 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_ta
             ),
         ),
         (
-            "the operation has no SearchResultId",
-            definition.replace("result_id: None", "result_id: Some(\"found\")"),
-        ),
-        (
             "the operation is shuffled",
             definition.replace("shuffle: true", "shuffle: false"),
         ),
@@ -7475,19 +7457,132 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_ta
             "the selection bounds remain 0..1",
             definition.replace("min: 0, max: 1", "min: 1, max: 1"),
         ),
-        (
-            "the resultless instruction cannot bind a cohort",
-            definition.replace(
-                "id: \"search_battlefield\", bind: [],",
-                "id: \"search_battlefield\", bind: [\"found\"],",
-            ),
-        ),
     ] {
         assert!(
             crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[]).is_err(),
             "{label} must be rejected"
         );
     }
+}
+
+#[test]
+fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_slot() {
+    let body = r#"(steps: [
+        (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
+            who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+            filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
+            slots: [], zones: Fixed([Library]), destination: Battlefield(tapped: true),
+            conditional_destination: None, shuffle: true, reveal: false,
+            selection_bounds: Some((min: 0, max: 1)),
+        ))),
+        (id: "intervening", bind: [], input: None, kind: Perform(Scry(count: 1))),
+        (id: "threshold", bind: [], input: None, kind: If(
+            condition: BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Land)),
+                aggregate: Count, min: Some(4),
+            ),
+            yes: (steps: [
+                (id: "untap", bind: [], input: Some("found"),
+                    kind: Perform(Untap(subject: PreviousEffectObject))),
+            ], yields: []),
+            no: (steps: [
+                (id: "alternate_untap", bind: [], input: Some("found"),
+                    kind: Perform(Untap(subject: PreviousEffectObject))),
+            ], yields: []),
+        )),
+    ], yields: [])"#;
+    let program = ability_program_fixture("typed_search_result_fixture", body)
+        .expect("the exact typed direct search result remains available in an ability Program");
+
+    let [search, intervening, threshold] = program.body.steps.as_slice() else {
+        panic!("the independent instruction between producer and nested consumer is preserved");
+    };
+    assert!(intervening.outputs.is_empty());
+    let [found_slot] = search.outputs.as_slice() else {
+        panic!("the direct search binds one typed result slot");
+    };
+    assert!(matches!(
+        &program.slots[found_slot.0 as usize].result_type,
+        crate::primitives::ResultType::PermanentSelection {
+            chooser: crate::primitives::PlayerRecipient::Controller,
+            filter,
+            cardinality: crate::primitives::Cardinality { min: 0, max: Some(1) },
+        } if filter.as_ref() == &crate::primitives::TargetFilter {
+            kind: crate::primitives::TargetKind::AnyPermanent,
+            controller: crate::primitives::TargetController::You,
+            permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
+            required_supertypes: vec!["Basic".into()],
+            ..Default::default()
+        }
+    ));
+    let crate::primitives::CompiledInstructionKind::If { yes, no, .. } = &threshold.kind else {
+        panic!("the nested threshold branch is retained");
+    };
+    let [untap] = yes.steps.as_slice() else {
+        panic!("the threshold branch contains the consumer");
+    };
+    assert_eq!(untap.input, Some(*found_slot));
+    let [alternate_untap] = no.steps.as_slice() else {
+        panic!("the mutually exclusive branch can consume the same dominating result");
+    };
+    assert_eq!(alternate_untap.input, Some(*found_slot));
+
+    let unused_search = ability_program_fixture(
+        "typed_search_result_unused_fixture",
+        r#"(steps: [
+            (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
+                who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+                filter: Some((card_type: Some(BasicLand))), selection_constraint: None,
+                slots: [], zones: Fixed([Library]), destination: Battlefield(tapped: true),
+                conditional_destination: None, shuffle: true, reveal: false,
+                selection_bounds: Some((min: 0, max: 1)),
+            ))),
+        ], yields: [])"#,
+    )
+    .expect("the exact bound search result is valid when the authored body leaves it unused");
+    let [unused_search] = unused_search.body.steps.as_slice() else {
+        panic!("the bound-but-unused body still has one search instruction");
+    };
+    assert_eq!(unused_search.outputs.len(), 1);
+
+    let choose_basic_land = r#"(steps: [
+        (id: "choose", bind: ["chosen"], input: None, kind: Perform(ChoosePermanents(
+            chooser: Controller,
+            filter: (kind: AnyPermanent, controller: You, permanent_types: [Land], required_supertypes: ["Basic"]),
+            min: 0, max: 1,
+        ))),
+    ], yields: [])"#;
+    let impostor = ability_program_fixture("exact_type_impostor_fixture", choose_basic_land)
+        .expect("the matching ChoosePermanents selection compiles on its own");
+    let [choose] = impostor.body.steps.as_slice() else {
+        panic!("the impostor has one ChoosePermanents producer");
+    };
+    let [impostor_slot] = choose.outputs.as_slice() else {
+        panic!("the impostor binds one PermanentSelection slot");
+    };
+    assert_eq!(
+        impostor.slots[impostor_slot.0 as usize].result_type,
+        program.slots[found_slot.0 as usize].result_type,
+        "the impostor metadata exactly matches the direct search result type"
+    );
+
+    let unrelated_selection = r#"(steps: [
+        (id: "choose", bind: ["chosen"], input: None, kind: Perform(ChoosePermanents(
+            chooser: Controller,
+            filter: (kind: AnyPermanent, controller: You, permanent_types: [Land], required_supertypes: ["Basic"]),
+            min: 0, max: 1,
+        ))),
+        (id: "untap", bind: [], input: Some("chosen"),
+            kind: Perform(Untap(subject: PreviousEffectObject))),
+    ], yields: [])"#;
+    let error = ability_program_fixture("unrelated_search_result_fixture", unrelated_selection)
+        .expect_err("an equal-typed ChoosePermanents result cannot stand in for the search output");
+    assert!(
+        error.contains(
+            "direct Battlefield search consumer must use its bound one-BasicLand search result"
+        ),
+        "the provenance rejection identifies the missing exact producer: {error}"
+    );
 }
 
 #[test]
@@ -7543,7 +7638,6 @@ fn authored_choose_accepts_resultless_direct_two_basic_land_search_to_battlefiel
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: Some(crate::primitives::SearchSelectionBounds {
                 min: 0,
                 max: 2,
@@ -10760,7 +10854,7 @@ fn gifts_typed_program_shape_compiles_with_an_explicit_target_binding() {
                         selection_constraint: Some(DifferentNames), slots: [],
                         zones: Fixed([Library]), destination: KeepInLibrary,
                         conditional_destination: None, shuffle: false, reveal: false,
-                        result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                        selection_bounds: Some((min: 0, max: 4)),
                     ))),
                 (id: "reveal", bind: ["revealed"], input: Some("found"),
                     kind: Perform(RevealCohort)),
@@ -10809,7 +10903,7 @@ fn gifts_partition_rejects_nonopponent_and_missing_target_bindings() {
                         selection_constraint: Some(DifferentNames), slots: [],
                         zones: Fixed([Library]), destination: KeepInLibrary,
                         conditional_destination: None, shuffle: false, reveal: false,
-                        result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                        selection_bounds: Some((min: 0, max: 4)),
                     ))),
                 (id: "reveal", bind: ["revealed"], input: Some("found"),
                     kind: Perform(RevealCohort)),
@@ -10864,7 +10958,7 @@ fn intuition_retained_search_without_different_names_compiles_with_fixed_three_c
                     selection_constraint: None, slots: [],
                     zones: Fixed([Library]), destination: KeepInLibrary,
                     conditional_destination: None, shuffle: false, reveal: false,
-                    result_id: None, selection_bounds: Some((min: 3, max: 3)),
+                    selection_bounds: Some((min: 3, max: 3)),
                 ))),
             (id: "reveal", bind: ["revealed"], input: Some("found"),
                 kind: Perform(RevealCohort)),
@@ -10920,7 +11014,7 @@ fn retained_cohort_compiler_rejects_broken_input_bindings_and_target_contracts()
                     selection_constraint: Some(DifferentNames), slots: [],
                     zones: Fixed([Library]), destination: KeepInLibrary,
                     conditional_destination: None, shuffle: false, reveal: false,
-                    result_id: None, selection_bounds: Some((min: 0, max: 4)),
+                    selection_bounds: Some((min: 0, max: 4)),
                 ))),
             (id: "reveal", bind: ["revealed"], input: Some("found"),
                 kind: Perform(RevealCohort)),
@@ -11003,7 +11097,7 @@ fn typed_retained_search_fields_are_rejected_on_direct_effects_and_shared_land_s
         filter: None, selection_constraint: None, slots: [],
         zones: Fixed([Library]), destination: Hand,
         conditional_destination: None, shuffle: false, reveal: false,
-        result_id: None, selection_bounds: None,
+        selection_bounds: None,
     )"#;
     for (unsupported, expected_field) in [
         (
@@ -11044,7 +11138,7 @@ fn typed_retained_search_fields_are_rejected_on_direct_effects_and_shared_land_s
             selection_constraint: Some(SharedLandType), slots: [],
             zones: Fixed([Library]), destination: Battlefield(tapped: true),
             conditional_destination: None, shuffle: true, reveal: false,
-            result_id: None, selection_bounds: None,
+            selection_bounds: None,
         )"#,
     );
     crate::CardRegistry::from_chunks_and_tokens(&[&shared_land], &[])

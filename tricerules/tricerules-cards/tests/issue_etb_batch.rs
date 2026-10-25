@@ -191,7 +191,6 @@ fn issue_etb_batch_maps_definitions() {
             conditional_destination: None,
             shuffle: true,
             reveal: true,
-            result_id: None,
             selection_bounds: Some(tricerules_cards::primitives::SearchSelectionBounds {
                 min: 0,
                 max: 1,

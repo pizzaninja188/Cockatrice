@@ -842,7 +842,6 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         cast_by: None,
         cast_cost_receipts: Vec::new(),
         payment_result: CardResultCohort::default(),
-        search_results: Default::default(),
         exiled_cohorts: Default::default(),
         chaos_warp_owner_instructions: Default::default(),
         resolution_branch_choices: Default::default(),

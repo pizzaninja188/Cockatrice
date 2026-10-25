@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ExiledCohortId,
-    ManaCost, SearchResultId,
+    ManaCost,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -180,9 +180,6 @@ pub enum EffectSubject {
     /// token-copy instruction. Only the approved Haste modifier and one delayed cohort Exile use
     /// this subject; single-object references keep using `PreviousEffectObject`.
     PreviousEffectObjects,
-    /// The exact post-entry incarnation published by an earlier, single-card battlefield
-    /// [`SpellEffectKind::SearchLibrary`] instruction in this resolution.
-    SearchedObject(SearchResultId),
     Chosen(Box<TargetFilter>),
 }
 
@@ -2081,10 +2078,6 @@ pub enum SpellEffectKind {
         /// Reveal the found card publicly (Mystical Tutor reveals to both players). Default: false.
         #[serde(default)]
         reveal: bool,
-        /// Stable server-only identity for the post-entry object selected by an exactly-one
-        /// battlefield search. Later effects may consume it through `SearchedObject`.
-        #[serde(default)]
-        result_id: Option<SearchResultId>,
         /// Bounds for the typed, retained library-search form used by resolution programs.
         /// Direct SearchLibrary effects keep their existing count/optional contract.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3552,8 +3545,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects
-                    | EffectSubject::SearchedObject(_) => None,
+                    | EffectSubject::PreviousEffectObjects => None,
                 })
                 .collect(),
             SpellEffectKind::AttachEquipment {
@@ -3567,8 +3559,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects
-                    | EffectSubject::SearchedObject(_) => None,
+                    | EffectSubject::PreviousEffectObjects => None,
                 })
                 .collect(),
             SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => subjects
@@ -3579,8 +3570,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects
-                    | EffectSubject::SearchedObject(_) => None,
+                    | EffectSubject::PreviousEffectObjects => None,
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
@@ -3612,8 +3602,7 @@ impl SpellEffectKind {
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_) => Vec::new(),
+                | EffectSubject::PreviousEffectObjects => Vec::new(),
             },
             SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
                 Some(EffectSubject::Chosen(target)) => vec![TargetRole::Filtered(target)],
@@ -3622,8 +3611,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects
-                    | EffectSubject::SearchedObject(_),
+                    | EffectSubject::PreviousEffectObjects,
                 )
                 | None => Vec::new(),
             },
@@ -4132,66 +4120,6 @@ impl SpellEffectKind {
             }
         }
 
-        fn searched_subjects<'a>(effect: &'a SpellEffectKind, out: &mut Vec<&'a SearchResultId>) {
-            let mut subject = |subject: &'a EffectSubject| {
-                if let EffectSubject::SearchedObject(result_id) = subject {
-                    out.push(result_id);
-                }
-            };
-            match effect {
-                SpellEffectKind::Conditional { effect, .. }
-                | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-                    searched_subjects(effect, out)
-                }
-                SpellEffectKind::MayBehold { if_beheld, .. } => {
-                    for nested in if_beheld {
-                        searched_subjects(nested, out);
-                    }
-                }
-                SpellEffectKind::Fight { first, second }
-                | SpellEffectKind::AttachEquipment {
-                    equipment: first,
-                    creature: second,
-                } => {
-                    subject(first);
-                    subject(second);
-                }
-                SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => {
-                    for value in subjects {
-                        subject(value);
-                    }
-                }
-                SpellEffectKind::Destroy { subject: value }
-                | SpellEffectKind::DestroyPreventingRegeneration { subject: value }
-                | SpellEffectKind::Sacrifice { subject: value }
-                | SpellEffectKind::PumpTarget { subject: value, .. }
-                | SpellEffectKind::Tap { subject: value }
-                | SpellEffectKind::Untap { subject: value }
-                | SpellEffectKind::SetPrepared { subject: value, .. }
-                | SpellEffectKind::GrantKeywords { subject: value, .. }
-                | SpellEffectKind::RemoveAllAbilities { subject: value, .. }
-                | SpellEffectKind::GrantKeywordChoice { subject: value, .. }
-                | SpellEffectKind::GrantProtection { subject: value, .. }
-                | SpellEffectKind::GrantTriggeredAbility { subject: value, .. }
-                | SpellEffectKind::AddTypes { subject: value, .. }
-                | SpellEffectKind::ReturnToOwnersHand { subject: value }
-                | SpellEffectKind::Exile { subject: value, .. }
-                | SpellEffectKind::ExileWithOwnerCastPermission { subject: value, .. }
-                | SpellEffectKind::PutInOwnersLibrary { subject: value, .. }
-                | SpellEffectKind::Regenerate { subject: value }
-                | SpellEffectKind::Explore { subject: value }
-                | SpellEffectKind::PutCounters { subject: value, .. }
-                | SpellEffectKind::RemoveCounters { subject: value, .. }
-                | SpellEffectKind::RemoveAllCounters { subject: value, .. }
-                | SpellEffectKind::PutCounterSnapshot { subject: value, .. } => subject(value),
-                SpellEffectKind::CreateDelayedTrigger {
-                    subject: Some(value),
-                    ..
-                } => subject(value),
-                _ => {}
-            }
-        }
-
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
         // an effect that declares an object target (Reanimate: `MoveGraveyardCards`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
@@ -4212,28 +4140,7 @@ impl SpellEffectKind {
             );
         }
 
-        let mut search_results = std::collections::HashSet::new();
         for (index, effect) in effects.iter().enumerate() {
-            let mut referenced = Vec::new();
-            searched_subjects(effect, &mut referenced);
-            if let Some(missing) = referenced
-                .into_iter()
-                .find(|result_id| !search_results.contains(result_id.as_str()))
-            {
-                return Err(format!(
-                    "searched object '{}' requires an earlier SearchLibrary producer",
-                    missing
-                ));
-            }
-            if let SpellEffectKind::SearchLibrary {
-                result_id: Some(result_id),
-                ..
-            } = effect
-            {
-                if !search_results.insert(result_id.as_str()) {
-                    return Err(format!("duplicate search result id '{}'", result_id));
-                }
-            }
             let amount = effect.result_consuming_amount();
             let previous = index
                 .checked_sub(1)
@@ -4377,7 +4284,66 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
-        if matches!(
+        self.validate_inner(context, false)
+    }
+
+    pub fn is_typed_resultful_direct_battlefield_search(&self) -> bool {
+        let Self::SearchLibrary {
+            who,
+            optional,
+            count,
+            count_by_cast_cost,
+            filter,
+            selection_constraint,
+            slots,
+            zones,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+            selection_bounds,
+        } = self
+        else {
+            return false;
+        };
+
+        *who == PlayerRecipient::Controller
+            && !*optional
+            && *count == 1
+            && count_by_cast_cost.is_none()
+            && filter.as_ref().is_some_and(|filter| {
+                *filter
+                    == ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..ZoneCardFilter::default()
+                    }
+            })
+            && selection_constraint.is_none()
+            && slots.is_empty()
+            && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+            && *destination == (SearchDestination::Battlefield { tapped: true })
+            && conditional_destination.is_none()
+            && *shuffle
+            && !*reveal
+            && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
+    }
+
+    pub(crate) fn validate_typed_program_search_result(
+        &self,
+        context: EffectContext,
+    ) -> Result<(), String> {
+        if !self.is_typed_resultful_direct_battlefield_search() {
+            return Err("typed direct Battlefield SearchLibrary result supports only a mandatory controller one-BasicLand Library search with bounds 0..1, no reveal, and shuffle".into());
+        }
+        self.validate_inner(context, true)
+    }
+
+    fn validate_inner(
+        &self,
+        context: EffectContext,
+        allow_typed_search_result: bool,
+    ) -> Result<(), String> {
+        let unsupported_retained_search_or_cohort = matches!(
             self,
             Self::SelectHandCards { .. }
                 | Self::PutSelectedHandCardsOnLibraryTop
@@ -4387,10 +4353,6 @@ impl SpellEffectKind {
                 | Self::MoveCohortPartition { .. }
                 | Self::ShuffleLibrary { .. }
                 | Self::SearchLibrary {
-                    selection_bounds: Some(_),
-                    ..
-                }
-                | Self::SearchLibrary {
                     selection_constraint: Some(SearchSelectionConstraint::DifferentNames),
                     ..
                 }
@@ -4398,7 +4360,15 @@ impl SpellEffectKind {
                     destination: SearchDestination::KeepInLibrary,
                     ..
                 }
-        ) {
+        ) || (!allow_typed_search_result
+            && matches!(
+                self,
+                Self::SearchLibrary {
+                    selection_bounds: Some(_),
+                    ..
+                }
+            ));
+        if unsupported_retained_search_or_cohort {
             return Err(
                 "typed retained search/cohort operations are valid only inside a spell_program"
                     .into(),
@@ -4829,8 +4799,7 @@ impl SpellEffectKind {
                 EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_) => {
+                | EffectSubject::PreviousEffectObjects => {
                     return Err("Explore requires Source or Chosen subject".into());
                 }
             }
@@ -4903,8 +4872,7 @@ impl SpellEffectKind {
                     EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
-                    | EffectSubject::PreviousEffectObjects
-                    | EffectSubject::SearchedObject(_) => {
+                    | EffectSubject::PreviousEffectObjects => {
                         return Err(
                             "ShufflePermanentsIntoOwnersLibraries supports only Source and Chosen subjects"
                                 .into(),
@@ -5001,9 +4969,7 @@ impl SpellEffectKind {
                         "PreviousEffectObjects only supports the indefinite Haste modifier".into(),
                     );
                 }
-                EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject
-                | EffectSubject::SearchedObject(_) => {
+                EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
                     return Err("permanent modifiers support only Source, Chosen, or an immediate PreviousEffectObject".into());
                 }
             }
@@ -6066,7 +6032,6 @@ impl SpellEffectKind {
                 destination,
                 conditional_destination,
                 count_by_cast_cost,
-                result_id,
                 ..
             } => {
                 if matches!(
@@ -6089,8 +6054,7 @@ impl SpellEffectKind {
                         || filter.as_ref().and_then(|filter| filter.card_type)
                             != Some(CardTypeFilter::BasicLand)
                         || *destination != (SearchDestination::Battlefield { tapped: true })
-                        || conditional_destination.is_some()
-                        || result_id.is_some())
+                        || conditional_destination.is_some())
                 {
                     return Err("shared land type requires a mandatory two-basic library search to the battlefield tapped without slots, conditional count/destination, or result binding".into());
                 }
@@ -6152,22 +6116,6 @@ impl SpellEffectKind {
                         "BattlefieldTappedThenHand requires an unconditional two-card library search"
                             .into(),
                     );
-                }
-                if let Some(result_id) = result_id {
-                    result_id.validate()?;
-                    if *optional
-                        || *count != 1
-                        || count_by_cast_cost.is_some()
-                        || !slots.is_empty()
-                        || !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
-                        || *destination != (SearchDestination::Battlefield { tapped: true })
-                        || conditional_destination.is_some()
-                    {
-                        return Err(
-                            "search result binding requires one mandatory library search to the battlefield tapped"
-                                .into(),
-                        );
-                    }
                 }
                 Ok(())
             }

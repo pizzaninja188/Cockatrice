@@ -215,7 +215,7 @@ fn myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented() {
         who: PlayerRecipient::Controller, optional: false, count: 2, count_by_cast_cost: None,
         filter: Some(filter), selection_constraint: Some(SearchSelectionConstraint::SharedLandType),
         slots, zones: SearchZoneSelection::Fixed(zones), destination: SearchDestination::Battlefield { tapped: true },
-        conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+        conditional_destination: None, shuffle: true, reveal: false,
         selection_bounds: None,
     }] if filter == &ZoneCardFilter { card_type: Some(CardTypeFilter::BasicLand), ..Default::default() }
        && slots.is_empty() && zones == &[CardSearchZone::Library])
@@ -252,7 +252,6 @@ fn shared_land_search_rejects_every_unsupported_shape() {
         SEARCH.replace("count:2", "zones:Fixed([Graveyard]),count:2"),
         SEARCH.replace("count:2", "zones:Fixed([Library,Hand]),count:2"),
         SEARCH.replace("count:2", "zones:PlayerChoice([Library]),count:2"),
-        SEARCH.replace("count:2", "result_id:Some(\"found\"),count:2"),
         SEARCH.replace("count:2", "count_by_cast_cost:Some((condition:(group_id:\"kicker\",option_id:\"paid\",expected_selected:true),if_selected:2,otherwise:1)),count:2"),
         SEARCH.replace("count:2", "slots:[(slot_id:\"basic\",presentation:OracleLines([1]),filter:(card_type:Some(BasicLand)))],count:2"),
         SEARCH.replace("count:2", "conditional_destination:Some((condition:ControllerLibraryEmpty,destination:Hand)),count:2"),

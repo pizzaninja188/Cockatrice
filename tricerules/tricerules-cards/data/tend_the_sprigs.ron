@@ -22,7 +22,6 @@
           conditional_destination: None,
           shuffle: true,
           reveal: false,
-          result_id: None,
           selection_bounds: Some((min: 0, max: 1)),
         ))),
       (id: "seven_land_or_treefolk", bind: [], input: None,

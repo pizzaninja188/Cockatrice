@@ -131,8 +131,7 @@ pub(super) fn destroy(
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject
-        | EffectSubject::SearchedObject(_) => {
+        | EffectSubject::PreviousEffectObject => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -201,8 +200,7 @@ pub(super) fn sacrifice(
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject
-        | EffectSubject::SearchedObject(_) => {
+        | EffectSubject::PreviousEffectObject => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -630,8 +628,7 @@ pub(super) fn create_delayed_trigger(
         let watched_id = match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject
-            | EffectSubject::TriggerObject
-            | EffectSubject::SearchedObject(_) => {
+            | EffectSubject::TriggerObject => {
                 resolve_effect_subject(cx.engine, cx.top, cx.targets, subject)
             }
             EffectSubject::PreviousEffectObject => exact_previous.map(|object| object.object_id),
@@ -906,7 +903,6 @@ fn attach_equipment_subject(
         }
         EffectSubject::PreviousEffectObject => cx.previous_battlefield_object(),
         EffectSubject::PreviousEffectObjects => None,
-        EffectSubject::SearchedObject(_) => cx.resolve_battlefield_subject(subject),
         EffectSubject::Source => resolve_effect_subject(cx.engine, cx.top, &[], subject),
         EffectSubject::AttachedObject | EffectSubject::TriggerObject => None,
     }
@@ -1299,7 +1295,6 @@ mod delayed_trigger_tests {
             cast_occurrence: None,
             cast_by: Some(0),
             payment_result: Default::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),

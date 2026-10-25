@@ -7929,7 +7929,6 @@ mod tests {
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id,
                 selection_bounds,
             } = effect.as_ref()
             else {
@@ -7956,7 +7955,6 @@ mod tests {
             assert!(conditional_destination.is_none());
             assert!(*shuffle);
             assert!(*reveal);
-            assert!(result_id.is_none());
             assert_eq!(
                 *selection_bounds,
                 Some(tricerules_cards::primitives::SearchSelectionBounds { min: 0, max: 1 })
@@ -12570,7 +12568,6 @@ mod tests {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
-                result_id: None,
             }]
         );
         assert!(raw.targeting.is_none());
@@ -14157,7 +14154,6 @@ mod tests {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
-                result_id: None,
             }]
         );
         assert!(raw.targeting.is_none());

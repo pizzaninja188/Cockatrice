@@ -40,7 +40,7 @@ fn direct_hand_search_fixture(filter: &str, draw_tail: bool) -> String {
                     filter: Some({filter}),
                     selection_constraint: None, slots: [], zones: Fixed([Library]),
                     destination: Hand, conditional_destination: None, shuffle: true, reveal: true,
-                    result_id: None, selection_bounds: Some((min: 0, max: 1)),
+                    selection_bounds: Some((min: 0, max: 1)),
                   )))
                 ], yields: []))],
               otherwise: (steps: [], yields: []),
@@ -76,7 +76,7 @@ const DIRECT_HAND_SEARCH_DEPARTURE_FIXTURE: &str = r#"(
             filter: Some((exact_name: Some("Legal Test Commander"))),
             selection_constraint: None, slots: [], zones: Fixed([Library]),
             destination: Hand, conditional_destination: None, shuffle: true, reveal: true,
-            result_id: None, selection_bounds: Some((min: 0, max: 1)),
+            selection_bounds: Some((min: 0, max: 1)),
           )))
         ], yields: []))],
       otherwise: (steps: [], yields: []),

@@ -46,7 +46,6 @@ fn tend_the_sprigs_has_the_exact_post_search_land_or_treefolk_program() {
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = search_effect.as_ref()
     else {
@@ -78,7 +77,6 @@ fn tend_the_sprigs_has_the_exact_post_search_land_or_treefolk_program() {
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert!(!reveal);
-    assert!(result_id.is_none());
     assert_eq!(
         *selection_bounds,
         Some(SearchSelectionBounds { min: 0, max: 1 }),

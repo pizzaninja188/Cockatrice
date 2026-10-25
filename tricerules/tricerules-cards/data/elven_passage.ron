@@ -1,5 +1,5 @@
 // Oracle and rulings checked against Scryfall on 2026-09-04.
-// CR 118.4, 608.2c, 701.4, 701.20, 701.23, and 701.26: life is paid atomically;
+// CR 118.3, 118.3b, 119.4, 608.2c, 701.4a, 701.20, 701.23, and 701.26a/b: life is paid atomically;
 // Behold may use an Elf permanent or reveal an Elf card from hand, then untaps the found land.
 (
   id: "elven_passage",
@@ -11,20 +11,30 @@
     ability_id: "activated_01",
     presentation: OracleLines([1]),
     costs: [Tap, PayLife(amount: 1), SacrificeSelf],
-    effect: [
-      SearchLibrary(
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "find_basic_land", bind: ["found_land"], input: None, kind: Perform(SearchLibrary(
+        who: Controller,
+        optional: false,
+        count: 1,
+        count_by_cast_cost: None,
         filter: Some((card_type: Some(BasicLand))),
+        selection_constraint: None,
+        slots: [],
+        zones: Fixed([Library]),
         destination: Battlefield(tapped: true),
+        conditional_destination: None,
         shuffle: true,
         reveal: false,
-        result_id: Some("found_land"),
-      ),
-      MayBehold(
+        selection_bounds: Some((min: 0, max: 1)),
+      ))),
+      (id: "behold_elf", bind: [], input: Some("found_land"), kind: Perform(MayBehold(
+        who: Controller,
         choice_id: "behold_elf",
         hand_filter: (required_subtypes: ["Elf"]),
         permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
-        if_beheld: [Untap(subject: SearchedObject("found_land"))],
-      ),
-    ],
+        if_beheld: [Untap(subject: PreviousEffectObject)],
+      ))),
+    ], yields: []))),
   )],
 )

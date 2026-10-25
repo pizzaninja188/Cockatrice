@@ -1543,8 +1543,7 @@ fn validate_effect_targets(
             | EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject
-            | EffectSubject::PreviousEffectObjects
-            | EffectSubject::SearchedObject(_) => {
+            | EffectSubject::PreviousEffectObjects => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
@@ -1588,8 +1587,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
             )
             | None => {
                 if !targets.is_empty() {
@@ -1790,38 +1788,33 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
         }
         | SpellEffectKind::SetPrepared { subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_), .. }
+                | EffectSubject::PreviousEffectObjects, .. }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
         }
         | SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
             ..
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
@@ -1829,8 +1822,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
             ..
         }
         | SpellEffectKind::PutInOwnersLibrary {
@@ -1838,8 +1830,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
-                | EffectSubject::PreviousEffectObjects
-                | EffectSubject::SearchedObject(_),
+                | EffectSubject::PreviousEffectObjects,
             ..
         }
         | SpellEffectKind::PumpAll { .. }
@@ -3026,7 +3017,6 @@ mod tests {
             cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),

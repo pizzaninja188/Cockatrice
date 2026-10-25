@@ -6,7 +6,8 @@ use super::helpers::*;
 use tricerules_cards::CardRegistry;
 use tricerules_core::{EngineDeck, Zone};
 use tricerules_proto::ruled::v1::{
-    ruled_command::Cmd, ChoiceKind, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
+    ruled_command::Cmd, ChoiceCandidateSourceZone, ChoiceKind, ResolutionChoiceDecision,
+    RuledCommand, SubmitResolutionChoice,
 };
 
 const DIRECT_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
@@ -25,12 +26,41 @@ const DIRECT_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
             filter: Some((card_type: Some(BasicLand))),
             selection_constraint: None, slots: [], zones: Fixed([Library]),
             destination: Battlefield(tapped: true), conditional_destination: None,
-            shuffle: true, reveal: false, result_id: None,
+            shuffle: true, reveal: false,
             selection_bounds: Some((min: 0, max: 1)),
           )))
         ], yields: []))],
       otherwise: (steps: [], yields: []),
     )),
+    (id: "tail_treasure", bind: [], input: None, kind: Perform(CreateTokens(
+      token: "treasure", count: 1, who: Controller, tapped: false,
+      sacrifice_timing: None,
+    ))),
+  ], yields: []), target_bindings: [])),
+)"#;
+
+const TYPED_BATTLEFIELD_SEARCH_BEHOLD_FIXTURE: &str = r#"(
+  id: "direct_battlefield_search_fixture",
+  name: "Direct Battlefield Search Fixture",
+  face_id: "direct_battlefield_search_fixture",
+  mana_cost: "{0}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "search_battlefield", bind: ["found_land"], input: None, kind: Perform(SearchLibrary(
+      who: Controller, optional: false, count: 1, count_by_cast_cost: None,
+      filter: Some((card_type: Some(BasicLand))),
+      selection_constraint: None, slots: [], zones: Fixed([Library]),
+      destination: Battlefield(tapped: true), conditional_destination: None,
+      shuffle: true, reveal: false,
+      selection_bounds: Some((min: 0, max: 1)),
+    ))),
+    (id: "scry_after_search", bind: [], input: None, kind: Perform(Scry(count: 0))),
+    (id: "behold_elf", bind: [], input: Some("found_land"), kind: Perform(MayBehold(
+      who: Controller, choice_id: "behold_elf",
+      hand_filter: (required_subtypes: ["Elf"]),
+      permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+      if_beheld: [Untap(subject: PreviousEffectObject)],
+    ))),
     (id: "tail_treasure", bind: [], input: None, kind: Perform(CreateTokens(
       token: "treasure", count: 1, who: Controller, tapped: false,
       sacrifice_timing: None,
@@ -75,6 +105,16 @@ const TEST_KINDRED_ARTIFACT_DRAGON: &str = r#"(
   types: ["Kindred", "Artifact", "Dragon"],
 )"#;
 
+const TEST_ELF_PERMANENT: &str = r#"(
+  id: "test_elf_permanent",
+  name: "Test Elf Permanent",
+  face_id: "test_elf_permanent",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf"],
+  power: 1,
+  toughness: 1,
+)"#;
+
 // Test-only validated composition: the same exact closed Embermouth conditional leaf followed
 // by the shared Controller Draw tail. Production Embermouth remains its Oracle-exact search only.
 const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
@@ -104,7 +144,7 @@ const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
                   required_subtypes: ["Dragon"], exclude_source: false),
                 aggregate: Count, min: Some(1), max: None, exclude_observed_object: false,
               ), destination: Battlefield(tapped: true))),
-              shuffle: true, reveal: true, result_id: None,
+              shuffle: true, reveal: true,
               selection_bounds: Some((min: 0, max: 1)),
             )))
           ], yields: []))],
@@ -154,7 +194,7 @@ const RECURSIVE_CONDITION_SEARCH_FIXTURE: &str = r#"(
                   ControllerLibraryEmpty,
                 ]),
               ]), destination: Battlefield(tapped: true))),
-              shuffle: true, reveal: true, result_id: None,
+              shuffle: true, reveal: true,
               selection_bounds: Some((min: 0, max: 1)),
             )))
           ], yields: []))],
@@ -194,7 +234,7 @@ const DRAW_STEP_TRIGGERED_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
               filter: Some((card_type: Some(BasicLand))),
               selection_constraint: None, slots: [], zones: Fixed([Library]),
               destination: Battlefield(tapped: true), conditional_destination: None,
-              shuffle: true, reveal: false, result_id: None,
+              shuffle: true, reveal: false,
               selection_bounds: Some((min: 0, max: 1)),
             )))
           ], yields: []))],
@@ -254,6 +294,7 @@ fn test_engine_with_search_fixture(seed: u64, search_fixture: &str) -> GameEngin
             &[
                 search_fixture,
                 TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE,
+                TEST_ELF_PERMANENT,
                 include_str!("../../../tricerules-cards/data/forest.ron"),
                 include_str!("../../../tricerules-cards/data/island.ron"),
                 include_str!("../../../tricerules-cards/data/wan_shi_tong,_librarian.ron"),
@@ -1202,6 +1243,250 @@ fn resultless_battlefield_search_entry_choice_retains_cursor_until_entry_commits
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
     assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
+}
+
+struct ParkedTypedBehold {
+    engine: GameEngine,
+    wan: u32,
+    elf: u32,
+    selected: u32,
+    generation_before: u64,
+}
+
+struct TypedSearchAfterEntry {
+    engine: GameEngine,
+    wan: u32,
+    elf: Option<u32>,
+    selected: u32,
+    generation_before: u64,
+    entry_completion: tricerules_proto::ruled::v1::RuledEventBatch,
+}
+
+fn complete_typed_search_entry(seed: u64, include_elf: bool) -> TypedSearchAfterEntry {
+    let mut engine = test_engine_with_search_fixture(seed, TYPED_BATTLEFIELD_SEARCH_BEHOLD_FIXTURE);
+    let wan = install_search_observer(&mut engine);
+    let elf =
+        include_elf.then(|| inject_permanent_on_battlefield(&mut engine, 0, "test_elf_permanent"));
+    let selected =
+        inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&selected)
+        .copied()
+        .unwrap_or(0);
+
+    let search_batch = cast_fixture(&mut engine);
+    let search = find_resolution_choice(&search_batch).expect("the BasicLand search choice");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert!(search.candidate_object_ids.contains(&selected));
+    assert_no_search_reveal(&search_batch);
+
+    let entry_batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("choose the Basic Land Creature");
+    let entry_choice = find_resolution_choice(&entry_batch).expect("as-enters type choice");
+    assert_eq!(entry_choice.choice_kind(), ChoiceKind::ResolutionBranch);
+    assert_no_search_reveal(&entry_batch);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the result-producing search is parked before entry commits");
+    let serialized_pending =
+        serde_json::to_value(pending).expect("the parked entry continuation is serializable");
+    let program =
+        &serialized_pending["continuation"]["EntryChooseCreatureType"]["stack"]["program"];
+    assert!(program["slots"][0].is_null());
+    assert!(program["frames"].is_array());
+
+    let human = tricerules_card_model::CREATURE_TYPES
+        .iter()
+        .position(|creature_type| *creature_type == "Human")
+        .expect("Human is a legal creature type") as u32;
+    let entry_completion = engine
+        .apply_scenario_command(0, &choose_branch(human))
+        .expect("complete the as-enters replacement");
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&selected].tapped);
+    assert_eq!(
+        engine.state.zone_change_generation[&selected],
+        generation_before + 1
+    );
+    assert_no_search_reveal(&entry_completion);
+
+    assert_eq!(shuffle_log_count(&search_batch, 0), 0);
+    assert_eq!(shuffle_log_count(&entry_batch, 0), 0);
+    assert_eq!(
+        shuffle_log_count(&entry_completion, 0),
+        1,
+        "the committed search shuffles exactly once before any Behold prompt"
+    );
+
+    TypedSearchAfterEntry {
+        engine,
+        wan,
+        elf,
+        selected,
+        generation_before,
+        entry_completion,
+    }
+}
+
+fn open_typed_search_behold_choice(seed: u64) -> ParkedTypedBehold {
+    let TypedSearchAfterEntry {
+        engine,
+        wan,
+        elf,
+        selected,
+        generation_before,
+        entry_completion,
+    } = complete_typed_search_entry(seed, true);
+    let elf = elf.expect("the test setup includes an eligible battlefield Elf");
+
+    let behold = find_resolution_choice(&entry_completion).expect("Behold the battlefield Elf");
+    assert_eq!(behold.choice_kind(), ChoiceKind::Behold);
+    assert_eq!(behold.candidate_object_ids, vec![elf]);
+    assert_eq!(
+        behold.candidate_source_zones,
+        vec![ChoiceCandidateSourceZone::Battlefield as i32]
+    );
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the Behold choice parks the typed Program cursor");
+    let serialized_pending =
+        serde_json::to_value(pending).expect("the parked Behold continuation is serializable");
+    let program = &serialized_pending["continuation"]["BeholdChoice"]["stack"]["program"];
+    let slots = &program["slots"];
+    let receipt = &slots[0]["PermanentSelection"][0];
+    assert_eq!(receipt["object_id"].as_u64(), Some(selected as u64));
+    assert_eq!(
+        receipt["zone_change_generation"].as_u64(),
+        Some(generation_before + 1),
+        "the typed search result captures the post-entry incarnation"
+    );
+    assert_eq!(receipt["controller_at_event"].as_i64(), Some(0));
+    let frames = program["frames"].as_array().expect("saved Program frames");
+    assert_eq!(frames.len(), 1);
+    assert_eq!(
+        frames[0]["next_instruction"].as_u64(),
+        Some(3),
+        "the parked cursor follows SearchLibrary and the intervening Scry(0)"
+    );
+    ParkedTypedBehold {
+        engine,
+        wan,
+        elf,
+        selected,
+        generation_before,
+    }
+}
+
+fn assert_typed_behold_completion(
+    engine: &GameEngine,
+    wan: u32,
+    completion: &tricerules_proto::ruled::v1::RuledEventBatch,
+) {
+    assert_eq!(
+        treasure_count(engine),
+        1,
+        "the saved Program tail runs once"
+    );
+    assert_no_search_reveal(completion);
+    assert_eq!(
+        shuffle_log_count(completion, 0),
+        0,
+        "answering Behold does not repeat the search shuffle"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.stack.len(), 1, "one LibrarySearched observer");
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
+}
+
+#[test]
+fn typed_battlefield_search_untaps_its_exact_post_entry_result_after_scry() {
+    let mut parked = open_typed_search_behold_choice(284_207);
+    assert!(parked.engine.state.objects[&parked.selected].tapped);
+
+    let completion = parked
+        .engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![parked.elf]))
+        .expect("behold the offered battlefield Elf");
+
+    assert!(!parked.engine.state.objects[&parked.selected].tapped);
+    assert_eq!(
+        parked.engine.state.zone_change_generation[&parked.selected],
+        parked.generation_before + 1,
+        "the accepted Behold uses the exact searched incarnation"
+    );
+    assert_typed_behold_completion(&parked.engine, parked.wan, &completion);
+}
+
+#[test]
+fn typed_battlefield_search_stale_result_cannot_untap_a_later_incarnation() {
+    let mut parked = open_typed_search_behold_choice(284_208);
+
+    // Simulate a later incarnation with the same physical id; the stale result cannot retarget it.
+    parked
+        .engine
+        .state
+        .zone_change_generation
+        .insert(parked.selected, parked.generation_before + 2);
+    let completion = parked
+        .engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![parked.elf]))
+        .expect("behold the offered battlefield Elf");
+    assert!(parked.engine.state.objects[&parked.selected].tapped);
+    assert_typed_behold_completion(&parked.engine, parked.wan, &completion);
+}
+
+#[test]
+fn typed_battlefield_search_declining_behold_resumes_tail_once_without_research() {
+    let mut parked = open_typed_search_behold_choice(284_209);
+    assert!(parked.engine.state.objects[&parked.selected].tapped);
+
+    let completion = parked
+        .engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline the Behold choice");
+
+    assert!(parked.engine.state.objects[&parked.selected].tapped);
+    assert_typed_behold_completion(&parked.engine, parked.wan, &completion);
+}
+
+#[test]
+fn typed_battlefield_search_without_eligible_elf_skips_behold_and_resumes_tail_once() {
+    let setup = complete_typed_search_entry(284_210, false);
+    assert!(find_resolution_choice(&setup.entry_completion).is_none());
+    assert!(setup.engine.state.pending_resolution.is_none());
+    assert!(setup.engine.state.objects[&setup.selected].tapped);
+    assert_eq!(
+        setup.engine.state.zone_change_generation[&setup.selected],
+        setup.generation_before + 1,
+        "the found land remains the same committed incarnation"
+    );
+    assert_eq!(
+        treasure_count(&setup.engine),
+        1,
+        "the saved Program tail runs once when Behold has no candidates"
+    );
+    assert_no_search_reveal(&setup.entry_completion);
+    assert_eq!(
+        shuffle_log_count(&setup.entry_completion, 0),
+        1,
+        "the search and shuffle complete once without repeating after the skipped prompt"
+    );
+    assert_eq!(
+        setup.engine.state.stack.len(),
+        1,
+        "one LibrarySearched observer"
+    );
+    assert_eq!(
+        setup.engine.state.stack[0].source_permanent_id,
+        Some(setup.wan)
+    );
 }
 
 #[test]

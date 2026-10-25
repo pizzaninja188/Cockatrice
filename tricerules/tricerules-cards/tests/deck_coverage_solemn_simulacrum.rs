@@ -108,7 +108,6 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: Some(SearchSelectionBounds { min: 0, max: 1 }),
         }
     );

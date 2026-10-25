@@ -154,7 +154,6 @@ fn issue_363_encroaching_dragonstorm_searches_up_to_two_basic_lands_tapped() {
             conditional_destination: None,
             shuffle: true,
             reveal: false,
-            result_id: None,
             selection_bounds: None,
         }]
     );

@@ -176,7 +176,6 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
-                result_id: None,
                 selection_bounds: None,
             },
         ]
@@ -346,7 +345,6 @@ fn issue_425_scour_for_scrap_reveals_the_searched_artifact() {
             conditional_destination: None,
             shuffle: true,
             reveal: true,
-            result_id: None,
             selection_bounds: None,
         }]
     );

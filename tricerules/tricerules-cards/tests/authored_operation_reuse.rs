@@ -139,7 +139,6 @@ fn assert_single_search(
         conditional_destination,
         shuffle,
         reveal: actual_reveal,
-        result_id,
         selection_bounds,
     } = effect.as_ref()
     else {
@@ -160,7 +159,6 @@ fn assert_single_search(
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert_eq!(*actual_reveal, reveal);
-    assert!(result_id.is_none());
     assert_eq!(
         selection_bounds.as_ref(),
         Some(&SearchSelectionBounds { min, max: 1 })
@@ -1184,7 +1182,6 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = effect.as_ref()
     else {
@@ -1205,7 +1202,6 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
     assert!(conditional_destination.is_none());
     assert!(*shuffle);
     assert!(!reveal);
-    assert!(result_id.is_none());
     assert_eq!(
         selection_bounds.as_ref(),
         Some(&SearchSelectionBounds { min: 1, max: 1 })

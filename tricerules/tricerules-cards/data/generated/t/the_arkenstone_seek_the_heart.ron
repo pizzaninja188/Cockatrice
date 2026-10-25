@@ -18,7 +18,7 @@
       face_id: "seek_the_heart",
       mana_cost: "{2}{W}",
       types: ["Sorcery", "Adventure"],
-      spell_effect: [SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],required_supertypes:["Legendary"],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Hand,conditional_destination:None,shuffle:true,reveal:true,result_id:None)],
+      spell_effect: [SearchLibrary(who:Controller,optional:false,count:1,count_by_cast_cost:None,filter:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],required_supertypes:["Legendary"],has_adventure:None,printed_power:None)),slots:[],zones:Fixed([Library]),destination:Hand,conditional_destination:None,shuffle:true,reveal:true)],
     ),
   ],
 )

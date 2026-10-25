@@ -47,7 +47,6 @@ fn basic_land_search_effect() -> SpellEffectKind {
         shuffle: true,
         reveal: false,
         selection_constraint: None,
-        result_id: None,
         selection_bounds: None,
     }
 }

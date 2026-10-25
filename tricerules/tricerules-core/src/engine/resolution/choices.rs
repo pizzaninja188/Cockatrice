@@ -637,6 +637,9 @@ pub(super) fn may_behold(
         cx.events.push(ev_log(format!(
             "P{deciding_player} has no matching object to behold."
         )));
+        if cx.program_state.is_some() {
+            return Ok(EffectOutcome::Continue);
+        }
         return Ok(EffectOutcome::RestartResolutionBranch(None));
     }
     let candidate_card_ids = candidates
@@ -709,8 +712,12 @@ pub(super) fn may_behold(
             unique_names: false,
         },
         continuation: ResolutionContinuation::BeholdChoice {
-            stack: ParkedStackResolution::new(cx.top.clone())
-                .with_previous_result(cx.previous_effect_result.clone()),
+            stack: if cx.program_state.is_some() {
+                cx.parked_stack()
+            } else {
+                ParkedStackResolution::new(cx.top.clone())
+                    .with_previous_result(cx.previous_effect_result.clone())
+            },
             candidate_generations,
             hand_candidates,
             hand_filter,

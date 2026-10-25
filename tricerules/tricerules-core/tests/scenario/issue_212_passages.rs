@@ -160,6 +160,51 @@ fn elven_passage_can_behold_an_elf_permanent() {
 }
 
 #[test]
+fn elven_passage_skips_behold_when_no_elf_is_eligible() {
+    let (mut engine, passage) = setup_passage("elven_passage", &[]);
+    let found = resolve_to_search(&mut engine, passage);
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
+        .expect("find basic land");
+
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.objects[&found].tapped);
+}
+
+#[test]
+fn elven_passage_beholds_an_elf_even_when_search_finds_no_basic_land() {
+    let (mut engine, passage) = setup_passage("elven_passage", &[]);
+    let elf = inject_permanent_on_battlefield(&mut engine, 0, "safewright_cavalry");
+    let unrelated_land = relocate_to_battlefield(&mut engine, 0, "forest", true);
+    engine.state.players[0].library.clear();
+
+    engine
+        .apply_scenario_command(0, &activate_ability(passage, 0, vec![]))
+        .expect("activate Passage");
+    assert_eq!(engine.state.objects[&passage].zone, Zone::Graveyard);
+    pass_both_players(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Behold choice");
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::Behold);
+    assert!(pending.presentation.candidates.contains(&elf));
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![elf]))
+        .expect("behold Elf with an empty search result");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.objects[&unrelated_land].tapped);
+    assert!(!batch
+        .events
+        .iter()
+        .any(|event| matches!(event.ev, Some(Ev::CardsRevealed(_)))));
+}
+
+#[test]
 fn behold_rejects_a_stale_generation_and_keeps_the_choice_pending() {
     let (mut engine, passage) = setup_passage("elven_passage", &["safewright_cavalry"]);
     let elf = relocate_to_hand(&mut engine, 0, "safewright_cavalry");
@@ -186,4 +231,34 @@ fn elven_passage_cannot_activate_without_enough_life() {
         .is_err());
     assert_eq!(engine.state.objects[&passage].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&passage].tapped);
+}
+
+#[test]
+fn passages_are_compiled_from_typed_programs() {
+    let registry = tricerules_cards::registry::global();
+    for card_id in ["elven_passage", "fabled_passage"] {
+        let face = registry
+            .get(card_id)
+            .unwrap_or_else(|| panic!("missing {card_id}"))
+            .primary_face();
+        let [ability] = face.activated_abilities.as_slice() else {
+            panic!("{card_id} has one activated ability");
+        };
+        assert!(ability.effect.is_empty(), "{card_id} uses its Program body");
+        assert!(
+            ability.program.is_some(),
+            "{card_id} has an authored Program"
+        );
+
+        let owner =
+            tricerules_cards::ProgramOwnerId::ability(tricerules_cards::AbilityDefinitionId {
+                card_id: card_id.to_owned(),
+                face_id: face.face_id.clone(),
+                ability_path: vec![ability.ability_id.clone()],
+            });
+        assert!(
+            registry.compiled_program_for_owner(&owner).is_some(),
+            "{card_id} has a compiled Program for its exact activated ability"
+        );
+    }
 }

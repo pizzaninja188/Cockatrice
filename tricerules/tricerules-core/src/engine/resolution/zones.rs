@@ -1680,8 +1680,7 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
             EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject
-            | EffectSubject::PreviousEffectObjects
-            | EffectSubject::SearchedObject(_) => {
+            | EffectSubject::PreviousEffectObjects => {
                 return Err(EngineError::Illegal(
                     "unsupported subject for multi-subject library shuffle",
                 ));
@@ -6993,7 +6992,6 @@ pub(in crate::engine) struct ZoneSearchRequest {
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
-    pub result_id: Option<tricerules_card_model::SearchResultId>,
     pub stack: ParkedStackResolution,
 }
 
@@ -7008,7 +7006,6 @@ pub(in crate::engine) struct SearchRequest {
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
-    pub result_id: Option<tricerules_card_model::SearchResultId>,
     pub stack: ParkedStackResolution,
 }
 
@@ -7030,7 +7027,6 @@ pub(in crate::engine) fn park_zone_search_choice(
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         mut stack,
     } = request;
     let idx = engine
@@ -7246,7 +7242,6 @@ pub(in crate::engine) fn park_zone_search_choice(
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
             commander_choice: None,
         },
     });
@@ -7271,7 +7266,6 @@ pub(in crate::engine) fn begin_search_request(
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         stack,
     } = request;
     match zones {
@@ -7291,12 +7285,11 @@ pub(in crate::engine) fn begin_search_request(
                 conditional_destination,
                 shuffle,
                 reveal,
-                result_id,
                 stack,
             },
         ),
         SearchZoneSelection::PlayerChoice(available_zones) => {
-            if result_id.is_some() || selection_constraint.is_some() || selection_bounds.is_some() {
+            if selection_constraint.is_some() || selection_bounds.is_some() {
                 return Err(EngineError::Illegal(
                     "typed search bounds require a fixed library search",
                 ));
@@ -7405,7 +7398,6 @@ pub(super) fn search_library(
         conditional_destination,
         shuffle,
         reveal,
-        result_id,
         selection_bounds,
     } = effect
     else {
@@ -7576,7 +7568,6 @@ pub(super) fn search_library(
             conditional_destination,
             shuffle,
             reveal,
-            result_id,
             stack: parked_stack,
         },
     )?;
@@ -9051,7 +9042,6 @@ mod tests {
             cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: Default::default(),
-            search_results: Default::default(),
             exiled_cohorts: Default::default(),
             chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),

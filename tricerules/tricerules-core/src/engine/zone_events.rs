@@ -81,24 +81,79 @@ impl GameEngine {
             return false;
         };
         if !program.in_flight.as_ref().is_some_and(Vec::is_empty)
-            || !self.current_program_perform(program).is_ok_and(|effect| {
-                matches!(
-                    effect,
-                    SpellEffectKind::SearchLibrary {
-                        result_id: None,
-                        ..
-                    }
-                )
-            })
+            || !self
+                .current_program_perform(program)
+                .is_ok_and(|effect| matches!(effect, SpellEffectKind::SearchLibrary { .. }))
         {
             return false;
         }
         let Some(crate::state::ZoneEntryCompletion::LibrarySearch(search)) = completion else {
             return false;
         };
+        origin == Zone::Library && search.searcher == stack.item.controller
+    }
+
+    pub(super) fn is_typed_resultful_library_search(&self, stack: &ParkedStackResolution) -> bool {
+        let Some(program) = stack.program.as_ref() else {
+            return false;
+        };
+        let Some(outputs) = program
+            .in_flight
+            .as_ref()
+            .filter(|outputs| outputs.len() == 1)
+        else {
+            return false;
+        };
+        let Ok((instruction, effect)) = self.current_compiled_perform_instruction(program) else {
+            return false;
+        };
+        let [output] = instruction.outputs.as_slice() else {
+            return false;
+        };
+        if outputs.as_slice() != [*output] || !effect.is_typed_resultful_direct_battlefield_search()
+        {
+            return false;
+        }
+        let Some(compiled) = self.registry.compiled_program_for_owner(&program.owner) else {
+            return false;
+        };
+        let Some(slot) = compiled.slot(*output) else {
+            return false;
+        };
+        matches!(
+            &slot.result_type,
+            tricerules_card_model::primitives::ResultType::PermanentSelection {
+                chooser: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                filter,
+                cardinality: tricerules_card_model::primitives::Cardinality {
+                    min: 0,
+                    max: Some(1),
+                },
+            } if filter.as_ref()
+                == &tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                    controller: tricerules_card_model::primitives::TargetController::You,
+                    permanent_types: vec![
+                        tricerules_card_model::primitives::PermanentTypeFilter::Land,
+                    ],
+                    required_supertypes: vec!["Basic".into()],
+                    ..Default::default()
+                }
+        )
+    }
+
+    pub(super) fn is_typed_resultful_library_search_entry(
+        &self,
+        stack: &ParkedStackResolution,
+        origin: Zone,
+        completion: Option<&crate::state::ZoneEntryCompletion>,
+    ) -> bool {
+        let Some(crate::state::ZoneEntryCompletion::LibrarySearch(search)) = completion else {
+            return false;
+        };
         origin == Zone::Library
-            && search.result_id.is_none()
             && search.searcher == stack.item.controller
+            && self.is_typed_resultful_library_search(stack)
     }
 
     /// Complete the exact ZoneEntryBatch boundary, preserving the typed resultless
@@ -373,7 +428,7 @@ impl GameEngine {
 
     pub(super) fn commit_zone_entry_batch_ready_with_resume(
         &mut self,
-        mut stack: ParkedStackResolution,
+        stack: ParkedStackResolution,
         mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<CompletedZoneEntryBatch, EngineError> {
@@ -391,11 +446,27 @@ impl GameEngine {
         // Capture typed Program outputs before the entry transaction consumes its completion:
         // resultless searches resume with an empty operation result, while Audacious Reshapers
         // carries the exact prefix count produced before entry and bottoming.
-        let program_operation_result = if self.is_typed_resultless_library_search_completion(
+        let typed_resultful_library_search = self.is_typed_resultful_library_search_entry(
             &stack,
             batch.origin,
             batch.completion.as_ref(),
-        ) {
+        );
+        let selected_search_object_ids = if typed_resultful_library_search {
+            match batch.completion.as_ref() {
+                Some(crate::state::ZoneEntryCompletion::LibrarySearch(search)) => {
+                    search.selected_object_ids.clone()
+                }
+                _ => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        let mut program_operation_result = if typed_resultful_library_search
+            || self.is_typed_resultless_library_search_completion(
+                &stack,
+                batch.origin,
+                batch.completion.as_ref(),
+            ) {
             Some(EffectResult::default())
         } else {
             self.typed_reveal_until_artifact_program_result(
@@ -405,8 +476,9 @@ impl GameEngine {
             )?
         };
         self.prune_invalid_zone_entry_auras(&mut batch)?;
-        let mut completion = batch.completion;
+        let completion = batch.completion;
         let mut committed = HashSet::new();
+        let mut typed_search_result_objects = Vec::new();
         let snapshot = self.snapshot_zone_event();
         let mut triggers = Vec::new();
         if let Some(crate::state::ZoneEntryCompletion::PairedArtifactExchange {
@@ -462,6 +534,7 @@ impl GameEngine {
         for entry in batch.ready {
             let oid = entry.object_id;
             let chosen_x = entry.chosen_x;
+            let destination_controller = entry.destination_controller;
             let owner = self.state.objects[&oid].owner;
             let label = events::object_display_name(&self.state, self.registry, oid);
             triggers.extend(
@@ -475,24 +548,17 @@ impl GameEngine {
                 entry_cause: entry.entry_cause.clone(),
             });
             committed.insert(oid);
-            if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) =
-                completion.as_mut()
-            {
-                if let Some(result_id) = completion.result_id.take() {
-                    stack.item.search_results.insert(
-                        result_id,
-                        TriggerObjectRef {
-                            object_id: oid,
-                            zone_change_generation: self
-                                .state
-                                .zone_change_generation
-                                .get(&oid)
-                                .copied()
-                                .unwrap_or(0),
-                            controller_at_event: entry.destination_controller,
-                        },
-                    );
-                }
+            if typed_resultful_library_search && selected_search_object_ids.contains(&oid) {
+                typed_search_result_objects.push(TriggerObjectRef {
+                    object_id: oid,
+                    zone_change_generation: self
+                        .state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: destination_controller,
+                });
             }
             events.push(permanent_moved_event(
                 &self.state,
@@ -516,6 +582,14 @@ impl GameEngine {
                     }
                 )));
             }
+        }
+        if typed_resultful_library_search {
+            let Some(result) = program_operation_result.as_mut() else {
+                return Err(EngineError::ProgramInvariant(
+                    "typed direct search result lost its zone-entry completion",
+                ));
+            };
+            result.produced_objects = typed_search_result_objects;
         }
         self.fire_zone_triggers(snapshot, triggers, events);
         if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) = completion {

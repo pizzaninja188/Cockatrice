@@ -16,7 +16,7 @@
           selection_constraint: Some(DifferentNames), slots: [],
           zones: Fixed([Library]), destination: KeepInLibrary,
           conditional_destination: None, shuffle: false, reveal: false,
-          result_id: None, selection_bounds: Some((min: 0, max: 4)),
+          selection_bounds: Some((min: 0, max: 4)),
         ))),
       (id: "reveal", bind: ["revealed"], input: Some("found"),
         kind: Perform(RevealCohort)),

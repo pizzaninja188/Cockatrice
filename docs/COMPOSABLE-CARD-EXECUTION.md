@@ -5,7 +5,10 @@ grammar/runtime are retired. After the Trade Route Envoy port, flat-variant vali
 selection/dispatch, and expansion paths were removed. The shared internal
 `EffectOutcome::RestartResolutionBranch` remains for MayBehold's no-candidate path; typed Program
 `Choose` and shared cost, requirement, and branch-selection helpers remain. The broader composable-card execution
-migration remains incomplete: receipt composition and library search/selection transactions remain open.
+migration remains incomplete. The bounded 2026-10-24 Passage increment now authors Elven Passage and
+Fabled Passage as typed Programs, including the exact bound tapped-Battlefield BasicLand search
+result. Earthbender and final retirement of the remaining legacy composition paths are still pending;
+receipt composition and other library search/selection transactions remain open.
 The target design also established cross-component resolution-prompt identity, exact compiled owner
 identities, and immutable ability binding. Supported finite profiles, accepted syntax, and
 restrictions are maintained in the

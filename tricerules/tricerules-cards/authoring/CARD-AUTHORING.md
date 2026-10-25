@@ -663,13 +663,29 @@ Lumbering Worldwagon's ETB and attack triggers and Solemn Simulacrum's ETB, and 
 Larval Scoutlander's ETB search. For bounded searches, publish `min(bounds.max, count)` as the
 maximum without shrinking it to the live eligible-candidate count; candidate generation and
 submitted selections remain filter-validated. This prevents the eligible count from changing the
-offer maximum, but does not establish full library-identity secrecy. These direct resultless forms
-bind and yield no search result, so finding no card, including when the library is empty, still
+offer maximum, but does not establish full library-identity secrecy. Unbound direct forms yield no
+search result, so finding no card, including when the library is empty, still
 shuffles and continues the program (CR 701.23b, 701.24e). A declared Commander selected for the
 Hand form stays in the library while its owner chooses Command zone or Hand, then the exact
 selected incarnation moves, the remaining library shuffles once, and the caller resumes at its next
 instruction (CR 903.9b). A selected Battlefield card follows the normal entry-replacement and
 entry-trigger pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m).
+
+One explicitly bound Battlefield profile also returns a typed `PermanentSelection`: mandatory
+Controller search, count 1, `BasicLand`, fixed `Library`, tapped `Battlefield`, bounds 0..1, shuffle
+true, reveal false, and no search slots, selection constraint, conditional destination, or
+cast-cost sizing. Its result type is chooser `Controller`, filter `AnyPermanent/You/Land` with the
+`Basic` supertype, cardinality 0..1. Capture includes only selected objects that commit to the
+Battlefield, after entry replacements, with their exact object ID, post-entry generation, and
+destination controller; zero selection or an entry that does not commit yields an empty selection.
+The bound result may remain unused. A consumer must name its exact slot: `Untap(PreviousEffectObject)`
+can use it directly, while `MayBehold` can use it only with its exact
+`if_beheld: [Untap(PreviousEffectObject)]` child. Elven Passage uses the latter and keeps the result
+while Behold is parked; Fabled Passage evaluates its four-land condition after the search and
+untaps only the captured entrant. No eligible Behold object means no prompt and the Program tail
+continues. Behold of a battlefield Elf does not reveal it; choosing an Elf from hand reveals that
+one card (CR 701.4a, 701.20, 701.23b, 701.26b, 608.2c).
+
 Embermouth Sentinel's `triggered_01` is the current conditional-destination use: its optional
 controller `Choose` has one free `Always` branch, whose resultless search checks one
 `BasicLand` with bounds 0..1, reveals the selection, and
