@@ -1892,7 +1892,7 @@ fn validate_effect_targets(
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
         | SpellEffectKind::PutAbilitySourceOntoBattlefield
         | SpellEffectKind::PutPermanentFromHand { .. }
-        | SpellEffectKind::SetSourceBasePowerToTownCount
+        | SpellEffectKind::SetSourceBasePower { .. }
         | SpellEffectKind::SetClassLevel { .. }
         | SpellEffectKind::SolveCase
         | SpellEffectKind::CreateStaticEmblem { .. }

@@ -1005,13 +1005,13 @@ pub(super) fn set_base_power_toughness(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn set_source_base_power_to_town_count(
+pub(super) fn set_source_base_power(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    if !matches!(effect, SpellEffectKind::SetSourceBasePowerToTownCount) {
+    let SpellEffectKind::SetSourceBasePower { amount } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    }
+    };
     let Some(source_id) = cx.top.source_permanent_id else {
         return Ok(EffectOutcome::Continue);
     };
@@ -1033,20 +1033,13 @@ pub(super) fn set_source_base_power_to_town_count(
         return Ok(EffectOutcome::Continue);
     }
 
-    let town_count = cx
-        .engine
-        .state
-        .players
-        .iter()
-        .flat_map(|player| player.battlefield.iter().copied())
-        .filter_map(|object_id| cx.engine.characteristics(object_id))
-        .filter(|characteristics| {
-            characteristics.controller == cx.controller
-                && characteristics.has_type("Land")
-                && characteristics.has_type("Town")
-        })
-        .count();
-    let power = i64::try_from(town_count).unwrap_or(i64::MAX);
+    let power = i64::from(
+        cx.engine.resolve_amount(
+            &amount,
+            AmountContext::for_stack_item(cx.top, cx.controller)
+                .with_previous_effect_result(cx.previous_effect_result),
+        ),
+    );
     let source_name = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
     cx.engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,

@@ -47,15 +47,31 @@
       "typed_path": "/faces/0/activated_abilities/1/costs/0"
     },
     {
-      "symbol": "SpellEffectKind::SetSourceBasePowerToTownCount",
+      "symbol": "SpellEffectKind::SetSourceBasePower",
       "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "Amount::Count",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SetSourceBasePower/amount"
+    },
+    {
+      "symbol": "CountExpression::BattlefieldPermanents",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SetSourceBasePower/amount/Count/BattlefieldPermanents"
+    },
+    {
+      "symbol": "RelativePlayerSet::Controller",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SetSourceBasePower/amount/Count/BattlefieldPermanents/filter/controllers"
+    },
+    {
+      "symbol": "CardTypeFilter::Land",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SetSourceBasePower/amount/Count/BattlefieldPermanents/filter/card_type"
     }
   ],
   "tokens": [],
   "semantic_fixtures": [
     {
       "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_registers_its_complete_printed_identity",
-      "covers": "exact card identity, mana cost, artifact creature and subtype line, 0/4 stats, flying, both Oracle-line mappings, activation costs and ability source zone"
+      "covers": "exact card identity, mana cost, artifact creature and subtype line, 0/4 stats, flying, both Oracle-line mappings, activation costs and ability source zone, plus the shared controller/Land/Town amount filter"
     },
     {
       "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_may_put_a_private_land_choice_onto_the_battlefield_without_playing_it",
@@ -68,6 +84,18 @@
     {
       "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_snapshots_its_controllers_towns_as_base_power_until_cleanup",
       "covers": "ability controller's Towns are counted on resolution, opposing Towns are excluded, the value is a snapshot until cleanup, counters remain applied, and toughness is preserved"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_source_setter_resolves_a_different_valid_battlefield_filter",
+      "covers": "the source setter evaluates an alternate opponent-creature filter through the shared battlefield amount evaluator"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_resolves_a_zero_power_setter_without_treating_it_as_a_noop",
+      "covers": "an empty controlled-Town cohort still creates the layer-7b set-power effect with value zero"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_does_not_set_power_on_a_source_that_left_and_returned",
+      "covers": "a source that left and returned before resolution has a new zone-change generation and receives no old ability effect"
     }
   ],
   "complete_definition_review_confirmed": true

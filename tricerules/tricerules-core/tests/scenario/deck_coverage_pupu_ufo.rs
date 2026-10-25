@@ -2,6 +2,10 @@
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
+use tricerules_cards::primitives::{
+    Amount, BattlefieldPermanentFilter, CardTypeFilter, ContinuousEffectKind, CountExpression,
+    RelativePlayerSet, SpellEffectKind,
+};
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, CounterKind, Keyword, Layout, ManaCost,
 };
@@ -84,6 +88,15 @@ fn pupu_ufo_registers_its_complete_printed_identity() {
         town_power.costs,
         vec![AbilityCost::Mana(ManaCost::parse("{3}").unwrap())]
     );
+    let [SpellEffectKind::SetSourceBasePower {
+        amount: Amount::Count(CountExpression::BattlefieldPermanents { filter }),
+    }] = town_power.effect.as_slice()
+    else {
+        panic!("PuPu UFO must use the shared battlefield count as its amount");
+    };
+    assert_eq!(filter.controllers, RelativePlayerSet::Controller);
+    assert_eq!(filter.card_type, Some(CardTypeFilter::Land));
+    assert_eq!(filter.required_subtypes, vec!["Town".to_string()]);
 }
 
 #[test]
@@ -233,4 +246,118 @@ fn pupu_ufo_snapshots_its_controllers_towns_as_base_power_until_cleanup() {
     end_active_turn(&mut engine, 0);
     assert_eq!(engine.characteristics(pupu).unwrap().power, Some(1));
     assert_eq!(engine.characteristics(pupu).unwrap().toughness, Some(5));
+}
+
+#[test]
+fn pupu_ufo_source_setter_resolves_a_different_valid_battlefield_filter() {
+    let mut engine = pupu_engine(20_261_010);
+    let pupu = inject_permanent_on_battlefield(&mut engine, 0, "pupu_ufo");
+    inject_permanent_on_battlefield(&mut engine, 1, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut engine, 1, "grizzly_bears");
+    grant_pool(&mut engine, 0);
+
+    let activation = activate_ability_for(&engine, pupu, 1, Vec::new());
+    semantic::accepted(&mut engine, 0, &activation);
+    let ability = engine
+        .state
+        .stack
+        .last_mut()
+        .and_then(|item| item.activated_ability.as_mut())
+        .expect("activated ability snapshot");
+    ability.effect[0] = SpellEffectKind::SetSourceBasePower {
+        amount: Amount::Count(CountExpression::BattlefieldPermanents {
+            filter: BattlefieldPermanentFilter {
+                required_supertypes: vec![],
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Opponents,
+                card_type: Some(CardTypeFilter::Creature),
+                color: None,
+                name: None,
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+        }),
+    };
+
+    semantic::accepted(&mut engine, 0, &pass());
+    semantic::accepted(&mut engine, 1, &pass());
+    let characteristics = engine.characteristics(pupu).expect("PuPu characteristics");
+    assert_eq!(characteristics.power, Some(2));
+    assert_eq!(characteristics.toughness, Some(4));
+    assert!(engine.state.continuous_effects.iter().any(|effect| {
+        effect.source_id == Some(pupu)
+            && matches!(
+                effect.kind,
+                ContinuousEffectKind::Layer7bSetPower { power: 2 }
+            )
+    }));
+}
+
+#[test]
+fn pupu_ufo_resolves_a_zero_power_setter_without_treating_it_as_a_noop() {
+    let mut engine = pupu_engine(20_261_011);
+    let pupu = inject_permanent_on_battlefield(&mut engine, 0, "pupu_ufo");
+    grant_pool(&mut engine, 0);
+
+    let activation = activate_ability_for(&engine, pupu, 1, Vec::new());
+    semantic::accepted(&mut engine, 0, &activation);
+    semantic::accepted(&mut engine, 0, &pass());
+    semantic::accepted(&mut engine, 1, &pass());
+
+    assert_eq!(engine.characteristics(pupu).unwrap().power, Some(0));
+    assert!(engine.state.continuous_effects.iter().any(|effect| {
+        effect.source_id == Some(pupu)
+            && matches!(
+                effect.kind,
+                ContinuousEffectKind::Layer7bSetPower { power: 0 }
+            )
+    }));
+}
+
+#[test]
+fn pupu_ufo_does_not_set_power_on_a_source_that_left_and_returned() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let mut engine = pupu_engine(20_261_012);
+    let pupu = inject_permanent_on_battlefield(&mut engine, 0, "pupu_ufo");
+    inject_permanent_on_battlefield(&mut engine, 0, "gongaga,_reactor_town");
+    grant_pool(&mut engine, 0);
+    engine.enable_dev_commands();
+
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&pupu)
+        .copied()
+        .unwrap_or(0);
+    let activation = activate_ability_for(&engine, pupu, 1, Vec::new());
+    semantic::accepted(&mut engine, 0, &activation);
+    for zone in [DevZone::Graveyard, DevZone::Battlefield] {
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::DevCommand(DevCommand {
+                        target_player_id: 0,
+                        dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                            card_name: "PuPu UFO".into(),
+                            zone: zone as i32,
+                            ready: false,
+                        })),
+                    })),
+                },
+            )
+            .expect("move PuPu through a zone change");
+    }
+    assert!(engine.state.players[0].battlefield.contains(&pupu));
+    assert!(engine.state.zone_change_generation[&pupu] > generation);
+
+    semantic::accepted(&mut engine, 0, &pass());
+    semantic::accepted(&mut engine, 1, &pass());
+    assert_eq!(engine.characteristics(pupu).unwrap().power, Some(0));
+    assert!(!engine.state.continuous_effects.iter().any(|effect| {
+        effect.source_id == Some(pupu)
+            && matches!(effect.kind, ContinuousEffectKind::Layer7bSetPower { .. })
+    }));
 }

@@ -118,8 +118,8 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::SetBasePowerToughness { .. } => {
             pump_counters::set_base_power_toughness(cx, effect)?
         }
-        effect @ SpellEffectKind::SetSourceBasePowerToTownCount => {
-            pump_counters::set_source_base_power_to_town_count(cx, effect)?
+        effect @ SpellEffectKind::SetSourceBasePower { .. } => {
+            pump_counters::set_source_base_power(cx, effect)?
         }
         SpellEffectKind::SetClassLevel { level } => misc::set_class_level(cx, level)?,
         SpellEffectKind::SolveCase => misc::solve_case(cx)?,

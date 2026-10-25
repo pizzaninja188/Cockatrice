@@ -1232,10 +1232,12 @@ pub enum SpellEffectKind {
         power: BasePowerToughnessValue,
         toughness: BasePowerToughnessValue,
     },
-    /// PuPu UFO snapshots the controller's Town count as its own base power when this ability
-    /// resolves; toughness is intentionally untouched. Specialized because no other admitted
-    /// card in this cohort needs this resolution-time, source-only layer-7b setter.
-    SetSourceBasePowerToTownCount,
+    /// CR 608.2h / 611.2a / 613.4b: set an ability source's base power to a game value read on
+    /// resolution. The base-power value is snapshotted through end of turn; toughness is
+    /// intentionally untouched.
+    SetSourceBasePower {
+        amount: Amount,
+    },
     /// CR 701.26: tap `subject`. `Chosen` preserves ordinary permanent targeting.
     Tap {
         #[serde(default)]
@@ -2978,7 +2980,8 @@ impl SpellEffectKind {
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
+            | SpellEffectKind::CreateAttackingTokens { count: amount, .. }
+            | SpellEffectKind::SetSourceBasePower { amount } => Some(amount),
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount(),
@@ -3867,7 +3870,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GiveControlOfSourceToAttackingPlayer
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
-            | SpellEffectKind::SetSourceBasePowerToTownCount
+            | SpellEffectKind::SetSourceBasePower { .. }
             | SpellEffectKind::DoubleTimeCounters
             | SpellEffectKind::SetClassLevel { .. }
             | SpellEffectKind::SolveCase
@@ -4059,7 +4062,8 @@ impl SpellEffectKind {
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
-            | Self::CreateAttackingTokens { count: amount, .. } => {
+            | Self::CreateAttackingTokens { count: amount, .. }
+            | Self::SetSourceBasePower { amount } => {
                 amount.validate_cast_snapshot_references(count)?;
             }
             Self::PumpTarget {
@@ -4420,9 +4424,8 @@ impl SpellEffectKind {
         {
             return Err("GiveControlOfSourceToAttackingPlayer requires a triggered ability".into());
         }
-        if matches!(self, Self::SetSourceBasePowerToTownCount) && context != EffectContext::Ability
-        {
-            return Err("PuPu UFO source effects require an activated ability".into());
+        if matches!(self, Self::SetSourceBasePower { .. }) && context != EffectContext::Ability {
+            return Err("SetSourceBasePower requires an ability context".into());
         }
         if matches!(self, Self::SolveCase) && context != EffectContext::Ability {
             return Err("SolveCase requires a permanent ability source".into());
@@ -5049,7 +5052,8 @@ impl SpellEffectKind {
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
+            | SpellEffectKind::CreateAttackingTokens { count: amount, .. }
+            | SpellEffectKind::SetSourceBasePower { amount } => {
                 if matches!(self, Self::PutCounters { .. }) {
                     amount.validate_targeted_put_counters(context)?;
                 } else if matches!(self, Self::Draw { .. } | Self::TargetPlayerDraws { .. }) {
@@ -6381,9 +6385,8 @@ impl SpellEffectKind {
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
-            | Self::CreateAttackingTokens { count: amount, .. } => {
-                amount.requires_triggering_spell_context()
-            }
+            | Self::CreateAttackingTokens { count: amount, .. }
+            | Self::SetSourceBasePower { amount } => amount.requires_triggering_spell_context(),
             Self::Draw { count, who } => {
                 count.requires_triggering_spell_context()
                     || *who == PlayerRecipient::EachOtherPlayerThanAffectedPlayer
@@ -6473,9 +6476,8 @@ impl SpellEffectKind {
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
-            | Self::CreateAttackingTokens { count: amount, .. } => {
-                amount.requires_source_counters()
-            }
+            | Self::CreateAttackingTokens { count: amount, .. }
+            | Self::SetSourceBasePower { amount } => amount.requires_source_counters(),
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount().is_some_and(Amount::requires_source_counters),
@@ -6524,9 +6526,8 @@ impl SpellEffectKind {
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
-            | Self::CreateAttackingTokens { count: amount, .. } => {
-                amount.uses_trigger_event_count()
-            }
+            | Self::CreateAttackingTokens { count: amount, .. }
+            | Self::SetSourceBasePower { amount } => amount.uses_trigger_event_count(),
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount().is_some_and(Amount::uses_trigger_event_count),
@@ -6982,6 +6983,59 @@ mod issue_187_base_pt_tests {
 #[cfg(test)]
 mod pupu_ufo_effect_validation_tests {
     use super::*;
+    use crate::primitives::{
+        CastOrdinalScope, CastTriggerPlayer, SpellCastFilter, SpellManaSpentComparison,
+    };
+
+    fn source_power(amount: Amount) -> SpellEffectKind {
+        SpellEffectKind::SetSourceBasePower { amount }
+    }
+
+    fn source_power_using_triggering_spell_context() -> SpellEffectKind {
+        source_power(Amount::Conditional {
+            condition: GameCondition::TriggeringSpellManaSpent {
+                comparison: SpellManaSpentComparison::AtLeast(4),
+            },
+            when_true: 2,
+            otherwise: 0,
+        })
+    }
+
+    fn activated_source_power(effect: SpellEffectKind) -> ActivatedAbilityDef {
+        ActivatedAbilityDef {
+            ability_id: AbilityId::new("spell_context_probe").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            intrinsic_land_mana: false,
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![],
+            cost_modifiers: vec![],
+            effect: vec![effect],
+            program: None,
+            targeting: None,
+            timing: Default::default(),
+            conditions: vec![],
+            activation_limit: None,
+        }
+    }
+
+    fn triggered_source_power(
+        trigger: TriggerCondition,
+        effect: SpellEffectKind,
+    ) -> TriggeredAbilityDef {
+        TriggeredAbilityDef {
+            ability_id: AbilityId::new("spell_context_probe").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            trigger,
+            effect: vec![effect],
+            program: None,
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        }
+    }
 
     #[test]
     fn source_only_pupu_effects_cannot_be_authored_as_spells() {
@@ -6993,11 +7047,138 @@ mod pupu_ufo_effect_validation_tests {
                 }),
                 max_mana_value: None,
             },
-            SpellEffectKind::SetSourceBasePowerToTownCount,
+            source_power(Amount::Fixed(1)),
         ] {
             assert!(effect.validate(EffectContext::Ability).is_ok());
             assert!(effect.validate(EffectContext::Spell).is_err());
         }
+    }
+
+    #[test]
+    fn source_base_power_accepts_any_valid_battlefield_count_filter() {
+        let effect = source_power(Amount::Count(CountExpression::BattlefieldPermanents {
+            filter: BattlefieldPermanentFilter {
+                required_supertypes: vec![],
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Opponents,
+                card_type: Some(CardTypeFilter::Creature),
+                color: None,
+                name: None,
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+        }));
+
+        assert!(effect.validate(EffectContext::Ability).is_ok());
+        assert!(SpellEffectKind::validate_list(&[effect]).is_ok());
+    }
+
+    #[test]
+    fn source_base_power_rejects_unbound_previous_mill_and_program_counts() {
+        for (amount, expected) in [
+            (
+                Amount::Count(CountExpression::PreviousMillManaValueSum),
+                "PreviousEffect references require an authored Program",
+            ),
+            (
+                Amount::Count(CountExpression::ProgramInputCount),
+                "ProgramInputCount requires a direct typed Program input",
+            ),
+        ] {
+            let effect = source_power(amount);
+            assert!(effect.validate(EffectContext::Ability).is_ok());
+            assert!(SpellEffectKind::validate_list(&[effect])
+                .unwrap_err()
+                .contains(expected));
+        }
+    }
+
+    #[test]
+    fn source_base_power_event_count_requires_a_trigger_that_supplies_it() {
+        let event_count_effect = source_power(Amount::EventCount);
+        let activated = ActivatedAbilityDef {
+            ability_id: AbilityId::new("event_count_probe").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            intrinsic_land_mana: false,
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![],
+            cost_modifiers: vec![],
+            effect: vec![event_count_effect.clone()],
+            program: None,
+            targeting: None,
+            timing: Default::default(),
+            conditions: vec![],
+            activation_limit: None,
+        };
+        assert!(activated
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated abilities cannot reference a trigger event's count"));
+
+        let triggered = |trigger| TriggeredAbilityDef {
+            ability_id: AbilityId::new("event_count_probe").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            trigger,
+            effect: vec![event_count_effect.clone()],
+            program: None,
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        };
+        assert!(triggered(TriggerCondition::WhenSelfEntersBattlefield)
+            .validate_shape()
+            .unwrap_err()
+            .contains(
+                "trigger-event count requires a trigger that supplies a committed cardinality"
+            ));
+        assert!(
+            triggered(TriggerCondition::WheneverControllerUntapsOneOrMorePermanents)
+                .validate_shape()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn source_base_power_conditional_triggering_spell_context_rejects_activated_abilities() {
+        let activated = activated_source_power(source_power_using_triggering_spell_context());
+
+        assert!(activated
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated abilities cannot reference triggering-spell context"));
+    }
+
+    #[test]
+    fn source_base_power_conditional_triggering_spell_context_accepts_spell_cast_triggers() {
+        let spell_cast_trigger = TriggerCondition::WheneverPlayerCastsSpell {
+            caster: CastTriggerPlayer::Controller,
+            filter: SpellCastFilter::default(),
+            ordinal: None,
+            ordinal_scope: CastOrdinalScope::AllSpells,
+        };
+        let triggered = triggered_source_power(
+            spell_cast_trigger,
+            source_power_using_triggering_spell_context(),
+        );
+
+        assert!(triggered.validate_shape().is_ok());
+    }
+
+    #[test]
+    fn source_base_power_conditional_triggering_spell_context_rejects_nonmatching_triggers() {
+        let triggered = triggered_source_power(
+            TriggerCondition::WhenSelfEntersBattlefield,
+            source_power_using_triggering_spell_context(),
+        );
+
+        assert!(triggered
+            .validate_shape()
+            .unwrap_err()
+            .contains("triggering-spell context requires WheneverPlayerCastsSpell"));
     }
 
     #[test]

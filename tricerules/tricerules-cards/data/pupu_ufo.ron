@@ -20,7 +20,11 @@
       ability_id: "set_power_to_towns",
       presentation: OracleLines([2]),
       costs: [Mana("{3}")],
-      effect: [SetSourceBasePowerToTownCount],
+      effect: [SetSourceBasePower(amount: Count(BattlefieldPermanents(filter: (
+        controllers: Controller,
+        card_type: Some(Land),
+        required_subtypes: ["Town"],
+      ))))],
     ),
   ],
 )
