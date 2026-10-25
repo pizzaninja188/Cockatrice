@@ -42,10 +42,13 @@ pub(super) fn counter_target_spell(
             .collect::<Vec<_>>();
         let target_identity_is_current =
             counter_target_refs_are_current(engine, &matching_target_refs);
-        cx.effect_result.targeted_spell_controller = target_identity_is_current
+        let targeted_spell_controller = target_identity_is_current
             .then(|| engine.state.stack.iter().find(|item| item.id == tid))
             .flatten()
             .map(|item| item.controller);
+        cx.effect_result.program_value = Some(crate::state::ProgramValue::TargetedSpellController(
+            targeted_spell_controller,
+        ));
         if !target_identity_is_current {
             if unless_controller_pays.is_some() {
                 cx.effect_result.counter_payment_outcome =

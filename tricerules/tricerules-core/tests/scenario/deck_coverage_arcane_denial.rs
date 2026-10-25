@@ -2,7 +2,9 @@
 //! ordered delayed triggers at the next actual turn's upkeep.
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
-use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
+use tricerules_cards::primitives::{
+    InstructionKind, PlayerRecipient, ProgramTargetRole, SpellEffectKind, TriggerCondition,
+};
 use tricerules_cards::AbilityPresentation;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -20,44 +22,50 @@ const SYNTHETIC_ARCANE_DELAYED_TAIL: &str = r#"
   face_id: "test_arcane_delayed_tail",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_effect: [
-    CounterTargetSpell(spell_filter: (), unless_controller_pays: None),
-    CreateDelayedTrigger(
-      subject: None,
-      affected_player: Some(PreviousTargetedSpellController),
-      ability: (
-        ability_id: "delayed_01",
-        presentation: Fallback,
-        trigger: AtBeginningOfNextTurnUpkeep,
-        effect: [],
-        program: Some((body: (steps: [
-          (id: "choose_count", kind: Choose(
-            choice: "draw_count",
-            chooser: AffectedPlayer,
-            optional: false,
-            branches: [
-              (branch_id: "draw_zero", presentation: Fallback, cost: None, requirement: Always,
-                body: (steps: [(id: "draw_zero", kind: Perform(Draw(
-                  who: AffectedPlayer, count: 0)))], yields: [])),
-              (branch_id: "draw_one", presentation: Fallback, cost: None, requirement: Always,
-                body: (steps: [(id: "draw_one", kind: Perform(Draw(
-                  who: AffectedPlayer, count: 1)))], yields: [])),
-              (branch_id: "draw_two", presentation: Fallback, cost: None, requirement: Always,
-                body: (steps: [(id: "draw_two", kind: Perform(Draw(
-                  who: AffectedPlayer, count: 2)))], yields: [])),
-            ],
-            otherwise: (steps: [], yields: []),
-          )),
-          (id: "controller_life_tail", kind: Perform(GainLife(who: Controller, amount: 1))),
-        ], yields: []), target_bindings: [])),
-      ),
-    ),
-  ],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(spell_filter: (), unless_controller_pays: None))),
+    (id: "create_target_draw_trigger", input: Some("target_controller"),
+      kind: Perform(CreateDelayedTrigger(
+        subject: None,
+        affected_player: Some(ProgramInputPlayer),
+        ability: (
+          ability_id: "delayed_01",
+          presentation: Fallback,
+          trigger: AtBeginningOfNextTurnUpkeep,
+          effect: [],
+          program: Some((body: (steps: [
+            (id: "choose_count", kind: Choose(
+              choice: "draw_count",
+              chooser: AffectedPlayer,
+              optional: false,
+              branches: [
+                (branch_id: "draw_zero", presentation: Fallback, cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_zero", kind: Perform(Draw(
+                    who: AffectedPlayer, count: 0)))], yields: [])),
+                (branch_id: "draw_one", presentation: Fallback, cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_one", kind: Perform(Draw(
+                    who: AffectedPlayer, count: 1)))], yields: [])),
+                (branch_id: "draw_two", presentation: Fallback, cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_two", kind: Perform(Draw(
+                    who: AffectedPlayer, count: 2)))], yields: [])),
+              ],
+              otherwise: (steps: [], yields: []),
+            )),
+            (id: "controller_life_tail", kind: Perform(GainLife(who: Controller, amount: 1))),
+          ], yields: []), target_bindings: [])),
+          modal: None, targeting: None, may: false, intervening_if: None,
+          triggers_only_once: false, max_triggers_per_turn: None,
+        ),
+      ))),
+  ], yields: []), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
   targeting: Some((groups: [(
     min: 1,
     max: 1,
     prompt: "Choose target spell",
-    effect_indices: [0],
+    effect_indices: [],
   )])),
 )
 "#;
@@ -347,33 +355,79 @@ fn arcane_denial_is_admitted_with_both_delayed_effects_and_exact_choice_ownershi
 
     assert_eq!(face.name, "Arcane Denial");
     assert_eq!(face.types, ["Instant"]);
+    assert!(
+        face.spell_effect.is_empty(),
+        "the authored Program owns spell resolution"
+    );
+    let program = face.spell_program.as_ref().expect("typed spell Program");
+    let [counter, targeted_draw, caster_draw] = program.body.steps.as_slice() else {
+        panic!("Arcane Denial has one counter and two independent delayed triggers");
+    };
+    assert_eq!(counter.bind, ["target_controller"]);
+    assert_eq!(targeted_draw.input.as_deref(), Some("target_controller"));
+    assert_eq!(program.target_bindings.len(), 1);
+    assert_eq!(program.target_bindings[0].instruction_id, "counter_spell");
+    assert_eq!(program.target_bindings[0].role, ProgramTargetRole::Spell);
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+
+    let InstructionKind::Perform(counter_effect) = &counter.kind else {
+        panic!("the controller receipt comes from a counter instruction");
+    };
     assert!(matches!(
-        face.spell_effect.as_slice(),
-        [
-            SpellEffectKind::CounterTargetSpell { .. },
-            SpellEffectKind::CreateDelayedTrigger {
-                subject: None,
-                affected_player: Some(PlayerRecipient::PreviousTargetedSpellController),
-                ability: first,
-            },
-            SpellEffectKind::CreateDelayedTrigger {
-                subject: None,
-                affected_player: None,
-                ability: second,
-            }
-        ] if first.presentation == AbilityPresentation::OracleLines(vec![1])
-            && second.presentation == AbilityPresentation::OracleLines(vec![2])
-            && first.trigger == TriggerCondition::AtBeginningOfNextTurnUpkeep
-            && second.trigger == TriggerCondition::AtBeginningOfNextTurnUpkeep
-            && first.effect.is_empty()
-            && first.program.is_some()
-            && matches!(
-                second.effect.as_slice(),
-                [SpellEffectKind::Draw {
-                    who: PlayerRecipient::Controller,
-                    ..
-                }]
-            )
+        counter_effect.as_ref(),
+        SpellEffectKind::CounterTargetSpell { .. }
+    ));
+    let InstructionKind::Perform(targeted_effect) = &targeted_draw.kind else {
+        panic!("the first trigger consumes the target-controller receipt");
+    };
+    let SpellEffectKind::CreateDelayedTrigger {
+        subject,
+        affected_player,
+        ability: first,
+    } = targeted_effect.as_ref()
+    else {
+        panic!("the first instruction creates the targeted player's delayed trigger");
+    };
+    assert_eq!(*subject, None);
+    assert_eq!(
+        affected_player.as_ref(),
+        Some(&PlayerRecipient::ProgramInputPlayer)
+    );
+    assert_eq!(
+        first.presentation,
+        AbilityPresentation::OracleLines(vec![1])
+    );
+    assert_eq!(first.trigger, TriggerCondition::AtBeginningOfNextTurnUpkeep);
+    assert!(first.effect.is_empty());
+    assert!(first.program.is_some());
+
+    let InstructionKind::Perform(caster_effect) = &caster_draw.kind else {
+        panic!("the second trigger remains an independent delayed effect");
+    };
+    let SpellEffectKind::CreateDelayedTrigger {
+        subject,
+        affected_player,
+        ability: second,
+    } = caster_effect.as_ref()
+    else {
+        panic!("the second instruction creates the caster's delayed draw");
+    };
+    assert_eq!(*subject, None);
+    assert_eq!(*affected_player, None);
+    assert_eq!(
+        second.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
+    assert_eq!(
+        second.trigger,
+        TriggerCondition::AtBeginningOfNextTurnUpkeep
+    );
+    assert!(matches!(
+        second.effect.as_slice(),
+        [SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            ..
+        }]
     ));
 }
 

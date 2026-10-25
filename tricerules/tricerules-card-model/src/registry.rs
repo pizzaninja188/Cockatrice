@@ -329,11 +329,15 @@ fn compile_authored_program_children(
         if ability.program.is_none() {
             return Ok(());
         }
-        if subject != &Some(crate::primitives::EffectSubject::PreviousEffectObject)
-            || affected_player.is_some()
-        {
+        let captures_object =
+            subject == &Some(crate::primitives::EffectSubject::PreviousEffectObject)
+                && affected_player.is_none();
+        let captures_targeted_player = subject.is_none()
+            && affected_player
+                == &Some(crate::primitives::PlayerRecipient::ProgramInputPlayer);
+        if !captures_object && !captures_targeted_player {
             return Err(format!(
-                "nested delayed Program child at {source_path}.program.instruction={} has no supported typed object capture",
+                "nested delayed Program child at {source_path}.program.instruction={} has no supported typed object or player capture",
                 instruction.id
             ));
         }
@@ -343,20 +347,27 @@ fn compile_authored_program_children(
                 instruction.id
             ));
         };
-        let captured_object = parent.slot(input).is_some_and(|slot| {
-            matches!(
-                &slot.result_type,
-                crate::primitives::ResultType::ExiledObject { cardinality }
-                    if cardinality.min == 0 && cardinality.max == Some(1)
-            )
+        let captured_input = parent.slot(input).is_some_and(|slot| {
+            if captures_object {
+                matches!(
+                    &slot.result_type,
+                    crate::primitives::ResultType::ExiledObject { cardinality }
+                        if cardinality.min == 0 && cardinality.max == Some(1)
+                )
+            } else {
+                matches!(
+                    &slot.result_type,
+                    crate::primitives::ResultType::TargetedSpellController
+                )
+            }
         });
-        if !captured_object {
+        if !captured_input {
             return Err(format!(
-                "nested delayed Program child at {source_path}.program.instruction={} requires a 0..1 typed object producer",
+                "nested delayed Program child at {source_path}.program.instruction={} requires its exact typed object or TargetedSpellController producer",
                 instruction.id
             ));
         }
-        children.push((instruction.id.clone(), ability.clone()));
+        children.push((instruction.id.clone(), ability.clone(), captures_object));
         Ok(())
     })
     .map_err(|reason| RegistryError::InvalidCard {
@@ -364,7 +375,7 @@ fn compile_authored_program_children(
         reason: format!("resolution program owner {parent_owner:?} at {source_path}: {reason}"),
     })?;
 
-    for (instruction_id, ability) in children {
+    for (instruction_id, ability, captures_object) in children {
         let program = ability
             .program
             .as_ref()
@@ -385,8 +396,8 @@ fn compile_authored_program_children(
             ProgramOwnerInputs {
                 targeting: ability.targeting.as_ref(),
                 cast_cost_groups,
-                captured_trigger_object_ref: true,
-                captured_delayed_affected_player: false,
+                captured_trigger_object_ref: captures_object,
+                captured_delayed_affected_player: !captures_object,
             },
             &format!("{source_path}.program.instruction={instruction_id}.ability"),
             Some(&ability.trigger),
@@ -485,40 +496,6 @@ fn compile_authored_face_programs(
             &path,
             ability,
             &format!("triggered ability path {path:?}"),
-        )?;
-    }
-
-    for (index, effect) in face.spell_effect.iter().enumerate() {
-        let SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect else {
-            continue;
-        };
-        let Some(program) = &ability.program else {
-            continue;
-        };
-        validate_face_spell_delayed_program_profile(face, index, effect).map_err(|reason| {
-            RegistryError::InvalidCard {
-                id: card.id.clone(),
-                reason: format!("face delayed program at spell_effect[{index}]: {reason}"),
-            }
-        })?;
-        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
-            card_id: card.id.clone(),
-            face_id: face.face_id.clone(),
-            ability_path: vec![ability.ability_id.clone()],
-        });
-        compile_authored_program_owner(
-            registry,
-            &card.id,
-            owner,
-            program,
-            ProgramOwnerInputs {
-                targeting: None,
-                cast_cost_groups: &face.cast_cost_groups,
-                captured_trigger_object_ref: false,
-                captured_delayed_affected_player: true,
-            },
-            &format!("face delayed child spell_effect[{index}]"),
-            Some(&ability.trigger),
         )?;
     }
     for bar in &face.class_level_bars {
@@ -2403,102 +2380,8 @@ fn validate_triggered_effect_list_metadata(
     Ok(())
 }
 
-/// Admit the one face-level delayed Program profile whose resolution owner is captured from a
-/// targeted spell. The exact target binding is kept on the casting face; the delayed Program
-/// receives only the controller context captured by CreateDelayedTrigger.
-fn validate_face_spell_delayed_program_profile(
-    face: &CardFace,
-    index: usize,
-    effect: &SpellEffectKind,
-) -> Result<(), String> {
-    let SpellEffectKind::CreateDelayedTrigger {
-        subject,
-        affected_player,
-        ability,
-    } = effect
-    else {
-        return Err("expected a direct CreateDelayedTrigger spell effect".into());
-    };
-    if subject.is_some() {
-        return Err("requires a subjectless delayed trigger".into());
-    }
-    if affected_player != &Some(crate::primitives::PlayerRecipient::PreviousTargetedSpellController)
-    {
-        return Err("requires the captured PreviousTargetedSpellController".into());
-    }
-    if index == 0 {
-        return Err("requires an immediately preceding CounterTargetSpell".into());
-    }
-    let SpellEffectKind::CounterTargetSpell {
-        unless_controller_pays,
-        unless_controller_pays_by_cast_cost,
-        ..
-    } = &face.spell_effect[index - 1]
-    else {
-        return Err("requires an immediately preceding CounterTargetSpell".into());
-    };
-    if unless_controller_pays.is_some() || unless_controller_pays_by_cast_cost.is_some() {
-        return Err("the preceding CounterTargetSpell must have no payment form".into());
-    }
-    if ability.trigger != TriggerCondition::AtBeginningOfNextTurnUpkeep {
-        return Err("requires AtBeginningOfNextTurnUpkeep".into());
-    }
-    if !ability.trigger.is_delayed_only() {
-        return Err("requires a delayed-only trigger condition".into());
-    }
-    if ability.modal.is_some()
-        || ability.targeting.is_some()
-        || ability.may
-        || ability.intervening_if.is_some()
-        || ability.triggers_only_once
-        || ability.max_triggers_per_turn.is_some()
-    {
-        return Err(
-            "requires default delayed-ability metadata with no modal or targeting owner".into(),
-        );
-    }
-    if ability.program.is_none() {
-        return Err("requires an authored delayed Program".into());
-    }
-    ability.validate_shape()?;
-
-    if face.targeting.is_none() {
-        return Err("requires an explicit face-local target group for the countered spell".into());
-    }
-    let schema = TargetSchema::compile(&face.spell_effect, face.targeting.as_ref())?;
-    let counter_groups = schema
-        .groups
-        .iter()
-        .filter(|group| {
-            group
-                .bindings
-                .iter()
-                .any(|binding| binding.effect_index == index - 1)
-        })
-        .collect::<Vec<_>>();
-    if counter_groups.len() != 1 {
-        return Err("requires exactly one target group bound to the preceding counter".into());
-    }
-    let counter_group = counter_groups[0];
-    let counter_bindings = counter_group
-        .bindings
-        .iter()
-        .filter(|binding| binding.effect_index == index - 1)
-        .collect::<Vec<_>>();
-    if counter_group.min != 1
-        || counter_group.max != 1
-        || counter_group.bindings.len() != 1
-        || counter_bindings.len() != 1
-        || !matches!(
-            counter_bindings[0].role,
-            crate::primitives::TargetRole::StackSpell(_)
-        )
-    {
-        return Err("requires one 1-of-1 StackSpell binding for the preceding counter".into());
-    }
-    Ok(())
-}
-
+/// Keep delayed-trigger child IDs unique within the face and prevent child Program owners from
+/// colliding with runtime ability owners on that face.
 fn validate_face_spell_effect_metadata(face: &CardFace) -> Result<(), String> {
     let runtime_owner_ids = face_activated_abilities(face)
         .map(|ability| ability.ability_id.as_str().to_owned())
@@ -2511,25 +2394,36 @@ fn validate_face_spell_effect_metadata(face: &CardFace) -> Result<(), String> {
         .collect::<HashSet<_>>();
     let mut direct_delayed_ids = HashSet::new();
 
-    for (index, effect) in face.spell_effect.iter().enumerate() {
+    for effect in &face.spell_effect {
         if let SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect {
             ability.ability_id.validate()?;
             let id = ability.ability_id.as_str().to_owned();
             if !direct_delayed_ids.insert(id.clone()) {
                 return Err(format!("duplicate direct delayed child ability id '{id}'"));
             }
-            if ability.program.is_some() {
-                validate_face_spell_delayed_program_profile(face, index, effect)?;
-                if runtime_owner_ids.contains(&id) {
-                    return Err(format!(
-                        "delayed child Program owner '{id}' conflicts with a face-local runtime ability owner"
-                    ));
-                }
-                validate_nested_effect_metadata_with_delayed_child_program(effect, true)?;
-                continue;
-            }
         }
         validate_nested_effect_metadata(effect)?;
+    }
+    if let Some(program) = &face.spell_program {
+        let mut program_delayed_ids = HashSet::new();
+        visit_authored_program_effects(&program.body, &mut |effect| {
+            let SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect else {
+                return Ok(());
+            };
+            ability.ability_id.validate()?;
+            let id = ability.ability_id.as_str().to_owned();
+            if !program_delayed_ids.insert(id.clone()) {
+                return Err(format!(
+                    "duplicate spell_program delayed child ability id '{id}'"
+                ));
+            }
+            if ability.program.is_some() && runtime_owner_ids.contains(&id) {
+                return Err(format!(
+                    "delayed child Program owner '{id}' conflicts with a face-local runtime ability owner"
+                ));
+            }
+            Ok(())
+        })?;
     }
     Ok(())
 }
@@ -4215,6 +4109,14 @@ impl CardRegistry {
                             id: card.id.clone(),
                             reason: format!("spell_program: {reason}"),
                         },
+                    )?;
+                    compile_authored_program_children(
+                        &mut reg,
+                        &card.id,
+                        &owner,
+                        &compiled,
+                        &face.cast_cost_groups,
+                        "spell_program",
                     )?;
                     if reg.compiled_programs.insert(owner, compiled).is_some() {
                         return Err(RegistryError::InvalidCard {

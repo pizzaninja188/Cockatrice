@@ -281,6 +281,8 @@ pub struct Cardinality {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultType {
     CounterPaymentOutcome,
+    /// Optional controller captured from one exact legal stack spell target.
+    TargetedSpellController,
     /// Optional generation-bound source permanent from a successfully countered ability.
     CounteredAbilitySource {
         cardinality: Cardinality,
@@ -1522,6 +1524,21 @@ impl Compiler<'_> {
                     )
                 }
                 InstructionKind::Perform(effect) => {
+                    let supported_program_input_consumer = matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CreateTokens {
+                            who: PlayerRecipient::ProgramInputPlayer,
+                            ..
+                        } | SpellEffectKind::CreateDelayedTrigger {
+                            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+                            ..
+                        }
+                    );
+                    if effect.contains_program_input_player() && !supported_program_input_consumer {
+                        return Err(
+                            "ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger through a typed Program input".into(),
+                        );
+                    }
                     let input = compile_input(
                         effect,
                         instruction.input.as_deref(),
@@ -1749,13 +1766,28 @@ impl Compiler<'_> {
                             instruction.id
                         ));
                     }
-                    let result_types = validate_and_result_types(
+                    let mut result_types = validate_and_result_types(
                         effect,
                         self.context,
                         target_group_index,
                         target_group_max,
                         self,
                     )?;
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CounterTargetSpell {
+                            unless_controller_pays: None,
+                            ..
+                        }
+                    ) && !instruction.bind.is_empty()
+                    {
+                        if instruction.bind.len() != 1 || self.context != EffectContext::Spell {
+                            return Err(
+                                "nonpayment CounterTargetSpell may bind one TargetedSpellController result only in a spell Program".into(),
+                            );
+                        }
+                        result_types = vec![ResultType::TargetedSpellController];
+                    }
                     validate_equipment_selection_input(
                         effect,
                         input,
@@ -2932,6 +2964,14 @@ fn compile_input(
 ) -> Result<Option<ResultSlotId>, String> {
     let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
     let expected = match effect {
+        EffectOp::CreateTokens {
+            who: PlayerRecipient::ProgramInputPlayer,
+            ..
+        }
+        | EffectOp::CreateDelayedTrigger {
+            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+            ..
+        } => Some("TargetedSpellController"),
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
         EffectOp::GrantKeywords {
             subject: EffectSubject::PreviousEffectObject,
@@ -2995,6 +3035,14 @@ fn compile_input(
                 .get(slot.0 as usize)
                 .ok_or_else(|| format!("input result '{name}' is unknown"))?;
             let matches = match effect {
+                EffectOp::CreateTokens {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                }
+                | EffectOp::CreateDelayedTrigger {
+                    affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+                    ..
+                } => matches!(actual.result_type, ResultType::TargetedSpellController),
                 EffectOp::ChooseCard {
                     source: ChooseCardSource::CardResultCohort { .. },
                     ..
@@ -3398,6 +3446,9 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
     Some(match (left, right) {
         (ResultType::CounterPaymentOutcome, ResultType::CounterPaymentOutcome) => {
             ResultType::CounterPaymentOutcome
+        }
+        (ResultType::TargetedSpellController, ResultType::TargetedSpellController) => {
+            ResultType::TargetedSpellController
         }
         (
             ResultType::CounteredAbilitySource { cardinality: a },
@@ -4257,10 +4308,11 @@ fn validate_and_result_types(
         } => {
             effect.validate(context)?;
             let supported_recipient = *who == PlayerRecipient::Controller
+                || (*who == PlayerRecipient::ProgramInputPlayer && context == EffectContext::Spell)
                 || (*who == PlayerRecipient::SourceController && context == EffectContext::Ability);
             if !supported_recipient || sacrifice_timing.is_some() {
                 return Err(
-                    "CreateTokens supports controller-owned ordinary tokens, or SourceController tokens on an ability program, without delayed sacrifice"
+                    "CreateTokens supports controller-owned tokens, explicit ProgramInputPlayer tokens in a spell program, or SourceController tokens on an ability program, without delayed sacrifice"
                         .into(),
                 );
             }
@@ -4594,6 +4646,22 @@ fn validate_and_result_types(
             Ok(Vec::new())
         }
         SpellEffectKind::ApplyPermanentModifier { .. } if is_token_copy_batch_consumer(effect) => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CreateDelayedTrigger {
+            subject: None,
+            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+            ..
+        } if context == EffectContext::Spell => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CreateDelayedTrigger {
+            subject: None,
+            affected_player: None,
+            ..
+        } if context == EffectContext::Spell => {
             effect.validate(context)?;
             Ok(Vec::new())
         }

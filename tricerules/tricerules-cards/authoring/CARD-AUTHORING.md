@@ -720,39 +720,41 @@ supported program instructions may compose before, inside, or after that return;
 `Return`→`GainLife` fixture verifies that a following instruction resumes. The child program retains
 its cursor across Clone's entry-copy choice. `ReturnTriggeredCard`
 also serves Abnormal Endurance's legacy graveyard return, but that different operation shape remains
-on its existing legacy path. Other effect-created abilities remain unsupported as program owners;
-Arcane Denial's distinct profile below is the only other bounded child case.
-This exception fails closed for a non-adjacent producer, other delayed timings, plural or other
-previous-effect subjects, modal or targetful child bodies, `may`, `once`, and maximum-use metadata;
-do not generalize it to arbitrary effect-created or activated abilities. Koya's exact trigger,
-target filters, and target bounds remain in its card definition and ordinary targeting validation.
+on its existing legacy path. Koya's object-capture profile remains distinct from the typed
+target-controller delayed child described below. It fails closed for a non-adjacent producer, other
+delayed timings, plural or other previous-effect subjects, modal or targetful child bodies, `may`,
+`once`, and maximum-use metadata; do not generalize it to arbitrary effect-created or activated
+abilities. Koya's exact trigger, target filters, and target bounds remain in its card definition and
+ordinary targeting validation.
 The actual definition, closed owner/consumer profile, completed-empty versus fizzled execution, and
 commander choice are indexed by the [Koya review map](review-maps/koya,_death_from_above.json).
 
-Arcane Denial is a separate, closed face-spell child profile. On a nonmodal face, a direct top-level
-`CreateDelayedTrigger` may own a Program only immediately after `CounterTargetSpell` with both
-`unless_controller_pays` and `unless_controller_pays_by_cast_cost` set to `None`. The child has
-`subject: None`, captures `affected_player: Some(PreviousTargetedSpellController)`, and uses
-`AtBeginningOfNextTurnUpkeep`. It keeps the default nonmodal, untargeted, mandatory, no-intervening-if,
-not-once, and uncapped metadata, with an empty legacy `effect` beside its Program. The face must have
-an explicit `TargetingDef` whose group for that immediately preceding counter has exactly one
-`StackSpell` binding and `min: 1, max: 1`; identify that group by its counter association, so unrelated
-face target groups do not have to be absent. An inferred or implicit group, a different role, or a
-different bound fails closed.
+`CounterTargetSpell` may bind one optional `TargetedSpellController` result in a finite spell Program
+when both payment fields are `None` and the instruction has an explicit `Spell` target binding.
+The result captures the exact legal stack spell's controller before the counter attempt, so a legal
+uncounterable spell still produces `Some(controller)`. A target instruction skipped while another
+target group keeps the spell resolving publishes typed `None`; if every target is illegal, CR 608.2b
+stops the spell before its Program runs. The existing fixed-payment `CounterPaymentOutcome` contract
+is unchanged, and this does not add a combined paid-counter/controller result.
 
-This scoped child may require `TriggerAffectedPlayer` through the private
-`captured_delayed_affected_player` owner-input descriptor, derived from the delayed trigger's captured
-`PreviousTargetedSpellController`; it does not widen which ordinary triggers supply that input. The
-child's stable ID is compiled as a one-segment ability path below the exact card face, and is reserved
-against direct delayed siblings and same-face printed or class-bar activated, triggered, and level-up
-owners. Another face may use the same local ID. Compile the child's body through the normal finite
-Program compiler: do not whitelist Arcane Denial's choice, branch IDs, draw counts, or body shape.
-The actual delayed_01 definition and branches all use `OracleLines([1])`, so each offered branch keeps
-the printed choice-line presentation. Twincast copies use the same face/child owner binding and retain
-the copied spell's own captured target controller; no physical source-object lookup or card-named
-runtime route is involved. Arcane Denial's separate `delayed_02` remains its existing legacy
-`CreateDelayedTrigger` with `OracleLines([2])`. The reviewed behavior follows CR 503.1, 603.3b,
-603.7a-b/d, 121.2 and copy rule 707.10; it adds no wire, relay, or client operation.
+`ProgramInputPlayer` is an explicit typed Program input supported only by `CreateTokens` and
+`CreateDelayedTrigger` in spell Programs. The consuming instruction must name the result slot with
+`input`; an ambient previous-effect lookup is not available. A `None` receipt creates no tokens or
+delayed ability and never falls back to the spell's caster. `An Offer You Can't Refuse` and `Swan
+Song` bind the receipt to token creation. `Arcane Denial` binds it to a subjectless
+`CreateDelayedTrigger` for `AtBeginningOfNextTurnUpkeep`, preserving its child Program and separate
+subjectless, no-input `delayed_02` caster draw.
+
+The delayed child is compiled through the normal finite Program compiler under its exact face and
+child ability identity. When its body needs `AffectedPlayer`, the child receives the private
+`TriggerAffectedPlayer` owner input derived from the captured player; ordinary triggered abilities do
+not gain this input. The child ID remains reserved against direct delayed siblings and same-face
+printed or class-bar activated, triggered, and level-up owners; another face may use the same local
+ID. No exact card identity, instruction adjacency, or Arcane-specific body whitelist is involved.
+Arcane Denial's `delayed_01` and choice branches use `OracleLines([1])`, preserving the printed
+choice-line presentation. Copies retain their own target spell's captured controller. The reviewed
+behavior follows CR 503.1, 603.3b, 603.7a-b/d, 608.2b, 121.2, and copy rule 707.10; it adds no wire,
+relay, or client operation.
 
 `Blight` as a `Perform` leaf is resultless in a program. It may suspend for its normal controller creature choice and
 for applicable counter-replacement choices, but it cannot bind or yield an output. Once those

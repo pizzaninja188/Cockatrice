@@ -244,8 +244,6 @@ pub(crate) struct EffectResult {
     pub counter_placements: Vec<CounterPlacementReceipt>,
     /// Exact battlefield object generations sacrificed by the immediately preceding instruction.
     pub sacrificed_objects: Vec<TriggerObjectRef>,
-    /// Controller of a legal stack target at the counter instruction, before any stack exit.
-    pub targeted_spell_controller: Option<PlayerId>,
     /// Typed library cohort/partition output from one composable resolution-program operation.
     /// This remains private to the engine and is never reconstructed from display data.
     pub program_value: Option<ProgramValue>,
@@ -302,7 +300,6 @@ impl From<CardResultCohort> for EffectResult {
             mana_paid: None,
             counter_placements: Vec::new(),
             sacrificed_objects: Vec::new(),
-            targeted_spell_controller: None,
             program_value: None,
         }
     }
@@ -1432,6 +1429,8 @@ pub(crate) struct ProgramFrame {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ProgramValue {
     CounterPaymentOutcome(CounterPaymentOutcome),
+    /// Optional controller captured from one exact legal stack spell target.
+    TargetedSpellController(Option<PlayerId>),
     /// Optional exact generation-bound source permanent from one countered stack ability.
     CounteredAbilitySource(Option<TriggerObjectRef>),
     DrawReceipt(Vec<TriggerObjectRef>),

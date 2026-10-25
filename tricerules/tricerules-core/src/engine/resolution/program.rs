@@ -1330,6 +1330,9 @@ impl GameEngine {
                                 previous.produced_objects.push(*object);
                             }
                             ProgramValue::CounteredAbilitySource(None) => {}
+                            value @ ProgramValue::TargetedSpellController(_) => {
+                                previous.program_value = Some(value.clone());
+                            }
                             ProgramValue::HandSelection(objects) => {
                                 previous.selected_hand_cards = objects.clone();
                             }
@@ -1503,6 +1506,14 @@ impl GameEngine {
                             result.counter_payment_outcome = Some(
                                     tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
                                 );
+                        }
+                        if outputs.iter().any(|slot_id| {
+                            compiled.slot(*slot_id).is_some_and(|slot| {
+                                matches!(slot.result_type, ResultType::TargetedSpellController)
+                            })
+                        }) {
+                            result.program_value =
+                                Some(ProgramValue::TargetedSpellController(None));
                         }
                         EffectOutcome::Continue
                     } else {
@@ -2260,6 +2271,14 @@ fn capture_program_outputs_inner(
                     ),
                 )?)
             }
+            ResultType::TargetedSpellController => match result.program_value.as_ref() {
+                Some(value @ ProgramValue::TargetedSpellController(_)) => value.clone(),
+                _ => {
+                    return Err(EngineError::ProgramInvariant(
+                        "counter instruction did not publish its typed target-controller result",
+                    ));
+                }
+            },
             ResultType::CounteredAbilitySource { cardinality } => {
                 ProgramValue::CounteredAbilitySource(optional_physical_output(
                     result,

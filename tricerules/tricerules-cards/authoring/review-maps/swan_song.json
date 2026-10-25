@@ -7,8 +7,8 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/spell_effect/0",
-        "/faces/0/spell_effect/1",
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform",
         "/faces/0/targeting"
       ]
     }
@@ -16,27 +16,27 @@
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::CounterTargetSpell",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
     },
     {
       "symbol": "StackSpellFilter::Enchantment",
-      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/0/card_type"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CounterTargetSpell/spell_filter/any_of/0/card_type"
     },
     {
       "symbol": "StackSpellFilter::Instant",
-      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/1/card_type"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CounterTargetSpell/spell_filter/any_of/1/card_type"
     },
     {
       "symbol": "StackSpellFilter::Sorcery",
-      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/2/card_type"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CounterTargetSpell/spell_filter/any_of/2/card_type"
     },
     {
       "symbol": "SpellEffectKind::CreateTokens",
-      "typed_path": "/faces/0/spell_effect/1"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
     },
     {
-      "symbol": "PlayerRecipient::PreviousTargetedSpellController",
-      "typed_path": "/faces/0/spell_effect/1/CreateTokens/who"
+      "symbol": "PlayerRecipient::ProgramInputPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/CreateTokens/who"
     },
     {
       "symbol": "TargetingDef",
@@ -63,7 +63,7 @@
     },
     {
       "test": "deck_registry::deck_coverage_swan_song::swan_song_registers_its_exact_spell_filter_and_bird_token",
-      "covers": "exact card identity, allowed spell-type union, target-controller recipient, effect order, and blue 2/2 Bird characteristics"
+      "covers": "exact card identity, allowed spell-type union, typed controller input, effect order, and blue 2/2 Bird characteristics"
     }
   ],
   "complete_definition_review_confirmed": true

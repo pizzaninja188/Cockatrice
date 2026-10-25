@@ -580,13 +580,15 @@ pub(super) fn create_delayed_trigger(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let affected_player = match affected_player {
-        Some(PlayerRecipient::PreviousTargetedSpellController) => {
-            let Some(player) = cx.previous_effect_result.targeted_spell_controller else {
+        Some(PlayerRecipient::ProgramInputPlayer) => {
+            let Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) =
+                cx.previous_effect_result.program_value.as_ref()
+            else {
                 // A missing typed capture must not silently bind the delayed ability to its
                 // controller. A resolving counter effect publishes this only for a legal target.
                 return Ok(EffectOutcome::Continue);
             };
-            Some(player)
+            Some(*player)
         }
         Some(_) => {
             return Err(EngineError::Illegal(
@@ -1307,22 +1309,32 @@ mod delayed_trigger_tests {
     }
 
     fn delayed_child_effect() -> SpellEffectKind {
-        tricerules_cards::registry::global()
+        let face = tricerules_cards::registry::global()
             .get("arcane_denial")
             .expect("Arcane Denial definition")
-            .primary_face()
-            .spell_effect[1]
-            .clone()
+            .primary_face();
+        let program = face.spell_program.as_ref().expect("Arcane spell Program");
+        let delayed = program
+            .body
+            .steps
+            .get(1)
+            .expect("targeted delayed trigger instruction");
+        let tricerules_cards::primitives::InstructionKind::Perform(effect) = &delayed.kind else {
+            panic!("the targeted delayed trigger is a performed effect");
+        };
+        effect.as_ref().clone()
     }
 
     fn invoke_delayed_child(
         engine: &mut GameEngine,
         top: &StackItem,
         effect: SpellEffectKind,
-        targeted_spell_controller: Option<i32>,
+        target_controller: Option<i32>,
     ) -> Result<EffectOutcome, EngineError> {
         let previous_result = crate::state::EffectResult {
-            targeted_spell_controller,
+            program_value: Some(crate::state::ProgramValue::TargetedSpellController(
+                target_controller,
+            )),
             ..Default::default()
         };
         let mut effect_result = crate::state::EffectResult::default();
@@ -1348,7 +1360,7 @@ mod delayed_trigger_tests {
     }
 
     #[test]
-    fn missing_previous_target_controller_capture_continues_without_an_observer() {
+    fn typed_none_target_controller_continues_without_an_observer() {
         let mut engine = engine(91_001);
         let top = delayed_spell_item();
         let before = engine.diagnostic_snapshot().unwrap();

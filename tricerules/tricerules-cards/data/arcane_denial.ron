@@ -6,48 +6,57 @@
   face_id: "arcane_denial",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_effect: [
-    CounterTargetSpell(spell_filter: (), unless_controller_pays: None),
-    CreateDelayedTrigger(
-      subject: None,
-      affected_player: Some(PreviousTargetedSpellController),
-      ability: (
-        ability_id: "delayed_01",
-        presentation: OracleLines([1]),
-        trigger: AtBeginningOfNextTurnUpkeep,
-        effect: [],
-        program: Some((body: (steps: [
-          (id: "choose_count", kind: Choose(
-            choice: "draw_count",
-            chooser: AffectedPlayer,
-            optional: false,
-            branches: [
-              (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, requirement: Always,
-                body: (steps: [(id: "draw_zero", kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
-              (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, requirement: Always,
-                body: (steps: [(id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
-              (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, requirement: Always,
-                body: (steps: [(id: "draw_two", kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
-            ],
-            otherwise: (steps: [], yields: []),
-          )),
-        ], yields: []), target_bindings: [])),
-      ),
-    ),
-    CreateDelayedTrigger(
-      subject: None,
-      ability: (
-        ability_id: "delayed_02",
-        presentation: OracleLines([2]),
-        trigger: AtBeginningOfNextTurnUpkeep,
-        effect: [Draw(count: 1)],
-      ),
-    ),
-  ],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(
+        spell_filter: (), unless_controller_pays: None,
+      ))),
+    (id: "create_target_draw_trigger", input: Some("target_controller"),
+      kind: Perform(CreateDelayedTrigger(
+        subject: None,
+        affected_player: Some(ProgramInputPlayer),
+        ability: (
+          ability_id: "delayed_01",
+          presentation: OracleLines([1]),
+          trigger: AtBeginningOfNextTurnUpkeep,
+          effect: [],
+          program: Some((body: (steps: [
+            (id: "choose_count", kind: Choose(
+              choice: "draw_count",
+              chooser: AffectedPlayer,
+              optional: false,
+              branches: [
+                (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_zero", kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
+                (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
+                (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, requirement: Always,
+                  body: (steps: [(id: "draw_two", kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
+              ],
+              otherwise: (steps: [], yields: []),
+            )),
+          ], yields: []), target_bindings: [])),
+          modal: None, targeting: None, may: false, intervening_if: None,
+          triggers_only_once: false, max_triggers_per_turn: None,
+        ),
+      ))),
+    (id: "create_caster_draw_trigger",
+      kind: Perform(CreateDelayedTrigger(
+        subject: None,
+        ability: (
+          ability_id: "delayed_02",
+          presentation: OracleLines([2]),
+          trigger: AtBeginningOfNextTurnUpkeep,
+          effect: [Draw(count: 1)],
+        ),
+      ))),
+  ], yields: []), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
   targeting: Some((groups: [(
     min: 1,
     max: 1,
     prompt: "Choose target spell",
-    effect_indices: [0],
+    effect_indices: [],
   )])),
 )

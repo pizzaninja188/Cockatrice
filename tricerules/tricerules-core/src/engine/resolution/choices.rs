@@ -913,10 +913,13 @@ fn branch_draw_recipients(
             })
             .into_iter()
             .collect(),
-        PlayerRecipient::PreviousTargetedSpellController => previous_result
-            .targeted_spell_controller
-            .into_iter()
-            .collect(),
+        PlayerRecipient::ProgramInputPlayer => match previous_result.program_value.as_ref() {
+            Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) => {
+                vec![*player]
+            }
+            Some(crate::state::ProgramValue::TargetedSpellController(None)) | None => Vec::new(),
+            _ => Vec::new(),
+        },
         PlayerRecipient::EachOtherPlayerThanAffectedPlayer => {
             let Some(affected) = top.trigger_context.affected_player else {
                 return Vec::new();

@@ -753,7 +753,7 @@ fn simple_player_recipients(
         PlayerRecipient::SourceController => source_controller.into_iter().collect(),
         PlayerRecipient::ControllerOfTargetGroup { .. }
         | PlayerRecipient::TargetedPlayer { .. }
-        | PlayerRecipient::PreviousTargetedSpellController
+        | PlayerRecipient::ProgramInputPlayer
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::EachOtherPlayerThanAffectedPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
@@ -852,11 +852,17 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             players.sort_by_key(|player| cx.engine.state.apnap_rank(*player));
             players
         }
-        PlayerRecipient::PreviousTargetedSpellController => cx
-            .previous_effect_result
-            .targeted_spell_controller
-            .into_iter()
-            .collect(),
+        PlayerRecipient::ProgramInputPlayer => {
+            match cx.previous_effect_result.program_value.as_ref() {
+                Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) => {
+                    vec![*player]
+                }
+                Some(crate::state::ProgramValue::TargetedSpellController(None)) | None => {
+                    Vec::new()
+                }
+                _ => Vec::new(),
+            }
+        }
         PlayerRecipient::ControllerOfTargetGroup { group_index } => {
             let object_id = cx.targets.iter().zip(cx.target_group_indices).find_map(
                 |(&object_id, &target_group)| (target_group == group_index).then_some(object_id),

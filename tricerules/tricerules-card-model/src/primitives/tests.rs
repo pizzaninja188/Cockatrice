@@ -4638,14 +4638,11 @@ fn issue_241_delayed_trigger_consumes_the_exact_prior_exiled_object() {
 }
 
 #[test]
-fn delayed_trigger_player_capture_requires_the_immediately_preceding_counter() {
-    let counter: super::SpellEffectKind =
-        ron::from_str("CounterTargetSpell(spell_filter: (), unless_controller_pays: None)")
-            .expect("counter target spell effect");
+fn program_input_player_is_rejected_from_legacy_effect_lists() {
     let delayed: super::SpellEffectKind = ron::from_str(
         r#"CreateDelayedTrigger(
           subject: None,
-          affected_player: Some(PreviousTargetedSpellController),
+          affected_player: Some(ProgramInputPlayer),
           ability: (
             ability_id: "delayed_01",
             presentation: Fallback,
@@ -4654,11 +4651,10 @@ fn delayed_trigger_player_capture_requires_the_immediately_preceding_counter() {
           ),
         )"#,
     )
-    .expect("delayed trigger captures the target spell controller");
-    assert!(super::SpellEffectKind::validate_list(&[counter, delayed.clone()]).is_ok());
-
-    let unrelated: super::SpellEffectKind = ron::from_str("Draw(count: 1)").unwrap();
-    assert!(super::SpellEffectKind::validate_list(&[unrelated, delayed]).is_err());
+    .expect("delayed trigger can name an explicit Program input");
+    let error = super::SpellEffectKind::validate_list(&[delayed])
+        .expect_err("primitive lists cannot consume typed Program inputs");
+    assert!(error.contains("ProgramInputPlayer requires an explicit typed Program input"));
 }
 
 #[test]
@@ -10209,6 +10205,21 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
     .expect("fixed-cost counter result binding remains optional");
     assert!(unbound.body.steps[0].outputs.is_empty());
 
+    let fixed_payment = compile(
+        r#"(id: "counter", bind: ["payment"], kind: Perform(CounterTargetSpell(
+            spell_filter: (), unless_controller_pays: Some(2)
+        )))"#,
+    )
+    .expect("the existing fixed-payment result contract remains available");
+    assert_eq!(fixed_payment.slots.len(), 1);
+    assert_eq!(
+        fixed_payment
+            .slot(fixed_payment.body.steps[0].outputs[0])
+            .unwrap()
+            .result_type,
+        crate::primitives::ResultType::CounterPaymentOutcome,
+    );
+
     let plain_counter = compile(
         r#"(id: "counter", bind: [], kind: Perform(CounterTargetSpell(
             spell_filter: (), unless_controller_pays: None
@@ -10256,6 +10267,186 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
     assert!(
         cast_cost_payment.contains("cast-cost payment is outside the typed program input contract"),
         "{cast_cost_payment}"
+    );
+}
+
+#[test]
+fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
+    let program: crate::primitives::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "counter", bind: ["controller"], input: None,
+                kind: Perform(CounterTargetSpell(
+                    spell_filter: (), unless_controller_pays: None,
+                    unless_controller_pays_by_cast_cost: None,
+                ))),
+            (id: "treasure", bind: [], input: Some("controller"),
+                kind: Perform(CreateTokens(
+                    token: "treasure", count: 2, who: ProgramInputPlayer,
+                ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])"#,
+    )
+    .expect("the controller receipt consumer fixture parses");
+    let targeting = crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a target spell".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let owner = crate::ProgramOwnerId::face(
+        "controller_receipt_program_fixture",
+        crate::CardFaceId::new("controller_receipt_program_fixture").unwrap(),
+    );
+    let compiled = crate::primitives::CompiledProgram::compile_with_targeting(
+        owner,
+        crate::primitives::EffectContext::Spell,
+        &program,
+        Some(&targeting),
+    )
+    .expect("a nonpayment counter can publish the controller captured for its legal target");
+
+    assert_eq!(compiled.slots.len(), 1);
+    let [controller_result] = compiled.body.steps[0].outputs.as_slice() else {
+        panic!("the nonpayment counter binds one explicit controller receipt");
+    };
+    assert_eq!(
+        compiled.slot(*controller_result).unwrap().result_type,
+        crate::primitives::ResultType::TargetedSpellController,
+    );
+    assert_eq!(compiled.body.steps[1].input, Some(*controller_result));
+    assert!(compiled.body.steps[1].outputs.is_empty());
+}
+
+#[test]
+fn counter_controller_input_rejects_missing_or_wrong_typed_producers() {
+    let targeting = crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            chooser: crate::primitives::TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a target spell".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    };
+    let owner = crate::ProgramOwnerId::face(
+        "invalid_controller_receipt_fixture",
+        crate::CardFaceId::new("invalid_controller_receipt_fixture").unwrap(),
+    );
+    let compile = |program: &str| {
+        let program: crate::primitives::CardProgram =
+            ron::from_str(program).expect("invalid receipt fixture parses");
+        crate::primitives::CompiledProgram::compile_with_targeting(
+            owner.clone(),
+            crate::primitives::EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+    };
+
+    let missing = compile(
+        r#"(body: (steps: [
+            (id: "counter", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: None,
+            ))),
+            (id: "treasure", kind: Perform(CreateTokens(
+                token: "treasure", count: 2, who: ProgramInputPlayer,
+            ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])"#,
+    )
+    .expect_err("a ProgramInputPlayer consumer cannot infer an ambient receipt");
+    assert!(
+        missing.contains("requires an explicitly bound input result"),
+        "{missing}"
+    );
+
+    let wrong_type = compile(
+        r#"(body: (steps: [
+            (id: "counter", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: None,
+            ))),
+            (id: "draw", bind: ["drawn"], kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "treasure", input: Some("drawn"), kind: Perform(CreateTokens(
+                token: "treasure", count: 2, who: ProgramInputPlayer,
+            ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])"#,
+    )
+    .expect_err("a different typed producer cannot supply a controller receipt");
+    assert!(
+        wrong_type.contains("wrong type for this instruction"),
+        "{wrong_type}"
+    );
+
+    let unsupported_consumer = compile(
+        r#"(body: (steps: [
+            (id: "counter", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: None,
+            ))),
+            (id: "damage", kind: Perform(DamagePlayer(
+                who: ProgramInputPlayer, amount: 1,
+            ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])"#,
+    )
+    .expect_err("controller inputs remain limited to the two approved consumer families");
+    assert!(
+        unsupported_consumer.contains("supported only by CreateTokens and CreateDelayedTrigger"),
+        "{unsupported_consumer}"
+    );
+}
+
+#[test]
+fn spell_program_accepts_subjectless_no_input_delayed_triggers_only() {
+    let body = r#"(steps: [
+        (id: "create_caster_trigger", kind: Perform(CreateDelayedTrigger(
+            subject: None,
+            affected_player: None,
+            ability: (
+                ability_id: "delayed_02",
+                presentation: OracleLines([2]),
+                trigger: AtBeginningOfNextTurnUpkeep,
+                effect: [Draw(who: Controller, count: 1)],
+            ),
+        ))),
+    ], yields: [])"#;
+    let definition = program_fixture(body);
+    crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("a spell Program may retain its subjectless caster-controlled delayed trigger");
+
+    let authored: crate::primitives::AuthoredBlock =
+        ron::from_str(body).expect("the delayed trigger fixture parses");
+    let ability_program = crate::primitives::CardProgram {
+        body: authored,
+        target_bindings: Vec::new(),
+    };
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "delayed_context_fixture".into(),
+        face_id: crate::CardFaceId::new("delayed_context_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+    });
+    let wrong_context = crate::primitives::CompiledProgram::compile(
+        ability_owner,
+        crate::primitives::EffectContext::Ability,
+        &ability_program,
+    )
+    .expect_err("the no-input spell delayed-trigger profile is not an ability profile");
+    assert!(
+        wrong_context.contains("resolution-program operation whitelist"),
+        "{wrong_context}"
     );
 }
 
@@ -12567,9 +12758,9 @@ fn spell_program_rejects_non_controller_context_and_cross_object_choices() {
             "Draw recipient supports only the resolving spell controller",
         ),
         (
-            "draw prior target controller",
-            r#"Draw(who: PreviousTargetedSpellController, count: 1)"#,
-            "Draw recipient supports only the resolving spell controller",
+            "draw ProgramInputPlayer",
+            r#"Draw(who: ProgramInputPlayer, count: 1)"#,
+            "ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger",
         ),
         (
             "draw target-group controller",
@@ -16674,7 +16865,7 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
 }
 
 #[test]
-fn registry_admits_closed_spell_delayed_program_with_captured_target_controller() {
+fn registry_admits_typed_spell_program_with_captured_target_controller() {
     let fixture = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
 
     let registry =
@@ -16682,10 +16873,10 @@ fn registry_admits_closed_spell_delayed_program_with_captured_target_controller(
             let rendered = error.to_string();
             assert!(
                 !rendered.starts_with("ron parse:"),
-                "the positive profile fixture must parse before admission is checked: {rendered}"
+                "the positive spell Program fixture must parse before admission is checked: {rendered}"
             );
             panic!(
-                "the valid direct spell-delayed Program profile is not admitted yet: {rendered}"
+                "the valid typed spell-delayed Program is not admitted: {rendered}"
             );
         });
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
@@ -16695,7 +16886,7 @@ fn registry_admits_closed_spell_delayed_program_with_captured_target_controller(
     });
     let compiled = registry
         .compiled_program_for_owner(&owner)
-        .expect("the direct delayed child owns the compiled Program");
+        .expect("the spell Program delayed child owns the compiled Program");
     assert_eq!(compiled.owner, owner);
     assert_eq!(
         compiled.required_inputs,
@@ -16740,22 +16931,28 @@ fn delayed_spell_program_fixture_with_face_fields(body: &str, types: &str, field
         name: "Delayed Spell Program Fixture", face_id: "delayed_spell_program_fixture",
         mana_cost: "{1}{U}", types: __FACE_TYPES__,
         __FACE_FIELDS__
-        spell_effect: [
-            CounterTargetSpell(spell_filter: (), unless_controller_pays: None,
-                unless_controller_pays_by_cast_cost: None),
-            CreateDelayedTrigger(subject: None,
-                affected_player: Some(PreviousTargetedSpellController),
-                ability: (
-                    ability_id: "delayed_01", presentation: Fallback,
-                    trigger: AtBeginningOfNextTurnUpkeep, effect: [],
-                    program: Some((body: __DELAYED_BODY__, target_bindings: [])),
-                    modal: None, targeting: None, may: false, intervening_if: None,
-                    triggers_only_once: false, max_triggers_per_turn: None,
-                ),
-            ),
-        ],
+        spell_program: Some((body: (steps: [
+            (id: "counter_spell", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            ))),
+            (id: "create_delayed", input: Some("controller"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: None,
+                    affected_player: Some(ProgramInputPlayer),
+                    ability: (
+                        ability_id: "delayed_01", presentation: Fallback,
+                        trigger: AtBeginningOfNextTurnUpkeep, effect: [],
+                        program: Some((body: __DELAYED_BODY__, target_bindings: [])),
+                        modal: None, targeting: None, may: false, intervening_if: None,
+                        triggers_only_once: false, max_triggers_per_turn: None,
+                    ),
+                ))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+        ])),
         targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
-            effect_indices: [0])]))
+            effect_indices: [])]))
     )"#
     .replace("__DELAYED_BODY__", body)
     .replace("__FACE_TYPES__", types)
@@ -16764,7 +16961,7 @@ fn delayed_spell_program_fixture_with_face_fields(body: &str, types: &str, field
 
 fn assert_delayed_spell_program_rejected(fixture: &str, expected_reason: &str) {
     let error = crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
-        .expect_err("the invalid direct face delayed Program profile must be rejected")
+        .expect_err("the invalid typed spell Program must be rejected")
         .to_string();
     assert!(
         !error.starts_with("ron parse:"),
@@ -16777,12 +16974,12 @@ fn assert_delayed_spell_program_rejected(fixture: &str, expected_reason: &str) {
 }
 
 #[test]
-fn registry_reuses_the_direct_delayed_program_profile_for_a_different_body() {
+fn registry_reuses_nested_delayed_program_compilation_for_a_different_body() {
     let body = r#"(steps: [(id: "gain_life",
         kind: Perform(GainLife(who: Controller, amount: 1)))], yields: [])"#;
     let fixture = delayed_spell_program_fixture(body);
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
-        .expect("the exact capture profile admits another generally supported Program body");
+        .expect("the typed capture admits another generally supported Program body");
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
         card_id: "delayed_spell_program_fixture".into(),
         face_id: crate::CardFaceId::new("delayed_spell_program_fixture").unwrap(),
@@ -16790,7 +16987,7 @@ fn registry_reuses_the_direct_delayed_program_profile_for_a_different_body() {
     });
     let compiled = registry
         .compiled_program_for_owner(&owner)
-        .expect("the delayed child retains its exact owner");
+        .expect("the delayed child retains its exact scoped owner");
     assert!(compiled.required_inputs.is_empty());
     assert!(matches!(
         compiled.body.steps.as_slice(),
@@ -16803,133 +17000,46 @@ fn registry_reuses_the_direct_delayed_program_profile_for_a_different_body() {
 }
 
 #[test]
-fn registry_rejects_direct_delayed_program_near_miss_profiles() {
+fn registry_rejects_delayed_programs_without_the_exact_controller_receipt() {
     let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
     let cases = [
         (
             "wrong captured player",
             base.replace(
-                "affected_player: Some(PreviousTargetedSpellController)",
-                "affected_player: None",
+                "affected_player: Some(ProgramInputPlayer)",
+                "affected_player: Some(Controller)",
             ),
-            "requires the captured PreviousTargetedSpellController",
+            "instruction does not accept an input result",
         ),
         (
-            "wrong delayed subject",
+            "missing typed input",
             base.replace(
-                "CreateDelayedTrigger(subject: None,",
-                "CreateDelayedTrigger(subject: Some(PreviousEffectObject),",
+                "(id: \"create_delayed\", input: Some(\"controller\"),",
+                "(id: \"create_delayed\",",
             ),
-            "requires a subjectless delayed trigger",
+            "requires an explicitly bound input result",
         ),
         (
-            "wrong trigger",
+            "wrong typed producer",
             base.replace(
-                "trigger: AtBeginningOfNextTurnUpkeep",
-                "trigger: AtBeginningOfNextEndStep",
+                "(id: \"create_delayed\", input: Some(\"controller\"),",
+                "(id: \"draw\", bind: [\"drawn\"], kind: Perform(Draw(who: Controller, count: 1))),\n            (id: \"create_delayed\", input: Some(\"drawn\"),",
             ),
-            "requires AtBeginningOfNextTurnUpkeep",
+            "wrong type for this instruction",
         ),
         (
-            "paid counter",
+            "paid counter receipt",
             base.replace(
                 "unless_controller_pays: None",
                 "unless_controller_pays: Some(2)",
             ),
-            "must have no payment form",
-        ),
-        (
-            "cast-cost-paid counter",
-            base.replace(
-                "unless_controller_pays_by_cast_cost: None",
-                "unless_controller_pays_by_cast_cost: Some((condition: (group_id: \"kick\", option_id: \"kick_option\"), if_selected: 1, otherwise: 1))",
-            ),
-            "must have no payment form",
-        ),
-        (
-            "wrong producer",
-            base.replace(
-                "CounterTargetSpell(spell_filter: (), unless_controller_pays: None,\n                unless_controller_pays_by_cast_cost: None),",
-                "CounterTargetAbility,",
-            ),
-            "requires an immediately preceding CounterTargetSpell",
-        ),
-        (
-            "non-adjacent producer",
-            base.replace(
-                "unless_controller_pays_by_cast_cost: None),\n            CreateDelayedTrigger",
-                "unless_controller_pays_by_cast_cost: None),\n            Draw(who: Controller, count: 1),\n            CreateDelayedTrigger",
-            ),
-            "requires an immediately preceding CounterTargetSpell",
-        ),
-        (
-            "optional delayed trigger",
-            base.replace("may: false", "may: true"),
-            "requires default delayed-ability metadata",
-        ),
-        (
-            "intervening-if delayed trigger",
-            base.replace("intervening_if: None", "intervening_if: Some(Void)"),
-            "requires default delayed-ability metadata",
-        ),
-        (
-            "trigger-only-once delayed trigger",
-            base.replace("triggers_only_once: false", "triggers_only_once: true"),
-            "requires default delayed-ability metadata",
-        ),
-        (
-            "capped delayed trigger",
-            base.replace(
-                "max_triggers_per_turn: None",
-                "max_triggers_per_turn: Some(1)",
-            ),
-            "requires default delayed-ability metadata",
-        ),
-        (
-            "targeted delayed trigger",
-            base.replace(
-                "modal: None, targeting: None",
-                "modal: None, targeting: Some((groups: []))",
-            ),
-            "requires default delayed-ability metadata",
-        ),
-        (
-            "implicit face targeting",
-            base.replace(
-                "targeting: Some((groups: [(min: 1, max: 1, prompt: \"Choose target spell\",\n            effect_indices: [0])]))",
-                "targeting: None",
-            ),
-            "requires an explicit face-local target group",
-        ),
-        (
-            "minimum other than one",
-            base.replace("min: 1, max: 1", "min: 0, max: 1"),
-            "requires one 1-of-1 StackSpell binding",
-        ),
-        (
-            "maximum other than one",
-            base.replace("min: 1, max: 1", "min: 1, max: 2"),
-            "requires one 1-of-1 StackSpell binding",
-        ),
-        (
-            "target group bound to the wrong effect",
-            base.replace("effect_indices: [0]", "effect_indices: [1]"),
-            "target group references an untargeted effect",
-        ),
-        (
-            "counter group also bound to a stack ability role",
-            base.replace(
-                "            ),\n        ],\n        targeting:",
-                "            ),\n            CounterTargetAbility,\n        ],\n        targeting:",
-            )
-            .replace("effect_indices: [0]", "effect_indices: [0, 2]"),
-            "requires one 1-of-1 StackSpell binding",
+            "wrong type for this instruction",
         ),
     ];
 
     for (label, fixture, expected_reason) in cases {
         let error = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
-            .expect_err("a near-miss delayed Program profile must be rejected")
+            .expect_err("an invalid delayed Program receipt flow must be rejected")
             .to_string();
         assert!(
             !error.starts_with("ron parse:"),
@@ -17028,28 +17138,6 @@ fn registry_keeps_delayed_program_owner_ids_face_local_and_rejects_same_face_col
     assert!(registry.compiled_program_for_owner(&owner).is_some());
 }
 
-#[test]
-fn registry_accepts_the_counter_target_group_among_unrelated_face_groups() {
-    let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
-    let fixture = base
-        .replace(
-            "        spell_effect: [\n            CounterTargetSpell",
-            "        spell_effect: [\n            Exile(subject: Chosen((kind: Creature))),\n            CounterTargetSpell",
-        )
-        .replace(
-            "effect_indices: [0])]))",
-            "effect_indices: [0]), (min: 1, max: 1, prompt: \"Choose target spell\", effect_indices: [1])]))",
-        );
-    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
-        .expect("an unrelated target group does not obscure the counter's unique spell group");
-    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "delayed_spell_program_fixture".into(),
-        face_id: crate::CardFaceId::new("delayed_spell_program_fixture").unwrap(),
-        ability_path: vec![crate::AbilityId::new("delayed_01").unwrap()],
-    });
-    assert!(registry.compiled_program_for_owner(&owner).is_some());
-}
-
 fn class_level_bars(level_two_owner_id: &str, extra_level_two_fields: &str) -> String {
     r#"class_level_bars: [(
         level: 2,
@@ -17066,20 +17154,20 @@ fn class_level_bars(level_two_owner_id: &str, extra_level_two_fields: &str) -> S
 }
 
 #[test]
-fn registry_keeps_nested_delayed_programs_unowned_and_upkeep_inputs_closed() {
+fn registry_rejects_nested_delayed_program_consumers_and_keeps_upkeep_inputs_closed() {
     let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
     let nested = base
         .replace(
-            "CreateDelayedTrigger(subject: None,",
-            "Conditional(condition: Void, effect: CreateDelayedTrigger(subject: None,",
+            "kind: Perform(CreateDelayedTrigger(",
+            "kind: Perform(Conditional(condition: Void, effect: CreateDelayedTrigger(",
         )
         .replace(
-            "            ),\n        ],\n        targeting:",
-            "            )),\n        ],\n        targeting:",
+            "                ))),\n        ], yields: []), target_bindings:",
+            "                )))),\n        ], yields: []), target_bindings:",
         );
     assert_delayed_spell_program_rejected(
         &nested,
-        "resolving-created abilities cannot use authored programs",
+        "ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger",
     );
 
     let generic_upkeep = r#"(id: "generic_upkeep_program_fixture",
@@ -17117,20 +17205,21 @@ fn registry_keeps_nested_delayed_programs_unowned_and_upkeep_inputs_closed() {
 }
 
 #[test]
-fn registry_rejects_duplicate_direct_delayed_ids_across_program_and_legacy_siblings() {
+fn registry_rejects_duplicate_delayed_ids_inside_a_spell_program() {
     let base = delayed_spell_program_fixture(ARCANE_DELAYED_PROGRAM_BODY);
     let duplicate = base.replace(
-        "        ],\n        targeting:",
-        r#"            CreateDelayedTrigger(subject: None, affected_player: None,
+        "        ], yields: []), target_bindings:",
+        r#"            (id: "create_duplicate", kind: Perform(CreateDelayedTrigger(
+                subject: None,
                 ability: (ability_id: "delayed_01", presentation: Fallback,
                     trigger: AtBeginningOfNextTurnUpkeep,
-                    effect: [Draw(who: Controller, count: 1)])),
-        ],
-        targeting:"#,
+                    effect: [Draw(who: Controller, count: 1)]),
+            ))),
+        ], yields: []), target_bindings:"#,
     );
     assert_delayed_spell_program_rejected(
         &duplicate,
-        "duplicate direct delayed child ability id 'delayed_01'",
+        "duplicate spell_program delayed child ability id 'delayed_01'",
     );
 }
 

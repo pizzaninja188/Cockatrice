@@ -1466,8 +1466,7 @@ pub enum SpellEffectKind {
     /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
     /// definition must use a delayed-only trigger condition. `subject: None` is reserved for a
     /// subjectless temporal observer. `affected_player` captures the exact player context needed
-    /// by the delayed ability; PreviousTargetedSpellController is valid only immediately after a
-    /// CounterTargetSpell instruction.
+    /// by the delayed ability through an explicit typed Program input.
     CreateDelayedTrigger {
         #[serde(default = "default_delayed_trigger_subject")]
         subject: Option<EffectSubject>,
@@ -2799,11 +2798,9 @@ pub enum PlayerRecipient {
     /// targeted-opponent permanent-choice cards such as Imperial Edict and Wei Assassins use this
     /// as the chooser for a resolution-time permanent choice.
     TargetedPlayer { group_index: u32, kind: TargetKind },
-    /// The controller of the legal stack spell selected by the immediately preceding
-    /// `CounterTargetSpell`, captured before that instruction may remove the spell. This
-    /// remains defined if the spell is legal but cannot be countered. An Offer You Can't
-    /// Refuse, Strix Serenade, and Swan Song use this recipient.
-    PreviousTargetedSpellController,
+    /// The player stored in an explicit `TargetedSpellController` Program input. Supported only
+    /// for token creation and the affected-player context of an authored delayed trigger.
+    ProgramInputPlayer,
     /// The event-time defending player of the attack that caused this trigger. Scorch Spitter and
     /// similar attack triggers keep that player even if the source leaves before resolution.
     DefendingPlayer,
@@ -3352,6 +3349,53 @@ impl SpellEffectKind {
                 effect,
                 Self::CreateDelayedTrigger {
                     subject: Some(EffectSubject::PreviousEffectObject),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Find the explicit Program-only player input through legacy flat-effect wrappers. A
+    /// primitive list cannot bind typed Program slots, so this recipient is never valid there.
+    pub(crate) fn contains_program_input_player(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| {
+            matches!(
+                effect,
+                Self::DamagePlayer {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::Draw {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::Discard {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::ChoosePermanents {
+                    chooser: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::CreateDelayedTrigger {
+                    affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+                    ..
+                } | Self::LoseLife {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::Mill {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::CreateTokens {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::MayBehold {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::SearchLibrary {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::ChooseCohortPartition {
+                    chooser: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::ShuffleLibrary {
+                    who: PlayerRecipient::ProgramInputPlayer,
                     ..
                 }
             )
@@ -3990,6 +4034,12 @@ impl SpellEffectKind {
         }
         if effects
             .iter()
+            .any(SpellEffectKind::contains_program_input_player)
+        {
+            return Err("ProgramInputPlayer requires an explicit typed Program input".into());
+        }
+        if effects
+            .iter()
             .any(SpellEffectKind::contains_legacy_flat_owner_library_placement)
         {
             return Err(
@@ -4332,26 +4382,6 @@ impl SpellEffectKind {
                     "ShuffleNonlandPermanentsIntoOwnersLibraries requires an authored Program"
                         .into(),
                 );
-            }
-            if matches!(
-                effect,
-                SpellEffectKind::CreateTokens {
-                    who: PlayerRecipient::PreviousTargetedSpellController,
-                    ..
-                }
-            ) && !matches!(previous, Some(SpellEffectKind::CounterTargetSpell { .. }))
-            {
-                return Err("PreviousTargetedSpellController requires an immediately preceding CounterTargetSpell".into());
-            }
-            if matches!(
-                effect,
-                SpellEffectKind::CreateDelayedTrigger {
-                    affected_player: Some(PlayerRecipient::PreviousTargetedSpellController),
-                    ..
-                }
-            ) && !matches!(previous, Some(SpellEffectKind::CounterTargetSpell { .. }))
-            {
-                return Err("PreviousTargetedSpellController requires an immediately preceding CounterTargetSpell".into());
             }
             let previous_cardinality = previous
                 .map(produced_object_cardinality)
@@ -5837,11 +5867,11 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
-                if affected_player.is_some_and(|recipient| {
-                    recipient != PlayerRecipient::PreviousTargetedSpellController
-                }) {
+                if affected_player
+                    .is_some_and(|recipient| recipient != PlayerRecipient::ProgramInputPlayer)
+                {
                     return Err(
-                        "CreateDelayedTrigger only captures PreviousTargetedSpellController".into(),
+                        "CreateDelayedTrigger affected_player requires an explicit ProgramInputPlayer".into(),
                     );
                 }
                 if !ability.trigger.is_delayed_only() {
@@ -5850,10 +5880,7 @@ impl SpellEffectKind {
                 if ability.program.is_some() {
                     let spell_captured_player_profile = matches!(context, EffectContext::Spell)
                         && subject.is_none()
-                        && matches!(
-                            affected_player,
-                            Some(PlayerRecipient::PreviousTargetedSpellController)
-                        )
+                        && matches!(affected_player, Some(PlayerRecipient::ProgramInputPlayer))
                         && matches!(
                             ability.trigger,
                             TriggerCondition::AtBeginningOfNextTurnUpkeep

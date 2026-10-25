@@ -6,24 +6,28 @@
   face_id: "swan_song",
   mana_cost: "{U}",
   types: ["Instant"],
-  spell_effect: [
-    CounterTargetSpell(
-      spell_filter: (any_of: Some([
-        (card_type: Some(Enchantment)),
-        (card_type: Some(Instant)),
-        (card_type: Some(Sorcery)),
-      ])),
-    ),
-    CreateTokens(
-      token: "bird_u_2_2_flying",
-      count: 1,
-      who: PreviousTargetedSpellController,
-    ),
-  ],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(
+        spell_filter: (any_of: Some([
+          (card_type: Some(Enchantment)),
+          (card_type: Some(Instant)),
+          (card_type: Some(Sorcery)),
+        ])),
+      ))),
+    (id: "create_bird", input: Some("target_controller"),
+      kind: Perform(CreateTokens(
+        token: "bird_u_2_2_flying",
+        count: 1,
+        who: ProgramInputPlayer,
+      ))),
+  ], yields: []), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
   targeting: Some((groups: [(
     min: 1,
     max: 1,
     prompt: "Choose target enchantment, instant, or sorcery spell",
-    effect_indices: [0],
+    effect_indices: [],
   )])),
 )

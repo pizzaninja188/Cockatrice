@@ -457,23 +457,20 @@ remains available to typed result/count expressions and other operations. The de
 `choice public-zones` fixture exercises the cross-zone candidate projection without moving a card
 or changing priority.
 
-The bounded 2026-10-20 Arcane Denial increment admits one exact delayed-child Program profile on a
-face spell. A direct top-level `CreateDelayedTrigger` immediately follows a `CounterTargetSpell`
-whose `unless_controller_pays` and `unless_controller_pays_by_cast_cost` are both `None`; the child
-is subjectless, captures `PreviousTargetedSpellController`, triggers at
-`AtBeginningOfNextTurnUpkeep`, and keeps its default nonmodal, untargeted, mandatory, no-intervening-if,
-not-once, uncapped metadata. Its face has an explicit `TargetingDef`: the group associated with that
-counter has one `StackSpell` binding and `min: 1, max: 1`; other face groups are not treated as that
-binding. A private `captured_delayed_affected_player` owner-input descriptor supplies
-`TriggerAffectedPlayer` from the delayed capture without broadening ordinary trigger input rules. The
-child's one-segment ability path is reserved against direct delayed siblings and same-face printed or
-class activated, triggered, and level-up owners; another face may reuse the local ID. Its body goes
-through the normal finite Program compiler, with no Arcane-specific card, branch-ID, draw-count, or
-body whitelist. The runtime offer exposes the three actual branch labels, each `OracleLines([1])`,
-under `Spell -> Ability(delayed_01) -> ResolutionBranch(draw_*)`; Twincast proofs show ordinary spell
-copies bind their own face/child owner and captured target controller. `delayed_02` is unchanged as
-the legacy delayed ability with `OracleLines([2])`. The behavior follows CR 503.1, 603.3b,
-603.7a-b/d, 121.2 and 707.10. This adds no protobuf, relay, or client contract.
+The 2026-10-24 counter-controller migration ports An Offer You Can't Refuse, Swan Song, and Arcane
+Denial to finite spell Programs. A nonpayment `CounterTargetSpell` may bind one optional
+`TargetedSpellController` result only in a spell Program, and only its explicit `StackSpell` target
+group supplies the captured controller. A still-targeted but uncounterable spell publishes that
+controller; a skipped counter instruction publishes typed `None`, so its downstream token or
+subjectless delayed-trigger consumer is a no-op rather than falling back to the caster. This remains
+distinct from a whole resolving spell that fizzles under CR 608.2b. `ProgramInputPlayer` is restricted
+to `CreateTokens` recipients and subjectless `CreateDelayedTrigger` affected players in spell
+Programs. Fixed-payment counters keep their `CounterPaymentOutcome` contract. Arcane Denial's
+`delayed_01` child remains an authored Program with `TriggerAffectedPlayer`; `delayed_02` remains a
+separate caster-controlled delayed draw. Child owner identity, per-copy binding, exact target-group
+scope, and delayed-trigger metadata validation remain enforced. The three former ambient
+`PreviousTargetedSpellController` readers and list-adjacency admission paths are retired. This ports
+no new card identity and adds no protobuf, relay, or client contract.
 
 The bounded 2026-10-20 Combustible Gearhulk increment admits one narrow composition: an optional,
 cost-free `Choose` by `TargetedPlayer(OpponentPlayer)` is paired with exactly one target-bound
