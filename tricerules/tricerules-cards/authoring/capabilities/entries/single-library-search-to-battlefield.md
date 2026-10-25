@@ -8,13 +8,20 @@
 
 ## Behavior and limits
 
-- **Behavior:** A resolving spell or triggered Program can offer one or two cards from its
-  controller's library that match an authored filter; selected cards go onto the battlefield
-  tapped, then the library is shuffled.
+- **Behavior:** Existing resultless spell and triggered Program paths can offer one or two cards
+  from the controller's library that match an authored filter; selected cards go onto the
+  battlefield tapped, then the library is shuffled. A separate bound typed Program profile returns
+  a generic `PermanentSelection` for at most one selected permanent, with authored tapped, shuffle,
+  and reveal settings independent of the captured identity.
 - **Composition and prerequisites:** One `SearchLibrary` effect with a static card filter, a
   battlefield destination whose `tapped` value is true, and `shuffle: true`. The spell scenarios
   observe a zero-to-one choice bound and select one result. Larval Scoutlander's ETB Program
   observes a zero-to-two bound and also covers choosing no result after paying its sacrifice cost.
+  The typed resultful profile requires a mandatory Controller search from fixed `Library`, a
+  permanent-proving type predicate in every query OR leaf, bounds whose feasible effective maximum
+  is one, and a direct `Battlefield` destination. It can bind a narrower query without narrowing the
+  generic result filter and can feed `Untap(PreviousEffectObject)` or the existing exact
+  `MayBehold` success leaf.
 - **Boundaries:** Existing spell scenarios cover a `BasicLand` filter and an OR of four land
   subtypes; the latter admits a nonbasic land carrying one of those subtypes. Larval Scoutlander
   covers a `BasicLand` filter, up to two tapped results, controller-only library selection, an
@@ -27,18 +34,19 @@
   serial entry choices and verifies that the caller resumes after both choices, the remaining
   instruction runs once, and one shuffle and one search-observer event complete the search.
 - **Near misses:** These scenarios do not cover split destinations, a hand or library destination,
-  untapped entry, reveal requirements, or a conditional destination. The Larval scenarios reject
+  untapped entry, or a conditional destination. The shipped-card scenarios do not cover reveal
+  requirements. The Larval scenarios reject
   wrong-actor and ineligible-candidate answers, but do not prove full library-identity secrecy or
   shuffle randomness.
 
 ## Runtime support
 
-- **Status:** `Supported` for one-result spell searches and the two-result triggered-Program form,
-  all with tapped battlefield entry and the tested filters described above.
+- **Status:** `Supported` for the existing one-result spell searches and two-result
+  triggered-Program form described above, plus the typed bound Program result exercised below.
 - **Typed symbols:** `SpellEffectKind::SearchLibrary`, `SearchDestination::Battlefield`, and
   `ZoneCardFilter` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`;
-  validator: `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate`;
+  validator/profile: `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::typed_resultful_battlefield_search_result_type`;
   engine choice producer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#search_library`;
   selection and destination consumer:
   `tricerules/tricerules-core/src/engine/custom_resolution/library_search.rs#finish_library_search`.
@@ -48,6 +56,17 @@
   selections without changing the pending offer, tapped results, one shuffle, and one observer. This
   checks bound/prompt capacity only; it does not prove full library-identity secrecy or shuffle
   randomness.
+- Test-only typed fixture coverage includes `typed_creature_battlefield_search_binds_exact_revealed_result_with_count_two_and_max_one`,
+  which offers two matching Creatures from a nonempty library for a count-two, bounds-zero-to-one search. The private
+  offer reveals neither candidate; after one is selected, only that Creature is revealed and enters
+  tapped. Its exact post-entry generation remains in the bound result through a parked Behold choice,
+  and Untap consumes that identity. The authored search does not shuffle. The paired
+  `typed_creature_battlefield_search_no_match_keeps_hidden_library_cards_private_and_runs_tail`
+  scenario has no eligible candidates in a nonempty library, reveals nothing, and resumes the tail
+  once with an empty result.
+- The generic `resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices`
+  fixture is engine regression evidence for serial entry choices and tail resumption, not a separate
+  shipped-card semantic claim.
 
 ## Generator recognition
 
@@ -88,9 +107,7 @@
   `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_search_prompt_hides_eligible_basic_count` — `Exercised`: same-sized nonempty controller Libraries with zero, one, or two eligible Basics retain the 0..2 offer and public up-to-two prompt/log; nonmatching and opponent-library answers are rejected without replacing the pending offer, then selected cards enter tapped and the search emits one shuffle and one observer.
 - `scenario issue_423_station_thresholds::issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search` —
   `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs#issue_423_larval_scoutlander_decline_and_no_eligible_cost_skip_the_search` — `Exercised`: declining or lacking an eligible sacrifice skips the search branch.
-- `scenario resultless_battlefield_search::resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices` —
-  `tricerules/tricerules-core/tests/scenario/resultless_battlefield_search.rs#resultless_two_card_battlefield_search_retains_cursor_across_both_entry_choices` — `Exercised`: two selected cards each receive an entry choice; after both answers, the search resumes at its tail, shuffles once, and emits one search-observer event.
-- **Uncovered behavior:** Split destinations, destination alternatives, reveal presentation, and shuffle randomness.
+- **Uncovered behavior:** Split destinations, destination alternatives, and shuffle randomness.
 - **Inapplicable cases:** `N/A` — the two existing spell definitions do not have trigger behavior; Larval Scoutlander is a triggered Program search.
 
 ## Presentation prerequisites
@@ -102,16 +119,21 @@
 
 ## Review provenance
 
-- **Reviewed revision:** `0ce073fdee9238fb516c5f7d36287d3b8659d076`.
+- **Reviewed revision:** `d4fa33fdba1926f5b0f699bdcdacec6aaf7aec14`.
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/rampant_growth.ron`
   - `tricerules/tricerules-cards/data/farseek.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/rampant_growth.json`
   - `tricerules/tricerules-cards/authoring/review-maps/farseek.json`
+  - `tricerules/tricerules-cards/authoring/review-maps/larval_scoutlander.json`
+  - `tricerules/tricerules-cards/data/generated/l/larval_scoutlander.ron`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_search_lands.rs`
+  - `tricerules/tricerules-core/tests/scenario/issue_423_station_thresholds.rs`
   - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`
   - `tricerules/tricerules-core/src/engine/custom_resolution/library_search.rs`
   - `tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs`
-- **Review note:** Source and assertions were inspected, not run. No client acceptance is claimed.
+- **Review note:** The linked card definitions, maps, and card-specific semantic scenarios were
+  inspected at this revision. Generic typed and resultless Program fixtures are engine regression
+  evidence, not additional shipped-card semantic claims. No client acceptance is claimed.

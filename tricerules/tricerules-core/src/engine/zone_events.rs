@@ -107,11 +107,14 @@ impl GameEngine {
         let Ok((instruction, effect)) = self.current_compiled_perform_instruction(program) else {
             return false;
         };
+        let Some(expected_result_type) = effect.typed_resultful_battlefield_search_result_type()
+        else {
+            return false;
+        };
         let [output] = instruction.outputs.as_slice() else {
             return false;
         };
-        if outputs.as_slice() != [*output] || !effect.is_typed_resultful_direct_battlefield_search()
-        {
+        if outputs.as_slice() != [*output] {
             return false;
         }
         let Some(compiled) = self.registry.compiled_program_for_owner(&program.owner) else {
@@ -120,26 +123,7 @@ impl GameEngine {
         let Some(slot) = compiled.slot(*output) else {
             return false;
         };
-        matches!(
-            &slot.result_type,
-            tricerules_card_model::primitives::ResultType::PermanentSelection {
-                chooser: tricerules_card_model::primitives::PlayerRecipient::Controller,
-                filter,
-                cardinality: tricerules_card_model::primitives::Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            } if filter.as_ref()
-                == &tricerules_card_model::primitives::TargetFilter {
-                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
-                    controller: tricerules_card_model::primitives::TargetController::You,
-                    permanent_types: vec![
-                        tricerules_card_model::primitives::PermanentTypeFilter::Land,
-                    ],
-                    required_supertypes: vec!["Basic".into()],
-                    ..Default::default()
-                }
-        )
+        slot.result_type == expected_result_type
     }
 
     pub(super) fn is_typed_resultful_library_search_entry(

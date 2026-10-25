@@ -1890,7 +1890,9 @@ impl Compiler<'_> {
                         None
                     };
                     let mut result_types = if instruction.bind.is_empty()
-                        && is_resultful_direct_battlefield_search(effect)
+                        && effect
+                            .typed_resultful_battlefield_search_result_type()
+                            .is_some()
                     {
                         validate_resultless_direct_battlefield_library_search(effect, self.context)?
                     } else if !instruction.bind.is_empty()
@@ -2021,7 +2023,9 @@ impl Compiler<'_> {
                         } if !is_resultless_direct_top_library_search(effect)
                             && !is_resultless_direct_hand_library_search(effect)
                             && !is_resultless_direct_battlefield_library_search(effect)
-                            && !is_resultful_direct_battlefield_search(effect)
+                            && effect
+                                .typed_resultful_battlefield_search_result_type()
+                                .is_none()
                             && !is_resultless_conditional_top_search(effect)
                     ) || matches!(
                         effect.as_ref(),
@@ -2561,11 +2565,13 @@ impl Compiler<'_> {
                 &instruction.kind,
                 InstructionKind::Perform(effect)
                     if !instruction.bind.is_empty()
-                        && is_resultful_direct_battlefield_search(effect.as_ref())
+                        && effect
+                            .typed_resultful_battlefield_search_result_type()
+                            .is_some()
             ) {
                 let [output] = outputs.as_slice() else {
                     return Err(format!(
-                        "instruction '{}' must bind its direct Battlefield search result",
+                        "instruction '{}' must bind exactly one typed Battlefield search result",
                         instruction.id
                     ));
                 };
@@ -3203,36 +3209,17 @@ fn validate_return_to_owners_hand_input(
     Ok(())
 }
 
-fn direct_basic_land_search_result_type() -> ResultType {
-    ResultType::PermanentSelection {
-        chooser: PlayerRecipient::Controller,
-        filter: Box::new(TargetFilter {
-            kind: TargetKind::AnyPermanent,
-            controller: super::TargetController::You,
-            permanent_types: vec![super::PermanentTypeFilter::Land],
-            required_supertypes: vec!["Basic".into()],
-            ..TargetFilter::default()
-        }),
-        cardinality: Cardinality {
-            min: 0,
-            max: Some(1),
-        },
-    }
-}
-
-fn is_resultful_direct_battlefield_search(effect: &SpellEffectKind) -> bool {
-    effect.is_typed_resultful_direct_battlefield_search()
-}
-
 fn validate_resultful_direct_battlefield_search(
     effect: &SpellEffectKind,
     context: EffectContext,
 ) -> Result<Vec<ResultType>, String> {
-    if !is_resultful_direct_battlefield_search(effect) {
-        return Err("typed direct Battlefield SearchLibrary result supports only a mandatory controller one-BasicLand Library search with bounds 0..1, no reveal, and shuffle".into());
-    }
+    let result_type = effect
+        .typed_resultful_battlefield_search_result_type()
+        .ok_or_else(|| {
+            "typed Battlefield SearchLibrary result must be a bounded, mandatory Controller search for a permanent card entering the Battlefield".to_string()
+        })?;
     effect.validate_typed_program_search_result(context)?;
-    Ok(vec![direct_basic_land_search_result_type()])
+    Ok(vec![result_type])
 }
 
 fn is_search_result_behold_consumer(effect: &SpellEffectKind) -> bool {
@@ -3267,14 +3254,20 @@ fn validate_search_result_input(
         return Ok(());
     }
     let invalid = || {
-        "direct Battlefield search consumer must use its bound one-BasicLand search result"
+        "direct Battlefield search consumer must use its bound singleton permanent search result"
             .to_string()
     };
     let input = input.ok_or_else(invalid)?;
-    if !search_result_slots.contains(&input)
-        || slots.get(input.0 as usize).map(|slot| &slot.result_type)
-            != Some(&direct_basic_land_search_result_type())
-    {
+    let singleton_permanent_search_result = slots.get(input.0 as usize).is_some_and(|slot| {
+        matches!(
+            &slot.result_type,
+            ResultType::PermanentSelection {
+                cardinality: Cardinality { max: Some(1), .. },
+                ..
+            }
+        )
+    });
+    if !search_result_slots.contains(&input) || !singleton_permanent_search_result {
         return Err(invalid());
     }
     Ok(())
@@ -4509,7 +4502,9 @@ fn validate_and_result_types(
             selection_bounds: Some(_),
             destination: SearchDestination::Battlefield { .. },
             ..
-        } if is_resultful_direct_battlefield_search(effect) =>
+        } if effect
+            .typed_resultful_battlefield_search_result_type()
+            .is_some() =>
         {
             validate_resultful_direct_battlefield_search(effect, context)
         }

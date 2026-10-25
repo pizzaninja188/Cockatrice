@@ -668,7 +668,7 @@ constraint, cast-cost sizing, conditional destination or result ID, and either a
 unrestricted search uses bounds 1..1 when candidates exist. Both preserve the authored reveal flag.
 Fountainport Bell, Campus Guide and Spider-Bot use `TopOfLibrary`; Environmental Scientist,
 Strixhaven Skycoach and Tempest Hawk use `Hand`. Demonic Tutor is an unrestricted private Hand
-search, and Fierce Empath uses the Creature/minimum-mana-value filter. The `Battlefield` form remains
+search, and Fierce Empath uses the Creature/minimum-mana-value filter. The unbound resultless direct `Battlefield` form remains
 limited to `BasicLand`, tapped entry, and no reveal. It supports the existing bounds 0..1 used by
 Lumbering Worldwagon's ETB and attack triggers and Solemn Simulacrum's ETB, and bounds 0..2 for
 Larval Scoutlander's ETB search. For bounded searches, publish `min(bounds.max, count)` as the
@@ -682,20 +682,24 @@ selected incarnation moves, the remaining library shuffles once, and the caller 
 instruction (CR 903.9b). A selected Battlefield card follows the normal entry-replacement and
 entry-trigger pipeline before the search resumes its caller (CR 614.12, 616.1, 608.2m).
 
-One explicitly bound Battlefield profile also returns a typed `PermanentSelection`: mandatory
-Controller search, count 1, `BasicLand`, fixed `Library`, tapped `Battlefield`, bounds 0..1, shuffle
-true, reveal false, and no search slots, selection constraint, conditional destination, or
-cast-cost sizing. Its result type is chooser `Controller`, filter `AnyPermanent/You/Land` with the
-`Basic` supertype, cardinality 0..1. Capture includes only selected objects that commit to the
-Battlefield, after entry replacements, with their exact object ID, post-entry generation, and
-destination controller; zero selection or an entry that does not commit yields an empty selection.
-The bound result may remain unused. A consumer must name its exact slot: `Untap(PreviousEffectObject)`
-can use it directly, while `MayBehold` can use it only with its exact
-`if_beheld: [Untap(PreviousEffectObject)]` child. Elven Passage uses the latter and keeps the result
-while Behold is parked; Fabled Passage evaluates its four-land condition after the search and
-untaps only the captured entrant. No eligible Behold object means no prompt and the Program tail
-continues. Behold of a battlefield Elf does not reveal it; choosing an Elf from hand reveals that
-one card (CR 701.4a, 701.20, 701.23b, 701.26b, 608.2c).
+An explicitly bound, resultful direct `Battlefield` profile returns a typed `PermanentSelection`.
+It requires a mandatory Controller search from fixed `Library`, a positive permanent card-type
+predicate on every terminal query leaf (`BasicLand`, `Land`, `Enchantment`, `Creature`, `Artifact`,
+`Planeswalker`, `Battle`, or `NonlandPermanent`), fixed `Battlefield` destination, selection bounds,
+and no search slots, selection constraint, conditional destination, or optional flag. Valid query
+refinements remain in the search. Each executable count branch must be positive and feasible under
+the bounds, and its largest effective maximum must be one; static and cast-cost-dependent counts
+are supported. The authored tapped, shuffle, and reveal settings are independent of result identity.
+The result type uses chooser `Controller`, filter `AnyPermanent/You`, and cardinality 0..1, even if
+the query is narrower or its minimum asks for one card. Only selected objects that commit to the
+Battlefield are captured, after entry replacements, with their exact object ID, post-entry
+generation, and destination controller; no selection produces an empty result. A consumer must
+name the exact bound slot: `Untap(PreviousEffectObject)` can use it directly, while `MayBehold` can
+use it only with its exact `if_beheld: [Untap(PreviousEffectObject)]` child. Elven Passage uses the
+latter and keeps the result while Behold is parked; Fabled Passage evaluates its four-land condition
+after the search and untaps only the captured entrant. No eligible Behold object means no prompt and
+the Program tail continues. Behold of a battlefield Elf does not reveal it; choosing an Elf from
+hand reveals that one card (CR 701.4a, 701.20, 701.23b, 701.26b, 608.2c).
 
 Embermouth Sentinel's `triggered_01` is the current conditional-destination use: its optional
 controller `Choose` has one free `Always` branch, whose resultless search checks one

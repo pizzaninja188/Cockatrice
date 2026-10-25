@@ -68,6 +68,39 @@ const TYPED_BATTLEFIELD_SEARCH_BEHOLD_FIXTURE: &str = r#"(
   ], yields: []), target_bindings: [])),
 )"#;
 
+const TYPED_CREATURE_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
+  id: "direct_battlefield_search_fixture",
+  name: "Direct Battlefield Search Fixture",
+  face_id: "direct_battlefield_search_fixture",
+  mana_cost: "{0}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "search_creature", bind: ["found_creature"], input: None,
+      kind: Perform(SearchLibrary(
+        who: Controller, optional: false, count: 2, count_by_cast_cost: None,
+        filter: Some((card_type: Some(Creature))),
+        selection_constraint: None, slots: [], zones: Fixed([Library]),
+        destination: Battlefield(tapped: true), conditional_destination: None,
+        shuffle: false, reveal: true,
+        selection_bounds: Some((min: 0, max: 1)),
+      ))),
+    (id: "scry_after_search", bind: [], input: None,
+      kind: Perform(Scry(count: 0))),
+    (id: "behold_elf", bind: [], input: Some("found_creature"),
+      kind: Perform(MayBehold(
+        who: Controller, choice_id: "behold_elf",
+        hand_filter: (required_subtypes: ["Elf"]),
+        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+        if_beheld: [Untap(subject: PreviousEffectObject)],
+      ))),
+    (id: "tail_treasure", bind: [], input: None,
+      kind: Perform(CreateTokens(
+        token: "treasure", count: 1, who: Controller, tapped: false,
+        sacrifice_timing: None,
+      ))),
+  ], yields: []), target_bindings: [])),
+)"#;
+
 const TEST_BASIC_LAND_CREATURE_WITH_ENTRY_CHOICE: &str = r#"(
   id: "test_basic_land_creature_with_entry_choice",
   name: "Test Basic Land Creature with Entry Choice",
@@ -328,6 +361,19 @@ fn test_engine_with_search_fixture(seed: u64, search_fixture: &str) -> GameEngin
         .expect("two-player resultless Battlefield-search engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
+}
+
+fn move_fixture_land_creature_to_graveyard(engine: &mut GameEngine) -> u32 {
+    let object_id =
+        take_oid_from_library_or_hand(engine, 0, "test_basic_land_creature_with_entry_choice");
+    engine.state.players[0].graveyard.push(object_id);
+    engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
+    *engine
+        .state
+        .zone_change_generation
+        .entry(object_id)
+        .or_default() += 1;
+    object_id
 }
 
 fn shuffle_log_count(batch: &tricerules_proto::ruled::v1::RuledEventBatch, player: i32) -> usize {
@@ -1487,6 +1533,124 @@ fn typed_battlefield_search_without_eligible_elf_skips_behold_and_resumes_tail_o
         setup.engine.state.stack[0].source_permanent_id,
         Some(setup.wan)
     );
+}
+
+#[test]
+fn typed_creature_battlefield_search_binds_exact_revealed_result_with_count_two_and_max_one() {
+    let mut engine =
+        test_engine_with_search_fixture(284_211, TYPED_CREATURE_BATTLEFIELD_SEARCH_FIXTURE);
+    move_fixture_land_creature_to_graveyard(&mut engine);
+    let selected = inject_library_card(&mut engine, 0, "test_elf_permanent");
+    let alternative =
+        inject_library_card(&mut engine, 0, "test_basic_land_creature_with_entry_choice");
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&selected)
+        .copied()
+        .unwrap_or(0);
+
+    let search_offer = cast_fixture(&mut engine);
+    let search = find_resolution_choice(&search_offer).expect("Creature library-search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!((search.min, search.max), (0, 1));
+    assert_eq!(search.candidate_object_ids.len(), 2);
+    assert!(search.candidate_object_ids.contains(&selected));
+    assert!(search.candidate_object_ids.contains(&alternative));
+    assert_no_search_reveal(&search_offer);
+
+    let search_completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("choose the exact nonland Creature result");
+    assert_eq!(engine.state.objects[&selected].zone, Zone::Battlefield);
+    assert!(engine.state.objects[&selected].tapped);
+    assert_eq!(engine.state.objects[&alternative].zone, Zone::Library);
+    assert!(engine.state.players[0].library.contains(&alternative));
+    assert_eq!(
+        engine.state.zone_change_generation[&selected],
+        generation_before + 1
+    );
+    let reveal = search_completion
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+            _ => None,
+        })
+        .expect("reveal:true publishes the selected search result after the private offer");
+    assert_eq!(reveal.cards.len(), 1);
+    assert_eq!(reveal.cards[0].object_id, selected);
+    assert_eq!(reveal.cards[0].card_id, "test_elf_permanent");
+
+    let behold = find_resolution_choice(&search_completion).expect("Behold choice");
+    assert_eq!(behold.choice_kind(), ChoiceKind::Behold);
+    assert!(behold.candidate_object_ids.contains(&selected));
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the search result remains bound while the later Behold choice is pending");
+    let serialized_pending = serde_json::to_value(pending).expect("pending choice serializes");
+    let program = &serialized_pending["continuation"]["BeholdChoice"]["stack"]["program"];
+    let receipt = &program["slots"][0]["PermanentSelection"][0];
+    assert_eq!(receipt["object_id"].as_u64(), Some(selected as u64));
+    assert_eq!(
+        receipt["zone_change_generation"].as_u64(),
+        Some(generation_before + 1),
+        "the slot records the exact post-search incarnation passed to PreviousEffectObject"
+    );
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("behold the searched Elf and resolve Untap");
+    assert!(!engine.state.objects[&selected].tapped);
+    assert_eq!(
+        engine.state.zone_change_generation[&selected],
+        generation_before + 1,
+        "using PreviousEffectObject does not change the selected object's incarnation"
+    );
+    assert_eq!(treasure_count(&engine), 1, "the Program tail runs once");
+    assert_eq!(shuffle_log_count(&search_completion, 0), 0);
+    assert_eq!(shuffle_log_count(&completion, 0), 0);
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn typed_creature_battlefield_search_no_match_keeps_hidden_library_cards_private_and_runs_tail() {
+    let mut engine =
+        test_engine_with_search_fixture(284_212, TYPED_CREATURE_BATTLEFIELD_SEARCH_FIXTURE);
+    move_fixture_land_creature_to_graveyard(&mut engine);
+    ensure_in_hand(&mut engine, 0, "direct_battlefield_search_fixture");
+    assert!(
+        !engine.state.players[0].library.is_empty(),
+        "the no-match case uses a nonempty library"
+    );
+    assert!(engine.state.players[0]
+        .library
+        .iter()
+        .all(|object_id| engine.state.objects[object_id].card_id == "forest"));
+
+    let search_offer = cast_fixture(&mut engine);
+    let search = find_resolution_choice(&search_offer).expect("empty Creature search offer");
+    assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!((search.min, search.max), (0, 1));
+    assert!(search.candidate_object_ids.is_empty());
+    assert_no_search_reveal(&search_offer);
+
+    let completion = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline an empty optional selection");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        treasure_count(&engine),
+        1,
+        "the empty result runs the tail once"
+    );
+    assert!(completion
+        .events
+        .iter()
+        .all(|event| { !matches!(event.ev, Some(Ev::CardsRevealed(_))) }));
+    assert_eq!(shuffle_log_count(&completion, 0), 0);
 }
 
 #[test]

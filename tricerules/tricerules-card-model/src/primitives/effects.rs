@@ -6,8 +6,9 @@ use super::{
     ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
     GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
     PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
-    TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    ResultType, SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter,
+    TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -2240,6 +2241,21 @@ impl ZoneCardFilter {
         Ok(())
     }
 
+    pub(crate) fn proves_permanent_library_query(&self) -> bool {
+        self.validate().is_ok() && self.proves_permanent_library_query_tree()
+    }
+
+    fn proves_permanent_library_query_tree(&self) -> bool {
+        match &self.any_of {
+            Some(branches) => branches
+                .iter()
+                .all(Self::proves_permanent_library_query_tree),
+            None => self
+                .card_type
+                .is_some_and(CardTypeFilter::proves_permanent_library_match),
+        }
+    }
+
     fn validate_tree(&self) -> Result<(), String> {
         if let Some(branches) = &self.any_of {
             if branches.len() < 2 {
@@ -4137,7 +4153,7 @@ impl SpellEffectKind {
         self.validate_inner(context, false)
     }
 
-    pub fn is_typed_resultful_direct_battlefield_search(&self) -> bool {
+    pub fn typed_resultful_battlefield_search_result_type(&self) -> Option<ResultType> {
         let Self::SearchLibrary {
             who,
             optional,
@@ -4149,42 +4165,69 @@ impl SpellEffectKind {
             zones,
             destination,
             conditional_destination,
-            shuffle,
-            reveal,
             selection_bounds,
+            ..
         } = self
         else {
-            return false;
+            return None;
         };
 
-        *who == PlayerRecipient::Controller
-            && !*optional
-            && *count == 1
-            && count_by_cast_cost.is_none()
-            && filter.as_ref().is_some_and(|filter| {
-                *filter
-                    == ZoneCardFilter {
-                        card_type: Some(CardTypeFilter::BasicLand),
-                        ..ZoneCardFilter::default()
-                    }
-            })
-            && selection_constraint.is_none()
-            && slots.is_empty()
-            && *zones == SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
-            && *destination == (SearchDestination::Battlefield { tapped: true })
-            && conditional_destination.is_none()
-            && *shuffle
-            && !*reveal
-            && *selection_bounds == Some(SearchSelectionBounds { min: 0, max: 1 })
+        let bounds = selection_bounds.as_ref()?;
+        let (first_count, second_count) = match count_by_cast_cost {
+            Some(conditional) => (conditional.if_selected, Some(conditional.otherwise)),
+            None => (*count, None),
+        };
+        if *count == 0
+            || first_count == 0
+            || bounds.min > bounds.max
+            || bounds.min > first_count.min(bounds.max)
+        {
+            return None;
+        }
+        let first_effective_max = first_count.min(bounds.max);
+        let effective_max = if let Some(second_count) = second_count {
+            let second_effective_max = second_count.min(bounds.max);
+            if second_count == 0 || bounds.min > second_effective_max {
+                return None;
+            }
+            first_effective_max.max(second_effective_max)
+        } else {
+            first_effective_max
+        };
+
+        if *who != PlayerRecipient::Controller
+            || *optional
+            || !filter
+                .as_ref()
+                .is_some_and(ZoneCardFilter::proves_permanent_library_query)
+            || selection_constraint.is_some()
+            || !slots.is_empty()
+            || *zones != SearchZoneSelection::Fixed(vec![CardSearchZone::Library])
+            || !matches!(destination, SearchDestination::Battlefield { .. })
+            || conditional_destination.is_some()
+            || effective_max != 1
+        {
+            return None;
+        }
+
+        Some(ResultType::PermanentSelection {
+            chooser: PlayerRecipient::Controller,
+            filter: Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            }),
+            cardinality: super::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        })
     }
 
     pub(crate) fn validate_typed_program_search_result(
         &self,
         context: EffectContext,
     ) -> Result<(), String> {
-        if !self.is_typed_resultful_direct_battlefield_search() {
-            return Err("typed direct Battlefield SearchLibrary result supports only a mandatory controller one-BasicLand Library search with bounds 0..1, no reveal, and shuffle".into());
-        }
         self.validate_inner(context, true)
     }
 

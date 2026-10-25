@@ -1299,6 +1299,29 @@ pub enum CardTypeFilter {
     Noncreature,
 }
 
+impl CardTypeFilter {
+    /// Whether this positive card-type predicate proves that every matching library card is a
+    /// permanent. Keep the match exhaustive so adding a card-type variant requires an explicit
+    /// profile decision.
+    pub(crate) const fn proves_permanent_library_match(self) -> bool {
+        match self {
+            Self::BasicLand
+            | Self::Land
+            | Self::Enchantment
+            | Self::Creature
+            | Self::Artifact
+            | Self::Planeswalker
+            | Self::Battle
+            | Self::NonlandPermanent => true,
+            Self::Instant
+            | Self::Sorcery
+            | Self::InstantOrSorcery
+            | Self::Nonland
+            | Self::Noncreature => false,
+        }
+    }
+}
+
 /// Characteristics required of a spell target on the stack. Type and inclusive mana-value
 /// bounds compose with AND. Equal bounds express an exact mana value (Spell Snare), while a
 /// single minimum or maximum supports open-ended filters (Disdainful Stroke).

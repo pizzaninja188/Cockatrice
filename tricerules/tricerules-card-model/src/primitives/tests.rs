@@ -7720,6 +7720,218 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_ta
 }
 
 #[test]
+fn typed_nonbasic_creature_search_uses_the_bounded_generic_permanent_result() {
+    let body = r#"(steps: [
+        (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
+            who: Controller, optional: false, count: 2, count_by_cast_cost: None,
+            filter: Some((card_type: Some(Creature))), selection_constraint: None,
+            slots: [], zones: Fixed([Library]), destination: Battlefield(tapped: false),
+            conditional_destination: None, shuffle: false, reveal: true,
+            selection_bounds: Some((min: 0, max: 1)),
+        ))),
+        (id: "untap", bind: [], input: Some("found"),
+            kind: Perform(Untap(subject: PreviousEffectObject))),
+    ], yields: [])"#;
+    let program = ability_program_fixture("typed_creature_search_result_fixture", body)
+        .expect("a bounded non-Basic permanent search can produce a typed result");
+
+    let [search, untap] = program.body.steps.as_slice() else {
+        panic!("the search result is consumed by the following Untap")
+    };
+    let [found] = search.outputs.as_slice() else {
+        panic!("the search binds one generic permanent result")
+    };
+    assert_eq!(untap.input, Some(*found));
+    assert_eq!(
+        program.slots[found.0 as usize].result_type,
+        crate::primitives::ResultType::PermanentSelection {
+            chooser: crate::primitives::PlayerRecipient::Controller,
+            filter: Box::new(crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::AnyPermanent,
+                controller: crate::primitives::TargetController::You,
+                ..Default::default()
+            }),
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+        }
+    );
+}
+
+fn typed_battlefield_search_program_body(search_fields: &str) -> String {
+    format!(
+        r#"(steps: [
+            (id: "search", bind: ["found"], input: None,
+                kind: Perform(SearchLibrary({search_fields}))),
+            (id: "untap", bind: [], input: Some("found"),
+                kind: Perform(Untap(subject: PreviousEffectObject))),
+        ], yields: [])"#
+    )
+}
+
+fn typed_battlefield_search_profile(search_fields: &str) -> Option<crate::primitives::ResultType> {
+    let effect: crate::primitives::SpellEffectKind =
+        ron::from_str(&format!("SearchLibrary({search_fields})"))
+            .expect("the typed search profile fields deserialize");
+    effect.typed_resultful_battlefield_search_result_type()
+}
+
+#[test]
+fn typed_permanent_search_accepts_a_pure_or_of_permanent_query_leaves() {
+    let fields = r#"who: Controller, optional: false, count: 2, count_by_cast_cost: None,
+        filter: Some((any_of: Some([
+            (card_type: Some(Creature)), (card_type: Some(Land)),
+        ]))),
+        selection_constraint: None, slots: [], zones: Fixed([Library]),
+        destination: Battlefield(tapped: true), conditional_destination: None,
+        shuffle: true, reveal: false, selection_bounds: Some((min: 0, max: 1))"#;
+    let program = ability_program_fixture(
+        "typed_permanent_or_search_result_fixture",
+        &typed_battlefield_search_program_body(fields),
+    )
+    .expect("each leaf in a validated OR query proves a permanent card");
+
+    let [search, untap] = program.body.steps.as_slice() else {
+        panic!("the OR search result flows into Untap")
+    };
+    let [found] = search.outputs.as_slice() else {
+        panic!("the OR search binds one result")
+    };
+    assert_eq!(untap.input, Some(*found));
+    assert_eq!(
+        program.slots[found.0 as usize].result_type,
+        typed_battlefield_search_profile(fields).expect("the profile helper admits the same OR")
+    );
+}
+
+#[test]
+fn typed_permanent_search_profile_rejects_unproven_or_infeasible_shapes() {
+    let base = r#"who: Controller, optional: false, count: 2, count_by_cast_cost: None,
+        filter: Some((card_type: Some(Creature))), selection_constraint: None,
+        slots: [], zones: Fixed([Library]), destination: Battlefield(tapped: false),
+        conditional_destination: None, shuffle: false, reveal: true,
+        selection_bounds: Some((min: 0, max: 1))"#;
+    assert!(
+        typed_battlefield_search_profile(base).is_some(),
+        "the varied tap, shuffle, and reveal flags do not change identity"
+    );
+    let feasible_conditional_counts = base
+        .replace(
+            "count_by_cast_cost: None",
+            "count_by_cast_cost: Some((condition: (group_id: \"cost_group\", option_id: \"cost_option\", expected_selected: true), if_selected: 1, otherwise: 2))",
+        )
+        .replace("min: 0, max: 1", "min: 1, max: 1");
+    assert!(
+        typed_battlefield_search_profile(&feasible_conditional_counts).is_some(),
+        "every feasible conditional count branch is capped to one"
+    );
+
+    let cases = vec![
+        ("no query filter", base.replace("filter: Some((card_type: Some(Creature)))", "filter: None")),
+        ("Nonland", base.replace("Some(Creature)", "Some(Nonland)")),
+        ("Noncreature", base.replace("Some(Creature)", "Some(Noncreature)")),
+        ("instant", base.replace("Some(Creature)", "Some(Instant)")),
+        ("sorcery", base.replace("Some(Creature)", "Some(Sorcery)")),
+        (
+            "mixed permanent and nonpermanent OR",
+            base.replace(
+                "filter: Some((card_type: Some(Creature)))",
+                "filter: Some((any_of: Some([(card_type: Some(Creature)), (card_type: Some(Instant))])))",
+            ),
+        ),
+        ("optional search", base.replace("optional: false", "optional: true")),
+        ("non-controller search", base.replace("who: Controller", "who: AffectedPlayer")),
+        ("non-library zone", base.replace("Fixed([Library])", "Fixed([Hand])")),
+        ("non-battlefield destination", base.replace("Battlefield(tapped: false)", "Hand")),
+        (
+            "conditional destination",
+            base.replace(
+                "conditional_destination: None",
+                "conditional_destination: Some((condition: ControllerLibraryEmpty, destination: Hand))",
+            ),
+        ),
+        ("no bounds", base.replace("Some((min: 0, max: 1))", "None")),
+        ("reversed bounds", base.replace("min: 0, max: 1", "min: 2, max: 1")),
+        ("zero effective maximum", base.replace("min: 0, max: 1", "min: 0, max: 0")),
+        ("maximum above one", base.replace("min: 0, max: 1", "min: 0, max: 2")),
+        (
+            "infeasible static lower bound",
+            base.replace("count: 2", "count: 1")
+                .replace("min: 0, max: 1", "min: 2, max: 3"),
+        ),
+        (
+            "heterogeneous slots",
+            base.replace(
+                "slots: []",
+                "slots: [(slot_id: \"creature\", presentation: Fallback, filter: (card_type: Some(Creature)))]",
+            ),
+        ),
+        (
+            "selection constraint",
+            base.replace("selection_constraint: None", "selection_constraint: Some(DifferentNames)"),
+        ),
+        (
+            "zero conditional count branch",
+            base.replace(
+                "count_by_cast_cost: None",
+                "count_by_cast_cost: Some((condition: (group_id: \"cost_group\", option_id: \"cost_option\", expected_selected: true), if_selected: 0, otherwise: 2))",
+            ),
+        ),
+        (
+            "conditional branch cannot meet lower bound",
+            base.replace(
+                "count_by_cast_cost: None",
+                "count_by_cast_cost: Some((condition: (group_id: \"cost_group\", option_id: \"cost_option\", expected_selected: true), if_selected: 1, otherwise: 2))",
+            )
+            .replace("min: 0, max: 1", "min: 2, max: 2"),
+        ),
+        (
+            "conditional maximum above one",
+            base.replace(
+                "count_by_cast_cost: None",
+                "count_by_cast_cost: Some((condition: (group_id: \"cost_group\", option_id: \"cost_option\", expected_selected: true), if_selected: 1, otherwise: 2))",
+            )
+            .replace("min: 0, max: 1", "min: 0, max: 2"),
+        ),
+    ];
+
+    for (label, fields) in cases {
+        assert!(
+            typed_battlefield_search_profile(&fields).is_none(),
+            "the typed profile rejects {label}"
+        );
+    }
+}
+
+#[test]
+fn card_type_search_profile_classification_is_explicit() {
+    use crate::primitives::CardTypeFilter as Type;
+
+    for (card_type, proves_permanent) in [
+        (Type::BasicLand, true),
+        (Type::Land, true),
+        (Type::Enchantment, true),
+        (Type::Creature, true),
+        (Type::Artifact, true),
+        (Type::Planeswalker, true),
+        (Type::Battle, true),
+        (Type::NonlandPermanent, true),
+        (Type::Instant, false),
+        (Type::Sorcery, false),
+        (Type::InstantOrSorcery, false),
+        (Type::Nonland, false),
+        (Type::Noncreature, false),
+    ] {
+        assert_eq!(
+            card_type.proves_permanent_library_match(),
+            proves_permanent,
+            "{card_type:?} permanence classification"
+        );
+    }
+}
+
+#[test]
 fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_slot() {
     let body = r#"(steps: [
         (id: "search", bind: ["found"], input: None, kind: Perform(SearchLibrary(
@@ -7764,8 +7976,6 @@ fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_s
         } if filter.as_ref() == &crate::primitives::TargetFilter {
             kind: crate::primitives::TargetKind::AnyPermanent,
             controller: crate::primitives::TargetController::You,
-            permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
-            required_supertypes: vec!["Basic".into()],
             ..Default::default()
         }
     ));
@@ -7802,7 +8012,7 @@ fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_s
     let choose_basic_land = r#"(steps: [
         (id: "choose", bind: ["chosen"], input: None, kind: Perform(ChoosePermanents(
             chooser: Controller,
-            filter: (kind: AnyPermanent, controller: You, permanent_types: [Land], required_supertypes: ["Basic"]),
+            filter: (kind: AnyPermanent, controller: You),
             min: 0, max: 1,
         ))),
     ], yields: [])"#;
@@ -7832,9 +8042,7 @@ fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_s
     let error = ability_program_fixture("unrelated_search_result_fixture", unrelated_selection)
         .expect_err("an equal-typed ChoosePermanents result cannot stand in for the search output");
     assert!(
-        error.contains(
-            "direct Battlefield search consumer must use its bound one-BasicLand search result"
-        ),
+        error.contains("direct Battlefield search consumer must use its bound singleton permanent search result"),
         "the provenance rejection identifies the missing exact producer: {error}"
     );
 }
