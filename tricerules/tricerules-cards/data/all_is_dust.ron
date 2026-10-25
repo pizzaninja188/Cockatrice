@@ -4,7 +4,7 @@
   face_id: "all_is_dust",
   mana_cost: "{7}",
   types: ["Kindred", "Sorcery", "Eldrazi"],
-  spell_effect: [SacrificeAll(players: All, filter: (any_of: Some([
+  spell_effect: [SacrificeAll( filter: (any_of: Some([
     (kind: AnyPermanent, is_color: Some(White)),
     (kind: AnyPermanent, is_color: Some(Blue)),
     (kind: AnyPermanent, is_color: Some(Black)),

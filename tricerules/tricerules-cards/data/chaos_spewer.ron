@@ -14,13 +14,12 @@
           branch_id: "pay_2",
           presentation: Fallback,
           cost: Mana("{2}"),
-          requirement: Always,
-          body: (steps: [], yields: []),
+          body: (),
         )],
         otherwise: (steps: [
           (id: "blight_2", kind: Perform(Blight(count: 2))),
-        ], yields: []),
+        ]),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

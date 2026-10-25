@@ -19,7 +19,7 @@
     presentation: OracleLines([2]),
     trigger: WheneverPlayerExpendsMana(amount: 8),
     effect: [MoveGraveyardCards(
-      filter: (owner: Controller, card: Some((any_of: Some([
+      filter: ( card: Some((any_of: Some([
         (card_type: Some(Land)),
         (card_type: Some(NonlandPermanent)),
       ])))),

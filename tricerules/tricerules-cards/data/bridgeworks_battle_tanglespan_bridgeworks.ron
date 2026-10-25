@@ -54,7 +54,6 @@
         presentation: OracleLines([1]),
         definition: EntersTapped(
           affected: Self_,
-          condition: None,
           unless_cost: Some(PayLife(amount: 3)),
         ),
       )],

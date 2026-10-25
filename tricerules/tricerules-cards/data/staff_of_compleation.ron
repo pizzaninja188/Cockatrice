@@ -27,7 +27,7 @@
       ability_id: "activated_04",
       presentation: OracleLines([4]),
       costs: [Tap, PayLife(amount: 4)],
-      effect: [Draw(who: Controller, count: 1)],
+      effect: [Draw( count: 1)],
     ),
     (
       ability_id: "activated_05",

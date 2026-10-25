@@ -7,6 +7,5 @@
   // The counter effect restricts its target to a noncreature spell (CR 701.6).
   spell_effect: [CounterTargetSpell(
     spell_filter: (card_type: Some(Noncreature)),
-    unless_controller_pays: None,
   )],
 )

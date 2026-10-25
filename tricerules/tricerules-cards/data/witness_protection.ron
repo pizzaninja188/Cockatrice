@@ -5,7 +5,7 @@
   mana_cost: "{U}",
   // Layered name, color, type, ability, and base-P/T changes are modeled independently.
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(
     set_types: Some((card_types: [Creature], creature_types: ["Citizen"])),
     set_name: Some("Legitimate Businessperson"),

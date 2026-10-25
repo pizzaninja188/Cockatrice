@@ -5,6 +5,6 @@
   mana_cost: "{1}{W}",
   // CR 303.4 (Auras); CR 508/509 (attack and block restrictions).
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)))],
 )

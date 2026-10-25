@@ -9,7 +9,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerCastsSpell(
-      caster: Controller,
       filter: (
         card_type: Some(InstantOrSorcery),
         targeted_permanent_type: Some(Creature),

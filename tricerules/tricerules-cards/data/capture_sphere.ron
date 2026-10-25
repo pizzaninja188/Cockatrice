@@ -6,7 +6,7 @@
   // CR 303.4m, 502.3, 603, 611.3.
   types: ["Enchantment", "Aura"],
   keywords: [Flash],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   triggered_abilities: [
     (
       ability_id: "triggered_01",

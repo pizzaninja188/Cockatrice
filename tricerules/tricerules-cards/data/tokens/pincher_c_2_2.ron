@@ -4,7 +4,6 @@
   name: "Pincher",
   face_id: "pincher",
   types: ["Creature", "Pincher"],
-  colors: [],
   power: 2,
   toughness: 2,
 )

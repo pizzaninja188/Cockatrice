@@ -17,23 +17,22 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
-        (id: "pay_3", bind: [], input: None, kind: Choose(
+        (id: "pay_3", kind: Choose(
           choice: "pay_3", chooser: Controller, optional: true,
           branches: [(
             branch_id: "pay_3", presentation: OracleLines([1]),
-            cost: Mana("{3}"), requirement: Always,
+            cost: Mana("{3}"),
             body: (steps: [
-              (id: "proliferate_01", bind: [], input: None,
+              (id: "proliferate_01",
                kind: Perform(Proliferate)),
-              (id: "proliferate_02", bind: [], input: None,
+              (id: "proliferate_02",
                kind: Perform(Proliferate)),
-            ], yields: []),
+            ]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",

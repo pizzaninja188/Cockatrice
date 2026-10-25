@@ -11,7 +11,7 @@
     (
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
-      trigger: WheneverPlayerGainsLife(player: Controller),
+      trigger: WheneverPlayerGainsLife(),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
     ),
   ],

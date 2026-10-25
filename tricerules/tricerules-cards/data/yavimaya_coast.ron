@@ -20,7 +20,7 @@
             costs: [Tap],
             effect: [
                 ProduceMana(options: [(g: 1), (u: 1)]),
-                DamagePlayer(amount: 1, who: Controller),
+                DamagePlayer(amount: 1),
             ],
         ),
     ],

@@ -7,15 +7,15 @@
   mana_cost: "{1}{W}",
   types: ["Instant"],
   spell_program: Some((body: (steps: [
-    (id: "untap", bind: [], input: None,
+    (id: "untap",
       kind: Perform(Untap(subject: TargetAlias("target_creature")))),
-    (id: "pump", bind: [], input: None,
+    (id: "pump",
       kind: Perform(PumpTarget(
         power: 2,
         toughness: 2,
         subject: TargetAlias("target_creature"),
       ))),
-    (id: "dwarf_gate", bind: [], input: None, kind: Choose(
+    (id: "dwarf_gate", kind: Choose(
       choice: "dwarf_gate",
       chooser: Controller,
       optional: false,
@@ -28,9 +28,8 @@
           filter: (kind: Creature, required_subtypes: ["Dwarf"]),
         )),
         body: (steps: [
-          (id: "choose_equipment", bind: ["selected_equipment"], input: None,
+          (id: "choose_equipment", bind: ["selected_equipment"],
             kind: Perform(ChoosePermanents(
-              chooser: Controller,
               filter: (kind: AnyPermanent, controller: You,
                 required_subtypes: ["Equipment"]),
               min: 0,
@@ -38,16 +37,16 @@
               constraints: [EquipmentAttachableTo(recipient:
                 TargetAlias("target_creature"))],
             ))),
-          (id: "attach_equipment", bind: [], input: Some("selected_equipment"),
+          (id: "attach_equipment", input: Some("selected_equipment"),
             kind: Perform(AttachEquipment(
               equipment: PreviousEffectObject,
               creature: TargetAlias("target_creature"),
             ))),
-        ], yields: []),
+        ]),
       )],
-      otherwise: (steps: [], yields: []),
+      otherwise: (),
     )),
-  ], yields: []), target_bindings: [], target_aliases: [
+  ]), target_aliases: [
     (name: "target_creature", group_index: 0,
       filter: (kind: Creature, controller: You)),
   ])),

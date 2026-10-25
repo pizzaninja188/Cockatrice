@@ -7,6 +7,5 @@
   types: ["Instant"],
   spell_effect: [CounterTargetSpell(
     spell_filter: (min_mana_value: Some(2), max_mana_value: Some(2)),
-    unless_controller_pays: None,
   )],
 )

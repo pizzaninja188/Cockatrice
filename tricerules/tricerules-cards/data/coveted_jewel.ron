@@ -15,7 +15,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [Draw(who: Controller, count: 3)],
+      effect: [Draw( count: 3)],
     ),
     (
       ability_id: "triggered_02",

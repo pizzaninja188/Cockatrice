@@ -13,15 +13,14 @@
       ability_id: "triggered_01",
       presentation: Fallback,
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
-      effect: [],
       program: Some((body: (steps: [
         (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}")))),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
-      trigger: WheneverPlayerCommitsCrime(player: Controller),
+      trigger: WheneverPlayerCommitsCrime(),
       effect: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil)],
       max_triggers_per_turn: Some(1),
     ),

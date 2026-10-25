@@ -7,11 +7,10 @@
   face_id: "minds_aglow",
   mana_cost: "{U}",
   types: ["Sorcery"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "collect_contributions", bind: ["total_mana_paid"], input: None,
+    (id: "collect_contributions", bind: ["total_mana_paid"],
       kind: Perform(JoinForces)),
-    (id: "draw_for_total_mana_paid", bind: [], input: Some("total_mana_paid"),
+    (id: "draw_for_total_mana_paid", input: Some("total_mana_paid"),
       kind: Perform(Draw(who: EachPlayer, count: Count(ProgramInputCount)))),
-  ], yields: []), target_bindings: [])),
+  ]))),
 )

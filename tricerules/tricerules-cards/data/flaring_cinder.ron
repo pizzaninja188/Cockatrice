@@ -13,37 +13,35 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
         (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(
-          who: Controller, quantity: OptionalExact(1),
+           quantity: OptionalExact(1),
         ))),
         (id: "draw_if_discarded", kind: IfResult(
           condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
           yes: (steps: [
-            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
-          ], yields: []),
-          no: (steps: [], yields: []),
+            (id: "draw_one", kind: Perform(Draw( count: 1))),
+          ]),
+          no: (),
         )),
-      ], yields: []), target_bindings: [])),
+      ]))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([1]),
-      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(4))),
-      effect: [],
+      trigger: WheneverPlayerCastsSpell( filter: (min_mana_value: Some(4))),
       program: Some((body: (steps: [
         (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(
-          who: Controller, quantity: OptionalExact(1),
+           quantity: OptionalExact(1),
         ))),
         (id: "draw_if_discarded", kind: IfResult(
           condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
           yes: (steps: [
-            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
-          ], yields: []),
-          no: (steps: [], yields: []),
+            (id: "draw_one", kind: Perform(Draw( count: 1))),
+          ]),
+          no: (),
         )),
-      ], yields: []), target_bindings: [])),
+      ]))),
     ),
   ],
 )

@@ -16,7 +16,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: AtBeginningOfUpkeep(player: AnyPlayer),
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_doom_change", kind: Choose(
         choice: "doom_change",
@@ -30,7 +29,7 @@
             )),
             body: (steps: [(id: "add_doom", kind: Perform(PutCounters(
               counter: Doom, count: 1, subject: Source,
-            )))], yields: [])),
+            )))])),
           (branch_id: "remove_doom_counter", presentation: Fallback, cost: None,
             requirement: GameCondition(AllOf([
               ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
@@ -38,9 +37,9 @@
             ])),
             body: (steps: [(id: "remove_doom", kind: Perform(RemoveCounters(
               counter: Doom, count: 1, subject: Source,
-            )))], yields: [])),
+            )))])),
         ],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
       (id: "check_doom_threshold", kind: If(
         condition: SourceCounterCount(counter: Doom, min: Some(3)),
@@ -55,13 +54,13 @@
                 ability_id: "reflexive_01",
                 // This is the reflexive damage fragment of the source's upkeep ability.
                 presentation: Fallback,
-                effect: [DamageAll(amount: 6, players: All, kind: (kind: Creature))],
+                effect: [DamageAll(amount: 6)],
               ),
             ),
           )),
-        ], yields: []),
-        no: (steps: [], yields: []),
+        ]),
+        no: (),
       )),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
 )

@@ -21,7 +21,6 @@
       max: 2,
       prompt: "Choose up to two target cards from graveyards",
       effect_indices: [0],
-      same_graveyard: false,
     )])),
   )],
 )

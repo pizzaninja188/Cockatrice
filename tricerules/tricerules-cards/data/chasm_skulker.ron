@@ -10,7 +10,7 @@
     (
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
-      trigger: WheneverPlayerDrawsCard(drawer: Controller),
+      trigger: WheneverPlayerDrawsCard(),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
     ),
     (

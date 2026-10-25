@@ -13,11 +13,10 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: AtBeginningOfDrawStep(player: AnyPlayer),
-    effect: [],
+    trigger: AtBeginningOfDrawStep(),
     program: Some((body: (steps: [
       (id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1))),
       (id: "discard_one", kind: Perform(Discard(who: AffectedPlayer, quantity: Exact(1)))),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
 )

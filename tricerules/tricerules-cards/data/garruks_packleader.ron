@@ -18,7 +18,7 @@
       filter: (permanent_type: Some(Creature), exclude_source: true),
       creature_filter: Some((power: Some(AtLeast(3)))),
     ),
-    effect: [Draw(who: Controller, count: 1)],
+    effect: [Draw( count: 1)],
     may: true,
   )],
 )

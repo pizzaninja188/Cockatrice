@@ -6,7 +6,7 @@
   mana_cost: "{1}{U}",
   types: ["Instant"],
   spell_effect: [
-    Draw(who: Controller, count: 1),
+    Draw( count: 1),
     CreateTokens(token: "clue", count: 1),
   ],
 )

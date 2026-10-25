@@ -20,7 +20,7 @@
           ability_id: "triggered_01",
           presentation: Fallback,
           trigger: WhenSelfDies,
-          effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true, controller: Owner)],
+          effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true)],
         ),
       ),
     ],

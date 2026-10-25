@@ -13,33 +13,28 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((
       body: (steps: [
-        (id: "draw_one", bind: [], input: None,
-          kind: Perform(Draw(who: Controller, count: 1))),
-        (id: "another_hero", bind: [], input: None,
+        (id: "draw_one",
+          kind: Perform(Draw( count: 1))),
+        (id: "another_hero",
           kind: If(
             condition: BattlefieldAggregate(
               filter: (
                 controllers: Controller,
-                card_type: None,
                 required_subtypes: ["Hero"],
                 exclude_source: true,
               ),
               aggregate: Count,
               min: Some(1),
-              max: None,
-              exclude_observed_object: false,
             ),
             yes: (steps: [
-              (id: "gain_two_life", bind: [], input: None,
+              (id: "gain_two_life",
                 kind: Perform(GainLife(amount: 2))),
-            ], yields: []),
-            no: (steps: [], yields: []),
+            ]),
+            no: (),
           )),
-      ], yields: []),
-      target_bindings: [],
+      ]),
     )),
   )],
 )

@@ -15,12 +15,11 @@
         branch_id: "waterbend_2",
         presentation: Fallback,
         cost: Waterbend("{2}"),
-        requirement: Always,
-        body: (steps: [], yields: []),
+        body: (),
       )],
       otherwise: (steps: [
-        (id: "discard_a_card", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
-      ], yields: []),
+        (id: "discard_a_card", kind: Perform(Discard( quantity: Exact(1)))),
+      ]),
     )),
-  ], yields: []))),
+  ]))),
 )

@@ -8,7 +8,6 @@
     (
       ability_id: "activated_01",
       presentation: OracleLines([1]),
-      source_zone: Battlefield,
       costs: [
         SacrificePermanent(filter: (
           kind: AnyPermanent,

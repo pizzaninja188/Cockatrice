@@ -13,8 +13,6 @@
         presentation: OracleLines([2]),
         effects: [SearchLibrary(
           filter: Some((card_type: Some(BasicLand))),
-          destination: Hand,
-          shuffle: true,
           reveal: true,
         )],
       ),

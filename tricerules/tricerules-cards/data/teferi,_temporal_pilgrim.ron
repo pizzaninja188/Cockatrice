@@ -12,7 +12,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    trigger: WheneverPlayerDrawsCard(),
     effect: [PutCounters(counter: Loyalty, count: 1, subject: Source)],
   )],
   activated_abilities: [
@@ -39,7 +39,6 @@
           filter: (kind: AnyPermanent, controller: You),
           min: 1,
           max: 1,
-          constraints: [],
         ))),
         (id: "return_chosen", input: Some("selected"), kind: Perform(
           ReturnToOwnersHand(subject: PreviousEffectObject))),
@@ -47,7 +46,7 @@
           ShuffleNonlandPermanentsIntoOwnersLibraries(
             players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
           ))),
-      ], yields: []), target_bindings: [
+      ]), target_bindings: [
         (instruction_id: "choose_permanent", role: Target, target_group_index: 0),
         (instruction_id: "shuffle_target", role: Target, target_group_index: 0),
       ])),
@@ -56,9 +55,6 @@
         max: 1,
         prompt: "Choose target opponent",
         effect_indices: [],
-        distinct_from: [],
-        same_graveyard: false,
-        cast_cost_expansion: None,
       )])),
     ),
   ],

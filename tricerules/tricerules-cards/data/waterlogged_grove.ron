@@ -18,14 +18,8 @@
     (
       ability_id: "activated_02",
       presentation: OracleLines([2]),
-      source_zone: Battlefield,
       costs: [Mana("{1}"), Tap, SacrificeSelf],
-      cost_modifiers: [],
-      effect: [Draw(who: Controller, count: 1)],
-      targeting: None,
-      timing: Normal,
-      conditions: [],
-      activation_limit: None,
+      effect: [Draw( count: 1)],
     ),
   ],
 )

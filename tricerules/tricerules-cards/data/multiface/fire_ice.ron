@@ -13,9 +13,7 @@
             // CR 601.2d: fixed total (2), no per-target surcharge, max 2 targets.
             spell_effect: [DamageTargets(
                 amount: 2,
-                target: (kind: AnyTarget),
-                division: ChooseAtCast,
-                extra_mana_per_target: 0,
+                target: (),
             )],
             targeting: Some((groups: [(
                 min: 1,

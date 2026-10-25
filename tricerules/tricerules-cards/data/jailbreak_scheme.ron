@@ -27,14 +27,13 @@
         mode_id: "counter_block",
         presentation: OracleLines([2]),
         linked_cast_cost: Some((group_id: "spree", option_id: "counter_block_cost")),
-        effects: [],
         program: Some((
           body: (steps: [
-            (id: "put_counter", bind: [], input: None,
+            (id: "put_counter",
               kind: Perform(PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature))))),
-            (id: "cant_be_blocked", bind: [], input: None,
+            (id: "cant_be_blocked",
               kind: Perform(ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_be_blocked: true)))),
-          ], yields: []),
+          ]),
           target_bindings: [
             (instruction_id: "put_counter", role: Target, target_group_index: 0),
             (instruction_id: "cant_be_blocked", role: Target, target_group_index: 0),
@@ -51,15 +50,14 @@
         mode_id: "library_choice",
         presentation: OracleLines([3]),
         linked_cast_cost: Some((group_id: "spree", option_id: "library_choice_cost")),
-        effects: [],
         program: Some((
           body: (steps: [
-            (id: "put_in_owners_library", bind: [], input: None,
+            (id: "put_in_owners_library",
               kind: Perform(PutInOwnersLibrary(
                 subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature])),
                 placement: OwnerChoiceTopOrBottom,
               ))),
-          ], yields: []),
+          ]),
           target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
         )),
         targeting: Some((groups: [(

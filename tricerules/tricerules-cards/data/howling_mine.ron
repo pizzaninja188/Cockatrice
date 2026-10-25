@@ -10,7 +10,7 @@
         (
             ability_id: "triggered_01",
             presentation: OracleLines([1]),
-            trigger: AtBeginningOfDrawStep(player: AnyPlayer),
+            trigger: AtBeginningOfDrawStep(),
             intervening_if: Some(ObjectTapped(object: Source, tapped: false)),
             effect: [Draw(who: AffectedPlayer, count: 1)],
         ),

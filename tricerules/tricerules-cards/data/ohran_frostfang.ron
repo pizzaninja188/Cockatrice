@@ -7,14 +7,12 @@
     types: ["Creature", "Snake"],
     power: Some(2),
     toughness: Some(6),
-    keywords: [],
     static_abilities: [
         (
             ability_id: "static_01",
             presentation: OracleLines([1]),
             definition: AnthemKeyword(
                 filter: (controller: YouControl, attacking: true),
-                condition: None,
                 keyword: Deathtouch,
             ),
         ),
@@ -24,8 +22,6 @@
             ability_id: "triggered_01",
             presentation: OracleLines([2]),
             trigger: WheneverCreatureDealsCombatDamageToPlayer(
-                source_controller: Controller,
-                damaged_player: AnyPlayer,
             ),
             effect: [Draw(count: 1)],
         ),

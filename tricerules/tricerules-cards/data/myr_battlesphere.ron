@@ -19,18 +19,15 @@
     ability_id: "triggered_02",
     presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [],
     program: Some((
       body: (steps: [
         (id: "choose_myrs", bind: ["myrs"], kind: Perform(ChoosePermanents(
-        chooser: Controller,
         filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Myr"], tapped: Some(false)),
         min: 0,
         max: 4294967295,
-        constraints: [],
         ))),
         (id: "attack_myrs", input: Some("myrs"), kind: Perform(MyrBattlesphereAttack)),
-      ], yields: []),
+      ]),
     )),
   )],
 )

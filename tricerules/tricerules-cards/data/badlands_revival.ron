@@ -6,8 +6,8 @@
   mana_cost: "{3}{B}{G}",
   types: ["Sorcery"],
   spell_effect: [
-    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false)),
-    MoveGraveyardCards(filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand),
+    MoveGraveyardCards(filter: ( card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false)),
+    MoveGraveyardCards(filter: ( card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand),
   ],
   targeting: Some((groups: [
     (min: 0, max: 1, prompt: "Choose up to one target creature card from your graveyard", effect_indices: [0]),

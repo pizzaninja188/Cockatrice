@@ -11,12 +11,10 @@
     ability_id: "imprint",
     presentation: OracleLines([1]),
     trigger: WheneverCreatureDies(
-      controller: AnyPlayer,
       filter: (permanent_type: Some(Creature), token: Some(false)),
     ),
-    effect: [],
     program: Some((body: (steps: [
-      (id: "choose_imprint", bind: [], input: None, kind: Choose(
+      (id: "choose_imprint", kind: Choose(
         choice: "imprint_creature",
         chooser: Controller,
         optional: true,
@@ -26,30 +24,29 @@
           cost: None,
           requirement: EffectsApplicable,
           body: (steps: [
-            (id: "exile_event", bind: ["imprint_receipt"], input: None,
+            (id: "exile_event", bind: ["imprint_receipt"],
               kind: Perform(Exile(
                 subject: TriggerObject,
                 linked_exile_id: Some("imprinted_card"),
               ))),
-            (id: "return_previous", bind: [], input: Some("imprint_receipt"),
+            (id: "return_previous", input: Some("imprint_receipt"),
               kind: Perform(ReturnOtherLinkedExiledCards(
                 producer_ability_id: "imprint",
                 linked_exile_id: "imprinted_card",
               )))
-          ], yields: []),
+          ]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
   activated_abilities: [(
     ability_id: "create_copy",
     presentation: OracleLines([2]),
-    source_zone: Battlefield,
     costs: [Mana("{3}"), Tap],
     effect: [],
     program: Some((body: (steps: [
-      (id: "copy_entry", bind: ["copies"], input: None, kind: Perform(
+      (id: "copy_entry", bind: ["copies"], kind: Perform(
         CreateTokenCopies(
           count: 1,
           source: LinkedExile(
@@ -58,14 +55,14 @@
           ),
         ),
       )),
-      (id: "grant_haste", bind: [], input: Some("copies"), kind: Perform(
+      (id: "grant_haste", input: Some("copies"), kind: Perform(
         ApplyPermanentModifier(
           subject: PreviousEffectObjects,
           modifier: GrantKeywords([Haste]),
           duration: Indefinite,
         ),
       )),
-      (id: "schedule_exile", bind: [], input: Some("copies"), kind: Perform(
+      (id: "schedule_exile", input: Some("copies"), kind: Perform(
         CreateDelayedTrigger(
           subject: Some(PreviousEffectObjects),
           ability: (
@@ -76,6 +73,6 @@
           ),
         ),
       )),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
 )

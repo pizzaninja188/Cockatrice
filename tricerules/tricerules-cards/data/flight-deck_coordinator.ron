@@ -11,7 +11,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfEndStep(player: Controller),
+    trigger: AtBeginningOfEndStep(),
     effect: [GainLife(amount: 2)],
     intervening_if: Some(BattlefieldCreatureCount(
       filter: (controllers: Controller, tapped: Some(true)),

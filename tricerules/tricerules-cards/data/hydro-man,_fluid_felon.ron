@@ -14,7 +14,6 @@
       ability_id: "blue_spell_pump",
       presentation: OracleLines([1]),
       trigger: WheneverPlayerCastsSpell(
-        caster: Controller,
         filter: (is_color: Some(Blue)),
       ),
       intervening_if: Some(ObjectMatches(
@@ -26,7 +25,7 @@
     (
       ability_id: "end_step_land",
       presentation: OracleLines([2]),
-      trigger: AtBeginningOfEndStep(player: Controller),
+      trigger: AtBeginningOfEndStep(),
       effect: [
         Untap(subject: Source),
         ApplyPermanentModifier(

@@ -5,7 +5,7 @@
   face_id: "blossombind",
   mana_cost: "{1}{U}",
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),

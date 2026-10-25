@@ -16,7 +16,6 @@
       filter: (permanent_type: Some(Creature), exclude_source: true),
       creature_filter: Some((power: Some(AtMost(2)))),
     ),
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_mentor_pay_draw", kind: Choose(
         choice: "mentor_pay_draw",
@@ -26,11 +25,10 @@
           branch_id: "pay_1",
           presentation: Fallback,
           cost: Mana("{1}"),
-          requirement: Always,
-          body: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+          body: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

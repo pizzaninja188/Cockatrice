@@ -7,7 +7,7 @@
   types: ["Sorcery"],
   spell_effect: [DamageTargets(
     amount: "X",
-    target: (kind: AnyTarget),
+    target: (),
     division: EvenAtResolution,
     extra_mana_per_target: 1,
   )],

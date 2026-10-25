@@ -4,14 +4,13 @@
   face_id: "griptide",
   mana_cost: "{3}{U}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((
     body: (steps: [
-      (id: "put_in_owners_library", bind: [], input: None,
+      (id: "put_in_owners_library",
         kind: Perform(PutInOwnersLibrary(
           subject: Chosen((kind: Creature)), placement: Top,
         ))),
-    ], yields: []),
+    ]),
     target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
   )),
   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])])),

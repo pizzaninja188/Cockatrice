@@ -33,7 +33,7 @@
                 ability_id: "triggered_01",
                 presentation: OracleLines([2]),
                 trigger: AtBeginningOfUpkeep(player: AnyPlayer),
-                intervening_if: Some(SpellsCastLastTurn(players: All, min: Some(2), max: None)),
+                intervening_if: Some(SpellsCastLastTurn(players: All, min: Some(2))),
                 effect: [ChangeSourceFace(action: Transform)],
             )],
         ),

@@ -14,7 +14,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
         (id: "choose_sacrifice", kind: Choose(
           choice: "sacrifice",
@@ -27,20 +26,18 @@
               (kind: AnyPermanent, controller: You, token: Some(true)),
               (kind: AnyPermanent, controller: You, permanent_types: [Land]),
             ]))),
-            requirement: Always,
             body: (steps: [
               (id: "gain_life", kind: Perform(GainLife(amount: 3))),
-            ], yields: []),
+            ]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [],
       program: Some((body: (steps: [
         (id: "choose_sacrifice", kind: Choose(
           choice: "sacrifice",
@@ -53,24 +50,22 @@
               (kind: AnyPermanent, controller: You, token: Some(true)),
               (kind: AnyPermanent, controller: You, permanent_types: [Land]),
             ]))),
-            requirement: Always,
             body: (steps: [
               (id: "gain_life", kind: Perform(GainLife(amount: 3))),
-            ], yields: []),
+            ]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_03",
       presentation: OracleLines([3]),
-      trigger: AtBeginningOfEndStep(player: Controller),
+      trigger: AtBeginningOfEndStep(),
       intervening_if: Some(PermanentLeftBattlefieldThisTurn(controllers: Controller)),
-      effect: [],
       program: Some((body: (steps: [
         (id: "draw", kind: Perform(Draw(count: 1))),
-      ], yields: []))),
+      ]))),
     ),
   ],
 )

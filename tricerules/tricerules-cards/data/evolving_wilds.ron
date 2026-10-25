@@ -13,8 +13,6 @@
         SearchLibrary(
           filter: Some((card_type: Some(BasicLand))),
           destination: Battlefield(tapped: true),
-          shuffle: true,
-          reveal: false,
         ),
       ],
     ),

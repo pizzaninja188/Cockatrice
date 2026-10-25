@@ -7,7 +7,6 @@
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
     filter: (controllers: All, card_type: Some(Creature)),
-    aggregate: Count,
   )],
-  spell_effect: [DestroyAll(kind: (kind: Creature), prevent_regeneration: false)],
+  spell_effect: [DestroyAll()],
 )

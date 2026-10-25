@@ -7,22 +7,12 @@
   face_id: "rampant_growth",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "search_tapped_basic", bind: [], input: None, kind: Perform(SearchLibrary(
-      who: Controller,
-      optional: false,
-      count: 1,
-      count_by_cast_cost: None,
+    (id: "search_tapped_basic", kind: Perform(SearchLibrary(
       filter: Some((card_type: Some(BasicLand))),
-      selection_constraint: None,
-      slots: [],
       zones: Fixed([Library]),
       destination: Battlefield(tapped: true),
-      conditional_destination: None,
-      shuffle: true,
-      reveal: false,
       selection_bounds: Some((min: 0, max: 1)),
     ))),
-  ], yields: []), target_bindings: [])),
+  ]))),
 )

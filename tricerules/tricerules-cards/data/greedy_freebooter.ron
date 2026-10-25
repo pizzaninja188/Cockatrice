@@ -13,13 +13,11 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfDies,
-    effect: [],
     program: Some((body: (steps: [
-      (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 1))),
-      (id: "treasure", bind: [], input: None, kind: Perform(CreateTokens(
-        token: "treasure", count: 1, who: Controller, tapped: false,
-        sacrifice_timing: None,
+      (id: "scry", kind: Perform(Scry(count: 1))),
+      (id: "treasure", kind: Perform(CreateTokens(
+        token: "treasure", count: 1,
       ))),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
 )

@@ -20,7 +20,7 @@
     triggered_abilities: [(
         ability_id: "triggered_01",
         presentation: OracleLines([2]),
-        trigger: AtBeginningOfEndStep(player: Controller),
+        trigger: AtBeginningOfEndStep(),
         effect: [Discover(value: 5)],
     )],
 )

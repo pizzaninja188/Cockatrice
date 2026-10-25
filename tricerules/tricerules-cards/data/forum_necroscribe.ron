@@ -15,25 +15,23 @@
         source: SpellOrAbility,
         source_controller: Opponent,
       ),
-      effect: [],
       program: Some((body: (steps: [
         (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(
-          cost: DiscardCard(filter: None),
+          cost: DiscardCard(),
         ))),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WheneverPlayerCastsSpell(
-        caster: Controller,
         filter: (
           card_type: Some(InstantOrSorcery),
           targeted_permanent_type: Some(Creature),
         ),
       ),
       effect: [MoveGraveyardCards(
-        filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
+        filter: ( card: Some((card_type: Some(Creature)))),
         destination: Battlefield(),
       )],
       targeting: Some((groups: [(

@@ -10,7 +10,6 @@
     count: 2,
     filter: Some((card_type: Some(BasicLand))),
     destination: Battlefield(tapped: true),
-    shuffle: true,
     reveal: true,
   )],
 )

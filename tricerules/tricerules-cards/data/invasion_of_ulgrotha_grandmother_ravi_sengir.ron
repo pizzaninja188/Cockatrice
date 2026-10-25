@@ -14,7 +14,7 @@
         presentation: OracleLines([2]),
         trigger: WhenSelfEntersBattlefield,
         effect: [
-          DamageTarget(amount: 3, target: (kind: AnyTarget, excluded_objects: [Source])),
+          DamageTarget(amount: 3, target: ( excluded_objects: [Source])),
           GainLife(amount: 3, who: Controller),
         ],
       )],

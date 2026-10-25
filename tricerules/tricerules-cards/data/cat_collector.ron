@@ -9,7 +9,7 @@
     ),
     (
       ability_id: "triggered_02", presentation: OracleLines([2]),
-      trigger: WheneverPlayerGainsLife(player: Controller, first_during_your_turn: true),
+      trigger: WheneverPlayerGainsLife( first_during_your_turn: true),
       effect: [CreateTokens(token: "cat_w_1_1", count: 1)],
     ),
   ],

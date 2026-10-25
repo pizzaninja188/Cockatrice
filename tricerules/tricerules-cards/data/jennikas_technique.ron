@@ -6,5 +6,5 @@
   mana_cost: "{2}{R}",
   sneak_cost: Some("{R}"),
   types: ["Instant"],
-  spell_effect: [DamageAll(amount: 2, kind: (kind: Creature))],
+  spell_effect: [DamageAll(amount: 2)],
 )

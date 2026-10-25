@@ -10,12 +10,12 @@
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [DamageTarget(
         amount: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Treasure"]))),
-        target: (kind: AnyTarget),
+        target: (),
       )],
     ),
     (
       ability_id: "triggered_02", presentation: OracleLines([3]),
-      trigger: AtBeginningOfUpkeep(player: Controller),
+      trigger: AtBeginningOfUpkeep(),
       effect: [CreateTokens(token: "treasure", count: 1)],
     ),
   ],

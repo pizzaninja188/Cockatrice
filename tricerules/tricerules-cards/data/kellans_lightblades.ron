@@ -9,8 +9,6 @@
   cast_cost_groups: [(
     group_id: "bargain",
     presentation: OracleLines([1]),
-    min: 0,
-    max: 1,
     options: [SacrificePermanent(
       option_id: "bargain",
       presentation: OracleLines([1]),
@@ -27,7 +25,7 @@
       effect: DamageTarget(amount: 3, target: (kind: Creature, combat_role: AttackingOrBlocking)),
     ),
     ConditionalCastCost(
-      condition: (group_id: "bargain", option_id: "bargain", expected_selected: true),
+      condition: (group_id: "bargain", option_id: "bargain"),
       effect: Destroy(subject: Chosen((kind: Creature, combat_role: AttackingOrBlocking))),
     ),
   ],

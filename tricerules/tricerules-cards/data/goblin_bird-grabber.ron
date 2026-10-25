@@ -15,7 +15,6 @@
       conditions: [BattlefieldCreatureCount(
         filter: (controllers: Controller, required_keywords: [Flying]),
         min: Some(1),
-        max: None,
       )],
     ),
   ],

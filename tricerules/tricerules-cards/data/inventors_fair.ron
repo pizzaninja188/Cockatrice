@@ -9,7 +9,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfUpkeep(player: Controller),
+    trigger: AtBeginningOfUpkeep(),
     intervening_if: Some(BattlefieldAggregate(
       filter: (controllers: Controller, card_type: Some(Artifact)),
       aggregate: Count,
@@ -35,9 +35,7 @@
       )],
       effect: [SearchLibrary(
         filter: Some((card_type: Some(Artifact))),
-        destination: Hand,
         reveal: true,
-        shuffle: true,
       )],
     ),
   ],

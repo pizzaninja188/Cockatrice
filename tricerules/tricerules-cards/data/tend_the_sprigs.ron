@@ -8,23 +8,14 @@
   types: ["Sorcery"],
   spell_program: Some((
     body: (steps: [
-      (id: "search_basic_land", bind: [], input: None,
+      (id: "search_basic_land",
         kind: Perform(SearchLibrary(
-          who: Controller,
-          optional: false,
-          count: 1,
-          count_by_cast_cost: None,
           filter: Some((card_type: Some(BasicLand))),
-          selection_constraint: None,
-          slots: [],
           zones: Fixed([Library]),
           destination: Battlefield(tapped: true),
-          conditional_destination: None,
-          shuffle: true,
-          reveal: false,
           selection_bounds: Some((min: 0, max: 1)),
         ))),
-      (id: "seven_land_or_treefolk", bind: [], input: None,
+      (id: "seven_land_or_treefolk",
         kind: If(
           condition: BattlefieldAggregate(
             filter: (
@@ -36,22 +27,16 @@
             ),
             aggregate: Count,
             min: Some(7),
-            max: None,
-            exclude_observed_object: false,
           ),
           yes: (steps: [
-            (id: "create_treefolk", bind: [], input: None,
+            (id: "create_treefolk",
               kind: Perform(CreateTokens(
                 token: "treefolk_g_3_4_reach",
                 count: 1,
-                who: Controller,
-                tapped: false,
-                sacrifice_timing: None,
               ))),
-          ], yields: []),
-          no: (steps: [], yields: []),
+          ]),
+          no: (),
         )),
-    ], yields: []),
-    target_bindings: [],
+    ]),
   )),
 )

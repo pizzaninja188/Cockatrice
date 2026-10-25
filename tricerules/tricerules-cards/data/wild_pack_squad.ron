@@ -12,7 +12,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfCombat(player: Controller),
+    trigger: AtBeginningOfCombat(),
     effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike, Vigilance])],
     targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
   )],

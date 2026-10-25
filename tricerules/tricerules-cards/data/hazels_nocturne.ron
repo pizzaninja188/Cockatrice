@@ -6,7 +6,7 @@
   mana_cost: "{3}{B}",
   types: ["Instant"],
   spell_effect: [
-    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand),
+    MoveGraveyardCards(filter: ( card: Some((card_type: Some(Creature)))), destination: Hand),
     LoseLife(amount: Fixed(2), who: EachOpponent),
     GainLife(amount: 2),
   ],

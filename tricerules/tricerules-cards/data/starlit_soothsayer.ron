@@ -15,7 +15,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: AtBeginningOfEndStep(player: Controller),
+    trigger: AtBeginningOfEndStep(),
     intervening_if: Some(LifeChangedThisTurn(
       players: Relative(Controller),
       change: Either,

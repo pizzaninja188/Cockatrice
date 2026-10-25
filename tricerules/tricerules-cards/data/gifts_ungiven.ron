@@ -9,13 +9,12 @@
   )])),
   spell_program: Some((
     body: (steps: [
-      (id: "search", bind: ["found"], input: None,
+      (id: "search", bind: ["found"],
         kind: Perform(SearchLibrary(
-          who: Controller,
-          optional: false, count: 4, count_by_cast_cost: None, filter: None,
-          selection_constraint: Some(DifferentNames), slots: [],
+           count: 4,
+          selection_constraint: Some(DifferentNames),
           zones: Fixed([Library]), destination: KeepInLibrary,
-          conditional_destination: None, shuffle: false, reveal: false,
+           shuffle: false,
           selection_bounds: Some((min: 0, max: 4)),
         ))),
       (id: "reveal", bind: ["revealed"], input: Some("found"),
@@ -25,13 +24,13 @@
           chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
           selection: ExactlyUpTo(2),
         ))),
-      (id: "move_partition", bind: [], input: Some("partition"),
+      (id: "move_partition", input: Some("partition"),
         kind: Perform(MoveCohortPartition(
           selected_to: Graveyard, remainder_to: Hand,
         ))),
-      (id: "shuffle_library", bind: [], input: None,
-        kind: Perform(ShuffleLibrary(who: Controller))),
-    ], yields: []),
+      (id: "shuffle_library",
+        kind: Perform(ShuffleLibrary())),
+    ]),
     target_bindings: [
       (instruction_id: "choose_partition", role: Target, target_group_index: 0),
     ],

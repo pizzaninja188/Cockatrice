@@ -10,7 +10,7 @@
   triggered_abilities: [(
     ability_id: "discard_modes",
     presentation: OracleLines([1, 2, 3, 4]),
-    trigger: WheneverPlayerDiscardsCard(player: Controller, filter: None),
+    trigger: WheneverPlayerDiscardsCard(),
     modal: Some((
       min_modes: 1,
       max_modes: 1,

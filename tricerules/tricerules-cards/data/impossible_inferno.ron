@@ -5,30 +5,25 @@
   face_id: "impossible_inferno",
   mana_cost: "{4}{R}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "damage_target", bind: [], input: None,
+    (id: "damage_target",
       kind: Perform(DamageTarget(amount: 6, target: (kind: Creature)))),
-    (id: "delirium", bind: [], input: None,
+    (id: "delirium",
       kind: If(
         condition: GraveyardAggregate(
           owners: Controller,
           aggregate: DistinctCardTypes,
-          filter: None,
           min: Some(4),
-          max: None,
         ),
         yes: (steps: [
-          (id: "exile_top", bind: [], input: None,
+          (id: "exile_top",
             kind: Perform(ExileTopWithPlayPermission(
               player: Controller,
-              count: 1,
-              count_by_cast_cost: None,
             ))),
-        ], yields: []),
-        no: (steps: [], yields: []),
+        ]),
+        no: (),
       )),
-  ], yields: []), target_bindings: [
+  ]), target_bindings: [
     (instruction_id: "damage_target", role: Target, target_group_index: 0),
   ])),
   targeting: Some((groups: [

@@ -6,7 +6,7 @@
     (mode_id: "mode_01", presentation: OracleLines([2]),
       effects: [PumpAll(filter: (controller: YouControl), power: 3, toughness: 3)]),
     (mode_id: "mode_02", presentation: OracleLines([3]),
-      effects: [MoveGraveyardCards(filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand)],
+      effects: [MoveGraveyardCards(filter: ( card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand)],
       targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target permanent cards from your graveyard", effect_indices: [0])]))),
   ]),
 )

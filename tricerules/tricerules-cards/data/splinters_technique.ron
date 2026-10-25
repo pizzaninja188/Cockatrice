@@ -11,9 +11,5 @@
   sneak_cost: Some("{1}{B}"),
   types: ["Sorcery"],
   spell_effect: [SearchLibrary(
-    filter: None,
-    destination: Hand,
-    shuffle: true,
-    reveal: false,
   )],
 )

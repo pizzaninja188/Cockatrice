@@ -13,6 +13,5 @@
       (required_subtypes: ["Gate"]),
     ]))),
     destination: Battlefield(tapped: true),
-    shuffle: true,
   )],
 )

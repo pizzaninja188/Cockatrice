@@ -5,7 +5,7 @@
   mana_cost: "{2}{B}",
   // Oracle/ruling verified 2026-08-20. CR 113.7a, 113.8, 120.4b, 303.4, 603.2.
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   triggered_abilities: [
     (
       ability_id: "triggered_01",

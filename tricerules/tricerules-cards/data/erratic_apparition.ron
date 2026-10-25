@@ -20,7 +20,7 @@
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
-      trigger: WheneverPlayerFullyUnlocksRoom(player: Controller),
+      trigger: WheneverPlayerFullyUnlocksRoom(),
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
     ),
   ],

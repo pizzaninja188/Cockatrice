@@ -283,7 +283,7 @@ fn koya_exile_consumer_rejects_near_misses_and_producer_is_generic() {
 
     let wrong_type = replace_once(
         KOYA_RON,
-        "        (id: \"schedule_return\", bind: [], input: Some(\"exiled\"),",
+        "        (id: \"schedule_return\", input: Some(\"exiled\"),",
         "        (id: \"wrong_result_type\", bind: [\"other_result\"], input: None,\n          kind: Perform(Draw(who: Controller, count: 1))),\n        (id: \"schedule_return\", input: Some(\"other_result\"),",
     );
     assert!(
@@ -293,8 +293,8 @@ fn koya_exile_consumer_rejects_near_misses_and_producer_is_generic() {
 
     let unrelated_instruction = replace_once(
         KOYA_RON,
-        "        (id: \"schedule_return\", bind: [], input: Some(\"exiled\"),",
-        "        (id: \"unrelated_gap\", input: None, kind: Perform(GainLife(amount: 1))),\n        (id: \"schedule_return\", bind: [], input: Some(\"exiled\"),",
+        "        (id: \"schedule_return\", input: Some(\"exiled\"),",
+        "        (id: \"unrelated_gap\", input: None, kind: Perform(GainLife(amount: 1))),\n        (id: \"schedule_return\", input: Some(\"exiled\"),",
     );
     assert!(
         compiles(&unrelated_instruction),

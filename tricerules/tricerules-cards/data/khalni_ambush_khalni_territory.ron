@@ -42,7 +42,7 @@
       static_abilities: [(
         ability_id: "static_01",
         presentation: OracleLines([1]),
-        definition: EntersTapped(affected: Self_, condition: None, unless_cost: None),
+        definition: EntersTapped(affected: Self_),
       )],
     ),
   ],

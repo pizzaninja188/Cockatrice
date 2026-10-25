@@ -7,7 +7,6 @@
   types: ["Sorcery"],
   spell_effect: [
     GainControl(
-      target: (kind: Creature),
       duration: UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue(
         filter: (controllers: Controller, required_subtypes: ["Villain"]),
       ),

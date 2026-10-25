@@ -19,10 +19,10 @@
     ],
     effect: [],
     program: Some((body: (steps: [
-      (id: "reveal_until_artifact", bind: ["revealed_prefix"], input: None,
+      (id: "reveal_until_artifact", bind: ["revealed_prefix"],
         kind: Perform(RevealUntilArtifact)),
-      (id: "damage_for_revealed_prefix", bind: [], input: Some("revealed_prefix"),
-        kind: Perform(DamagePlayer(amount: Count(ProgramInputCount), who: Controller))),
-    ], yields: []), target_bindings: [])),
+      (id: "damage_for_revealed_prefix", input: Some("revealed_prefix"),
+        kind: Perform(DamagePlayer(amount: Count(ProgramInputCount)))),
+    ]))),
   )],
 )

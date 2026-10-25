@@ -7,7 +7,6 @@
   spell_effect: [
     TargetPlayerSacrifices(
       target: (kind: AnyPlayer),
-      filter: (kind: Creature),
     ),
   ],
 )

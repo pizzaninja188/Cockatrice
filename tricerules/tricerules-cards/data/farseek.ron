@@ -15,6 +15,5 @@
       (required_subtypes: ["Mountain"]),
     ]))),
     destination: Battlefield(tapped: true),
-    shuffle: true,
   )],
 )

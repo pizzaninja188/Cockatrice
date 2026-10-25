@@ -54,7 +54,14 @@ fn myr_attack_program_rejects_missing_or_incompatible_selection_inputs() {
     );
     assert!(myr_registry_error(&wrong_filter).contains(MYR_INPUT_PROFILE_ERROR));
 
-    let wrong_chooser = valid.replace("chooser: Controller", "chooser: AffectedPlayer");
+    let wrong_chooser = valid.replace(
+        "kind: Perform(ChoosePermanents(",
+        "kind: Perform(ChoosePermanents(\n        chooser: AffectedPlayer,",
+    );
+    assert_ne!(
+        wrong_chooser, valid,
+        "the invalid chooser fixture changes source"
+    );
     assert!(myr_registry_error(&wrong_chooser).contains(
         "ChoosePermanents chooser supports only the resolving spell controller in spell_program"
     ));
@@ -63,16 +70,12 @@ fn myr_attack_program_rejects_missing_or_incompatible_selection_inputs() {
     assert!(myr_registry_error(&wrong_cardinality).contains(MYR_INPUT_PROFILE_ERROR));
 
     let wrong_type = valid.replace(
-        r#"(id: "choose_myrs", bind: ["myrs"], kind: Perform(ChoosePermanents(
-        chooser: Controller,
-        filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Myr"], tapped: Some(false)),
-        min: 0,
-        max: 4294967295,
-        constraints: [],
-        )))"#,
-        r#"(id: "choose_myrs", bind: ["myrs"], kind: Perform(SelectHandCards(
-        count: 1, ordered: false, prompt: "Choose a card",
-      )))"#,
+        "(id: \"choose_myrs\", bind: [\"myrs\"], kind: Perform(ChoosePermanents(\n        filter: (kind: AnyPermanent, controller: You, required_subtypes: [\"Myr\"], tapped: Some(false)),\n        min: 0,\n        max: 4294967295,\n        )))",
+        "(id: \"choose_myrs\", bind: [\"myrs\"], kind: Perform(SelectHandCards(\n        count: 1, ordered: false, prompt: \"Choose a card\",\n      )))",
+    );
+    assert_ne!(
+        wrong_type, valid,
+        "the wrong-result-type fixture changes source"
     );
     assert!(myr_registry_error(&wrong_type)
         .contains("input result 'myrs' has the wrong type for this instruction"));

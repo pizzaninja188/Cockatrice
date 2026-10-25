@@ -6,7 +6,6 @@
   face_id: "sold_out",
   mana_cost: "{3}{B}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((
     body: (steps: [
       (id: "exile_target", kind: Perform(Exile(subject: Chosen((kind: Creature))))),
@@ -16,10 +15,10 @@
         ),
         yes: (steps: [
           (id: "create_clue", kind: Perform(CreateTokens(token: "clue", count: 1))),
-        ], yields: []),
-        no: (steps: [], yields: []),
+        ]),
+        no: (),
       )),
-    ], yields: []),
+    ]),
     target_bindings: [
       (instruction_id: "exile_target", role: Subject, target_group_index: 0),
     ],

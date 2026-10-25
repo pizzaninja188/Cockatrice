@@ -21,8 +21,6 @@
                 SearchLibrary(
                     filter: Some((card_type: Some(Land))),
                     destination: Battlefield(tapped: true),
-                    shuffle: true,
-                    reveal: false,
                 ),
             ],
         ),

@@ -15,7 +15,6 @@
       trigger: WhenSelfDies,
       effect: [MoveGraveyardCards(
         filter: (
-          owner: Controller,
           card: Some((card_type: Some(Artifact))),
           mana_value_less_than_trigger_object: true,
         ),
@@ -35,11 +34,9 @@
         controller: Controller,
         filter: (permanent_type: Some(Artifact), exclude_source: true),
         destination: OneOf([Graveyard]),
-        cardinality: EachObject,
       ),
       effect: [MoveGraveyardCards(
         filter: (
-          owner: Controller,
           card: Some((card_type: Some(Artifact))),
           mana_value_less_than_trigger_object: true,
         ),

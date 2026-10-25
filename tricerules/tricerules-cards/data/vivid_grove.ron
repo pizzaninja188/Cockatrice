@@ -28,7 +28,7 @@
     (
       ability_id: "static_02",
       presentation: OracleLines([1]),
-      definition: EntersWithCounters(counter: Charge, amount: 2, affected: Self_),
+      definition: EntersWithCounters(counter: Charge, amount: 2),
     ),
   ],
 )

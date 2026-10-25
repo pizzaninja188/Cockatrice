@@ -11,7 +11,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfSecondMainPhase(player: Controller),
+    trigger: AtBeginningOfSecondMainPhase(),
     effect: [PutCounters(counter: Keyword(Flying), count: 1, subject: Source)],
     intervening_if: Some(ObjectTapped(object: Source, tapped: true)),
     triggers_only_once: true,

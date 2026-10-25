@@ -14,7 +14,6 @@
     effect: [MoveGraveyardCards(
       filter: (
         excluded_objects: [Source],
-        owner: Controller,
         card: Some((card_type: Some(Artifact))),
       ),
       destination: Hand,

@@ -5,7 +5,7 @@
   mana_cost: "{2}{W}",
   // CR 205.1b, 205.3d, and 613.1d.
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   static_abilities: [
     (ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(
       add_types: (creature_types: ["Knight"]),

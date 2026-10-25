@@ -12,15 +12,14 @@
       (
         mode_id: "mode_01",
         presentation: OracleLines([2]),
-        effects: [],
         program: Some((
           body: (steps: [
-            (id: "put_in_owners_library", bind: [], input: None,
+            (id: "put_in_owners_library",
               kind: Perform(PutInOwnersLibrary(
                 subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])),
                 placement: OwnerChoiceTopOrBottom,
               ))),
-          ], yields: []),
+          ]),
           target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
         )),
         targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nonland permanent", effect_indices: [])])),
@@ -28,15 +27,13 @@
       (
         mode_id: "mode_02",
         presentation: OracleLines([3]),
-        effects: [],
         program: Some((
           body: (steps: [
-            (id: "counter_spell", bind: [], input: None,
+            (id: "counter_spell",
               kind: Perform(CounterTargetSpell(
                 spell_filter: (card_type: Some(Noncreature)),
-                unless_controller_pays: None,
               ))),
-          ], yields: []),
+          ]),
           target_bindings: [(instruction_id: "counter_spell", role: Spell, target_group_index: 0)],
         )),
         targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target noncreature spell", effect_indices: [])])),

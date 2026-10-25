@@ -7,7 +7,7 @@
   types: ["Sorcery", "Lesson"],
   spell_effect: [
     MoveGraveyardCards(
-      filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))),
+      filter: ( card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))),
       destination: Hand,
     ),
     CreateTokens(token: "clue", count: 1),

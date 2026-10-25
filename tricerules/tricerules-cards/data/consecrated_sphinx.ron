@@ -14,7 +14,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverPlayerDrawsCard(drawer: Opponent),
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_sphinx_draw", kind: Choose(
         choice: "sphinx_draw",
@@ -24,11 +23,10 @@
           branch_id: "draw_two",
           presentation: OracleLines([2]),
           cost: None,
-          requirement: Always,
-          body: (steps: [(id: "draw_two_cards", kind: Perform(Draw(who: Controller, count: 2)))], yields: []),
+          body: (steps: [(id: "draw_two_cards", kind: Perform(Draw( count: 2)))]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

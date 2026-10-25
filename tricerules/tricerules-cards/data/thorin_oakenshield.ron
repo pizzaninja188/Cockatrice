@@ -22,10 +22,9 @@
         ability_id: "triggered_01",
         presentation: Fallback,
         trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
-        effect: [],
         program: Some((body: (steps: [
           (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}")))),
-        ], yields: []))),
+        ]))),
       )],
     )),
   ],

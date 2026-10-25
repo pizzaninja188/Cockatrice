@@ -14,15 +14,14 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
-        (id: "mill", bind: ["milled"], input: None,
-          kind: Perform(Mill(count: 4, who: Controller))),
-        (id: "gain_life", bind: [], input: Some("milled"),
+        (id: "mill", bind: ["milled"],
+          kind: Perform(Mill(count: 4))),
+        (id: "gain_life", input: Some("milled"),
           kind: Perform(GainLife(amount: Count(BoundCardResultCount(
             aggregation: Total, card_type: Some(Creature),
           ))))),
-      ], yields: []))),
+      ]))),
     ),
   ],
 )

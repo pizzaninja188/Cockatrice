@@ -16,7 +16,7 @@
     (
       ability_id: "activated_01",
       presentation: OracleLines([2]),
-      costs: [Mana("{1}"), RemoveCounters(counter: Some(PlusOnePlusOne), count: 1, payment_source: Source)],
+      costs: [Mana("{1}"), RemoveCounters(counter: Some(PlusOnePlusOne), count: 1)],
       effect: [CreateTokens(token: "pentavite_c_1_1_flying", count: 1)],
     ),
     (

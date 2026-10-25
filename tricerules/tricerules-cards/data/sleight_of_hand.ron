@@ -6,10 +6,10 @@
   mana_cost: "{U}",
   types: ["Sorcery"],
   spell_program: Some((body: (steps: [
-    (id: "look", bind: [], input: None,
+    (id: "look",
      kind: Perform(LookChooseToHand(
-       count: 2, filter: None, min: 1, max: 1,
+       count: 2, min: 1,
        reveal: false, bottom_order: Chosen,
      ))),
-  ], yields: []))),
+  ]))),
 )

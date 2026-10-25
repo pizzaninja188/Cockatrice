@@ -38,9 +38,7 @@
             (card_type: Some(Land), required_subtypes: ["Mountain"]),
             (card_type: Some(Land), required_subtypes: ["Forest"]),
           ]))),
-          destination: Battlefield(tapped: false),
-          shuffle: true,
-          reveal: false,
+          destination: Battlefield(),
         ),
       ],
       targeting: Some((groups: [(

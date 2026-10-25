@@ -24,7 +24,7 @@
             face_id: "stoke_genius",
             mana_cost: "{1}{R}",
             types: ["Sorcery", "Adventure"],
-            spell_effect: [Discard(who: Controller, quantity: All), Draw(count: 2)],
+            spell_effect: [Discard( quantity: All), Draw(count: 2)],
         ),
     ],
 )

@@ -234,8 +234,8 @@ fn linked_copy_admission_is_structural_and_registry_checks_the_named_pair() {
     );
 
     let ambiguous_pair = MIMIC_VAT_RON.replacen(
-        "      )),\n    ], yields: []), target_bindings: [])),",
-        "      )),\n      (id: \"duplicate_exile\", bind: [], input: None, kind: Perform(Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\")))),\n    ], yields: []), target_bindings: [])),",
+        "      )),\n      (id: \"grant_haste\"",
+        "      )),\n      (id: \"duplicate_exile\", kind: Perform(Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\")))),\n      (id: \"grant_haste\"",
         1,
     );
     assert_ne!(

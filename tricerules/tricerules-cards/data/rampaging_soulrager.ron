@@ -11,7 +11,6 @@
       condition: UnlockedRoomDoorCount(
         controllers: Controller,
         min: Some(2),
-        max: None,
       ),
       delta_power: 3,
     )),

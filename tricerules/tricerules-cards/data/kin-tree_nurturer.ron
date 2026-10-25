@@ -12,7 +12,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
         (id: "choose_endure", kind: Choose(
           choice: "endure", chooser: SourceController, optional: false,
@@ -21,16 +20,16 @@
               cost: None, requirement: EffectsApplicable,
               body: (steps: [(id: "put_counter", kind: Perform(PutCounters(
                 counter: PlusOnePlusOne, count: 1, subject: Source,
-              )))], yields: [])),
+              )))])),
             (branch_id: "create_a_1_1_white_spirit_creature_token", presentation: Fallback,
-              cost: None, requirement: Always,
+              cost: None,
               body: (steps: [(id: "create_spirit", kind: Perform(CreateTokens(
                 token: "spirit_w_1_1", count: 1, who: SourceController,
-              )))], yields: [])),
+              )))])),
           ],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
   ],
 )

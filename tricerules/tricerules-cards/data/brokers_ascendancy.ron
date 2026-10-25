@@ -11,7 +11,7 @@
         (
             ability_id: "triggered_01",
             presentation: OracleLines([1]),
-            trigger: AtBeginningOfEndStep(player: Controller),
+            trigger: AtBeginningOfEndStep(),
             effect: [
                 PutCountersAll(
                     counter: PlusOnePlusOne,
@@ -21,7 +21,6 @@
                 PutCountersAllPlaneswalkers(
                     counter: Loyalty,
                     count: 1,
-                    exclude_self: false,
                 ),
             ],
         ),

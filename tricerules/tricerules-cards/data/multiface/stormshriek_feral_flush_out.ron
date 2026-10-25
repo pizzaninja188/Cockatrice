@@ -24,11 +24,10 @@
       face_id: "flush_out",
       mana_cost: "{1}{R}",
       types: ["Sorcery", "Omen"],
-      spell_effect: [],
       spell_program: Some((body: (steps: [
-        (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
-        (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
-      ], yields: []), target_bindings: [])),
+        (id: "discard_one", kind: Perform(Discard( quantity: Exact(1)))),
+        (id: "draw_two", kind: Perform(Draw( count: 2))),
+      ]))),
     ),
   ],
 )

@@ -12,7 +12,7 @@
   mana_cost: "{3}{G}",
   types: ["Enchantment", "Aura"],
   keywords: [Flash],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   static_abilities: [(
     ability_id: "static_01",
     presentation: OracleLines([3]),

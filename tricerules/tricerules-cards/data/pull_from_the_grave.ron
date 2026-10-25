@@ -6,7 +6,7 @@
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [
-    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand),
+    MoveGraveyardCards(filter: ( card: Some((card_type: Some(Creature)))), destination: Hand),
     GainLife(amount: 2),
   ],
   targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creature cards from your graveyard", effect_indices: [0])])),

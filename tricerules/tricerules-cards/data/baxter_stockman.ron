@@ -11,7 +11,7 @@
     ),
     (
       ability_id: "triggered_02", presentation: OracleLines([2]),
-      trigger: AtBeginningOfCombat(player: Controller),
+      trigger: AtBeginningOfCombat(),
       effect: [
         PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature, controller: You, permanent_types: [Artifact]))),
         GrantKeywords(subject: Chosen((kind: Creature, controller: You, permanent_types: [Artifact])), keywords: [FirstStrike, Vigilance]),

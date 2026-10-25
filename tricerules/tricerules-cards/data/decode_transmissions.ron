@@ -5,18 +5,17 @@
   face_id: "decode_transmissions",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
     (id: "branch_on_void", kind: If(
       condition: Void,
       yes: (steps: [
-        (id: "void_draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+        (id: "void_draw_two", kind: Perform(Draw( count: 2))),
         (id: "void_opponents_lose_life", kind: Perform(LoseLife(amount: Fixed(2), who: EachOpponent))),
-      ], yields: []),
+      ]),
       no: (steps: [
-        (id: "ordinary_draw_two", kind: Perform(Draw(who: Controller, count: 2))),
-        (id: "ordinary_controller_loses_life", kind: Perform(LoseLife(amount: Fixed(2), who: Controller))),
-      ], yields: []),
+        (id: "ordinary_draw_two", kind: Perform(Draw( count: 2))),
+        (id: "ordinary_controller_loses_life", kind: Perform(LoseLife(amount: Fixed(2)))),
+      ]),
     )),
-  ], yields: []), target_bindings: [])),
+  ]))),
 )

@@ -21,8 +21,8 @@
       costs: [Mana("{4}"), Tap],
       effect: [],
       program: Some((body: (steps: [
-        (id: "proliferate", bind: [], input: None, kind: Perform(Proliferate)),
-      ], yields: []), target_bindings: [])),
+        (id: "proliferate", kind: Perform(Proliferate)),
+      ]))),
     ),
   ],
 )

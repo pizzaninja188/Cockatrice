@@ -12,6 +12,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield,
-    effect: [Draw(who: Controller, count: 1)],
+    effect: [Draw( count: 1)],
   )],
 )

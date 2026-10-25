@@ -9,24 +9,17 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerCastsSpell(caster: AnyPlayer),
-    effect: [],
     program: Some((body: (steps: [
       (id: "sacrifice", bind: ["sacrificed"], kind: Perform(Sacrifice(subject: Source))),
       (id: "draw_for_opponents", kind: IfResult(
-        condition: CardResultCount(result: "sacrificed", min: Some(1), max: None),
+        condition: CardResultCount(result: "sacrificed", min: Some(1)),
         yes: (steps: [
           (id: "draw", kind: Perform(Draw(
             count: 3, who: EachOtherPlayerThanAffectedPlayer
           )))
-        ], yields: []),
-        no: (steps: [], yields: [])
+        ]),
+        no: ()
       ))
-    ], yields: []))),
-    modal: None,
-    targeting: None,
-    may: false,
-    intervening_if: None,
-    triggers_only_once: false,
-    max_triggers_per_turn: None,
+    ]))),
   )],
 )

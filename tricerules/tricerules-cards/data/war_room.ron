@@ -18,7 +18,7 @@
       ability_id: "activated_02",
       presentation: OracleLines([2]),
       costs: [Mana("{3}"), Tap, PayCommanderColorIdentityLife],
-      effect: [Draw(who: Controller, count: 1)],
+      effect: [Draw( count: 1)],
     ),
   ],
 )

@@ -10,13 +10,12 @@
     (id: "counter_spell", bind: ["target_controller"],
       kind: Perform(CounterTargetSpell(
         spell_filter: (card_type: Some(Noncreature)),
-        unless_controller_pays: None,
       ))),
     (id: "create_treasures", input: Some("target_controller"),
       kind: Perform(CreateTokens(
         token: "treasure", count: 2, who: ProgramInputPlayer,
       ))),
-  ], yields: []), target_bindings: [
+  ]), target_bindings: [
     (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
   ])),
   targeting: Some((groups: [(

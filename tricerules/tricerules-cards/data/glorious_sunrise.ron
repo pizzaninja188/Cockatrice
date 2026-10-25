@@ -10,7 +10,7 @@
   triggered_abilities: [(
     ability_id: "combat_modes",
     presentation: OracleLines([1, 2, 3, 4, 5]),
-    trigger: AtBeginningOfCombat(player: Controller),
+    trigger: AtBeginningOfCombat(),
     modal: Some((
       min_modes: 1,
       max_modes: 1,
@@ -52,7 +52,7 @@
               aggregate: MaximumPower,
               min: Some(3),
             ),
-            effect: Draw(who: Controller, count: 1),
+            effect: Draw( count: 1),
           )],
         ),
         (

@@ -9,7 +9,6 @@
   types: ["Sorcery"],
   spell_effect: [SearchLibrary(
     filter: Some((required_subtypes: ["Forest"])),
-    destination: Battlefield(tapped: false),
-    shuffle: true,
+    destination: Battlefield(),
   )],
 )

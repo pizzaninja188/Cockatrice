@@ -8,7 +8,7 @@
     PumpAll(filter: (controller: YouControl), power: 2, toughness: 0),
     Conditional(
       condition: ActivePlayer(players: Opponents),
-      effect: UntapAll(players: Controller, filter: (kind: Creature)),
+      effect: UntapAll(players: Controller),
     ),
   ],
 )

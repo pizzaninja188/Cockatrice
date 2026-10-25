@@ -21,7 +21,6 @@
         zones: Fixed([Hand]),
         destination: Battlefield(tapped: true),
         shuffle: false,
-        reveal: false,
       )],
     ),
   ],

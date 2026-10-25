@@ -4,5 +4,5 @@
   face_id: "wrath_of_god",
   mana_cost: "{2}{W}{W}",
   types: ["Sorcery"],
-  spell_effect: [DestroyAll(kind: (kind: Creature), prevent_regeneration: true)],
+  spell_effect: [DestroyAll( prevent_regeneration: true)],
 )

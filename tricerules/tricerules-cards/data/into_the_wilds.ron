@@ -9,8 +9,7 @@
   triggered_abilities: [(
     ability_id: "upkeep_look_and_land",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfUpkeep(player: Controller),
-    may: false,
+    trigger: AtBeginningOfUpkeep(),
     effect: [IntoTheWilds],
   )],
 )

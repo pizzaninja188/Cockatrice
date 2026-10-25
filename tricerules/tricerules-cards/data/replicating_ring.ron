@@ -15,8 +15,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: AtBeginningOfUpkeep(player: Controller),
-    effect: [],
+    trigger: AtBeginningOfUpkeep(),
     program: Some((body: (steps: [
       (id: "put_night", kind: Perform(PutCounters(
         counter: Night, count: 1, subject: Source,
@@ -28,12 +27,11 @@
             counter: Night, subject: Source,
           ))),
           (id: "make_rings", kind: Perform(CreateTokens(
-            token: "replicated_ring", count: 8, who: Controller,
-            tapped: false, sacrifice_timing: None,
+            token: "replicated_ring", count: 8,
           ))),
-        ], yields: []),
-        no: (steps: [], yields: []),
+        ]),
+        no: (),
       )),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
 )

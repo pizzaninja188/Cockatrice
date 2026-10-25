@@ -11,7 +11,7 @@
     trigger: WhenSelfEntersBattlefield,
     effect: [
       DamageTarget(amount: 4, target: (kind: AnyTarget)),
-      DamagePlayer(amount: 3, who: Controller),
+      DamagePlayer(amount: 3),
     ],
     targeting: Some((groups: [(
       min: 1,

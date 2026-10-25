@@ -15,7 +15,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverCardsLeaveGraveyard(
-      owner: Controller,
       cardinality: OneOrMore,
     ),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],

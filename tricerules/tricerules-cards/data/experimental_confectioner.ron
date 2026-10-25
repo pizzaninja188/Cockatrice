@@ -10,7 +10,7 @@
     ),
     (
       ability_id: "triggered_02", presentation: OracleLines([2]),
-      trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (required_subtypes: ["Food"])),
+      trigger: WheneverPlayerSacrificesPermanent( filter: (required_subtypes: ["Food"])),
       effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1)],
     ),
   ],

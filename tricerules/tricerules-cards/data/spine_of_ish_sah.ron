@@ -24,7 +24,6 @@
         controller: Controller,
         filter: (source_only: true),
         destination: OneOf([Graveyard]),
-        cardinality: EachObject,
       ),
       effect: [ReturnTriggeredCard(reference: TriggerObject, from: [Graveyard], destination: Hand)],
     ),

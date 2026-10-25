@@ -11,28 +11,25 @@
     (
       ability_id: "activated_01",
       presentation: OracleLines([1]),
-      source_zone: Battlefield,
       costs: [Mana("{1}"), Tap, Discard],
       effect: [GainLife(amount: 4)],
     ),
     (
       ability_id: "activated_02",
       presentation: OracleLines([2]),
-      source_zone: Battlefield,
       costs: [Mana("{1}"), Tap, PayLife(amount: 1)],
       effect: [CreateTokens(token: "goat_w_0_1", count: 1)],
     ),
     (
       ability_id: "activated_03",
       presentation: OracleLines([3]),
-      source_zone: Battlefield,
       costs: [
         Mana("{1}"),
         Tap,
         SacrificePermanent(filter: (kind: Creature, controller: You)),
       ],
       effect: [MoveGraveyardCards(
-        filter: (owner: Controller, card: Some((card_type: Some(Artifact)))),
+        filter: ( card: Some((card_type: Some(Artifact)))),
         destination: Hand,
       )],
       targeting: Some((groups: [(
@@ -45,7 +42,6 @@
     (
       ability_id: "activated_04",
       presentation: OracleLines([4]),
-      source_zone: Battlefield,
       costs: [
         Mana("{1}"),
         Tap,

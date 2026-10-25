@@ -15,8 +15,6 @@
         SearchLibrary(
           filter: Some((card_type: Some(BasicLand))),
           destination: Battlefield(tapped: true),
-          shuffle: true,
-          reveal: false,
         ),
       ],
     ),
@@ -27,7 +25,6 @@
         controller: Controller,
         filter: (permanent_type: Some(Land)),
       ),
-      effect: [],
       program: Some((body: (steps: [
         (id: "place_quest", bind: ["placed"], kind: Perform(
           PutCounters(counter: Quest, count: 1, subject: Source),
@@ -59,7 +56,7 @@
             ),
           ),
         )),
-      ], yields: []), target_bindings: [])),
+      ]))),
     ),
   ],
 )

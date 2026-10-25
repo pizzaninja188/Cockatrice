@@ -5,9 +5,8 @@
   mana_cost: "{U}",
   types: ["Sorcery"],
   // CR 701.22a: keeping both cards on top prompts an ordering choice before the draw.
-  spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "scry", bind: [], input: None, kind: Perform(Scry(count: 2))),
-    (id: "draw", bind: [], input: None, kind: Perform(Draw(who: Controller, count: 1))),
-  ], yields: []), target_bindings: [])),
+    (id: "scry", kind: Perform(Scry(count: 2))),
+    (id: "draw", kind: Perform(Draw( count: 1))),
+  ]))),
 )

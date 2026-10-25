@@ -8,8 +8,6 @@
   cast_cost_groups: [(
     group_id: "cast_cost_01",
     presentation: OracleLines([1]),
-    min: 0,
-    max: 1,
     options: [Mana(option_id: "option_01", presentation: OracleLines([1]), kind: Kicker, cost: "{2}")],
   )],
   spell_effect: [
@@ -27,12 +25,9 @@
           enabled_by_cast_cost: Some((
             group_id: "cast_cost_01",
             option_id: "option_01",
-            expected_selected: true,
           )),
         ),
       ],
-      destination: Hand,
-      shuffle: true,
       reveal: true,
     ),
     GainLife(amount: 2),

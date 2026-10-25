@@ -8,16 +8,14 @@
   types: ["Instant"],
   spell_program: Some((body: (
     steps: [
-      (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
-      (id: "discard_two", kind: Perform(Discard(who: Controller, quantity: Exact(2)))),
+      (id: "draw_two", kind: Perform(Draw( count: 2))),
+      (id: "discard_two", kind: Perform(Discard( quantity: Exact(2)))),
       (id: "choose_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
-        chooser: Controller,
         filter: (kind: AnyPermanent, permanent_types: [Land]),
         min: 0,
         max: 3,
       ))),
       (id: "untap_lands", input: Some("lands"), kind: Perform(UntapChosenPermanents)),
     ],
-    yields: [],
   ))),
 )

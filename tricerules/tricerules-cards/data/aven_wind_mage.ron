@@ -12,7 +12,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WheneverPlayerCastsSpell(
-        caster: Controller,
         filter: (card_type: Some(InstantOrSorcery)),
       ),
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],

@@ -20,8 +20,6 @@
         (card_type: Some(Land), required_subtypes: ["Cave"]),
       ]))),
       destination: Battlefield(tapped: true),
-      shuffle: true,
-      reveal: false,
     )],
   )],
 )

@@ -6,11 +6,10 @@
   face_id: "midnight_tilling",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
-    (id: "mill", bind: ["milled"], input: None,
-      kind: Perform(Mill(count: 4, who: Controller))),
-    (id: "recover", bind: [], input: Some("milled"),
+    (id: "mill", bind: ["milled"],
+      kind: Perform(Mill(count: 4))),
+    (id: "recover", input: Some("milled"),
       kind: Perform(ChooseCard(
         source: CardResultCohort(players: Controller),
         filter: (any_of: Some([
@@ -20,5 +19,5 @@
         destination: Hand,
         optional: true,
       ))),
-  ], yields: []), target_bindings: [])),
+  ]))),
 )

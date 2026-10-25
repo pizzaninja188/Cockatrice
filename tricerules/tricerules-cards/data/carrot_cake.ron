@@ -15,7 +15,7 @@
     (
       ability_id: "triggered_02",
       presentation: OracleLines([1]),
-      trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (source_only: true)),
+      trigger: WheneverPlayerSacrificesPermanent( filter: (source_only: true)),
       effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
     ),
   ],

@@ -9,22 +9,22 @@
   types: ["Sorcery"],
   spell_program: Some((
     body: (steps: [
-      (id: "destroy", bind: ["destroyed"], input: None,
+      (id: "destroy", bind: ["destroyed"],
         kind: Perform(Destroy(subject: Chosen((any_of: Some([
           (kind: Creature),
           (kind: AnyPermanent, permanent_types: [Enchantment]),
         ])))))),
-      (id: "lose_life_if_enchantment", bind: [], input: None,
+      (id: "lose_life_if_enchantment",
         kind: IfResult(
           condition: CardResultCount(result: "destroyed", card_type: Some(Enchantment),
-            min: Some(1), max: None),
+            min: Some(1)),
           yes: (steps: [
-            (id: "controller_loses_life", bind: [], input: None,
-              kind: Perform(LoseLife(amount: Fixed(2), who: Controller)))
-          ], yields: []),
-          no: (steps: [], yields: []),
+            (id: "controller_loses_life",
+              kind: Perform(LoseLife(amount: Fixed(2))))
+          ]),
+          no: (),
         )),
-    ], yields: []),
+    ]),
     target_bindings: [
       (instruction_id: "destroy", role: Subject, target_group_index: 0),
     ],

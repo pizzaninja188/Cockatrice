@@ -18,7 +18,6 @@
         Conditional(
           condition: CastSnapshot(index: 0),
           effect: ExileSourceThenReturnTransformed(
-            controller: Owner,
             entry_counters: [(counter: Finality, count: 1)],
           ),
         ),

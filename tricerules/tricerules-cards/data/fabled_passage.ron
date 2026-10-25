@@ -13,34 +13,25 @@
     costs: [Tap, SacrificeSelf],
     effect: [],
     program: Some((body: (steps: [
-      (id: "find_basic_land", bind: ["found_land"], input: None, kind: Perform(SearchLibrary(
-        who: Controller,
-        optional: false,
-        count: 1,
-        count_by_cast_cost: None,
+      (id: "find_basic_land", bind: ["found_land"], kind: Perform(SearchLibrary(
         filter: Some((card_type: Some(BasicLand))),
-        selection_constraint: None,
-        slots: [],
         zones: Fixed([Library]),
         destination: Battlefield(tapped: true),
-        conditional_destination: None,
-        shuffle: true,
-        reveal: false,
         selection_bounds: Some((min: 0, max: 1)),
       ))),
-      (id: "check_four_lands", bind: [], input: None, kind: If(
+      (id: "check_four_lands", kind: If(
         condition: BattlefieldAggregate(
           filter: (controllers: Controller, card_type: Some(Land)),
           aggregate: Count,
           min: Some(4),
         ),
         yes: (steps: [
-          (id: "untap_found_land", bind: [], input: Some("found_land"), kind: Perform(
+          (id: "untap_found_land", input: Some("found_land"), kind: Perform(
             Untap(subject: PreviousEffectObject),
           )),
-        ], yields: []),
-        no: (steps: [], yields: []),
+        ]),
+        no: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

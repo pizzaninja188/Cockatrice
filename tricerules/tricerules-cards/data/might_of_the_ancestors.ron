@@ -10,7 +10,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfCombat(player: Controller),
+    trigger: AtBeginningOfCombat(),
     effect: [
       PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature, controller: You))),
       GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Vigilance]),

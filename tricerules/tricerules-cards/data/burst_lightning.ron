@@ -2,7 +2,7 @@
 (
   id: "burst_lightning", name: "Burst Lightning", face_id: "burst_lightning",
   mana_cost: "{R}", types: ["Instant"],
-  cast_cost_groups: [(group_id: "kicker", presentation: OracleLines([1]), min: 0, max: 1,
+  cast_cost_groups: [(group_id: "kicker", presentation: OracleLines([1]),
     options: [Mana(option_id: "kicker", presentation: OracleLines([1]), kind: Kicker, cost: "{4}")])],
   spell_effect: [DamageTarget(amount: CastCost(cast_cost: (group_id: "kicker", option_id: "kicker"), when_true: 4, otherwise: 2), target: (kind: AnyTarget))],
 )

@@ -16,24 +16,23 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
-        (id: "pay_2_r", bind: [], input: None, kind: Choose(
+        (id: "pay_2_r", kind: Choose(
           choice: "sparktongue_pay_to_damage", chooser: Controller, optional: true,
           branches: [(
             branch_id: "pay_2_r", presentation: Fallback,
-            cost: Mana("{2}{R}"), requirement: Always,
+            cost: Mana("{2}{R}"),
             body: (steps: [
-              (id: "create_reflexive_damage", bind: [], input: None,
+              (id: "create_reflexive_damage",
                kind: Perform(CreateReflexiveTrigger(ability: (
                  ability_id: "reflexive_01", presentation: Fallback,
                  effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
                )))),
-            ], yields: []),
+            ]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
   ],
 )

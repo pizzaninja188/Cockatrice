@@ -21,7 +21,6 @@
         source_chosen_creature_type: Some("chosen_type"),
       ),
     ),
-    effect: [],
     program: Some((body: (steps: [
       (id: "copy_entry", bind: ["copies"], kind: Perform(
         CreateTokenCopies(count: 1, source: TriggerObject),
@@ -44,6 +43,6 @@
           ),
         ),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

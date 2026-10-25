@@ -15,7 +15,6 @@
     presentation: OracleLines([2]),
     trigger: WheneverSelfDealsCombatDamageToPlayer,
     intervening_if: Some(CrimesCommittedThisTurn(players: Controller, min: Some(1))),
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_sacrifice", kind: Choose(
         choice: "sacrifice",
@@ -28,19 +27,14 @@
             filter: (kind: AnyPermanent, controller: You),
             source_only: true,
           ),
-          requirement: Always,
           body: (steps: [
             (id: "search_library", kind: Perform(SearchLibrary(
-              filter: None,
-              destination: Hand,
-              shuffle: true,
-              reveal: false,
               selection_bounds: Some((min: 1, max: 1)),
             ))),
-          ], yields: []),
+          ]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

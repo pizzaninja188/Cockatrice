@@ -11,10 +11,9 @@
         kind: Perform(Discard(who: EachPlayer, quantity: AnyNumber))),
       (id: "draw_each_player", input: Some("discarded"),
         kind: Perform(Draw(who: EachPlayer, count: Count(
-          BoundCardResultCount(aggregation: ForAffectedPlayer, card_type: None),
+          BoundCardResultCount(aggregation: ForAffectedPlayer),
         )))),
-      (id: "draw_controller", kind: Perform(Draw(who: Controller, count: 1))),
+      (id: "draw_controller", kind: Perform(Draw( count: 1))),
     ],
-    yields: [],
   ))),
 )

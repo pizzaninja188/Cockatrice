@@ -14,8 +14,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WheneverCreatureDealsCombatDamageToPlayer(
-        source_controller: Controller,
-        damaged_player: AnyPlayer,
       ),
       effect: [Draw(count: 1)],
     ),
@@ -26,7 +24,6 @@
       effect: [ReturnTriggeredCard(
         reference: AbilitySource,
         from: [Graveyard],
-        controller: Owner,
         set_types: Some((card_types: [Enchantment])),
       )],
     ),

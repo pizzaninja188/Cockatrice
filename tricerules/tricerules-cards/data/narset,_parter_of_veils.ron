@@ -19,9 +19,6 @@
     costs: [Loyalty(-2)],
     effect: [LookChooseToHand(
       count: 4,
-      min: 0,
-      max: 1,
-      reveal: true,
       filter: Some((excluded_card_types: [Creature, Land])),
       bottom_order: Random,
     )],

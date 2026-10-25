@@ -18,7 +18,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: WheneverPlayerCastsSpell(caster: Controller, ordinal: Some(2)),
+    trigger: WheneverPlayerCastsSpell( ordinal: Some(2)),
     effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
   )],
 )

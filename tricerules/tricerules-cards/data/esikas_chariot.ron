@@ -17,9 +17,6 @@
       effect: [CreateTokens(
         token: "cat_g_2_2",
         count: 2,
-        who: Controller,
-        tapped: false,
-        sacrifice_timing: None,
       )],
     ),
     (

@@ -22,11 +22,10 @@
     presentation: OracleLines([2]),
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      filter: (permanent_type: None, exclude_source: true),
+      filter: ( exclude_source: true),
     ),
     intervening_if: Some(TriggerObjectWasNotPutWithThisAbility),
     effect: [PutPermanentFromHand(
-      filter: None,
       max_mana_value: Some(TriggerObject),
     )],
   )],

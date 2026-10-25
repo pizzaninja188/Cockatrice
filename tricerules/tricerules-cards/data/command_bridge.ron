@@ -16,25 +16,23 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((body: (steps: [
-      (id: "choose_tap", bind: [], input: None, kind: Choose(
+      (id: "choose_tap", kind: Choose(
         choice: "tap_permanent", chooser: Controller, optional: true,
         branches: [(
           branch_id: "tap_an_untapped_permanent_you_control", presentation: Fallback,
           cost: TapPermanents(
             count: 1,
             filter: (kind: AnyPermanent, controller: You),
-            exclude_source: false,
-          ), requirement: Always,
-          body: (steps: [], yields: []),
+          ),
+          body: (),
         )],
         otherwise: (steps: [
-          (id: "sacrifice_source", bind: [], input: None,
+          (id: "sacrifice_source",
             kind: Perform(Sacrifice(subject: Source))),
-        ], yields: []),
+        ]),
       )),
-    ], yields: []), target_bindings: [])),
+    ]))),
   )],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_))],
 )

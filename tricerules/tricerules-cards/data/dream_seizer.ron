@@ -15,15 +15,14 @@
           branch_id: "blight_1",
           presentation: Fallback,
           cost: Blight(count: 1),
-          requirement: Always,
           body: (steps: [
             (id: "discard", bind: ["discarded"], kind: Perform(Discard(
               who: EachOpponent, quantity: Exact(1),
             ))),
-          ], yields: []),
+          ]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

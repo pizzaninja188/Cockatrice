@@ -4,7 +4,7 @@
   face_id: "kenriths_transformation",
   mana_cost: "{1}{G}",
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   triggered_abilities: [
     (
       ability_id: "triggered_01",

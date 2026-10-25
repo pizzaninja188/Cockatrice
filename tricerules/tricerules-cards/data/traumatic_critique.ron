@@ -2,11 +2,10 @@
 (
   id: "traumatic_critique", name: "Traumatic Critique", face_id: "traumatic_critique",
   mana_cost: "{X}{U}{R}", types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
     (id: "damage_target", kind: Perform(DamageTarget(amount: "X", target: (kind: AnyTarget)))),
-    (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
-    (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
-  ], yields: []), target_bindings: [(instruction_id: "damage_target", role: Target, target_group_index: 0)])),
+    (id: "draw_two", kind: Perform(Draw( count: 2))),
+    (id: "discard_one", kind: Perform(Discard( quantity: Exact(1)))),
+  ]), target_bindings: [(instruction_id: "damage_target", role: Target, target_group_index: 0)])),
   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [])])),
 )

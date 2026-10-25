@@ -10,8 +10,8 @@
   types: ["Sorcery"],
   spell_effect: [
     MoveGraveyardCards(
-      filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
-      destination: Battlefield(tapped: false),
+      filter: ( card: Some((card_type: Some(Creature)))),
+      destination: Battlefield(),
     ),
     GainLife(amount: 3),
   ],

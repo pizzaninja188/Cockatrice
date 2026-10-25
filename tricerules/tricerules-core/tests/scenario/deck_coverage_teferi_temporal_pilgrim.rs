@@ -101,8 +101,8 @@ fn teferi_lki_prefix_engine(seed: u64) -> GameEngine {
             "steps: [\n        (id: \"prefix_draw\", kind: Perform(Draw(count: 1))),",
         ),
         (
-            "      ], yields: []), target_bindings: [",
-            "        (id: \"observable_tail\", kind: Perform(GainLife(amount: 1))),\n      ], yields: []), target_bindings: [",
+            "      ]), target_bindings: [",
+            "        (id: \"observable_tail\", kind: Perform(GainLife(amount: 1))),\n      ]), target_bindings: [",
         ),
     ] {
         assert_eq!(fixture.matches(needle).count(), 1, "fixture source changed: {needle}");

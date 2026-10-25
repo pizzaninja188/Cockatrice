@@ -4,17 +4,16 @@
   face_id: "rousing_read",
   mana_cost: "{2}{U}",
   types: ["Enchantment", "Aura"],
-  spell_effect: [AuraAttach(target: (kind: Creature))],
+  spell_effect: [AuraAttach()],
   triggered_abilities: [
     (
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
-        (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
-        (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
-      ], yields: []), target_bindings: [])),
+        (id: "draw_two", kind: Perform(Draw( count: 2))),
+        (id: "discard_one", kind: Perform(Discard( quantity: Exact(1)))),
+      ]))),
     ),
   ],
   static_abilities: [

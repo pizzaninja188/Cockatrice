@@ -17,10 +17,8 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverPermanentLeavesBattlefield(
-      controller: AnyPlayer,
       filter: (permanent_type: Some(Artifact)),
       destination: OneOf([Graveyard]),
-      cardinality: EachObject,
     ),
     effect: [Untap(subject: Source)],
     may: true,

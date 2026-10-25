@@ -16,9 +16,7 @@
     ],
     effect: [SearchLibrary(
       filter: Some((card_type: Some(Artifact))),
-      destination: Battlefield(tapped: false),
-      shuffle: true,
-      reveal: false,
+      destination: Battlefield(),
     )],
   )],
 )

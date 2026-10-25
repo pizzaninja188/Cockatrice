@@ -5,7 +5,6 @@
   face_id: "volcanic_spite",
   mana_cost: "{1}{R}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
     (id: "damage_target", kind: Perform(DamageTarget(amount: 3, target: (any_of: Some([
       (kind: Creature),
@@ -20,11 +19,10 @@
         branch_id: "put_hand_card_on_bottom",
         presentation: Fallback,
         cost: PutHandCardOnLibraryBottom,
-        requirement: Always,
-        body: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+        body: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
       )],
-      otherwise: (steps: [], yields: []),
+      otherwise: (),
     )),
-  ], yields: []), target_bindings: [(instruction_id: "damage_target", role: Target, target_group_index: 0)])),
+  ]), target_bindings: [(instruction_id: "damage_target", role: Target, target_group_index: 0)])),
   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature, planeswalker, or battle", effect_indices: [])])),
 )

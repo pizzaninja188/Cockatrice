@@ -8,8 +8,6 @@
   cast_cost_groups: [(
     group_id: "teamwork",
     presentation: OracleLines([1]),
-    min: 0,
-    max: 1,
     options: [TapPermanents(
       option_id: "teamwork_2",
       presentation: OracleLines([1]),
@@ -21,7 +19,7 @@
   spell_effect: [CounterTargetSpell(
     spell_filter: (),
     unless_controller_pays_by_cast_cost: Some((
-      condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+      condition: (group_id: "teamwork", option_id: "teamwork_2"),
       if_selected: 4,
       otherwise: 2,
     )),

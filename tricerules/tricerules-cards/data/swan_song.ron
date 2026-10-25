@@ -21,7 +21,7 @@
         count: 1,
         who: ProgramInputPlayer,
       ))),
-  ], yields: []), target_bindings: [
+  ]), target_bindings: [
     (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
   ])),
   targeting: Some((groups: [(

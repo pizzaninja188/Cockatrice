@@ -11,7 +11,6 @@
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: OracleLines([1]),
-    source_zone: Battlefield,
     costs: [Mana("{1}"), Tap, SacrificeSelf],
     effect: [ProduceMana(options: [
       (w: 1),
@@ -25,6 +24,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfDies,
-    effect: [Draw(who: Controller, count: 1)],
+    effect: [Draw( count: 1)],
   )],
 )

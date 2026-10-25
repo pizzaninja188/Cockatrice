@@ -23,7 +23,6 @@
         ExileGraveyardCards(
           constraint: AggregateMinimum(minimum: 3, contribution: ManaValue),
           filter: (),
-          exclude_source: false,
         ),
       ],
       effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],

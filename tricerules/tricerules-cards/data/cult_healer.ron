@@ -19,7 +19,7 @@
     (
       ability_id: "triggered_02",
       presentation: OracleLines([1]),
-      trigger: WheneverPlayerFullyUnlocksRoom(player: Controller),
+      trigger: WheneverPlayerFullyUnlocksRoom(),
       effect: [GrantKeywords(subject: Source, keywords: [Lifelink])],
     ),
   ],

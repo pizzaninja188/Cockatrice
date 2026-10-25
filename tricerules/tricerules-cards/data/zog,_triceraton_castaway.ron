@@ -25,8 +25,6 @@
     costs: [Mana("{2}"), DiscardSelf],
     effect: [SearchLibrary(
       filter: Some((required_subtypes: ["Mountain"])),
-      destination: Hand,
-      shuffle: true,
       reveal: true,
     )],
   )],

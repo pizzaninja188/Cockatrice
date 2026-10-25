@@ -11,7 +11,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (exclude_source: true),),
+    trigger: WheneverPlayerSacrificesPermanent( filter: (exclude_source: true),),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
   )],
 )

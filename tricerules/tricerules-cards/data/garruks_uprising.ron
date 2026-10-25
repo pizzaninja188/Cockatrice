@@ -22,7 +22,7 @@
         aggregate: MaximumPower,
         min: Some(4),
       )),
-      effect: [Draw(who: Controller, count: 1)],
+      effect: [Draw( count: 1)],
     ),
     (
       ability_id: "triggered_02",
@@ -32,7 +32,7 @@
         filter: (permanent_type: Some(Creature)),
         creature_filter: Some((power: Some(AtLeast(4)))),
       ),
-      effect: [Draw(who: Controller, count: 1)],
+      effect: [Draw( count: 1)],
     ),
   ],
 )

@@ -15,7 +15,6 @@
         token: Some(false),
       ),
     ),
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_copy", kind: Choose(
         choice: "choose_copy",
@@ -25,7 +24,6 @@
           branch_id: "pay_to_copy",
           presentation: OracleLines([1]),
           cost: Mana("{R}"),
-          requirement: Always,
           body: (steps: [
             (id: "copy_entry", bind: ["copies"], kind: Perform(
               CreateTokenCopies(count: 1, source: TriggerObject),
@@ -48,10 +46,10 @@
                 ),
               ),
             )),
-          ], yields: []),
+          ]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

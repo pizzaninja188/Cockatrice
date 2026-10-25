@@ -9,8 +9,8 @@
     filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
   )],
   spell_effect: [MoveGraveyardCards(
-    filter: (owner: Controller, card: Some((card_type: Some(Artifact)))),
-    destination: Battlefield(tapped: false),
+    filter: ( card: Some((card_type: Some(Artifact)))),
+    destination: Battlefield(),
   )],
   targeting: Some((groups: [(
     min: 1,

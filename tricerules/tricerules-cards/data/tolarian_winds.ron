@@ -9,15 +9,13 @@
   spell_program: Some((body: (
     steps: [
       (id: "discard", bind: ["discarded"],
-        kind: Perform(Discard(who: Controller, quantity: All))),
+        kind: Perform(Discard( quantity: All))),
       (id: "draw", input: Some("discarded"),
-        kind: Perform(Draw(who: Controller, count: Count(CardsMatchingResult(filter: (
+        kind: Perform(Draw( count: Count(CardsMatchingResult(filter: (
           source: PreviousEffect,
           action: Discard,
           players: Controller,
-          card_type: None,
         )))))),
     ],
-    yields: [],
   ))),
 )

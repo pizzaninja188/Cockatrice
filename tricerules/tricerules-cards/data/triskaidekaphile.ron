@@ -16,7 +16,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: AtBeginningOfUpkeep(player: Controller),
+    trigger: AtBeginningOfUpkeep(),
     intervening_if: Some(CardsInHand(players: Relative(Controller), min: Some(13), max: Some(13))),
     effect: [WinGameIf(condition: CardsInHand(players: Relative(Controller), min: Some(13), max: Some(13)))],
   )],

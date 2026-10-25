@@ -16,7 +16,7 @@
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [MoveGraveyardCards(
-      filter: (owner: Controller, card: Some((any_of: Some([
+      filter: ( card: Some((any_of: Some([
         (card_type: Some(Creature)),
         (required_subtypes: ["Food"]),
       ])))),

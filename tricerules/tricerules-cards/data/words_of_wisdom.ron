@@ -7,7 +7,7 @@
   mana_cost: "{1}{U}",
   types: ["Instant"],
   spell_effect: [
-    Draw(who: Controller, count: 2),
+    Draw( count: 2),
     Draw(who: EachOpponent, count: 1),
   ],
 )

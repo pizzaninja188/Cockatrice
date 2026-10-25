@@ -13,7 +13,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([3]),
       trigger: WheneverPermanentEntersBattlefield(
-        controller: AnyPlayer,
         filter: (permanent_type: Some(Creature), exclude_source: true),
       ),
       effect: [DamagePlayer(amount: 1, who: TriggerObjectController)],

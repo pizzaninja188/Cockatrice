@@ -5,9 +5,8 @@
   mana_cost: "{U}",
   types: ["Instant"],
   // CR 701.22: the Scry decision finishes before the following draw.
-  spell_effect: [],
   spell_program: Some((body: (steps: [
     (id: "scry", kind: Perform(Scry(count: 1))),
-    (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+    (id: "draw", kind: Perform(Draw( count: 1))),
   ]))),
 )

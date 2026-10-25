@@ -8,14 +8,14 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    trigger: WheneverPlayerDrawsCard(),
     effect: [PutCounters(counter: Foreshadow, count: 1, subject: Source)],
   )],
   activated_abilities: [
     (
       ability_id: "activated_01",
       presentation: OracleLines([2]),
-      costs: [RemoveCounters(counter: Some(Foreshadow), count: 8, payment_source: Source)],
+      costs: [RemoveCounters(counter: Some(Foreshadow), count: 8)],
       effect: [CreateTokens(token: "kraken_token_8_8", count: 1)],
     ),
     (

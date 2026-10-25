@@ -12,7 +12,7 @@
     presentation: OracleLines([2]),
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      filter: (permanent_type: Some(Land), exclude_source: false),
+      filter: (permanent_type: Some(Land)),
     ),
     effect: [CreateTokens(token: "elf_warrior_g_1_1", count: 1, who: SourceController)],
   )],

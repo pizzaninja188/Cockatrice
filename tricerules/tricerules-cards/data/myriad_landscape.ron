@@ -23,8 +23,6 @@
         filter: Some((card_type: Some(BasicLand))),
         selection_constraint: Some(SharedLandType),
         destination: Battlefield(tapped: true),
-        shuffle: true,
-        reveal: false,
       )],
     ),
   ],

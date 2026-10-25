@@ -13,6 +13,5 @@
       (required_subtypes: ["Desert"]),
     ]))),
     destination: Battlefield(tapped: true),
-    shuffle: true,
   )],
 )

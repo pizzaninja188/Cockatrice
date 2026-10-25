@@ -11,11 +11,10 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((
       body: (
         steps: [
-          (id: "draw_or_mill", bind: [], input: None, kind: Choose(
+          (id: "draw_or_mill", kind: Choose(
             choice: "draw_or_mill",
             chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
             optional: true,
@@ -23,24 +22,22 @@
               branch_id: "draw_three",
               presentation: OracleLines([2]),
               cost: None,
-              requirement: Always,
               body: (steps: [
-                (id: "draw_three_cards", bind: [], input: None,
-                  kind: Perform(Draw(who: Controller, count: 3))),
-              ], yields: []),
+                (id: "draw_three_cards",
+                  kind: Perform(Draw( count: 3))),
+              ]),
             )],
             otherwise: (steps: [
-              (id: "mill_three", bind: ["milled"], input: None,
-                kind: Perform(Mill(who: Controller, count: 3))),
-              (id: "damage_opponent", bind: [], input: Some("milled"),
+              (id: "mill_three", bind: ["milled"],
+                kind: Perform(Mill( count: 3))),
+              (id: "damage_opponent", input: Some("milled"),
                 kind: Perform(DamagePlayer(
                   who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
                   amount: Count(PreviousMillManaValueSum),
                 ))),
-            ], yields: []),
+            ]),
           )),
         ],
-        yields: [],
       ),
       target_bindings: [(
         instruction_id: "damage_opponent",

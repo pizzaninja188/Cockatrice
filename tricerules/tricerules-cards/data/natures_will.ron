@@ -9,8 +9,6 @@
             ability_id: "triggered_01",
             presentation: OracleLines([1]),
             trigger: WheneverCreatureDealsCombatDamageToPlayer(
-                source_controller: Controller,
-                damaged_player: AnyPlayer,
                 cardinality: OneOrMorePerDamagedPlayer,
             ),
             effect: [

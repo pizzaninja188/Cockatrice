@@ -10,23 +10,22 @@
       ability_id: "chapter_i",
       presentation: OracleLines([2]),
       trigger: SagaChapter(chapters: [1]),
-      effect: [],
       program: Some((body: (steps: [
-        (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
-        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+        (id: "draw_one", kind: Perform(Draw( count: 1))),
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard( quantity: Exact(1)))),
         (id: "create_soldier_if_nonland", kind: IfResult(
-          condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1), max: None),
-          yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1, who: Controller, tapped: false, sacrifice_timing: None)))], yields: []),
-          no: (steps: [], yields: []))),
-      ], yields: []), target_bindings: [])),
+          condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1)),
+          yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1)))]),
+          no: ())),
+      ]))),
     ),
     (
       ability_id: "chapter_ii",
       presentation: OracleLines([3]),
       trigger: SagaChapter(chapters: [2]),
       effect: [MoveGraveyardCards(
-        filter: (owner: Controller, card: Some((card_type: Some(Creature), max_mana_value: Some(3)))),
-        destination: Battlefield(tapped: false),
+        filter: ( card: Some((card_type: Some(Creature), max_mana_value: Some(3)))),
+        destination: Battlefield(),
       )],
     ),
     (

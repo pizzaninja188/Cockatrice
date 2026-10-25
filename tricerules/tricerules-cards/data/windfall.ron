@@ -11,9 +11,8 @@
         kind: Perform(Discard(who: EachPlayer, quantity: All))),
       (id: "draw_each_player", input: Some("discarded"),
         kind: Perform(Draw(who: EachPlayer, count: Count(
-          BoundCardResultCount(aggregation: MaximumPerPlayer, card_type: None),
+          BoundCardResultCount(aggregation: MaximumPerPlayer),
         )))),
     ],
-    yields: [],
   ))),
 )

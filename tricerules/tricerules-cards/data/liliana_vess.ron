@@ -18,19 +18,12 @@
         action: Discard,
         count: 1,
         target: (kind: AnyPlayer),
-        chooser: AffectedPlayer,
-        card_filter: None,
-        optional: false,
-        visibility: PrivateLook,
       )],
       targeting: Some((groups: [(
         min: 1,
         max: 1,
         prompt: "Choose target player",
         effect_indices: [0],
-        distinct_from: [],
-        same_graveyard: false,
-        cast_cost_expansion: None,
       )])),
     ),
     (
@@ -38,10 +31,7 @@
       presentation: OracleLines([2]),
       costs: [Loyalty(-2)],
       effect: [SearchLibrary(
-        filter: None,
         destination: TopOfLibrary,
-        shuffle: true,
-        reveal: false,
       )],
     ),
     (

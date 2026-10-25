@@ -26,8 +26,6 @@
       types: ["Sorcery", "Omen"],
       spell_effect: [SearchLibrary(
         filter: Some((card_type: Some(BasicLand))),
-        destination: Hand,
-        shuffle: true,
         reveal: true,
       )],
     ),

@@ -8,7 +8,7 @@
     triggered_abilities: [(
         ability_id: "triggered_01",
         presentation: OracleLines([1]),
-        trigger: AtBeginningOfDrawStep(player: AnyPlayer),
+        trigger: AtBeginningOfDrawStep(),
         effect: [Draw(who: AffectedPlayer, count: 2)],
     )],
 )

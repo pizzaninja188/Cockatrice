@@ -13,27 +13,17 @@
     costs: [Tap, PayLife(amount: 1), SacrificeSelf],
     effect: [],
     program: Some((body: (steps: [
-      (id: "find_basic_land", bind: ["found_land"], input: None, kind: Perform(SearchLibrary(
-        who: Controller,
-        optional: false,
-        count: 1,
-        count_by_cast_cost: None,
+      (id: "find_basic_land", bind: ["found_land"], kind: Perform(SearchLibrary(
         filter: Some((card_type: Some(BasicLand))),
-        selection_constraint: None,
-        slots: [],
         zones: Fixed([Library]),
         destination: Battlefield(tapped: true),
-        conditional_destination: None,
-        shuffle: true,
-        reveal: false,
         selection_bounds: Some((min: 0, max: 1)),
       ))),
-      (id: "behold_elf", bind: [], input: Some("found_land"), kind: Perform(MayBehold(
-        who: Controller,
+      (id: "behold_elf", input: Some("found_land"), kind: Perform(MayBehold(
         choice_id: "behold_elf",
         criterion: (required_subtype: "Elf"),
         if_beheld: [Untap(subject: PreviousEffectObject)],
       ))),
-    ], yields: []))),
+    ]))),
   )],
 )

@@ -17,16 +17,15 @@
       effect: [ChooseAndSacrifice(
         players: EachOpponent,
         count: 3,
-        filter: (kind: Creature),
       )],
     ),
     (
       ability_id: "upkeep_return_creature",
       presentation: OracleLines([2]),
-      trigger: AtBeginningOfUpkeep(player: Controller),
+      trigger: AtBeginningOfUpkeep(),
       effect: [MoveGraveyardCards(
         filter: (owner: AnyPlayer, card: Some((card_type: Some(Creature)))),
-        destination: Battlefield(tapped: false),
+        destination: Battlefield(),
         entry_modifiers: [AddTypes((creature_types: ["Phyrexian"]))],
       )],
       targeting: Some((groups: [

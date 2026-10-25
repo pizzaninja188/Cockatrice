@@ -5,5 +5,5 @@
   mana_cost: "{U}{U}",
   types: ["Instant"],
   // The counter effect has no spell restriction (CR 701.6).
-  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: None)],
+  spell_effect: [CounterTargetSpell(spell_filter: ())],
 )

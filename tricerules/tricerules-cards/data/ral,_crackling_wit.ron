@@ -12,7 +12,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerCastsSpell(
-      caster: Controller,
       filter: (card_type: Some(Noncreature)),
     ),
     effect: [PutCounters(counter: Loyalty, count: 1, subject: Source)],
@@ -28,7 +27,7 @@
       ability_id: "activated_02",
       presentation: OracleLines([3]),
       costs: [Loyalty(-3)],
-      effect: [Draw(count: 3), Discard(who: Controller, quantity: Exact(2))],
+      effect: [Draw(count: 3), Discard( quantity: Exact(2))],
     ),
     (
       ability_id: "activated_03",

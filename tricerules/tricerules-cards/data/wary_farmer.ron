@@ -11,7 +11,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfEndStep(player: Controller),
+    trigger: AtBeginningOfEndStep(),
     effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
     intervening_if: Some(PermanentsEnteredThisTurn(
       controllers: Controller,

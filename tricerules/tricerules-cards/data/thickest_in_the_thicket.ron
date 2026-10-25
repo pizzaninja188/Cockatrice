@@ -26,10 +26,10 @@
         (
             ability_id: "triggered_02",
             presentation: OracleLines([2]),
-            trigger: AtBeginningOfEndStep(player: Controller),
+            trigger: AtBeginningOfEndStep(),
             effect: [Conditional(
                 condition: ControlsCreatureTiedForGreatestPower,
-                effect: Draw(who: Controller, count: 2),
+                effect: Draw( count: 2),
             )],
         ),
     ],

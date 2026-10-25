@@ -352,18 +352,31 @@ fn koya_return_tail_program(include_early_life: bool) -> String {
     } else {
         ""
     };
-    include_str!("../../../tricerules-cards/data/koya,_death_from_above.ron")
-        .replace("\r\n", "\n")
-        .replacen(
-            "steps: [\n                (id: \"pay_or_return\"",
-            &format!("steps: [\n                {early}(id: \"pay_or_return\""),
-            1,
-        )
-        .replacen(
-            "                ))\n              ], yields: [])))",
-            "                )),\n                (id: \"tail\", kind: Perform(GainLife(who: Controller, amount: 1)))\n              ], yields: [])))",
-            1,
-        )
+    let mut fixture = include_str!("../../../tricerules-cards/data/koya,_death_from_above.ron")
+        .replace("\r\n", "\n");
+    let early_needle = "steps: [\n                (id: \"pay_or_return\"";
+    assert_eq!(
+        fixture.matches(early_needle).count(),
+        1,
+        "Koya fixture source changed before early-life insertion"
+    );
+    fixture = fixture.replacen(
+        early_needle,
+        &format!("steps: [\n                {early}(id: \"pay_or_return\""),
+        1,
+    );
+
+    let tail_needle = "                ))\n              ])))";
+    assert_eq!(
+        fixture.matches(tail_needle).count(),
+        1,
+        "Koya fixture source changed before delayed-tail insertion"
+    );
+    fixture.replacen(
+        tail_needle,
+        "                )),\n                (id: \"tail\", kind: Perform(GainLife(who: Controller, amount: 1)))\n              ])))",
+        1,
+    )
 }
 
 fn koya_return_tail_setup(

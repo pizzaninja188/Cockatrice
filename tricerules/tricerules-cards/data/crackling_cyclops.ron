@@ -12,7 +12,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    trigger: WheneverPlayerCastsSpell( filter: (card_type: Some(Noncreature))),
     effect: [PumpTarget(power: 3, toughness: 0, subject: Source)],
   )],
 )

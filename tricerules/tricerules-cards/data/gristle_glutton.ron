@@ -13,11 +13,11 @@
     costs: [Tap, Blight(count: 1)],
     effect: [],
     program: Some((body: (steps: [
-      (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+      (id: "discard_one", bind: ["discarded"], kind: Perform(Discard( quantity: Exact(1)))),
       (id: "draw_if_discarded", kind: IfResult(
-        condition: DiscardCount(result: "discarded", players: Controller, card_type: None, min: Some(1), max: None),
-        yes: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
-        no: (steps: [], yields: []))),
-    ], yields: []), target_bindings: [])),
+        condition: DiscardCount(result: "discarded", players: Controller, min: Some(1)),
+        yes: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
+        no: ())),
+    ]))),
   )],
 )

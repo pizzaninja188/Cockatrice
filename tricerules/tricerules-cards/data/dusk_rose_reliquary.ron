@@ -11,7 +11,6 @@
     group_id: "additional_cost",
     presentation: OracleLines([1]),
     min: 1,
-    max: 1,
     options: [
       SacrificePermanent(
         option_id: "sacrifice_artifact_or_creature",
@@ -29,10 +28,9 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
-      effect: [],
       program: Some((body: (steps: [
         (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}")))),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",

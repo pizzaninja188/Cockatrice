@@ -14,12 +14,11 @@
       (id: "create_a_lander_if_paid", kind: IfResult(
         condition: CounterPayment(result: "counter_payment", outcome: Paid),
         yes: (steps: [(id: "create_lander", kind: Perform(CreateTokens(
-          token: "lander", count: 1, who: Controller, tapped: false,
-          sacrifice_timing: None,
-        )))], yields: []),
-        no: (steps: [], yields: []),
+          token: "lander", count: 1,
+        )))]),
+        no: (),
       )),
-    ], yields: []),
+    ]),
     target_bindings: [(instruction_id: "counter_spell", role: Spell, target_group_index: 0)],
   )),
   targeting: Some((groups: [(

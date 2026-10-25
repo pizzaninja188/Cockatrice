@@ -23,7 +23,7 @@
       triggered_abilities: [(
         ability_id: "triggered_01",
         presentation: OracleLines([1]),
-        trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: None),
+        trigger: WheneverControllerAttacks(min_attackers: Some(1)),
         effect: [GrantKeywords(
           subject: Chosen((kind: Creature, combat_role: AttackingOrBlocking)),
           keywords: [DoubleStrike],

@@ -11,7 +11,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
-    trigger: WheneverPlayerCommitsCrime(player: Controller),
+    trigger: WheneverPlayerCommitsCrime(),
     effect: [GrantKeywordChoice(subject: Chosen((kind: Creature, controller: You)), choices: [Menace, Lifelink])],
   )],
 )

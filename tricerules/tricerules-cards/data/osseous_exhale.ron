@@ -9,15 +9,12 @@
   cast_cost_groups: [(
     group_id: "cast_cost_01",
     presentation: OracleLines([1]),
-    min: 0,
-    max: 1,
     options: [Behold(
       option_id: "option_01",
       presentation: OracleLines([1]),
       criterion: (required_subtype: "Dragon"),
     )],
   )],
-  spell_effect: [],
   spell_program: Some((body: (steps: [
     (id: "damage_target", kind: Perform(DamageTarget(
       amount: 5,
@@ -35,11 +32,10 @@
           requirement: CastCostReceipt((
             group_id: "cast_cost_01",
             option_id: "option_01",
-            expected_selected: true,
           )),
           body: (steps: [
             (id: "gain_two_life", kind: Perform(GainLife(amount: 2))),
-          ], yields: []),
+          ]),
         ),
         (
           branch_id: "no_dragon_beheld",
@@ -50,12 +46,12 @@
             option_id: "option_01",
             expected_selected: false,
           )),
-          body: (steps: [], yields: []),
+          body: (),
         ),
       ],
-      otherwise: (steps: [], yields: []),
+      otherwise: (),
     )),
-  ], yields: []), target_bindings: [
+  ]), target_bindings: [
     (instruction_id: "damage_target", role: Target, target_group_index: 0),
   ])),
   targeting: Some((groups: [(

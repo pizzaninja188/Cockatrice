@@ -7,32 +7,32 @@
   mana_cost: "{1}{U}",
   types: ["Sorcery"],
   spell_program: Some((body: (steps: [
-    (id: "graveyard_gate", bind: [], input: None,
+    (id: "graveyard_gate",
      kind: If(
        condition: AllOf([
          GraveyardAggregate(
            owners: Controller, aggregate: CardCount,
-           filter: Some((card_type: Some(Instant))), min: Some(1), max: None,
+           filter: Some((card_type: Some(Instant))), min: Some(1),
          ),
          GraveyardAggregate(
            owners: Controller, aggregate: CardCount,
-           filter: Some((card_type: Some(Sorcery))), min: Some(1), max: None,
+           filter: Some((card_type: Some(Sorcery))), min: Some(1),
          ),
        ]),
        yes: (steps: [
-         (id: "take_two", bind: [], input: None,
+         (id: "take_two",
           kind: Perform(LookChooseToHand(
-            count: 3, filter: None, min: 2, max: 2,
+            count: 3, min: 2, max: 2,
             reveal: false, bottom_order: Chosen,
           ))),
-       ], yields: []),
+       ]),
        no: (steps: [
-         (id: "take_one", bind: [], input: None,
+         (id: "take_one",
           kind: Perform(LookChooseToHand(
-            count: 3, filter: None, min: 1, max: 1,
+            count: 3, min: 1,
             reveal: false, bottom_order: Chosen,
           ))),
-       ], yields: []),
+       ]),
      )),
-  ], yields: []))),
+  ]))),
 )

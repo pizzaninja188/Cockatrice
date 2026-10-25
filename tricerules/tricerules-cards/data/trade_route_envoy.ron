@@ -13,7 +13,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((body: (steps: [
       (id: "draw_or_counter", kind: Choose(
         choice: "draw_if_countered",
@@ -27,14 +26,12 @@
             filter: (
               controllers: Controller,
               requires_any_counter: true,
-              exclude_source: false,
             ),
             min: Some(1),
-            max: None,
           )),
           body: (steps: [
-            (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
-          ], yields: []),
+            (id: "draw", kind: Perform(Draw( count: 1))),
+          ]),
         )],
         otherwise: (steps: [
           (id: "put_counter", kind: Perform(PutCounters(
@@ -42,8 +39,8 @@
             count: 1,
             subject: Source,
           ))),
-        ], yields: []),
+        ]),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

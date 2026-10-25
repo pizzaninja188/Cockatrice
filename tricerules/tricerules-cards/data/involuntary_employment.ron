@@ -4,7 +4,7 @@
   id: "involuntary_employment", name: "Involuntary Employment", face_id: "involuntary_employment",
   mana_cost: "{3}{R}", types: ["Sorcery"],
   spell_effect: [
-    GainControl(target: (kind: Creature), duration: UntilEndOfTurn),
+    GainControl( duration: UntilEndOfTurn),
     Untap(subject: Chosen((kind: Creature))),
     GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
     CreateTokens(token: "treasure", count: 1),

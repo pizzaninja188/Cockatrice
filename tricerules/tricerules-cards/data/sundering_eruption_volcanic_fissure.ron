@@ -17,8 +17,6 @@
           optional: true,
           filter: Some((card_type: Some(BasicLand))),
           destination: Battlefield(tapped: true),
-          shuffle: true,
-          reveal: false,
         ),
         ApplyCombatRestriction(
           scope: Matching((kind: Creature, excluded_keywords: [Flying])),
@@ -48,7 +46,6 @@
         presentation: OracleLines([1]),
         definition: EntersTapped(
           affected: Self_,
-          condition: None,
           unless_cost: Some(PayLife(amount: 3)),
         ),
       )],

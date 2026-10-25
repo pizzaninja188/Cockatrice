@@ -9,7 +9,7 @@
   spell_program: Some((body: (steps: [
     (id: "counter_spell", bind: ["target_controller"],
       kind: Perform(CounterTargetSpell(
-        spell_filter: (), unless_controller_pays: None,
+        spell_filter: (),
       ))),
     (id: "create_target_draw_trigger", input: Some("target_controller"),
       kind: Perform(CreateDelayedTrigger(
@@ -19,7 +19,6 @@
           ability_id: "delayed_01",
           presentation: OracleLines([1]),
           trigger: AtBeginningOfNextTurnUpkeep,
-          effect: [],
           program: Some((body: (steps: [
             (id: "choose_count", kind: DrawCountChoice(
               choice: "draw_count",
@@ -32,9 +31,7 @@
                 (branch_id: "draw_two", count: 2),
               ],
             )),
-          ], yields: []), target_bindings: [])),
-          modal: None, targeting: None, may: false, intervening_if: None,
-          triggers_only_once: false, max_triggers_per_turn: None,
+          ]))),
         ),
       ))),
     (id: "create_caster_draw_trigger",
@@ -47,7 +44,7 @@
           effect: [Draw(count: 1)],
         ),
       ))),
-  ], yields: []), target_bindings: [
+  ]), target_bindings: [
     (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
   ])),
   targeting: Some((groups: [(

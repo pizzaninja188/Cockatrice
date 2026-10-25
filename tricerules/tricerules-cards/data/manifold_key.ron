@@ -11,7 +11,6 @@
     (
       ability_id: "activated_01",
       presentation: OracleLines([1]),
-      source_zone: Battlefield,
       costs: [Mana("{1}"), Tap],
       effect: [Untap(subject: Chosen((
         kind: AnyPermanent,
@@ -28,7 +27,6 @@
     (
       ability_id: "activated_02",
       presentation: OracleLines([2]),
-      source_zone: Battlefield,
       costs: [Mana("{3}"), Tap],
       effect: [ApplyCombatRestriction(
         scope: Chosen((kind: Creature)),

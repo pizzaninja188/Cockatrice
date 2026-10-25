@@ -12,14 +12,12 @@
     (
       ability_id: "activated_01",
       presentation: OracleLines([1]),
-      source_zone: Battlefield,
       costs: [Tap],
       effect: [ProduceMana(options: [(c: 1)])],
     ),
     (
       ability_id: "activated_02",
       presentation: OracleLines([2]),
-      source_zone: Battlefield,
       costs: [Mana("{1}"), Tap, SacrificeSelf],
       effect: [Draw(count: 1)],
     ),

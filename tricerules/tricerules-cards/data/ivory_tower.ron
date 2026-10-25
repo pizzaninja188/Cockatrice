@@ -8,7 +8,7 @@
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
-    trigger: AtBeginningOfUpkeep(player: Controller),
+    trigger: AtBeginningOfUpkeep(),
     effect: [GainLife(amount: Count(Affine(constant: -4, terms: [(
       coefficient: 1,
       quantity: CardsInHand(players: Relative(Controller)),

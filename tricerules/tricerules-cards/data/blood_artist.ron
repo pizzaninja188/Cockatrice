@@ -11,8 +11,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WheneverCreatureDies(
-        controller: AnyPlayer,
-        filter: (exclude_source: false),
+        filter: (),
       ),
       effect: [DrainTarget(
         amount: 1,

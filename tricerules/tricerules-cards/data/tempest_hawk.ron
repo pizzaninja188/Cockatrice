@@ -12,9 +12,8 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverSelfDealsCombatDamageToPlayer,
-    effect: [],
     program: Some((body: (steps: [
-      (id: "search_choice", bind: [], input: None, kind: Choose(
+      (id: "search_choice", kind: Choose(
         choice: "search",
         chooser: Controller,
         optional: true,
@@ -22,27 +21,17 @@
           branch_id: "search_for_tempest_hawk",
           presentation: Fallback,
           cost: None,
-          requirement: Always,
           body: (steps: [
-            (id: "search_hand", bind: [], input: None, kind: Perform(SearchLibrary(
-              who: Controller,
-              optional: false,
-              count: 1,
-              count_by_cast_cost: None,
+            (id: "search_hand", kind: Perform(SearchLibrary(
               filter: Some((exact_name: Some("Tempest Hawk"))),
-              selection_constraint: None,
-              slots: [],
               zones: Fixed([Library]),
-              destination: Hand,
-              conditional_destination: None,
-              shuffle: true,
               reveal: true,
               selection_bounds: Some((min: 0, max: 1)),
             )))
-          ], yields: []),
+          ]),
         )],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

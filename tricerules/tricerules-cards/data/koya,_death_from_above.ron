@@ -19,12 +19,11 @@
       prompt: "Choose up to one other target creature",
       effect_indices: [],
     )])),
-    effect: [],
     program: Some((body: (
       steps: [
-        (id: "exile_target", bind: ["exiled"], input: None,
+        (id: "exile_target", bind: ["exiled"],
           kind: Perform(Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))))),
-        (id: "schedule_return", bind: [], input: Some("exiled"),
+        (id: "schedule_return", input: Some("exiled"),
           kind: Perform(CreateDelayedTrigger(
             subject: Some(PreviousEffectObject),
             ability: (
@@ -39,22 +38,19 @@
                     // The choice is only the payment fragment of the printed delayed instruction.
                     presentation: Fallback,
                     cost: Mana("{3}{B}"),
-                    requirement: Always,
-                    body: (steps: [], yields: []),
+                    body: (),
                   )],
                   otherwise: (steps: [
                     (id: "return", kind: Perform(ReturnTriggeredCard(
                       reference: ExactTriggerObject,
                       from: [Exile],
-                      controller: Owner,
                     )))
-                  ], yields: []),
+                  ]),
                 ))
-              ], yields: []))),
+              ]))),
             ),
           ))),
       ],
-      yields: [],
     ), target_bindings: [
       (instruction_id: "exile_target", role: Subject, target_group_index: 0),
     ])),

@@ -16,6 +16,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfDies,
-    effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1, who: Controller)],
+    effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1)],
   )],
 )

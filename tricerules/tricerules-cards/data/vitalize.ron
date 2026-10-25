@@ -5,6 +5,6 @@
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [
-    UntapAll(players: Controller, filter: (kind: Creature)),
+    UntapAll(players: Controller),
   ],
 )

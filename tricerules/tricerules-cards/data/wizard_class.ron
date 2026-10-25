@@ -38,7 +38,7 @@
       triggered_abilities: [(
         ability_id: "level_3_trigger",
         presentation: OracleLines([6]),
-        trigger: WheneverPlayerDrawsCard(drawer: Controller),
+        trigger: WheneverPlayerDrawsCard(),
         effect: [PutCounters(
           counter: PlusOnePlusOne,
           count: 1,

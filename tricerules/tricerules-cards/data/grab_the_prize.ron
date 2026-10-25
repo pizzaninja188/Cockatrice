@@ -9,21 +9,20 @@
   additional_costs: [DiscardCard],
   spell_program: Some((
     body: (steps: [
-      (id: "import_paid_discard", bind: ["paid_discard"], input: None,
+      (id: "import_paid_discard", bind: ["paid_discard"],
         kind: ImportCastPayment),
-      (id: "draw_two", bind: [], input: None,
+      (id: "draw_two",
         kind: Perform(Draw(count: 2))),
-      (id: "check_paid_card_type", bind: [], input: None,
+      (id: "check_paid_card_type",
         kind: IfResult(
           condition: CardResultCount(result: "paid_discard", card_type: Some(Nonland),
-            min: Some(1), max: None),
+            min: Some(1)),
           yes: (steps: [
-            (id: "damage_each_opponent", bind: [], input: None,
+            (id: "damage_each_opponent",
               kind: Perform(DamagePlayer(amount: 2, who: EachOpponent))),
-          ], yields: []),
-          no: (steps: [], yields: []),
+          ]),
+          no: (),
         )),
-    ], yields: []),
-    target_bindings: [],
+    ]),
   )),
 )

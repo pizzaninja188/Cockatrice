@@ -13,9 +13,9 @@
       costs: [Mana("{1}{U}"), Tap],
       effect: [],
       program: Some((body: (steps: [
-        (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
-        (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
-      ], yields: []), target_bindings: [])),
+        (id: "draw_one", kind: Perform(Draw( count: 1))),
+        (id: "discard_one", kind: Perform(Discard( quantity: Exact(1)))),
+      ]))),
     ),
   ],
 )

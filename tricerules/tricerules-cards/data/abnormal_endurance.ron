@@ -17,7 +17,6 @@
           from: [Graveyard],
             reference: AbilitySource,
             tapped: true,
-            controller: Owner,
           ),
         ],
       ),

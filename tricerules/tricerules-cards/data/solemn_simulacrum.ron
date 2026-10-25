@@ -16,7 +16,6 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [],
       program: Some((body: (steps: [
         (id: "choose_solemn_etb_search", kind: Choose(
           choice: "solemn_etb_search",
@@ -26,24 +25,20 @@
             branch_id: "search_for_a_basic_land",
             presentation: OracleLines([1]),
             cost: None,
-            requirement: Always,
             body: (steps: [(id: "search_basic_land", kind: Perform(SearchLibrary(
-              who: Controller, optional: false, count: 1, count_by_cast_cost: None,
-              filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
+              filter: Some((card_type: Some(BasicLand))),
               zones: Fixed([Library]), destination: Battlefield(tapped: true),
-              conditional_destination: None, shuffle: true, reveal: false,
               selection_bounds: Some((min: 0, max: 1)),
-            )))], yields: []),
+            )))]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
     (
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WhenSelfDies,
-      effect: [],
       program: Some((body: (steps: [
         (id: "choose_solemn_death_draw", kind: Choose(
           choice: "solemn_death_draw",
@@ -53,12 +48,11 @@
             branch_id: "draw_a_card",
             presentation: OracleLines([2]),
             cost: None,
-            requirement: Always,
-            body: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+            body: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
           )],
-          otherwise: (steps: [], yields: []),
+          otherwise: (),
         )),
-      ], yields: []))),
+      ]))),
     ),
   ],
 )

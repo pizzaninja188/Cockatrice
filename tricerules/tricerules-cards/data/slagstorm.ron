@@ -6,7 +6,7 @@
   mana_cost: "{1}{R}{R}",
   types: ["Sorcery"],
   modal_spell: (min_modes: 1, max_modes: 1, modes: [
-    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [DamageAll(amount: 3, kind: (kind: Creature))]),
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [DamageAll(amount: 3)]),
     (mode_id: "mode_02", presentation: OracleLines([3]), effects: [DamagePlayer(amount: 3, who: EachPlayer)]),
   ]),
 )

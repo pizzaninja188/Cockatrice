@@ -5,24 +5,23 @@
   mana_cost: "{2}{G}", types: ["Creature", "Insect"], power: 3, toughness: 2,
   triggered_abilities: [(
     ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((body: (steps: [
       (id: "choose_food_or_treasure", kind: Choose(
         choice: "token_choice",
         chooser: Controller,
         optional: false,
         branches: [
-          (branch_id: "create_food", presentation: Fallback, cost: None, requirement: Always,
+          (branch_id: "create_food", presentation: Fallback, cost: None,
             body: (steps: [(id: "create_food_token", kind: Perform(CreateTokens(
-              token: "food", count: 1, who: Controller, tapped: false, sacrifice_timing: None,
-            )))], yields: [])),
-          (branch_id: "create_treasure", presentation: Fallback, cost: None, requirement: Always,
+              token: "food", count: 1,
+            )))])),
+          (branch_id: "create_treasure", presentation: Fallback, cost: None,
             body: (steps: [(id: "create_treasure_token", kind: Perform(CreateTokens(
-              token: "treasure", count: 1, who: Controller, tapped: false, sacrifice_timing: None,
-            )))], yields: [])),
+              token: "treasure", count: 1,
+            )))])),
         ],
-        otherwise: (steps: [], yields: []),
+        otherwise: (),
       )),
-    ], yields: []))),
+    ]))),
   )],
 )

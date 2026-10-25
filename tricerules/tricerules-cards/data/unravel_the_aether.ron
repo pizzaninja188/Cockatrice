@@ -4,15 +4,14 @@
   face_id: "unravel_the_aether",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_effect: [],
   spell_program: Some((
     body: (steps: [
-      (id: "put_in_owners_library", bind: [], input: None,
+      (id: "put_in_owners_library",
         kind: Perform(PutInOwnersLibrary(
           subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])),
           placement: Shuffle,
         ))),
-    ], yields: []),
+    ]),
     target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
   )),
   targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact or enchantment", effect_indices: [])])),

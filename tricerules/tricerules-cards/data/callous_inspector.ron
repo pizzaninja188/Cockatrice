@@ -17,7 +17,7 @@
     presentation: OracleLines([2]),
     trigger: WhenSelfDies,
     effect: [
-      DamagePlayer(amount: 1, who: Controller),
+      DamagePlayer(amount: 1),
       CreateTokens(token: "clue", count: 1),
     ],
   )],

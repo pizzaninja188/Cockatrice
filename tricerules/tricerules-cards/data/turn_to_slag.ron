@@ -7,7 +7,6 @@
   spell_effect: [
     DamageTarget(amount: 5, target: (kind: Creature)),
     DestroyAttached(
-      target: (kind: Creature),
       attachments: (kinds: [Equipment]),
     ),
   ],

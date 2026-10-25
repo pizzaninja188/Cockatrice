@@ -6,7 +6,7 @@
   keywords: [Haste],
   triggered_abilities: [(
     ability_id: "triggered_01", presentation: OracleLines([2]),
-    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    trigger: WheneverPlayerCastsSpell( filter: (card_type: Some(Noncreature))),
     intervening_if: Some(TriggeringSpellManaSpent(comparison: AtLeast(4))),
     effect: [CreateTokens(token: "treasure", count: 1)],
   )],

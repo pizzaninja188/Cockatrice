@@ -13,13 +13,12 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((body: (steps: [
-      (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: OptionalExact(1)))),
+      (id: "discard_one", bind: ["discarded"], kind: Perform(Discard( quantity: OptionalExact(1)))),
       (id: "draw_if_discarded", kind: IfResult(condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
-        yes: (steps: [(id: "draw_two", kind: Perform(Draw(who: Controller, count: 2)))], yields: []),
-        no: (steps: [], yields: []))),
-    ], yields: []), target_bindings: [])),
+        yes: (steps: [(id: "draw_two", kind: Perform(Draw( count: 2)))]),
+        no: ())),
+    ]))),
   )],
   static_abilities: [(
     ability_id: "static_01",

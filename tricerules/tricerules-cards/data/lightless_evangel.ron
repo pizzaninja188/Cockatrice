@@ -13,7 +13,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverPlayerSacrificesPermanent(
-      player: Controller,
       filter: (exclude_source: true, any_of: Some([
         (permanent_type: Some(Creature)),
         (permanent_type: Some(Artifact)),

@@ -7,7 +7,7 @@
   static_abilities: [(
     ability_id: "static_01",
     presentation: OracleLines([1]),
-    definition: EntersWithCounters(affected: Self_, counter: Charge, amount: Count(ManaColorsSpentToCast)),
+    definition: EntersWithCounters( counter: Charge, amount: Count(ManaColorsSpentToCast)),
   )],
   activated_abilities: [(
     ability_id: "activated_01",

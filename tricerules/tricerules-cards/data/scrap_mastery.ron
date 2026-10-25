@@ -6,7 +6,7 @@
   spell_effect: [
     ExileGraveyards(players: All, filter: Some((card_type: Some(Artifact))),
       capture_exile_cohort: Some("original_graveyards")),
-    SacrificeAll(players: All, filter: (kind: AnyPermanent, permanent_types: [Artifact])),
+    SacrificeAll( filter: (kind: AnyPermanent, permanent_types: [Artifact])),
     ReturnExiledCohortToOwnersBattlefield(cohort_id: "original_graveyards"),
   ],
 )

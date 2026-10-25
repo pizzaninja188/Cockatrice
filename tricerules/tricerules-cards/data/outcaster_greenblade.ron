@@ -8,7 +8,7 @@
     trigger: WhenSelfEntersBattlefield,
     effect: [SearchLibrary(filter: Some((any_of: Some([
       (card_type: Some(BasicLand)), (required_subtypes: ["Desert"]),
-    ]))), destination: Hand, shuffle: true, reveal: true)],
+    ]))), reveal: true)],
   )],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: CountScaledSelfPt(
     count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),

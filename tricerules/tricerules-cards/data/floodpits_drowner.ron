@@ -12,14 +12,13 @@
     ability_id: "triggered_01",
     presentation: OracleLines([3]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [],
     program: Some((body: (steps: [
-      (id: "tap_target", bind: [], input: None,
+      (id: "tap_target",
         kind: Perform(Tap(subject: TargetAlias("target_creature")))),
-      (id: "put_stun_counter", bind: [], input: None,
+      (id: "put_stun_counter",
         kind: Perform(PutCounters(counter: Stun, count: 1,
           subject: TargetAlias("target_creature")))),
-    ], yields: []), target_bindings: [], target_aliases: [
+    ]), target_aliases: [
       (name: "target_creature", group_index: 0,
         filter: (kind: Creature, controller: Opponent)),
     ])),
@@ -36,12 +35,12 @@
     costs: [Mana("{1}{U}"), Tap],
     effect: [],
     program: Some((body: (steps: [
-      (id: "shuffle_source_and_target", bind: [], input: None,
+      (id: "shuffle_source_and_target",
         kind: Perform(ShufflePermanentsIntoOwnersLibraries(subjects: [
           Source,
           Chosen((kind: Creature, required_counter: Stun)),
         ]))),
-    ], yields: []), target_bindings: [
+    ]), target_bindings: [
       (instruction_id: "shuffle_source_and_target", role: Target, target_group_index: 0),
     ])),
     targeting: Some((groups: [(

@@ -28,10 +28,9 @@
         mode_id: "counter",
         presentation: OracleLines([2]),
         linked_cast_cost: Some((group_id: "spree", option_id: "counter_cost")),
-        effects: [],
         program: Some((body: (steps: [
           (id: "counter_spell", kind: Perform(CounterTargetSpell())),
-        ], yields: []), target_bindings: [
+        ]), target_bindings: [
           (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
         ])),
         targeting: Some((groups: [(
@@ -45,7 +44,6 @@
         mode_id: "copy",
         presentation: OracleLines([3]),
         linked_cast_cost: Some((group_id: "spree", option_id: "copy_cost")),
-        effects: [],
         program: Some((body: (steps: [
           (id: "copy_source", kind: Perform(CreateTokenCopies(
           count: 1,
@@ -54,7 +52,7 @@
             (kind: Creature, controller: You),
           ]))),
           ))),
-        ], yields: []), target_bindings: [
+        ]), target_bindings: [
           (instruction_id: "copy_source", role: Source, target_group_index: 0),
         ])),
         targeting: Some((groups: [(
@@ -68,12 +66,11 @@
         mode_id: "draw_discard",
         presentation: OracleLines([4]),
         linked_cast_cost: Some((group_id: "spree", option_id: "draw_discard_cost")),
-        effects: [],
         program: Some((body: (steps: [
-          (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+          (id: "draw_two", kind: Perform(Draw( count: 2))),
           (id: "discard_one", kind: Perform(Discard(
-            who: Controller, quantity: Exact(1)))),
-        ], yields: []), target_bindings: [])),
+             quantity: Exact(1)))),
+        ]))),
       ),
     ],
   ),

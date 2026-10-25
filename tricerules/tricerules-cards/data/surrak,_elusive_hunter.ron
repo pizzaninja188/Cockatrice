@@ -23,7 +23,6 @@
         source_controller: Opponent,
         target_controller: Controller,
         permanent_type: Some(Creature),
-        exclude_self: false,
       ),
       effect: [Draw(count: 1)],
     ),
