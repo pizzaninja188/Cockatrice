@@ -15763,44 +15763,45 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
 }
 
 #[test]
-fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
+fn linked_exile_receipt_program_admits_only_its_exact_top_level_pair() {
     use crate::primitives::{
         ChooseDeparturePolicy, CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram,
         EffectContext, ProgramRequiredInput, ResultType,
     };
 
-    const BODY: &str = r#"(steps: [(id: "choose_imprint", kind: Choose(
-        choice: "imprint_creature", chooser: Controller, optional: true,
-        branches: [(branch_id: "imprint", presentation: Fallback, cost: None,
+    const BODY: &str = r#"(steps: [(id: "choose_archive", kind: Choose(
+        choice: "archive_linked_event", chooser: Controller, optional: true,
+        branches: [(branch_id: "archive", presentation: Fallback, cost: None,
             requirement: EffectsApplicable, body: (steps: [
-                (id: "exile_event", bind: ["imprint_receipt"], kind: Perform(Exile(
-                    subject: TriggerObject, linked_exile_id: Some("imprinted_card"),
+                (id: "exile_event", bind: ["archive_receipt"], kind: Perform(Exile(
+                    subject: TriggerObject, linked_exile_id: Some("archived_card"),
                 ))),
-                (id: "return_previous", input: Some("imprint_receipt"),
+                (id: "intervening", kind: Perform(GainLife(amount: 1))),
+                (id: "return_previous", input: Some("archive_receipt"),
                     kind: Perform(ReturnOtherLinkedExiledCards(
-                        producer_ability_id: "imprint", linked_exile_id: "imprinted_card",
+                        producer_ability_id: "archive_event", linked_exile_id: "archived_card",
                     )))
             ], yields: []))],
         otherwise: (steps: [], yields: []),
     ))], yields: [])"#;
     let program: crate::CardProgram =
-        ron::from_str(&format!("(body: {BODY})")).expect("Mimic Vat Program fixture parses");
+        ron::from_str(&format!("(body: {BODY})")).expect("linked-exile Program fixture parses");
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "mimic_vat".into(),
-        face_id: crate::CardFaceId::new("mimic_vat").unwrap(),
-        ability_path: vec![crate::AbilityId::new("imprint").unwrap()],
+        card_id: "archive_fixture".into(),
+        face_id: crate::CardFaceId::new("archive_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("archive_event").unwrap()],
     });
 
     let compile = |owner| CompiledProgram::compile(owner, EffectContext::Ability, &program);
     let compiled = compile(owner.clone()).unwrap_or_else(|error| {
-        panic!("Mimic Vat's exact linked-Exile receipt flow was rejected: {error}")
+        panic!("the generic linked-Exile receipt flow was rejected: {error}")
     });
     assert_eq!(
         compiled.required_inputs,
         vec![ProgramRequiredInput::TriggerLinkedExileObject]
     );
     let [choose] = compiled.body.steps.as_slice() else {
-        panic!("Mimic Vat's imprint Program has one optional choice");
+        panic!("the receipt Program has one optional choice");
     };
     let CompiledInstructionKind::Choose {
         chooser,
@@ -15811,7 +15812,7 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
         ..
     } = &choose.kind
     else {
-        panic!("Mimic Vat's imprint Program compiles its optional choice");
+        panic!("the receipt Program compiles its optional choice");
     };
     assert_eq!(*chooser, crate::primitives::PlayerRecipient::Controller);
     assert!(*optional);
@@ -15822,23 +15823,25 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
     assert!(otherwise.steps.is_empty());
     assert!(otherwise.yields.is_empty());
     let [branch] = branches.as_slice() else {
-        panic!("Mimic Vat has one linked-Exile branch");
+        panic!("the receipt Program has one linked-Exile branch");
     };
     assert_eq!(
         branch.requirement,
         CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
     );
-    let [exile, return_other] = branch.body.steps.as_slice() else {
-        panic!("the accepted branch contains the exact Exile and return pair");
+    let [exile, intervening, return_other] = branch.body.steps.as_slice() else {
+        panic!("the accepted branch contains the Exile, a resultless step, and return pair");
     };
+    assert!(intervening.outputs.is_empty());
+    assert!(intervening.input.is_none());
     let [receipt_slot] = exile.outputs.as_slice() else {
-        panic!("the Mimic Vat Exile binds its receipt");
+        panic!("the Exile binds its receipt");
     };
     assert_eq!(
         compiled.slot(*receipt_slot).unwrap().result_type,
         ResultType::TriggerObjectLinkedExileReceipt {
-            producer_ability_id: crate::AbilityId::new("imprint").unwrap(),
-            linked_exile_id: crate::AbilityLinkId::new("imprinted_card").unwrap(),
+            producer_ability_id: crate::AbilityId::new("archive_event").unwrap(),
+            linked_exile_id: crate::AbilityLinkId::new("archived_card").unwrap(),
             cardinality: crate::primitives::Cardinality {
                 min: 0,
                 max: Some(1),
@@ -15850,16 +15853,30 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
     for (label, invalid_body) in [
         (
             "missing receipt input",
-            BODY.replace("input: Some(\"imprint_receipt\")", "input: None"),
+            BODY.replace("input: Some(\"archive_receipt\")", "input: None"),
         ),
         (
-            "crossed linked-exile owner",
-            BODY.replace("producer_ability_id: \"imprint\"", "producer_ability_id: \"other\""),
+            "unknown receipt input",
+            BODY.replace(
+                "input: Some(\"archive_receipt\")",
+                "input: Some(\"missing_receipt\")",
+            ),
+        ),
+        (
+            "unbound receipt",
+            BODY.replace("bind: [\"archive_receipt\"], ", ""),
+        ),
+        (
+            "crossed producer ability",
+            BODY.replace(
+                "producer_ability_id: \"archive_event\"",
+                "producer_ability_id: \"other\"",
+            ),
         ),
         (
             "crossed linked-exile ID",
             BODY.replace(
-                "linked_exile_id: \"imprinted_card\"",
+                "linked_exile_id: \"archived_card\"",
                 "linked_exile_id: \"other_link\"",
             ),
         ),
@@ -15868,21 +15885,21 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
             BODY.replace("subject: TriggerObject", "subject: Source"),
         ),
         (
-            "intervening instruction",
+            "duplicate receipt producer",
             BODY.replace(
-                "(id: \"return_previous\", input:",
-                "(id: \"intervening\", kind: Perform(GainLife(amount: 1))),\n                (id: \"return_previous\", input:",
+                "(id: \"intervening\", kind: Perform(GainLife(amount: 1))),",
+                "(id: \"second_exile\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"archived_card\"),\n                ))),\n                (id: \"intervening\", kind: Perform(GainLife(amount: 1))),",
             ),
         ),
         (
             "branch result escape",
-            BODY.replace("], yields: []))],", "], yields: [\"imprint_receipt\"]))],"),
+            BODY.replace("], yields: []))],", "], yields: [\"archive_receipt\"]))],"),
         ),
         (
             "extra receipt use",
             BODY.replace(
                 "                    )))\n            ], yields: []))],",
-                "                    ))),\n                (id: \"return_again\", input: Some(\"imprint_receipt\"),\n                    kind: Perform(ReturnOtherLinkedExiledCards(\n                        producer_ability_id: \"imprint\", linked_exile_id: \"imprinted_card\",\n                    )))\n            ], yields: []))],",
+                "                    ))),\n                (id: \"return_again\", input: Some(\"archive_receipt\"),\n                    kind: Perform(ReturnOtherLinkedExiledCards(\n                        producer_ability_id: \"archive_event\", linked_exile_id: \"archived_card\",\n                    )))\n            ], yields: []))],",
             ),
         ),
         (
@@ -15898,7 +15915,7 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
             .unwrap_or_else(|error| panic!("{label} fixture parses: {error}"));
         assert!(
             compile(owner.clone()).is_ok(),
-            "the base Mimic Vat profile remains valid for {label}"
+            "the base linked-exile receipt profile remains valid for {label}"
         );
         let invalid_compiled = crate::primitives::CompiledProgram::compile(
             owner.clone(),
@@ -15907,17 +15924,48 @@ fn mimic_vat_imprint_program_admits_its_exact_linked_exile_receipt_flow() {
         );
         assert!(
             invalid_compiled.is_err(),
-            "unsupported Mimic Vat receipt profile was accepted: {label}"
+            "unsupported linked-exile receipt profile was accepted: {label}"
         );
     }
     let other_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
-        card_id: "other_card".into(),
-        face_id: crate::CardFaceId::new("other_card").unwrap(),
-        ability_path: vec![crate::AbilityId::new("imprint").unwrap()],
+        card_id: "nested_archive_fixture".into(),
+        face_id: crate::CardFaceId::new("nested_archive_fixture").unwrap(),
+        ability_path: vec![
+            crate::AbilityId::new("outer").unwrap(),
+            crate::AbilityId::new("archive_event").unwrap(),
+        ],
     });
     assert!(
         compile(other_owner).is_err(),
-        "the specialized receipt cannot be claimed by another program owner"
+        "nested ability owners cannot claim the top-level linked-exile receipt contract"
+    );
+
+    let card = format!(
+        r#"(id: "archive_fixture", name: "Archive Fixture",
+            face_id: "archive_fixture", types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "archive_event", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsCard(player: Controller), effect: [],
+                program: Some((body: {BODY}, target_bindings: [])),
+                modal: None, targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None,
+            )])"#
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+        .expect("registry accepts a different top-level trigger owner and linked pair");
+
+    let unsupported_trigger = card.replace(
+        "WheneverPlayerDiscardsCard(player: Controller)",
+        "WheneverYouProliferate",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_trigger], &[])
+        .expect_err("a trigger without an event object cannot use the receipt flow")
+        .to_string();
+    assert!(
+        error.contains(
+            "requires TriggerLinkedExileObject, but its trigger does not supply that input"
+        ),
+        "unexpected linked-exile input error: {error}"
     );
 }
 

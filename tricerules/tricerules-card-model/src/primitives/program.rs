@@ -532,7 +532,7 @@ struct Compiler<'a> {
     choice_ids: HashSet<ChoiceId>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     allow_trigger_object_linked_exile: bool,
-    allow_mimic_vat_linked_exile_receipt: bool,
+    allow_linked_exile_receipt: bool,
     next_instruction_address: u32,
 }
 
@@ -683,7 +683,7 @@ impl CompiledProgram {
             choice_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
             allow_trigger_object_linked_exile: false,
-            allow_mimic_vat_linked_exile_receipt: false,
+            allow_linked_exile_receipt: false,
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -2369,11 +2369,11 @@ impl Compiler<'_> {
                                 CompiledChooseRequirement::CastCostReceipt(condition.clone())
                             }
                             ResolutionBranchRequirement::EffectsApplicable => {
-                                let mimic_vat_receipt_body =
-                                    exact_mimic_vat_imprint_receipt_body(&self.owner, &branch.body);
+                                let linked_exile_receipt_body =
+                                    is_linked_exile_receipt_body(&branch.body);
                                 let exact_linked_exile_body =
                                     exact_trigger_object_linked_exile_body(&branch.body)
-                                        || mimic_vat_receipt_body;
+                                        || linked_exile_receipt_body;
                                 let exact_linked_exile_profile = exact_linked_exile_body
                                     && *chooser == PlayerRecipient::Controller
                                     && *optional
@@ -2386,11 +2386,11 @@ impl Compiler<'_> {
                                         && !exact_linked_exile_profile)
                                 {
                                     return Err(format!(
-                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction, the exact optional Controller linked-Exile TriggerObject branch, or the exact Mimic Vat imprint linked-exile receipt flow",
+                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction or the exact optional Controller linked-Exile TriggerObject branch",
                                         instruction.id
                                     ));
                                 }
-                                if exact_linked_exile_profile && mimic_vat_receipt_body {
+                                if exact_linked_exile_profile && linked_exile_receipt_body {
                                     optional_cost_falls_through = true;
                                 }
                                 if exact_linked_exile_profile {
@@ -2403,22 +2403,20 @@ impl Compiler<'_> {
 
                         let previous_linked_exile_permission =
                             self.allow_trigger_object_linked_exile;
-                        let previous_mimic_receipt_permission =
-                            self.allow_mimic_vat_linked_exile_receipt;
+                        let previous_receipt_permission = self.allow_linked_exile_receipt;
                         self.allow_trigger_object_linked_exile = matches!(
                             &requirement,
                             CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
                         );
-                        self.allow_mimic_vat_linked_exile_receipt =
-                            exact_mimic_vat_imprint_receipt_body(&self.owner, &branch.body)
+                        self.allow_linked_exile_receipt =
+                            is_linked_exile_receipt_body(&branch.body)
                                 && matches!(
                                     &requirement,
                                     CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
                                 );
                         let compiled_body = self.compile_block(&branch.body, &names);
                         self.allow_trigger_object_linked_exile = previous_linked_exile_permission;
-                        self.allow_mimic_vat_linked_exile_receipt =
-                            previous_mimic_receipt_permission;
+                        self.allow_linked_exile_receipt = previous_receipt_permission;
                         let (body, body_types) = compiled_body?;
                         joined_types = Some(match joined_types {
                             None => body_types,
@@ -4792,12 +4790,16 @@ fn validate_and_result_types(
             linked_exile_id: Some(linked_exile_id),
         } if context == EffectContext::Ability
             && compiler.allow_trigger_object_linked_exile
-            && compiler.allow_mimic_vat_linked_exile_receipt =>
+            && compiler.allow_linked_exile_receipt =>
         {
             effect.validate(context)?;
+            let producer_ability_id = top_level_ability_id(&compiler.owner)
+                .cloned()
+                .ok_or_else(|| {
+                    "TriggerObject linked-exile receipt requires a top-level ability owner".to_string()
+                })?;
             Ok(vec![ResultType::TriggerObjectLinkedExileReceipt {
-                producer_ability_id: AbilityId::new("imprint")
-                    .expect("the compiled Mimic Vat ability ID is canonical"),
+                producer_ability_id,
                 linked_exile_id: linked_exile_id.clone(),
                 cardinality: Cardinality {
                     min: 0,
@@ -4814,13 +4816,13 @@ fn validate_and_result_types(
         }
         SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
             if context == EffectContext::Ability
-                && compiler.allow_mimic_vat_linked_exile_receipt =>
+                && compiler.allow_linked_exile_receipt =>
         {
             effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::ReturnOtherLinkedExiledCards { .. } => Err(
-            "ReturnOtherLinkedExiledCards in a resolution program requires the immediately preceding Mimic Vat imprint receipt".into(),
+            "ReturnOtherLinkedExiledCards in a resolution program requires an explicitly bound matching TriggerObject linked-exile receipt from a top-level ability".into(),
         ),
         SpellEffectKind::ChooseLinkedExiledCard {
             producer_ability_id,
@@ -5464,52 +5466,64 @@ fn exact_trigger_object_linked_exile_body(body: &AuthoredBlock) -> bool {
     )
 }
 
-fn exact_mimic_vat_imprint_receipt_body(owner: &ProgramOwnerId, body: &AuthoredBlock) -> bool {
-    let exact_owner = matches!(
-        owner,
-        ProgramOwnerId::Ability(definition)
-            if definition.card_id == "mimic_vat"
-                && definition.face_id.as_str() == "mimic_vat"
-                && definition.ability_path.len() == 1
-                && definition.ability_path[0].as_str() == "imprint"
-    );
-    if !exact_owner || !body.yields.is_empty() {
+fn top_level_ability_id(owner: &ProgramOwnerId) -> Option<&AbilityId> {
+    let ProgramOwnerId::Ability(definition) = owner else {
+        return None;
+    };
+    let [ability_id] = definition.ability_path.as_slice() else {
+        return None;
+    };
+    Some(ability_id)
+}
+
+fn is_linked_exile_receipt_body(body: &AuthoredBlock) -> bool {
+    if !body.yields.is_empty() {
         return false;
     }
-    let [exile_instruction, return_instruction] = body.steps.as_slice() else {
+    let [producer_instruction, intervening @ .., consumer_instruction] = body.steps.as_slice()
+    else {
         return false;
     };
-    if exile_instruction.bind.len() != 1
-        || exile_instruction.input.is_some()
-        || !return_instruction.bind.is_empty()
-        || return_instruction.input.as_deref() != Some(exile_instruction.bind[0].as_str())
-    {
+    let InstructionKind::Perform(producer_effect) = &producer_instruction.kind else {
+        return false;
+    };
+    if !matches!(
+        producer_effect.as_ref(),
+        SpellEffectKind::Exile {
+            subject: EffectSubject::TriggerObject,
+            linked_exile_id: Some(_),
+        }
+    ) {
         return false;
     }
-    let exact_exile = matches!(
-        &exile_instruction.kind,
-        InstructionKind::Perform(effect)
-            if matches!(
-                effect.as_ref(),
-                SpellEffectKind::Exile {
-                    subject: EffectSubject::TriggerObject,
-                    linked_exile_id: Some(linked_exile_id),
-                } if linked_exile_id.as_str() == "imprinted_card"
+
+    let InstructionKind::Perform(consumer_effect) = &consumer_instruction.kind else {
+        return false;
+    };
+    if !matches!(
+        consumer_effect.as_ref(),
+        SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
+    ) {
+        return false;
+    }
+
+    for intervening_instruction in intervening {
+        let InstructionKind::Perform(intervening_effect) = &intervening_instruction.kind else {
+            return false;
+        };
+        if !intervening_instruction.bind.is_empty()
+            || intervening_instruction.input.is_some()
+            || matches!(
+                intervening_effect.as_ref(),
+                SpellEffectKind::Exile { .. }
+                    | SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
             )
-    );
-    let exact_consumer = matches!(
-        &return_instruction.kind,
-        InstructionKind::Perform(effect)
-            if matches!(
-                effect.as_ref(),
-                SpellEffectKind::ReturnOtherLinkedExiledCards {
-                    producer_ability_id,
-                    linked_exile_id,
-                } if producer_ability_id.as_str() == "imprint"
-                    && linked_exile_id.as_str() == "imprinted_card"
-            )
-    );
-    exact_exile && exact_consumer
+        {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn is_mimic_vat_create_copy_owner(owner: &ProgramOwnerId) -> bool {

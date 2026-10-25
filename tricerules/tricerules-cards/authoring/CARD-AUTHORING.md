@@ -1019,16 +1019,19 @@ resolves the already-begun discard ability. CR 800.4a removes the departed owner
 608.2m lets the begun ability finish. This checks source removal and retained last-known trigger
 context, not chooser delegation under CR 800.4g.
 
-Mimic Vat's `imprint` owner admits one separate exact receipt profile: its optional Controller
-branch exiles only the captured `TriggerObject` under `imprinted_card`, then immediately feeds the
-typed 0..1 `TriggerObjectLinkedExileReceipt` to `ReturnOtherLinkedExiledCards` for that same owner
-and link. The receipt identifies the newly linked event incarnation so the return skips only that
-object. This does not expose a general TriggerObject-Exile result slot or permit another consumer,
-link, instruction, or owner. The compiler also records a private optional-cost departure policy for
-this exact profile; although the choice has no separate `ResolutionCost`, a departed Controller has
-not paid the optional action cost and takes `Otherwise` under CR 800.4f (an inference from that
-rule). Ordinary non-cost Program choices continue to delegate under CR 800.4g. The Mimic Vat
-compiler and scenario evidence is indexed by its [review map](review-maps/mimic_vat.json).
+A top-level ability Program may use a linked-exile receipt only inside one optional Controller
+`Choose` with one free `EffectsApplicable` branch and empty `Otherwise`. The branch binds a typed
+0..1 `TriggerObjectLinkedExileReceipt` from `Exile(TriggerObject, link)` and passes that exact slot
+to `ReturnOtherLinkedExiledCards` with the owner's top-level ability ID and same link. Any
+intervening steps must be input-free, unbound `Perform` instructions; the receipt cannot escape the
+branch or be consumed by another instruction. The registry requires the trigger to supply
+`TriggerLinkedExileObject` and validates the matching Exile producer on the same face. The receipt
+identifies the newly linked event incarnation so the return skips only that object. The compiler
+also records a private optional-cost departure policy for this profile; although the choice has no
+separate `ResolutionCost`, a departed Controller has not paid the optional action cost and takes
+`Otherwise` under CR 800.4f (an inference from that rule). Ordinary non-cost Program choices
+continue to delegate under CR 800.4g. Mimic Vat's compiler and scenario evidence is indexed by its
+[review map](review-maps/mimic_vat.json).
 
 The begun mandatory choice keeps its original ability-controller attribution and
 Program cursor through the narrow active/saved departure path for this profile. When that ability

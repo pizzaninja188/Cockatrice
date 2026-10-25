@@ -1548,3 +1548,224 @@ fn a_copied_vat_uses_its_own_linked_exile_occurrence() {
             .collect()
     );
 }
+
+fn archive_receipt_fixture_registry() -> &'static tricerules_cards::CardRegistry {
+    const BODY: &str = r#"(steps: [
+        (id: "choose_archive", kind: Choose(
+            choice: "archive_linked_event", chooser: Controller, optional: true,
+            branches: [(branch_id: "archive", presentation: Fallback, cost: None,
+                requirement: EffectsApplicable, body: (steps: [
+                    (id: "exile_event", bind: ["archive_receipt"], kind: Perform(Exile(
+                        subject: TriggerObject, linked_exile_id: Some("archived_card"),
+                    ))),
+                    (id: "intervening", kind: Perform(GainLife(amount: 1))),
+                    (id: "return_previous", input: Some("archive_receipt"),
+                        kind: Perform(ReturnOtherLinkedExiledCards(
+                            producer_ability_id: "archive_event", linked_exile_id: "archived_card",
+                        )))
+                ], yields: []))],
+            otherwise: (steps: [], yields: []),
+        )),
+        (id: "program_tail", kind: Perform(GainLife(amount: 2)))
+    ], yields: [])"#;
+    let fixture = format!(
+        r#"(id: "archive_fixture", name: "Archive Fixture", face_id: "archive_fixture",
+            types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "archive_event", presentation: Fallback,
+                trigger: WheneverCreatureDies(controller: AnyPlayer, filter: (exclude_source: false)),
+                effect: [], program: Some((body: {BODY}, target_bindings: [])),
+                modal: None, targeting: None, may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None,
+            )])"#
+    );
+    let old_event = r#"(id: "archive_old_event", name: "Archive Old Event",
+        face_id: "archive_old_event", types: ["Creature"], power: 1, toughness: 1)"#;
+    let new_event = r#"(id: "archive_new_event", name: "Archive New Event",
+        face_id: "archive_new_event", types: ["Creature"], power: 1, toughness: 1)"#;
+    Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[&fixture, old_event, new_event],
+            &[],
+        )
+        .expect("the non-Mimic receipt runtime fixture is valid card data"),
+    ))
+}
+
+fn archive_linked_members(engine: &GameEngine, source: u32) -> Vec<(u32, u64)> {
+    let snapshot = engine
+        .diagnostic_snapshot()
+        .expect("linked-exile diagnostic snapshot");
+    let entries = snapshot["state"]["linked_exile_records"]["entries"]
+        .as_array()
+        .expect("linked-exile records are exposed as structured diagnostic entries");
+    entries
+        .iter()
+        .filter(|entry| {
+            let key = &entry["key"];
+            key["source_object_id"].as_u64() == Some(u64::from(source))
+                && key["producer"]["card_id"].as_str() == Some("archive_fixture")
+                && key["producer"]["ability_path"][0].as_str() == Some("archive_event")
+                && key["ability_link_id"].as_str() == Some("archived_card")
+        })
+        .flat_map(|entry| {
+            entry["value"]
+                .as_array()
+                .expect("each linked-exile entry contains exact object generations")
+                .iter()
+                .map(|member| {
+                    let generation = member["zone_change_generation"]
+                        .as_str()
+                        .expect("diagnostic generations use lossless decimal strings")
+                        .parse::<u64>()
+                        .expect("linked-exile generation is numeric");
+                    (
+                        member["object_id"]
+                            .as_u64()
+                            .expect("linked-exile object ID is numeric")
+                            as u32,
+                        generation,
+                    )
+                })
+        })
+        .collect()
+}
+
+fn resolve_archive_receipt(engine: &mut GameEngine) -> (u32, u32) {
+    for _ in 0..12 {
+        if engine.state.pending_resolution.is_some() {
+            break;
+        }
+        pass_priority_round(engine);
+    }
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the archive event reaches its optional branch choice");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    assert_eq!(pending.deciding_player, 0, "the source controller chooses");
+    let stack = match &pending.continuation {
+        ResolutionContinuation::ProgramChoose { stack, .. } => stack,
+        _ => panic!("the archive event resolves through its authored Program"),
+    };
+    let source = stack
+        .item
+        .source_permanent_id
+        .expect("the event retains its archive source object");
+    let event_object = stack
+        .item
+        .trigger_context
+        .observed_object
+        .expect("the event retains the exact creature-death object")
+        .object_id;
+    let deciding_player = pending.deciding_player;
+    engine
+        .apply_scenario_command(
+            deciding_player,
+            &imprint_choice_command(0, ResolutionChoiceDecision::SelectBranch),
+        )
+        .expect("select the archive branch");
+    (source, event_object)
+}
+
+#[test]
+fn generic_linked_exile_receipt_excludes_the_exact_current_generation_and_resumes_tail_once() {
+    let registry = archive_receipt_fixture_registry();
+    let decks = Some(vec![
+        vec!["archive_old_event".to_string(); 20],
+        vec!["archive_old_event".to_string(); 20],
+        vec!["archive_new_event".to_string(); 20],
+    ]);
+    let mut engine = GameEngine::new(registry, 2_026_102_125, &[0, 1, 2], 20, decks, true)
+        .expect("three-player synthetic receipt game");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "archive_fixture");
+
+    let old_event = inject_creature_on_battlefield(&mut engine, 1, "archive_old_event");
+    let old_battlefield_generation = engine
+        .state
+        .zone_change_generation
+        .get(&old_event)
+        .copied()
+        .unwrap_or(0);
+    engine.state.objects.get_mut(&old_event).unwrap().damage = 2;
+    let actor = engine.state.priority_player_id();
+    engine
+        .apply_scenario_command(actor, &pass())
+        .expect("the first archive creature dies");
+    assert_eq!(engine.state.objects[&old_event].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[1].life, 20);
+    assert_eq!(engine.state.players[0].life, 20);
+
+    assert_eq!(resolve_archive_receipt(&mut engine), (source, old_event));
+    assert_eq!(engine.state.objects[&old_event].zone, Zone::Exile);
+    let old_exile_generation = engine.state.zone_change_generation[&old_event];
+    assert_eq!(old_exile_generation, old_battlefield_generation + 2);
+    assert_eq!(
+        archive_linked_members(&engine, source),
+        vec![(old_event, old_exile_generation)],
+        "the first receipt records the exact exiled object generation"
+    );
+    assert_eq!(
+        engine.state.players[0].life, 23,
+        "branch and Program tail each resolve once"
+    );
+
+    let new_event = inject_creature_on_battlefield(&mut engine, 2, "archive_new_event");
+    let new_battlefield_generation = engine
+        .state
+        .zone_change_generation
+        .get(&new_event)
+        .copied()
+        .unwrap_or(0);
+    engine.state.objects.get_mut(&new_event).unwrap().damage = 2;
+    let actor = engine.state.priority_player_id();
+    engine
+        .apply_scenario_command(actor, &pass())
+        .expect("the second archive creature dies");
+    assert_eq!(engine.state.objects[&new_event].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[2].life, 20);
+
+    assert_eq!(resolve_archive_receipt(&mut engine), (source, new_event));
+    assert_eq!(engine.state.objects[&old_event].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&old_event].owner, 1);
+    assert!(engine.state.players[1].graveyard.contains(&old_event));
+    assert_eq!(engine.state.objects[&new_event].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&new_event].owner, 2);
+    let new_exile_generation = engine.state.zone_change_generation[&new_event];
+    assert_eq!(new_exile_generation, new_battlefield_generation + 2);
+    assert_ne!(
+        (old_event, old_exile_generation),
+        (new_event, new_exile_generation),
+        "the receipt distinguishes the prior and current object generations"
+    );
+    let old_returned_generation = engine.state.zone_change_generation[&old_event];
+    assert_eq!(old_returned_generation, old_exile_generation + 1);
+    let mut linked_members = archive_linked_members(&engine, source);
+    linked_members.sort_unstable();
+    let mut expected_linked_members = vec![
+        (old_event, old_exile_generation),
+        (new_event, new_exile_generation),
+    ];
+    expected_linked_members.sort_unstable();
+    assert_eq!(
+        linked_members, expected_linked_members,
+        "linked records retain the exact old and current generations even after return"
+    );
+    assert_ne!(
+        old_returned_generation, old_exile_generation,
+        "the returned old record is stale for its current graveyard incarnation"
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&new_event], new_exile_generation,
+        "the exact new receipt generation remains current in exile"
+    );
+    assert_eq!(
+        engine.state.players[0].life, 26,
+        "the intervening branch effect and suspended Program tail each resolved once per event"
+    );
+}

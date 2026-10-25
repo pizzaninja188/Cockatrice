@@ -3052,7 +3052,10 @@ fn run_program_only_leaf(
 #[cfg(test)]
 mod countered_ability_source_tests {
     use super::*;
-    use crate::state::{CounterPlacementReceipt, EffectResult, ProgramRunState, TriggerObjectRef};
+    use crate::state::{
+        CounterPlacementReceipt, EffectResult, LinkedExileOccurrence, LinkedExiledObject,
+        ProgramRunState, ProgramValue, TriggerObjectRef,
+    };
     use tricerules_card_model::primitives::{
         Cardinality, CompiledBlock, CompiledSlot, ConditionObjectRef, CounterKind, EffectContext,
         ProgramTargetProjection,
@@ -3553,6 +3556,242 @@ mod countered_ability_source_tests {
         )
         .expect("creature leaves battlefield");
         assert!(!holds(&engine, Some(creature)).unwrap());
+    }
+    fn compiled_receipt_program() -> CompiledProgram {
+        let owner = tricerules_card_model::ProgramOwnerId::ability(
+            tricerules_card_model::AbilityDefinitionId {
+                card_id: "mimic_vat".into(),
+                face_id: tricerules_card_model::CardFaceId::new("mimic_vat").unwrap(),
+                ability_path: vec![tricerules_card_model::AbilityId::new("imprint").unwrap()],
+            },
+        );
+        CompiledProgram {
+            owner,
+            context: EffectContext::Ability,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "imprint_receipt".into(),
+                result_type: ResultType::TriggerObjectLinkedExileReceipt {
+                    producer_ability_id: tricerules_card_model::AbilityId::new("imprint").unwrap(),
+                    linked_exile_id: tricerules_card_model::AbilityLinkId::new("imprinted_card")
+                        .unwrap(),
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                },
+            }],
+        }
+    }
+
+    fn receipt_run(compiled: &CompiledProgram) -> ProgramRunState {
+        ProgramRunState {
+            owner: compiled.owner.clone(),
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![None; compiled.slots.len()],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        }
+    }
+
+    #[test]
+    fn empty_or_stale_linked_exile_receipt_projects_none_and_return_other_runs_without_exclusion() {
+        let (mut engine, mut top) = fixture_engine_and_top();
+        let source = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture has a source permanent");
+        let source_ref = put_card_on_battlefield(&mut engine, source, "mimic_vat");
+        top.card_id = "mimic_vat".into();
+        top.face_index = 0;
+        top.source_permanent_id = Some(source);
+        top.source_owner = Some(0);
+        top.source_zone_change = source_ref.zone_change_generation;
+        top.is_triggered = true;
+        top.trigger_context.linked_exile_occurrence =
+            Some(LinkedExileOccurrence::NativeOrTokenBase);
+
+        let old_member = *engine.state.players[1]
+            .hand
+            .first()
+            .expect("fixture has an older event card owned by player 1");
+        engine
+            .state
+            .objects
+            .get_mut(&old_member)
+            .expect("older event card object")
+            .card_id = "grizzly_bears".into();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            old_member,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("older linked card enters the battlefield");
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            old_member,
+            Zone::Exile,
+            None,
+        )
+        .expect("older linked card enters exile");
+        let old_generation = engine.state.zone_change_generation[&old_member];
+
+        let current_member = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture has the current event card owned by player 0");
+        let current_ref = put_card_on_battlefield(&mut engine, current_member, "savannah_lions");
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            current_member,
+            Zone::Exile,
+            None,
+        )
+        .expect("current linked card enters exile");
+        let current_generation = engine.state.zone_change_generation[&current_member];
+        assert_eq!(current_generation, current_ref.zone_change_generation + 1);
+        top.trigger_context.observed_object = Some(TriggerObjectRef {
+            object_id: current_member,
+            zone_change_generation: current_generation.saturating_sub(1),
+            controller_at_event: 0,
+        });
+
+        let producer_ability_id = tricerules_card_model::AbilityId::new("imprint").unwrap();
+        let linked_exile_id = tricerules_card_model::AbilityLinkId::new("imprinted_card").unwrap();
+        let key = super::super::zones::linked_exile_key(
+            &engine,
+            &top,
+            linked_exile_id.clone(),
+            producer_ability_id.clone(),
+        )
+        .expect("the stack occurrence resolves its exact linked-exile key");
+        let linked_records = vec![
+            LinkedExiledObject {
+                object_id: old_member,
+                zone_change_generation: old_generation,
+            },
+            LinkedExiledObject {
+                object_id: current_member,
+                zone_change_generation: current_generation,
+            },
+        ];
+        engine
+            .state
+            .linked_exile_records
+            .insert(key.clone(), linked_records.clone());
+
+        let compiled = compiled_receipt_program();
+        let outputs = [ResultSlotId(0)];
+        let mut no_output_run = receipt_run(&compiled);
+        capture_program_outputs_for_stack(
+            &engine,
+            &top,
+            &compiled,
+            &mut no_output_run,
+            &outputs,
+            &EffectResult::default(),
+        )
+        .expect("a resultless Exile completes with an empty optional receipt");
+        assert!(matches!(
+            no_output_run.slots[0],
+            Some(ProgramValue::TriggerObjectLinkedExileReceipt(None))
+        ));
+
+        let mut stale_output = EffectResult::default();
+        stale_output.produced_objects.push(TriggerObjectRef {
+            object_id: current_member,
+            zone_change_generation: current_generation - 1,
+            controller_at_event: 0,
+        });
+        let mut stale_generation_run = receipt_run(&compiled);
+        capture_program_outputs_for_stack(
+            &engine,
+            &top,
+            &compiled,
+            &mut stale_generation_run,
+            &outputs,
+            &stale_output,
+        )
+        .expect("a noncurrent Exile generation completes as an empty optional receipt");
+        assert!(matches!(
+            stale_generation_run.slots[0],
+            Some(ProgramValue::TriggerObjectLinkedExileReceipt(None))
+        ));
+
+        // This is the interpreter's existing receipt-slot transfer: None adds no
+        // produced_objects to the preceding EffectResult passed into the consumer.
+        let mut previous_result = EffectResult::default();
+        match stale_generation_run.slots[0].as_ref() {
+            Some(ProgramValue::TriggerObjectLinkedExileReceipt(Some(object))) => {
+                previous_result.produced_objects.push(*object);
+            }
+            Some(ProgramValue::TriggerObjectLinkedExileReceipt(None)) => {}
+            _ => panic!("the receipt slot contains its completed typed None"),
+        }
+        assert!(previous_result.produced_objects.is_empty());
+
+        let mut events = Vec::new();
+        let mut consumer_result = EffectResult::default();
+        let outcome = super::super::zones::return_other_linked_exiled_cards(
+            &mut super::super::EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &[],
+                targets_by_role: &[],
+                target_damage: &[],
+                target_group_indices: &[],
+                top: &top,
+                controller: 0,
+                affected_player: 0,
+                spell_label: "Mimic Vat",
+                previous_effect_result: &previous_result,
+                resume_previous_result: None,
+                effect_result: &mut consumer_result,
+                effect_index: 0,
+                program_state: None,
+            },
+            SpellEffectKind::ReturnOtherLinkedExiledCards {
+                producer_ability_id,
+                linked_exile_id,
+            },
+        )
+        .expect("ReturnOther runs after the empty receipt");
+        assert!(matches!(outcome, EffectOutcome::Continue));
+
+        for (object_id, owner, exile_generation) in [
+            (old_member, 1, old_generation),
+            (current_member, 0, current_generation),
+        ] {
+            assert_eq!(engine.state.objects[&object_id].zone, Zone::Graveyard);
+            assert_eq!(engine.state.objects[&object_id].owner, owner);
+            let owner_index = engine.state.player_idx(owner).unwrap();
+            assert!(engine.state.players[owner_index]
+                .graveyard
+                .contains(&object_id));
+            assert_eq!(
+                engine.state.zone_change_generation[&object_id],
+                exile_generation + 1,
+                "the returned object now has a new generation"
+            );
+        }
+        assert_eq!(
+            engine.state.linked_exile_records.get(&key),
+            Some(&linked_records),
+            "historical records remain mapped at their original generations"
+        );
     }
 }
 
