@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 
 use tricerules_cards::mana::ManaCost;
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardResultAction, CardResultFilter,
-    CardResultSource, CardTypeFilter, CountExpression, EffectSubject, GameCondition,
-    InstructionKind, ObjectPaymentConstraint, PlayerRecipient, PowerToughnessCharacteristic,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
+    CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, CountExpression,
+    EffectSubject, GameCondition, InstructionKind, ObjectPaymentConstraint, PlayerRecipient,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
@@ -121,7 +121,7 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                         players: tricerules_cards::primitives::RelativePlayerSet::Controller,
                         card_type: Some(CardTypeFilter::Creature),
                     },
-                    characteristic: PowerToughnessCharacteristic::Power,
+                    characteristic: BattlefieldQuantityCharacteristic::Power,
                 }),
                 subject: EffectSubject::Source,
             }]

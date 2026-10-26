@@ -257,19 +257,30 @@ pub(in crate::engine) fn committed_card_result_entry(
             "committed card movement has no live output object",
         ))?;
     let mut entry = card_result_entry(state, registry, action, affected_player, object_id);
+    let output_visibility = if object.face_down
+        || matches!(
+            object.zone,
+            crate::state::Zone::Hand | crate::state::Zone::Library
+        ) {
+        crate::state::CardResultOutputVisibility::UnknownHidden
+    } else {
+        crate::state::CardResultOutputVisibility::FaceUpPublic
+    };
+    let outside_stack_mana_value = (output_visibility
+        == crate::state::CardResultOutputVisibility::FaceUpPublic)
+        .then(|| {
+            registry
+                .get(&object.card_id)
+                .map(|definition| definition.mana_value_outside_stack())
+        })
+        .flatten();
     entry.provenance = crate::state::CardResultProvenance::CommittedMovement {
         input_zone,
         input_generation,
+        owner: object.owner,
         actual_output_zone: object.zone,
-        output_visibility: if object.face_down
-            || matches!(
-                object.zone,
-                crate::state::Zone::Hand | crate::state::Zone::Library
-            ) {
-            crate::state::CardResultOutputVisibility::UnknownHidden
-        } else {
-            crate::state::CardResultOutputVisibility::FaceUpPublic
-        },
+        output_visibility,
+        outside_stack_mana_value,
     };
     Ok(entry)
 }

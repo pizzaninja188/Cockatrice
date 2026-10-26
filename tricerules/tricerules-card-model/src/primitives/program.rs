@@ -2024,10 +2024,9 @@ impl Compiler<'_> {
                         &self.slots,
                     )?;
                     validate_program_draw_result_count_input(effect.as_ref(), input, &self.slots)?;
-                    validate_previous_mill_mana_value_sum_input(
+                    validate_program_card_result_characteristic_sum_input(
                         effect.as_ref(),
                         input,
-                        &steps,
                         &self.slots,
                     )?;
                     validate_return_to_owners_hand_input(effect.as_ref(), input, &self.slots)?;
@@ -3216,17 +3215,14 @@ fn validate_counter_placement_program_reflexive_trigger(
     Ok(())
 }
 
-fn is_targeted_opponent_previous_mill_damage(effect: &EffectOp) -> bool {
-    matches!(
-        effect,
-        EffectOp::DamagePlayer {
-            amount: Amount::Count(super::CountExpression::PreviousMillManaValueSum),
-            who: PlayerRecipient::TargetedPlayer {
-                kind: TargetKind::OpponentPlayer,
-                ..
-            },
-        }
-    )
+fn previous_effect_card_result_characteristic_sum_filter(
+    effect: &EffectOp,
+) -> Option<&CardResultFilter> {
+    effect
+        .result_consuming_amount()?
+        .card_result_characteristic_sum()
+        .map(|(filter, _)| filter)
+        .filter(|filter| filter.source == CardResultSource::PreviousEffect)
 }
 
 fn program_gain_life_result_count_profile(amount: &Amount) -> Option<(&CardResultFilter, u32)> {
@@ -3516,43 +3512,36 @@ fn same_block_direct_perform_producer(
     })
 }
 
-fn validate_previous_mill_mana_value_sum_input(
+fn validate_program_card_result_characteristic_sum_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
-    steps: &[CompiledInstruction],
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
-    if !is_targeted_opponent_previous_mill_damage(effect) {
+    let Some(filter) = previous_effect_card_result_characteristic_sum_filter(effect) else {
         return Ok(());
-    }
+    };
     let slot_id = input.ok_or_else(|| {
-        "PreviousMillManaValueSum requires an explicitly bound Controller Mill input".to_string()
+        "CardResultCharacteristicSum requires an explicitly bound typed previous-effect input"
+            .to_string()
     })?;
-    let producer = same_block_direct_perform_producer(steps, Some(slot_id)).ok_or_else(|| {
-        "PreviousMillManaValueSum requires a same-block direct Controller Mill producer".to_string()
-    })?;
+    let slot = slots
+        .get(slot_id.0 as usize)
+        .ok_or_else(|| "CardResultCharacteristicSum input slot is unavailable".to_string())?;
     if !matches!(
-        &producer.kind,
-        CompiledInstructionKind::Perform(effect)
-            if matches!(effect.as_ref(), SpellEffectKind::Mill {
-                who: PlayerRecipient::Controller,
-                ..
-            })
+        slot.result_type,
+        ResultType::CardResultCohort { .. } | ResultType::TargetCardResultCohort { .. }
     ) {
+        return Err("CardResultCharacteristicSum requires a typed card-result cohort input".into());
+    }
+    if filter.card_type.is_some() && !bound_card_result_type_filter_is_safe(&slot.result_type) {
         return Err(
-            "PreviousMillManaValueSum requires its same-block input to come from a Controller Mill instruction".into(),
+            "CardResultCharacteristicSum card_type is unsafe for this result cohort".into(),
         );
     }
-    if !matches!(
-        slots.get(slot_id.0 as usize).map(|slot| &slot.result_type),
-        Some(ResultType::CardResultCohort {
-            action: CardResultAction::Mill,
-            who: PlayerRecipient::Controller,
-            ..
-        })
-    ) {
+    if *filter != project_bound_card_result_filter(slot, filter.card_type)? {
         return Err(
-            "PreviousMillManaValueSum input must be a Controller Mill card-result cohort".into(),
+            "CardResultCharacteristicSum filter must match its explicitly bound result cohort"
+                .into(),
         );
     }
     Ok(())
@@ -3778,6 +3767,9 @@ fn compile_input(
         EffectOp::GainLife { amount } if amount.uses_bound_card_result_count() => {
             Some("bound card-result cohort")
         }
+        effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
+            Some("CardResultCohort")
+        }
         EffectOp::DamagePlayer {
             amount: Amount::Count(CountExpression::ProgramInputCount),
             who: PlayerRecipient::Controller,
@@ -3806,9 +3798,6 @@ fn compile_input(
         EffectOp::CreateReflexiveTrigger { .. }
             if is_source_sacrifice_reflexive_consumer(effect) =>
         {
-            Some("CardResultCohort")
-        }
-        EffectOp::DamagePlayer { .. } if is_targeted_opponent_previous_mill_damage(effect) => {
             Some("CardResultCohort")
         }
         _ if token_copy_batch_consumer => Some("TokenCopyBatch"),
@@ -3866,6 +3855,19 @@ fn compile_input(
                             | ResultType::CastPaymentCohort { .. }
                             | ResultType::DiscardResult { .. }
                     )
+                }
+                effect
+                    if previous_effect_card_result_characteristic_sum_filter(effect).is_some() =>
+                {
+                    let filter = previous_effect_card_result_characteristic_sum_filter(effect)
+                        .expect("matched previous-effect characteristic sum");
+                    match &actual.result_type {
+                        ResultType::CardResultCohort { action, .. }
+                        | ResultType::TargetCardResultCohort { action, .. } => {
+                            *action == filter.action
+                        }
+                        _ => false,
+                    }
                 }
                 EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
                     matches!(actual.result_type, ResultType::DiscardResult { .. })
@@ -4015,18 +4017,6 @@ fn compile_input(
                                 min: 0,
                                 max: Some(1),
                             },
-                        }
-                    )
-                }
-                EffectOp::DamagePlayer { .. }
-                    if is_targeted_opponent_previous_mill_damage(effect) =>
-                {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort {
-                            action: CardResultAction::Mill,
-                            who: PlayerRecipient::Controller,
-                            ..
                         }
                     )
                 }
@@ -5079,12 +5069,12 @@ fn validate_and_result_types(
             effect.validate(context)?;
             match amount {
                 Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
-                Amount::Count(super::CountExpression::PreviousMillManaValueSum) => {
+                amount if amount.card_result_characteristic_sum().is_some() => {
                     amount.validate_effect(context)?;
                     Ok(Vec::new())
                 }
                 _ => Err(
-                    "DamagePlayer TargetedPlayer OpponentPlayer in spell_program requires a positive fixed amount or a direct PreviousMillManaValueSum result"
+                    "DamagePlayer TargetedPlayer OpponentPlayer in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
                         .into(),
                 ),
             }

@@ -8,15 +8,16 @@ use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingCounterMove, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
-    ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup,
+    ProgramValue, ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup,
     TargetedPlayerControlCohort, TriggerContext, TriggerObjectRef,
 };
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
 use tricerules_card_model::primitives::{
-    Amount, PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionCost, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TriggerCondition, TriggeredAbilityDef,
+    Amount, BattlefieldQuantityCharacteristic, CardResultAction, PermanentChoiceConstraint,
+    PlayerRecipient, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
+    ResolutionCost, ResultType, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    TriggerCondition, TriggeredAbilityDef,
 };
 
 pub(super) fn move_one_counter_between_targets(
@@ -1209,7 +1210,7 @@ pub(in crate::engine) fn card_result_characteristic_sum(
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
     filter: &tricerules_card_model::primitives::CardResultFilter,
-    characteristic: tricerules_card_model::primitives::PowerToughnessCharacteristic,
+    characteristic: BattlefieldQuantityCharacteristic,
 ) -> i64 {
     matching_card_result_entries(
         &engine.state,
@@ -1219,45 +1220,230 @@ pub(in crate::engine) fn card_result_characteristic_sum(
         filter,
     )
     .fold(0_i64, |sum, entry| {
-        let (power, toughness) =
-            engine.object_power_toughness(entry.object_id, engine.card_result_generation(entry));
         let value = match characteristic {
-            tricerules_card_model::primitives::PowerToughnessCharacteristic::Power => power,
-            tricerules_card_model::primitives::PowerToughnessCharacteristic::Toughness => toughness,
+            BattlefieldQuantityCharacteristic::Power
+            | BattlefieldQuantityCharacteristic::Toughness => {
+                let (power, toughness) = engine
+                    .object_power_toughness(entry.object_id, engine.card_result_generation(entry));
+                match characteristic {
+                    BattlefieldQuantityCharacteristic::Power => power,
+                    BattlefieldQuantityCharacteristic::Toughness => toughness,
+                    BattlefieldQuantityCharacteristic::ManaValue => unreachable!(),
+                }
+            }
+            BattlefieldQuantityCharacteristic::ManaValue => {
+                match committed_movement_evidence(engine, entry) {
+                    Ok(CommittedMovementEvidence::Public {
+                        input_zone: Zone::Library,
+                        actual_output_zone: Zone::Graveyard,
+                        outside_stack_mana_value: Some(value),
+                        ..
+                    }) => i64::from(value),
+                    // The fallible Program input projection validates qualifying public Mill
+                    // receipts before any amount reaches this legacy infallible evaluator.
+                    // Unknown-hidden and non-Mill payment receipts are never dereferenced here.
+                    _ => 0,
+                }
+            }
         };
         sum.saturating_add(value)
     })
 }
 
-pub(in crate::engine) fn card_result_mana_value_sum(
-    engine: &crate::engine::GameEngine,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommittedMovementEvidence {
+    Missing,
+    Hidden,
+    Public {
+        input_zone: Zone,
+        actual_output_zone: Zone,
+        owner: PlayerId,
+        outside_stack_mana_value: Option<u32>,
+    },
+}
+
+/// Validate and project the exact typed Program input before EffectResult drops the raw
+/// ProgramValue variant. A present empty CardResultCohort is valid; an absent or differently
+/// typed runtime value remains an invariant error instead of becoming an empty sum.
+pub(super) fn validate_program_card_result_characteristic_sum_input(
+    engine: &GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
-) -> i64 {
-    let mut seen = std::collections::BTreeSet::new();
-    previous_result
-        .cards
-        .iter()
-        .filter(|entry| {
-            entry.action == tricerules_card_model::primitives::CardResultAction::Mill
-                && entry.affected_player == top.controller
-                && seen.insert((entry.object_id, entry.zone_change_generation))
-        })
-        .filter_map(|entry| {
-            let current_generation = engine
-                .state
-                .zone_change_generation
-                .get(&entry.object_id)
-                .copied()
-                .unwrap_or(0);
-            if current_generation != entry.zone_change_generation {
-                return None;
+    effect: &SpellEffectKind,
+    result_type: &ResultType,
+    value: &ProgramValue,
+) -> Result<(), EngineError> {
+    let Some((filter, characteristic)) = effect.previous_effect_card_result_characteristic_sum()
+    else {
+        return Ok(());
+    };
+    let (action, players, producer_who) = match result_type {
+        ResultType::CardResultCohort { action, who, .. } => (
+            *action,
+            if *who == PlayerRecipient::Controller {
+                RelativePlayerSet::Controller
+            } else {
+                RelativePlayerSet::All
+            },
+            Some(*who),
+        ),
+        ResultType::TargetCardResultCohort { action, .. } => {
+            (*action, RelativePlayerSet::All, None)
+        }
+        _ => {
+            return Err(EngineError::ProgramInvariant(
+                "card-result characteristic sum input has the wrong compiled result type",
+            ));
+        }
+    };
+    if action != filter.action || players != filter.players {
+        return Err(EngineError::ProgramInvariant(
+            "card-result characteristic sum input type disagrees with its declared filter",
+        ));
+    }
+    let ProgramValue::CardResultCohort(cohort) = value else {
+        return Err(EngineError::ProgramInvariant(
+            "card-result characteristic sum input has the wrong runtime value",
+        ));
+    };
+
+    for entry in &cohort.cards {
+        if entry.action != filter.action
+            || !super::super::history::relative_player_set_contains(
+                &engine.state,
+                filter.players,
+                top.controller,
+                entry.affected_player,
+            )
+        {
+            return Err(EngineError::ProgramInvariant(
+                "card-result characteristic sum cohort disagrees with its compiled action or player scope",
+            ));
+        }
+        if producer_who.is_some_and(|who| {
+            !card_result_entry_matches_program_recipient(engine, top, who, entry.affected_player)
+        }) {
+            return Err(EngineError::ProgramInvariant(
+                "card-result characteristic sum cohort member disagrees with its compiled producer recipient",
+            ));
+        }
+        if filter
+            .card_type
+            .is_some_and(|card_type| !entry.matched_card_types.contains(&card_type))
+        {
+            continue;
+        }
+        if characteristic != BattlefieldQuantityCharacteristic::ManaValue {
+            continue;
+        }
+        match committed_movement_evidence(engine, entry)? {
+            CommittedMovementEvidence::Missing => {
+                return Err(EngineError::ProgramInvariant(
+                    "ManaValue card-result sum entry has no committed movement receipt",
+                ));
             }
-            let object = engine.state.objects.get(&entry.object_id)?;
-            let definition = engine.registry.get(&object.card_id)?;
-            Some(i64::from(definition.mana_value_outside_stack()))
-        })
-        .fold(0_i64, i64::saturating_add)
+            CommittedMovementEvidence::Hidden => continue,
+            CommittedMovementEvidence::Public {
+                input_zone: Zone::Library,
+                actual_output_zone: Zone::Graveyard,
+                owner,
+                outside_stack_mana_value: Some(_),
+            } if filter.action == CardResultAction::Mill && owner != entry.affected_player => {
+                return Err(EngineError::ProgramInvariant(
+                    "Mill movement owner disagrees with its affected library player",
+                ));
+            }
+            CommittedMovementEvidence::Public {
+                input_zone: Zone::Library,
+                actual_output_zone: Zone::Graveyard,
+                owner,
+                outside_stack_mana_value: None,
+            } => {
+                if filter.action == CardResultAction::Mill && owner != entry.affected_player {
+                    return Err(EngineError::ProgramInvariant(
+                        "Mill movement owner disagrees with its affected library player",
+                    ));
+                }
+                return Err(EngineError::ProgramInvariant(
+                    "public Library-to-Graveyard result is missing its event-time ManaValue",
+                ));
+            }
+            CommittedMovementEvidence::Public {
+                input_zone: Zone::Library,
+                actual_output_zone: Zone::Graveyard,
+                outside_stack_mana_value: Some(_),
+                ..
+            } => {}
+            CommittedMovementEvidence::Public { .. } => {
+                return Err(EngineError::ProgramInvariant(
+                    "ManaValue card-result sum encountered an unsupported committed movement",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn card_result_entry_matches_program_recipient(
+    engine: &GameEngine,
+    top: &StackItem,
+    who: PlayerRecipient,
+    affected_player: PlayerId,
+) -> bool {
+    let expected_player = match who {
+        PlayerRecipient::Controller => Some(top.controller),
+        PlayerRecipient::AffectedPlayer => Some(
+            top.trigger_context
+                .affected_player
+                .unwrap_or(top.controller),
+        ),
+        _ => None,
+    };
+    expected_player.is_some_and(|player| {
+        engine.state.player_idx(player).is_some() && affected_player == player
+    })
+}
+
+fn committed_movement_evidence(
+    engine: &GameEngine,
+    entry: &crate::state::CardResultEntry,
+) -> Result<CommittedMovementEvidence, EngineError> {
+    match entry.provenance {
+        crate::state::CardResultProvenance::ActionFacts => Ok(CommittedMovementEvidence::Missing),
+        crate::state::CardResultProvenance::CommittedMovement {
+            output_visibility: crate::state::CardResultOutputVisibility::UnknownHidden,
+            ..
+        } => Ok(CommittedMovementEvidence::Hidden),
+        crate::state::CardResultProvenance::CommittedMovement {
+            input_zone,
+            input_generation,
+            owner,
+            actual_output_zone,
+            output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+            outside_stack_mana_value,
+        } => {
+            if input_generation >= entry.zone_change_generation {
+                return Err(EngineError::ProgramInvariant(
+                    "committed card-result movement has an invalid generation range",
+                ));
+            }
+            if engine
+                .state
+                .objects
+                .get(&entry.object_id)
+                .is_some_and(|object| object.owner != owner)
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "committed card-result movement owner disagrees with its object identity",
+                ));
+            }
+            Ok(CommittedMovementEvidence::Public {
+                input_zone,
+                actual_output_zone,
+                owner,
+                outside_stack_mana_value,
+            })
+        }
+    }
 }
 
 fn card_result_count_from_cohorts(
@@ -1969,8 +2155,58 @@ mod result_count_tests {
     use super::*;
     use crate::state::{CardResultCohort, CardResultEntry};
     use tricerules_card_model::primitives::{
-        CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, RelativePlayerSet,
+        Amount, CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter,
+        CountExpression, PlayerRecipient, RelativePlayerSet, ResultType,
     };
+
+    fn characteristic_sum_effect(players: RelativePlayerSet) -> SpellEffectKind {
+        SpellEffectKind::DamagePlayer {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+            }),
+            who: PlayerRecipient::Controller,
+        }
+    }
+
+    fn card_result_sum_type(who: PlayerRecipient) -> ResultType {
+        ResultType::CardResultCohort {
+            action: CardResultAction::Mill,
+            who,
+            cardinality: tricerules_card_model::primitives::Cardinality {
+                min: 0,
+                max: Some(10),
+            },
+        }
+    }
+
+    fn card_result_entry(
+        affected_player: PlayerId,
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        provenance: crate::state::CardResultProvenance,
+    ) -> CardResultEntry {
+        CardResultEntry {
+            action: CardResultAction::Mill,
+            affected_player,
+            object_id,
+            zone_change_generation,
+            matched_card_types: Vec::new(),
+            provenance,
+        }
+    }
+
+    fn cohort_value(cards: Vec<CardResultEntry>) -> ProgramValue {
+        ProgramValue::CardResultCohort(CardResultCohort {
+            cards,
+            program_discard_result: None,
+        })
+    }
 
     #[test]
     fn windfall_grouped_maximum_filters_receipts_and_deduplicates_generations() {
@@ -2110,6 +2346,148 @@ mod result_count_tests {
                 &filter,
             ),
             2
+        );
+    }
+
+    #[test]
+    fn mana_value_card_result_input_preserves_runtime_type_and_movement_evidence() {
+        let engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            122_010,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source_id = *engine
+            .state
+            .objects
+            .keys()
+            .next()
+            .expect("default decks contain a source object");
+        let mut top = engine.observer_return_item(source_id, 10);
+        top.trigger_context.affected_player = Some(20);
+        let controller_effect = characteristic_sum_effect(RelativePlayerSet::Controller);
+        let controller_result_type = card_result_sum_type(PlayerRecipient::Controller);
+
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &controller_effect,
+                &controller_result_type,
+                &ProgramValue::Count(0),
+            )
+            .is_err(),
+            "a wrong runtime variant must not be flattened into an empty result"
+        );
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &controller_effect,
+                &controller_result_type,
+                &cohort_value(Vec::new()),
+            )
+            .is_ok(),
+            "a present, correctly typed empty cohort sums to zero"
+        );
+
+        let affected_player_effect = characteristic_sum_effect(RelativePlayerSet::All);
+        let affected_player_result_type = card_result_sum_type(PlayerRecipient::AffectedPlayer);
+        let wrong_recipient = cohort_value(vec![card_result_entry(
+            10,
+            900,
+            2,
+            crate::state::CardResultProvenance::ActionFacts,
+        )]);
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &affected_player_effect,
+                &affected_player_result_type,
+                &wrong_recipient,
+            )
+            .is_err(),
+            "All-player filter membership cannot replace the producer's exact recipient"
+        );
+
+        let public_receipt = |owner, outside_stack_mana_value| {
+            crate::state::CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Library,
+                input_generation: 1,
+                owner,
+                actual_output_zone: Zone::Graveyard,
+                output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value,
+            }
+        };
+        let missing_snapshot = cohort_value(vec![card_result_entry(
+            10,
+            901,
+            2,
+            public_receipt(10, None),
+        )]);
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &controller_effect,
+                &controller_result_type,
+                &missing_snapshot,
+            )
+            .is_err(),
+            "public Library-to-Graveyard evidence needs its event-time mana value"
+        );
+
+        let wrong_library_owner = cohort_value(vec![card_result_entry(
+            10,
+            902,
+            2,
+            public_receipt(20, Some(3)),
+        )]);
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &controller_effect,
+                &controller_result_type,
+                &wrong_library_owner,
+            )
+            .is_err(),
+            "a Mill receipt must belong to the affected library player"
+        );
+
+        let valid_receipt = card_result_entry(10, 903, 2, public_receipt(10, Some(3)));
+        let valid_cohort = cohort_value(vec![valid_receipt.clone()]);
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &controller_effect,
+            &controller_result_type,
+            &valid_cohort,
+        )
+        .is_ok());
+        let previous_result: crate::state::EffectResult = CardResultCohort {
+            cards: vec![valid_receipt],
+            program_discard_result: None,
+        }
+        .into();
+        let (filter, _) = controller_effect
+            .previous_effect_card_result_characteristic_sum()
+            .expect("test effect has a previous-effect characteristic sum");
+        assert_eq!(
+            card_result_characteristic_sum(
+                &engine,
+                &top,
+                &previous_result,
+                filter,
+                BattlefieldQuantityCharacteristic::ManaValue,
+            ),
+            3,
+            "the sum reads the receipt snapshot even after its object has left the live registry"
         );
     }
 }

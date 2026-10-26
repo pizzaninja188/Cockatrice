@@ -13,10 +13,10 @@
 //! registry entry here; their unsupported clauses stay fail-closed.
 
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardResultAction, CardResultFilter,
-    CardResultSource, CardSearchZone, CardTypeFilter, CountExpression, CreatureScopeController,
-    CreatureScopeFilter, EffectSubject, GameCondition, ObjectPaymentConstraint, PlayerRecipient,
-    PowerToughnessCharacteristic, RelativePlayerSet, ResolvingEffectDuration,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
+    CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
+    CountExpression, CreatureScopeController, CreatureScopeFilter, EffectSubject, GameCondition,
+    ObjectPaymentConstraint, PlayerRecipient, RelativePlayerSet, ResolvingEffectDuration,
     ResolvingPermanentModifier, SearchDestination, SearchZoneSelection, SpellEffectKind,
     StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
     TypeLineAddition, ZoneCardFilter,
@@ -137,7 +137,7 @@ fn station_effect() -> SpellEffectKind {
                 players: RelativePlayerSet::Controller,
                 card_type: Some(CardTypeFilter::Creature),
             },
-            characteristic: PowerToughnessCharacteristic::Power,
+            characteristic: BattlefieldQuantityCharacteristic::Power,
         }),
         subject: EffectSubject::Source,
     }
@@ -721,7 +721,7 @@ fn issue_423_planets_grant_their_twelve_plus_activated_abilities() {
                     players: RelativePlayerSet::Controller,
                     card_type: Some(CardTypeFilter::Creature),
                 },
-                characteristic: PowerToughnessCharacteristic::Power,
+                characteristic: BattlefieldQuantityCharacteristic::Power,
             }),
         }]
     );

@@ -179,8 +179,12 @@ pub(crate) enum CardResultProvenance {
     CommittedMovement {
         input_zone: Zone,
         input_generation: u64,
+        owner: PlayerId,
         actual_output_zone: Zone,
         output_visibility: CardResultOutputVisibility,
+        /// Outside-stack mana value captured with this exact movement receipt. It is present only
+        /// when the committed output is face-up and the card definition is available.
+        outside_stack_mana_value: Option<u32>,
     },
 }
 

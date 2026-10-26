@@ -77,8 +77,10 @@ mod source_sacrifice_receipt_tests {
             provenance: crate::state::CardResultProvenance::CommittedMovement {
                 input_zone,
                 input_generation,
+                owner: affected_player,
                 actual_output_zone: Zone::Graveyard,
                 output_visibility: CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: Some(0),
             },
         }
     }
@@ -1387,22 +1389,26 @@ impl GameEngine {
 
                     let mut previous = EffectResult::default();
                     if let Some(input) = input {
-                        previous.input_result_type = Some(
-                            compiled
-                                .slot(input)
-                                .ok_or(EngineError::ProgramInvariant(
-                                    "resolution program input slot is invalid",
-                                ))?
-                                .result_type
-                                .clone(),
-                        );
-                        match program_state
+                        let input_slot =
+                            compiled.slot(input).ok_or(EngineError::ProgramInvariant(
+                                "resolution program input slot is invalid",
+                            ))?;
+                        let input_value = program_state
                             .slots
                             .get(input.0 as usize)
                             .and_then(Option::as_ref)
                             .ok_or(EngineError::ProgramInvariant(
                                 "resolution program input is unavailable",
-                            ))? {
+                            ))?;
+                        super::choices::validate_program_card_result_characteristic_sum_input(
+                            self,
+                            top,
+                            &effect,
+                            &input_slot.result_type,
+                            input_value,
+                        )?;
+                        previous.input_result_type = Some(input_slot.result_type.clone());
+                        match input_value {
                             ProgramValue::PermanentSelection(objects) => {
                                 previous.produced_objects = objects.clone();
                             }
@@ -4920,8 +4926,10 @@ mod invariant_rollback_tests {
             CardResultProvenance::CommittedMovement {
                 input_zone: Zone::Hand,
                 input_generation: 3,
+                owner: 23,
                 actual_output_zone: Zone::Graveyard,
                 output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: Some(0),
             },
         )];
         assert!(matches!(

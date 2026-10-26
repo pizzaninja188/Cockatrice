@@ -2632,9 +2632,10 @@ fn flat_previous_result_operations_require_explicit_program_inputs() {
     .expect("nested flat linked return consumer parses");
     let mill: super::SpellEffectKind =
         ron::from_str("Mill(count: 3, who: Controller)").expect("flat Mill parses");
-    let previous_mill_damage: super::SpellEffectKind =
-        ron::from_str("DamagePlayer(who: Controller, amount: Count(PreviousMillManaValueSum))")
-            .expect("flat PreviousMillManaValueSum consumer parses");
+    let previous_mill_damage: super::SpellEffectKind = ron::from_str(
+        "DamagePlayer(who: Controller, amount: Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue)))",
+    )
+    .expect("flat PreviousEffect characteristic-sum consumer parses");
 
     for (label, consumer) in [
         ("linked return", direct_return),
@@ -2648,10 +2649,10 @@ fn flat_previous_result_operations_require_explicit_program_inputs() {
         );
     }
     let error = super::SpellEffectKind::validate_list(&[mill, previous_mill_damage])
-        .expect_err("flat PreviousMillManaValueSum must use an authored Program input");
+        .expect_err("flat PreviousEffect characteristic sum must use an authored Program input");
     assert!(
         error.contains("PreviousEffect references require an authored Program"),
-        "flat PreviousMillManaValueSum: {error}"
+        "flat PreviousEffect characteristic sum: {error}"
     );
 }
 
@@ -9004,11 +9005,19 @@ fn spell_program_create_tokens_accepts_typed_graveyard_count() {
             "None",
         )
         .expect_err("only the explicit Controller graveyard-card profile is admitted");
-        assert!(
-            error.contains("CreateTokens count")
-                || error.contains("program amounts cannot read an implicit card result"),
-            "unexpected {label} diagnostic: {error}"
-        );
+        if label == "implicit_card_result_count" {
+            assert_eq!(
+                error,
+                "PreviousEffect result references require an authored Program input",
+                "{label} should be rejected by the typed Program-input contract"
+            );
+        } else {
+            assert!(
+                error.contains("CreateTokens count")
+                    || error.contains("program amounts cannot read an implicit card result"),
+                "unexpected {label} diagnostic: {error}"
+            );
+        }
     }
 
     {
@@ -20228,12 +20237,13 @@ mod combustible_gearhulk_program_compiler_tests {
     }
 
     #[test]
-    fn program_compiler_accepts_gearhulk_typed_mill_input_for_targeted_damage() {
+    fn program_compiler_accepts_generic_typed_mill_characteristic_sum() {
+        let amount = "Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))";
         let compiled = compile(
-            &targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")"),
+            &targeted_mill_damage_body(amount, "Some(\"milled\")"),
             damage_target_binding(),
         )
-        .expect("the direct mana-value sum consumes its exact same-block Mill result");
+        .expect("the characteristic sum consumes its explicitly bound typed Mill result");
 
         assert_eq!(compiled.target_bindings.len(), 1);
         assert_eq!(compiled.target_bindings[0].instruction_address, 4);
@@ -20269,7 +20279,15 @@ mod combustible_gearhulk_program_compiler_tests {
             CompiledInstructionKind::Perform(effect)
                 if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamagePlayer {
                     amount: crate::primitives::Amount::Count(
-                        crate::primitives::CountExpression::PreviousMillManaValueSum
+                    crate::primitives::CountExpression::CardResultCharacteristicSum {
+                        filter: crate::primitives::CardResultFilter {
+                            source: crate::primitives::CardResultSource::PreviousEffect,
+                            action: crate::primitives::CardResultAction::Mill,
+                            players: crate::primitives::RelativePlayerSet::Controller,
+                            card_type: None,
+                        },
+                        characteristic: crate::primitives::BattlefieldQuantityCharacteristic::ManaValue,
+                    }
                     ),
                     who: PlayerRecipient::TargetedPlayer {
                         group_index: 0,
@@ -20280,44 +20298,78 @@ mod combustible_gearhulk_program_compiler_tests {
     }
 
     #[test]
-    fn program_compiler_rejects_unbound_or_wrapped_gearhulk_mill_sum() {
-        for (label, amount, input) in [
-            (
-                "unbound direct sum",
-                "Count(PreviousMillManaValueSum)",
-                "None",
-            ),
-            (
-                "affine-wrapped sum",
-                "Count(Affine(terms: [(coefficient: 1, quantity: PreviousMillManaValueSum)]))",
-                "None",
-            ),
-            (
-                "divide-wrapped sum",
-                "DivideRoundedDown(amount: Count(PreviousMillManaValueSum), divisor: 2)",
-                "None",
-            ),
-        ] {
-            let error = compile(
-                &targeted_mill_damage_body(amount, input),
-                damage_target_binding(),
-            )
-            .expect_err(&format!("the Program compiler admitted {label}"));
-            if label == "unbound direct sum" {
-                assert!(
-                    error.contains("instruction requires an explicitly bound input result"),
-                    "{error}"
-                );
+    fn program_compiler_accepts_non_controller_card_result_across_resultless_sibling() {
+        let amount = "Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:All),characteristic:ManaValue))";
+        let body = targeted_mill_damage_body(amount, "Some(\"milled\")").replace(
+            "Mill(count: 3, who: Controller)",
+            "Mill(count: 3, who: AffectedPlayer)",
+        );
+        let compiled = compile(&body, damage_target_binding())
+            .expect("the sum follows its exact non-Controller producer through a resultless step");
+        let Some(milled) = compiled.slots.iter().find(|slot| slot.name == "milled") else {
+            panic!("the AffectedPlayer Mill binds the typed result");
+        };
+        assert!(matches!(
+            &milled.result_type,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Mill,
+                who: PlayerRecipient::AffectedPlayer,
+                ..
             }
-        }
+        ));
+        let [choose] = compiled.body.steps.as_slice() else {
+            panic!("the target choice owns the Otherwise block");
+        };
+        let CompiledInstructionKind::Choose { otherwise, .. } = &choose.kind else {
+            panic!("the program step is a target choice");
+        };
+        let [mill, intervening, damage] = otherwise.steps.as_slice() else {
+            panic!("a resultless sibling remains between producer and consumer");
+        };
+        assert!(intervening.outputs.is_empty());
+        assert_eq!(damage.input, Some(milled.id));
+        assert_eq!(mill.outputs.as_slice(), &[milled.id]);
     }
 
     #[test]
-    fn program_compiler_requires_the_exact_prior_controller_mill_slot() {
-        let valid =
-            targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")");
+    fn program_compiler_requires_a_typed_input_for_previous_effect_characteristic_sums() {
+        let amount = "Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))";
+        let unbound = compile(
+            &targeted_mill_damage_body(amount, "None"),
+            damage_target_binding(),
+        )
+        .expect_err("a previous-effect sum cannot read ambient history");
+        assert!(
+            unbound.contains("explicitly bound input result"),
+            "{unbound}"
+        );
+
+        let affine = compile(
+            &targeted_mill_damage_body(
+                "Count(Affine(terms: [(coefficient: 1, quantity: CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))]))",
+                "Some(\"milled\")",
+            ),
+            damage_target_binding(),
+        )
+        .expect_err("an authored affine quantity cannot hide a previous-effect sum");
+        assert!(!affine.is_empty());
+
+        compile(
+            &targeted_mill_damage_body(
+                "DivideRoundedDown(amount: Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue)), divisor: 2)",
+                "Some(\"milled\")",
+            ),
+            damage_target_binding(),
+        )
+        .expect("the typed characteristic sum remains composable under division");
+    }
+
+    #[test]
+    fn program_compiler_accepts_an_inherited_typed_mill_slot() {
+        let amount = "Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))";
+        let valid = targeted_mill_damage_body(amount, "Some(\"milled\")");
         let compiled = compile(&valid, damage_target_binding())
-            .expect("a resultless sibling does not sever the exact typed Mill receipt");
+            .expect("a resultless sibling does not sever the typed Mill receipt");
         let CompiledInstructionKind::Choose { otherwise, .. } = &compiled.body.steps[0].kind else {
             panic!("the targeted choice owns the Otherwise block");
         };
@@ -20351,27 +20403,29 @@ mod combustible_gearhulk_program_compiler_tests {
                 otherwise: (steps: [
                     (id: "damage", bind: [], input: Some("milled"),
                         kind: Perform(DamagePlayer(
-                            amount: Count(PreviousMillManaValueSum),
+                            amount: Count(CardResultCharacteristicSum(
+                                filter:(source:PreviousEffect,action:Mill,players:Controller),
+                                characteristic:ManaValue,
+                            )),
                             who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
                         ))),
                 ], yields: []),
             )),
         ], yields: [])"#;
-        let error = compile(inherited_branch_slot, damage_target_binding())
-            .expect_err("a branch cannot consume an inherited older Mill result");
-        assert!(error.contains("same-block"), "{error}");
+        compile(inherited_branch_slot, damage_target_binding())
+            .expect("an explicitly bound earlier Mill result can be consumed from a nested branch");
     }
 
     #[test]
-    fn program_compiler_limits_mill_sum_input_to_controller_mill_targeted_damage() {
-        let valid =
-            targeted_mill_damage_body("Count(PreviousMillManaValueSum)", "Some(\"milled\")");
+    fn program_compiler_checks_generic_characteristic_sum_action_and_player_scope() {
+        let amount = "Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))";
+        let valid = targeted_mill_damage_body(amount, "Some(\"milled\")");
         let wrong_action = valid.replace(
             "kind: Perform(Mill(count: 3, who: Controller))",
             "kind: Perform(Draw(who: Controller, count: 3))",
         );
         let error = compile(&wrong_action, damage_target_binding())
-            .expect_err("a non-Mill result cannot supply PreviousMillManaValueSum");
+            .expect_err("a non-Mill result cannot supply a Mill characteristic sum");
         assert!(error.contains("wrong type for this instruction"), "{error}");
 
         let wrong_mill_recipient = valid.replace(
@@ -20379,27 +20433,16 @@ mod combustible_gearhulk_program_compiler_tests {
             "kind: Perform(Mill(count: 3, who: AffectedPlayer))",
         );
         let error = compile(&wrong_mill_recipient, damage_target_binding())
-            .expect_err("only the controller's Mill cohort supplies this amount");
-        assert!(error.contains("wrong type for this instruction"), "{error}");
-
-        let wrong_damage_recipient = valid.replace(
-            "who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),",
-            "who: Controller,",
-        );
-        let error = compile(&wrong_damage_recipient, damage_target_binding())
-            .expect_err("the typed input is limited to targeted-opponent DamagePlayer");
-        assert!(error.contains("does not accept an input result"), "{error}");
+            .expect_err("a Controller filter must match the declared result player scope");
+        assert!(error.contains("filter must match"), "{error}");
 
         let ambient_reader = valid.replace(
             "(id: \"damage\"",
-            "(id: \"ambient_gain\", bind: [], input: None, kind: Perform(GainLife(amount: Count(PreviousMillManaValueSum)))),\n                        (id: \"damage\"",
+            "(id: \"ambient_gain\", bind: [], input: None, kind: Perform(GainLife(amount: Count(CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Controller),characteristic:ManaValue))))),\n                        (id: \"damage\"",
         );
         let error = compile(&ambient_reader, damage_target_binding())
-            .expect_err("other Program operations cannot read the implicit Mill sum");
-        assert!(
-            error.contains("immediate controller Mill result"),
-            "{error}"
-        );
+            .expect_err("another amount consumer still requires its own explicit typed input");
+        assert!(error.contains("explicitly bound input result"), "{error}");
     }
 
     #[test]

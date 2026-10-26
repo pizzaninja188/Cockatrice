@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardResultAction, CardResultFilter,
-    CardResultSource, CardTypeFilter, CountExpression, EffectSubject, GameCondition,
-    ObjectPaymentConstraint, PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
+    CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, CountExpression,
+    EffectSubject, GameCondition, ObjectPaymentConstraint, PlayerRecipient, RelativePlayerSet,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
     TypeLineAddition,
 };
@@ -33,7 +33,7 @@ fn station_effect() -> SpellEffectKind {
                 players: RelativePlayerSet::Controller,
                 card_type: Some(CardTypeFilter::Creature),
             },
-            characteristic: PowerToughnessCharacteristic::Power,
+            characteristic: BattlefieldQuantityCharacteristic::Power,
         }),
         subject: EffectSubject::Source,
     }

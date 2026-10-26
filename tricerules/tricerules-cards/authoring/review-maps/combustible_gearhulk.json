@@ -68,8 +68,24 @@
       "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer"
     },
     {
-      "symbol": "CountExpression::PreviousMillManaValueSum",
+      "symbol": "CountExpression::CardResultCharacteristicSum",
       "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count"
+    },
+    {
+      "symbol": "CardResultSource::PreviousEffect",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count/CardResultCharacteristicSum/filter/source"
+    },
+    {
+      "symbol": "CardResultAction::Mill",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count/CardResultCharacteristicSum/filter/action"
+    },
+    {
+      "symbol": "RelativePlayerSet::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count/CardResultCharacteristicSum/filter/players"
+    },
+    {
+      "symbol": "BattlefieldQuantityCharacteristic::ManaValue",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/1/kind/Perform/DamagePlayer/amount/Count/CardResultCharacteristicSum/characteristic"
     },
     {
       "symbol": "TargetingDef::groups",

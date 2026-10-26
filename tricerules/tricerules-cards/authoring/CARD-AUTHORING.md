@@ -1130,20 +1130,27 @@ Combustible Gearhulk uses a deliberately narrower targeted-choice profile. `Choo
 `chooser: TargetedPlayer(OpponentPlayer)` only when it is optional and every branch has `cost: None`.
 Its compiled target binding pairs exactly one `DamagePlayer` with that same singleton opponent
 target group. The group is resolved recursively through nested blocks and through the owning
-ability or mode's local target context. In `Otherwise`, `Mill(who: Controller)` must bind a named
-result; a `DamagePlayer` in that same block must read that exact slot with `input: Some("milled")`
-and `Count(PreviousMillManaValueSum)`. A sibling instruction may intervene. No wrapper, ambient
-previous-result read, mismatched result slot, alternative player recipient, or paid targeted-chooser form is
-accepted. Delegating the pending choice after target departure changes the chooser only. The
-original target remains the damage recipient, and the resolving trigger retains Gearhulk source LKI
-after source departure (CR 113.7a, 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). Its actual-card scenarios
-cover the exact Mill receipts, short-library draw branch, Narset's controller-scoped draw, target
-departure, delegated replay, and ordered prevention. Compiler regressions also reject paid Mana and
-Waterbend branches, unbound or wrapped Mill inputs, and mismatched target groups. The model
-tests `program_compiler_accepts_gearhulk_targeted_choose_and_damage_group`,
+ability or mode's local target context. In `Otherwise`, `Mill(who: Controller)` binds the named
+`milled` result, and `DamagePlayer` reads that exact slot with `input: Some("milled")` and a
+`CardResultCharacteristicSum` over its mana values. The previous-effect sum requires an explicitly
+bound typed card-result cohort; its action, player scope, and optional card-type filter must match
+the producer slot. A sibling instruction may intervene, a typed slot may be inherited into a nested
+branch, and `DivideRoundedDown` may wrap the sum. Ambient previous-result reads, unbound or
+mismatched input slots, mismatched filters, and affine wrappers are rejected. The sum primitive is
+shared with other typed card-result consumers rather than being limited to Gearhulk. Delegating the
+pending choice after target departure changes the chooser only. The original target remains the
+damage recipient, and the resolving trigger retains Gearhulk source LKI after source departure
+(CR 113.7a, 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). Its actual-card scenarios cover the exact
+Mill receipts, short-library draw branch, Narset's controller-scoped draw, target departure,
+delegated replay, and ordered prevention. Compiler regressions also reject paid Mana and Waterbend
+branches and mismatched target groups. The model tests
+`program_compiler_accepts_gearhulk_targeted_choose_and_damage_group`,
 `program_compiler_recursively_accepts_gearhulk_targeted_choose_in_otherwise`,
-`program_compiler_accepts_gearhulk_typed_mill_input_for_targeted_damage`,
-`program_compiler_rejects_unbound_or_wrapped_gearhulk_mill_sum`,
+`program_compiler_accepts_generic_typed_mill_characteristic_sum`,
+`program_compiler_accepts_non_controller_card_result_across_resultless_sibling`,
+`program_compiler_requires_a_typed_input_for_previous_effect_characteristic_sums`,
+`program_compiler_accepts_an_inherited_typed_mill_slot`,
+`program_compiler_checks_generic_characteristic_sum_action_and_player_scope`,
 `program_compiler_rejects_invalid_gearhulk_target_group_contracts`,
 `program_compiler_rejects_paid_mana_targeted_optional_choose`, and
 `program_compiler_rejects_paid_waterbend_targeted_optional_choose` cover the compiler contract.

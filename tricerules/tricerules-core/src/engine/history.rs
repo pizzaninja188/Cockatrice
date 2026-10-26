@@ -2199,12 +2199,6 @@ impl GameEngine {
                         *characteristic,
                     )
                 }),
-            CountExpression::PreviousMillManaValueSum => context
-                .previous_effect_result
-                .zip(context.stack_item)
-                .map_or(0, |(previous, top)| {
-                    super::resolution::card_result_mana_value_sum(self, top, previous)
-                }),
             CountExpression::ProgramInputCount => context
                 .previous_effect_result
                 .and_then(|previous| match previous.program_value.as_ref() {

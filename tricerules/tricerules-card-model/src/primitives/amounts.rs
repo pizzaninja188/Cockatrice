@@ -104,18 +104,14 @@ pub enum CountExpression {
     /// Windfall and Whispering Madness use the greatest completed cohort belonging to one
     /// affected player. Group receipts, never current zones or current hand sizes.
     MaximumCardsMatchingResult { filter: CardResultFilter },
-    /// Sum one derived P/T characteristic across distinct, generation-bound objects in an
-    /// engine-owned result cohort. Station on Wurmwall Sweeper and Tapestry Warden reads the
-    /// tapped creature's power on resolution; the typed characteristic keeps the evaluator
-    /// reusable for corresponding toughness-based effects.
+    /// Sum one characteristic across distinct, generation-bound objects in an engine-owned
+    /// result cohort. Station on Wurmwall Sweeper and Tapestry Warden reads live P/T at
+    /// resolution; Combustible Gearhulk reads the event-time outside-stack mana value recorded
+    /// with each public committed movement.
     CardResultCharacteristicSum {
         filter: CardResultFilter,
-        characteristic: PowerToughnessCharacteristic,
+        characteristic: BattlefieldQuantityCharacteristic,
     },
-    /// Combustible Gearhulk sums printed mana values from the immediately preceding controller
-    /// Mill result. This is deliberately a fieldless result consumer: its valid source, action,
-    /// and player are fixed by the sibling-effect contract.
-    PreviousMillManaValueSum,
     /// A direct, explicitly bound scalar input to one finite resolution Program instruction.
     ProgramInputCount,
     /// Authoring-only count marker. The Program compiler projects source, action, and player scope
@@ -266,7 +262,6 @@ impl CountExpression {
                                 | Self::CardsMatchingResultForAffectedPlayer { .. }
                                 | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
-                                | Self::PreviousMillManaValueSum
                                 | Self::ProgramInputCount
                                 | Self::BoundCardResultCount { .. }
                         )
@@ -288,23 +283,20 @@ impl CountExpression {
             | CountExpression::CardsMatchingResult { .. }
             | CountExpression::CardsMatchingResultForAffectedPlayer { .. }
             | CountExpression::MaximumCardsMatchingResult { .. }
-            | CountExpression::CardResultCharacteristicSum { .. }
-            | CountExpression::PreviousMillManaValueSum
             | CountExpression::ProgramInputCount => Ok(()),
+            CountExpression::CardResultCharacteristicSum {
+                filter,
+                characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+            } if filter.source != CardResultSource::PreviousEffect
+                || filter.action != CardResultAction::Mill =>
+            {
+                Err("ManaValue card-result sums require a PreviousEffect Mill result".into())
+            }
+            CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
             CountExpression::BoundCardResultCount { .. } => Err(
                 "BoundCardResultCount must be lowered from an explicitly bound typed Program input"
                     .into(),
             ),
-        }
-    }
-
-    fn uses_previous_mill_mana_value_sum(&self) -> bool {
-        match self {
-            Self::PreviousMillManaValueSum => true,
-            Self::Affine { terms, .. } => terms
-                .iter()
-                .any(|term| term.quantity.uses_previous_mill_mana_value_sum()),
-            _ => false,
         }
     }
 
@@ -391,12 +383,22 @@ impl Amount {
         }
     }
 
-    pub(crate) fn uses_previous_mill_mana_value_sum(&self) -> bool {
+    pub(crate) fn card_result_characteristic_sum(
+        &self,
+    ) -> Option<(&CardResultFilter, BattlefieldQuantityCharacteristic)> {
         match self {
-            Self::Count(expression) => expression.uses_previous_mill_mana_value_sum(),
-            Self::DivideRoundedDown { amount, .. } => amount.uses_previous_mill_mana_value_sum(),
-            _ => false,
+            Self::Count(CountExpression::CardResultCharacteristicSum {
+                filter,
+                characteristic,
+            }) => Some((filter, *characteristic)),
+            Self::DivideRoundedDown { amount, .. } => amount.card_result_characteristic_sum(),
+            _ => None,
         }
+    }
+
+    fn uses_previous_effect_card_result(&self) -> bool {
+        self.card_result_filter()
+            .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
     }
 
     pub(crate) fn uses_program_input_count(&self) -> bool {
@@ -442,9 +444,9 @@ impl Amount {
     }
 
     pub(crate) fn validate_entry(&self, intrinsic: bool) -> Result<(), String> {
-        if self.uses_previous_mill_mana_value_sum() {
+        if self.uses_previous_effect_card_result() {
             return Err(
-                "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+                "PreviousEffect result references require an authored Program input".into(),
             );
         }
         if self.uses_program_input_count() {
@@ -572,9 +574,9 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
-        if self.uses_previous_mill_mana_value_sum() {
+        if self.uses_previous_effect_card_result() {
             return Err(
-                "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+                "PreviousEffect result references require an authored Program input".into(),
             );
         }
         if self.uses_program_input_count() {
@@ -1002,28 +1004,81 @@ mod hand_size_count_tests {
     }
 
     #[test]
-    fn previous_mill_mana_value_sum_is_private_to_an_immediate_result_consumer() {
-        let expression = CountExpression::PreviousMillManaValueSum;
-        let amount = Amount::Count(expression.clone());
-        assert!(expression.validate().is_ok());
-        assert!(expression.validate_static_count().is_err());
-        assert!(amount.validate_cost(false).is_err());
-        assert!(amount.validate_entry(false).is_err());
-        assert!(amount.validate_live().is_err());
-        assert!(amount.validate_effect(EffectContext::Ability).is_ok());
-        assert!(ron::from_str::<CountExpression>(
-            "Affine(terms:[(coefficient:1,quantity:PreviousMillManaValueSum)])"
+    fn card_result_characteristic_sum_accepts_mana_value_selector() {
+        let expression: CountExpression = ron::from_str(
+            "CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Mill,players:Opponents),characteristic:ManaValue)",
         )
-        .unwrap()
-        .validate()
-        .is_err());
+        .expect("typed card-result sums should accept the existing mana-value selector");
+        assert!(expression.validate().is_ok());
     }
 
     #[test]
-    fn flat_previous_mill_mana_value_sum_requires_a_typed_program_input() {
+    fn mana_value_card_result_sum_rejects_payment_discard_input() {
+        let expression: CountExpression = ron::from_str(
+            "CardResultCharacteristicSum(filter:(source:Payment,action:Discard,players:Controller),characteristic:ManaValue)",
+        )
+        .unwrap();
+        assert_eq!(
+            expression.validate().unwrap_err(),
+            "ManaValue card-result sums require a PreviousEffect Mill result"
+        );
+    }
+
+    #[test]
+    fn mana_value_card_result_sum_rejects_previous_effect_non_mill_input() {
+        let expression: CountExpression = ron::from_str(
+            "CardResultCharacteristicSum(filter:(source:PreviousEffect,action:Discard,players:Controller),characteristic:ManaValue)",
+        )
+        .unwrap();
+        assert_eq!(
+            expression.validate().unwrap_err(),
+            "ManaValue card-result sums require a PreviousEffect Mill result"
+        );
+    }
+
+    #[test]
+    fn mana_value_card_result_sum_rejects_payment_mill_input() {
+        let expression: CountExpression = ron::from_str(
+            "CardResultCharacteristicSum(filter:(source:Payment,action:Mill,players:Controller),characteristic:ManaValue)",
+        )
+        .unwrap();
+        assert_eq!(
+            expression.validate().unwrap_err(),
+            "ManaValue card-result sums require a PreviousEffect Mill result"
+        );
+    }
+
+    #[test]
+    fn payment_discard_power_and_toughness_sums_remain_supported() {
+        for characteristic in ["Power", "Toughness"] {
+            let expression: CountExpression = ron::from_str(&format!(
+                "CardResultCharacteristicSum(filter:(source:Payment,action:Discard,players:Controller),characteristic:{characteristic})"
+            ))
+            .unwrap();
+            assert!(
+                expression.validate().is_ok(),
+                "the {characteristic} payment-result sum remains supported"
+            );
+        }
+    }
+
+    #[test]
+    fn previous_effect_characteristic_sum_requires_a_typed_program_input() {
         use crate::primitives::{PlayerRecipient, SpellEffectKind};
 
-        let amount = Amount::Count(CountExpression::PreviousMillManaValueSum);
+        let amount = Amount::Count(CountExpression::CardResultCharacteristicSum {
+            filter: CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Mill,
+                players: RelativePlayerSet::Controller,
+                card_type: None,
+            },
+            characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+        });
+        assert!(amount.validate_effect(EffectContext::Ability).is_ok());
+        assert!(amount.validate_cost(true).is_err());
+        assert!(amount.validate_entry(true).is_err());
+        assert!(amount.validate_live().is_err());
         let mill = SpellEffectKind::Mill {
             count: Amount::Fixed(3),
             who: PlayerRecipient::Controller,
@@ -1075,23 +1130,39 @@ mod hand_size_count_tests {
     }
 
     #[test]
-    fn previous_mill_mana_value_sum_is_rejected_by_mass_counter_effect() {
+    fn previous_effect_characteristic_sum_is_rejected_by_mass_counter_effect() {
         use crate::primitives::{CounterKind, SpellEffectKind};
 
         let effect = SpellEffectKind::PutCountersAll {
             counter: CounterKind::PlusOnePlusOne,
-            count: Amount::Count(CountExpression::PreviousMillManaValueSum),
+            count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+            }),
             filter: Default::default(),
         };
         assert!(SpellEffectKind::validate_list(&[effect]).is_err());
     }
 
     #[test]
-    fn previous_mill_mana_value_sum_is_rejected_by_attacked_recipient_damage() {
+    fn previous_effect_characteristic_sum_is_rejected_by_attacked_recipient_damage() {
         use crate::primitives::SpellEffectKind;
 
         let effect = SpellEffectKind::DamageAttackedPlayerOrPlaneswalker {
-            amount: Amount::Count(CountExpression::PreviousMillManaValueSum),
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+            }),
         };
         assert!(SpellEffectKind::validate_list(&[effect]).is_err());
     }

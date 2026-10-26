@@ -33,7 +33,10 @@
               (id: "damage_opponent", input: Some("milled"),
                 kind: Perform(DamagePlayer(
                   who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
-                  amount: Count(PreviousMillManaValueSum),
+                  amount: Count(CardResultCharacteristicSum(
+                    filter: (source: PreviousEffect, action: Mill, players: Controller),
+                    characteristic: ManaValue,
+                  )),
                 ))),
             ]),
           )),

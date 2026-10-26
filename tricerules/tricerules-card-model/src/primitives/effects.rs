@@ -2,13 +2,13 @@
 
 use super::{
     AbilitySourceZone, ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType,
-    BattlefieldPermanentFilter, CardTypeFilter, CastCostReceiptCondition, Color,
-    ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
-    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
-    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    ResultType, SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter,
-    TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
-    TypeLineReplacement,
+    BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardTypeFilter,
+    CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression, CreatureScopeFilter,
+    DamageDivision, EventZone, GameCondition, GraveyardDestination, GraveyardFilter, Keyword,
+    LifeAmount, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
+    ProtectionQuality, ReflexiveTriggeredAbilityDef, ResultType, SpecialActionKind, SpellKeyword,
+    StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -2958,6 +2958,18 @@ pub(super) fn validate_resolution_sacrifice_cost(
 }
 
 impl SpellEffectKind {
+    /// Return a characteristic sum that consumes an explicitly bound previous-effect card result.
+    /// The finite Program compiler and engine projection use this shared contract to keep the
+    /// declared cohort attached to the amount consumer.
+    pub fn previous_effect_card_result_characteristic_sum(
+        &self,
+    ) -> Option<(&CardResultFilter, BattlefieldQuantityCharacteristic)> {
+        let (filter, characteristic) = self
+            .result_consuming_amount()?
+            .card_result_characteristic_sum()?;
+        (filter.source == CardResultSource::PreviousEffect).then_some((filter, characteristic))
+    }
+
     /// Inspect a conditional consumer without changing its outer result context.
     pub(crate) fn result_consuming_amount(&self) -> Option<&Amount> {
         match self {
@@ -3395,7 +3407,6 @@ impl SpellEffectKind {
                 amount
                     .card_result_filter()
                     .is_some_and(|filter| filter.source == CardResultSource::PreviousEffect)
-                    || amount.uses_previous_mill_mana_value_sum()
             }) || effect.contains_bound_card_result_count()
                 || effect.has_previous_effect_object_reference()
         })
@@ -7075,7 +7086,15 @@ mod pupu_ufo_effect_validation_tests {
     fn source_base_power_rejects_unbound_previous_mill_and_program_counts() {
         for (amount, expected) in [
             (
-                Amount::Count(CountExpression::PreviousMillManaValueSum),
+                Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::PreviousEffect,
+                        action: CardResultAction::Mill,
+                        players: RelativePlayerSet::Controller,
+                        card_type: None,
+                    },
+                    characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+                }),
                 "PreviousEffect references require an authored Program",
             ),
             (

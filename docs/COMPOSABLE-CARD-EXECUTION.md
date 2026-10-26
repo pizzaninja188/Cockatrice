@@ -499,21 +499,25 @@ scope, and delayed-trigger metadata validation remain enforced. The three former
 `PreviousTargetedSpellController` readers and list-adjacency admission paths are retired. This ports
 no new card identity and adds no protobuf, relay, or client contract.
 
-The bounded 2026-10-20 Combustible Gearhulk increment admits one narrow composition: an optional,
-cost-free `Choose` by `TargetedPlayer(OpponentPlayer)` is paired with exactly one target-bound
-`DamagePlayer` on the same singleton, controller-chosen opponent group. The compiler resolves that
-group through nested blocks and the owning ability or mode's local target context. In the `Otherwise`
-block, a controller `Mill` binds a named result and a `DamagePlayer` in that same block reads that
-exact input with `Count(PreviousMillManaValueSum)`; a resultless sibling may intervene. No wrapper,
-ambient previous-result read, mismatched result slot, other recipient, or paid targeted-chooser
-profile is admitted. If the
+The Combustible Gearhulk composition uses an optional, cost-free `Choose` by
+`TargetedPlayer(OpponentPlayer)` paired with exactly one target-bound `DamagePlayer` on the same
+singleton, controller-chosen opponent group. The compiler resolves that group through nested blocks
+and the owning ability or mode's local target context. In the `Otherwise` block, a controller `Mill`
+binds a named result and `DamagePlayer` reads that exact typed slot with a
+`CardResultCharacteristicSum` over its mana values. A previous-effect sum requires an explicitly
+bound card-result cohort whose projected action, player scope, and optional card-type filter match
+the authored filter. A sibling may intervene and an inherited typed slot may cross a nested branch;
+`DivideRoundedDown` can wrap the sum. Ambient previous-result reads, unbound or mismatched result
+slots, mismatched filters, and affine wrappers are rejected. The characteristic-sum primitive is
+generic across typed card-result inputs rather than a Gearhulk-specific effect. If the
 target leaves while a choice is pending, delegation changes only who answers; it does not replace
 the captured damage target. The begun trigger retains source LKI if Gearhulk leaves (CR 113.7a,
 608.2b, 608.2h, 608.2m, 800.4a, 800.4g). The six actual-card scenarios cover exact Mill receipts,
 draw failure with a short library, Narset's controller-scoped draw replacement, target departure,
 delegation with deterministic replay, and ordered damage prevention. Model compiler tests cover the
-recursive and owner/mode-local target binding, the exact named Mill input, and rejected paid,
-wrapped, unbound, and mismatched-group forms. The pinned Oracle identity is
+recursive and owner/mode-local target binding, the exact named Mill input, inherited typed slots,
+the non-Controller producer and resultless sibling, the supported arithmetic wrapper, mismatched
+action/player filters, and rejected paid or mismatched-group forms. The pinned Oracle identity is
 [Combustible Gearhulk](https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=676036&printed=false);
 its 2016-09-20 Wizards rulings confirm no actions during its resolution, a legal draw-three choice
 with fewer than three library cards, after which the controller loses for the failed draw, and X

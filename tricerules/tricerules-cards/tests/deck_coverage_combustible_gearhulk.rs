@@ -1,7 +1,8 @@
 use tricerules_cards::primitives::{
-    Amount, CardResultAction, Cardinality, CompiledChooseRequirement, CompiledInstructionKind,
-    CountExpression, PlayerRecipient, ResolutionCost, ResultType, SpellEffectKind, TargetKind,
-    TriggerCondition,
+    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CardResultFilter,
+    CardResultSource, Cardinality, CompiledChooseRequirement, CompiledInstructionKind,
+    CountExpression, PlayerRecipient, RelativePlayerSet, ResolutionCost, ResultType,
+    SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{
     AbilityDefinitionId, AbilityPresentation, EffectContext, Keyword, Layout, ManaCost,
@@ -152,7 +153,15 @@ fn combustible_gearhulk_registers_its_exact_identity_and_etb_choice() {
                 group_index: 0,
                 kind: TargetKind::OpponentPlayer,
             },
-            amount: Amount::Count(CountExpression::PreviousMillManaValueSum),
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+            }),
         }
     );
 

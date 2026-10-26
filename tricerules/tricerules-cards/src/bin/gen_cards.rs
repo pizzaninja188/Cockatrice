@@ -4032,16 +4032,15 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        BattlefieldPermanentFilter, CardResultAction, CardResultSource, CardTypeFilter,
-        CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
-        CreatureScopeController, CreatureScopeFilter, EffectSubject, EntersTappedAffected,
-        EntryCost, GameCondition, GraveyardFilter, GraveyardOwner, LibraryPlacement,
-        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-        PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionCost,
-        SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-        SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
-        TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter,
-        TypeLineAddition,
+        BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardResultAction,
+        CardResultSource, CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole,
+        CountExpression, CreatureScopeController, CreatureScopeFilter, EffectSubject,
+        EntersTappedAffected, EntryCost, GameCondition, GraveyardFilter, GraveyardOwner,
+        LibraryPlacement, ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter,
+        PlayerRecipient, PowerComparison, RelativePlayerSet, ResolutionCost, SearchDestination,
+        SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+        TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
@@ -6469,7 +6468,7 @@ mod tests {
                             players: tricerules_cards::primitives::RelativePlayerSet::Controller,
                             card_type: Some(CardTypeFilter::Creature),
                         },
-                        characteristic: PowerToughnessCharacteristic::Power,
+                        characteristic: BattlefieldQuantityCharacteristic::Power,
                     }),
                     subject: EffectSubject::Source,
                 }]

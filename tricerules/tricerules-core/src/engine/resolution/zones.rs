@@ -8663,8 +8663,10 @@ mod tests {
             CardResultProvenance::CommittedMovement {
                 input_zone: Zone::Library,
                 input_generation: recorded_input,
+                owner: 0,
                 actual_output_zone: Zone::Graveyard,
                 output_visibility: CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: Some(2),
             } if recorded_input == input_generation
         ));
         assert_ne!(entry.zone_change_generation, input_generation);
@@ -8697,8 +8699,10 @@ mod tests {
         hidden_evidence.provenance = CardResultProvenance::CommittedMovement {
             input_zone: Zone::Library,
             input_generation,
+            owner: 0,
             actual_output_zone: Zone::Graveyard,
             output_visibility: CardResultOutputVisibility::UnknownHidden,
+            outside_stack_mana_value: None,
         };
         assert!(committed_choose_card_candidate(
             &engine,
