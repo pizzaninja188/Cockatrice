@@ -22,8 +22,8 @@
 //! to memoize later without changing callers.
 
 use super::history::{
-    battlefield_quantity_value, graveyard_aggregate_value, graveyard_named_card_count,
-    player_life_aggregate_value, relative_player_set_contains,
+    battlefield_quantity_value, graveyard_aggregate_value, player_life_aggregate_value,
+    relative_player_set_contains,
 };
 use super::*;
 
@@ -472,16 +472,6 @@ impl CharacteristicsEvaluator<'_> {
                     *owners,
                     GraveyardAggregate::CardCount,
                     filter.as_ref(),
-                    context.controller,
-                    context.resolving_spell_id,
-                )))
-            }
-            CountExpression::GraveyardCardsNamed { owners, name } => {
-                Some(i64::from(graveyard_named_card_count(
-                    self.state,
-                    self.registry,
-                    *owners,
-                    name,
                     context.controller,
                     context.resolving_spell_id,
                 )))
@@ -4845,6 +4835,9 @@ mod tests {
                     r#"(id: "gy_source", name: "Gy Source", face_id: "gy_source", types: ["Creature"], power: 1, toughness: 1,
                         static_abilities: [(ability_id: "static_01", presentation: Fallback,
                             definition: CountScaledSelfPt(count: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))), power_per_match: 1, toughness_per_match: 1))])"#,
+                    r#"(id: "gy_named_source", name: "Gy Named Source", face_id: "gy_named_source", types: ["Creature"], power: 1, toughness: 1,
+                        static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                            definition: CountScaledSelfPt(count: GraveyardCards(owners: Controller, filter: Some((exact_name: Some("Gy Creature")))), power_per_match: 1, toughness_per_match: 1))])"#,
                     r#"(id: "gy_affine", name: "Gy Affine", face_id: "gy_affine", types: ["Creature"], power: 1, toughness: 1,
                         static_abilities: [(ability_id: "static_01", presentation: Fallback,
                             definition: CountScaledSelfPt(count: Affine(constant: 0, terms: [(coefficient: 1, quantity: BattlefieldCreatures(filter: (controllers: Controller))), (coefficient: 1, quantity: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))))]), power_per_match: 1, toughness_per_match: 1))])"#,
@@ -4853,6 +4846,7 @@ mod tests {
                         static_abilities: [(ability_id: "static_01", presentation: Fallback,
                             definition: AttachedModifier(count: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))), power_per_match: 1, toughness_per_match: 1))])"#,
                     r#"(id: "gy_creature", name: "Gy Creature", face_id: "gy_creature", types: ["Creature"], power: 1, toughness: 1)"#,
+                    r#"(id: "gy_other_creature", name: "Other Gy Creature", face_id: "gy_other_creature", types: ["Creature"], power: 1, toughness: 1)"#,
                     r#"(id: "gy_land", name: "Gy Land", face_id: "gy_land", types: ["Land"])"#,
                 ],
                 &[],
@@ -4962,6 +4956,26 @@ mod tests {
             ),
             (Some(3), Some(3)),
             "the attached graveyard count scaling adds a second point"
+        );
+    }
+
+    #[test]
+    fn issue_342_exact_name_graveyard_count_scales_static_pt() {
+        let mut engine = graveyard_scaling_engine(342_003);
+        let source = insert_fixture(&mut engine, 0, "gy_named_source", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        assert_eq!(engine.effective_power(source), Some(1));
+
+        insert_fixture(&mut engine, 0, "gy_creature", Zone::Graveyard);
+        insert_fixture(&mut engine, 0, "gy_other_creature", Zone::Graveyard);
+        insert_fixture(&mut engine, 1, "gy_creature", Zone::Graveyard);
+        assert_eq!(
+            (
+                engine.effective_power(source),
+                engine.effective_toughness(source)
+            ),
+            (Some(2), Some(2)),
+            "the static count includes the exact-name card in its controller's graveyard only"
         );
     }
 

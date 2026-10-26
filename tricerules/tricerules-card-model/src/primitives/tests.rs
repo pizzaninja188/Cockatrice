@@ -4558,9 +4558,12 @@ fn amount_serde_preserves_literals_x_and_named_conditionals() {
                 exclude_source: false,
             },
         }),
-        Amount::Count(CountExpression::GraveyardCardsNamed {
+        Amount::Count(CountExpression::GraveyardCards {
             owners: RelativePlayerSet::Controller,
-            name: "Growth Cycle".into(),
+            filter: Some(ZoneCardFilter {
+                exact_name: Some("Growth Cycle".into()),
+                ..ZoneCardFilter::default()
+            }),
         }),
         Amount::Count(CountExpression::CreatureDeathsThisTurn),
         Amount::Count(CountExpression::CardsMatchingResult {
@@ -4620,9 +4623,12 @@ fn counted_amounts_reject_empty_authored_filters() {
     })
     .validate()
     .is_err());
-    assert!(Amount::Count(CountExpression::GraveyardCardsNamed {
+    assert!(Amount::Count(CountExpression::GraveyardCards {
         owners: RelativePlayerSet::Controller,
-        name: String::new(),
+        filter: Some(ZoneCardFilter {
+            exact_name: Some(String::new()),
+            ..ZoneCardFilter::default()
+        }),
     })
     .validate()
     .is_err());
@@ -9049,11 +9055,35 @@ fn spell_program_create_tokens_accepts_typed_graveyard_count() {
     )
     .expect("the generic count profile accepts other valid token identities and tapped states");
 
+    let exact_name_count = "Count(GraveyardCards(owners: Controller, filter: Some((exact_name: Some(\"Other Card\")))))";
+    let exact_name_compiled = compile(
+        "graveyard_exact_name_count_tokens",
+        exact_name_count,
+        "generic_token",
+        "Controller",
+        false,
+        "None",
+    )
+    .expect("spell Programs may count the controller's exact-name filtered graveyard");
+    let [instruction] = exact_name_compiled.body.steps.as_slice() else {
+        panic!("the exact-name token operation remains one instruction")
+    };
+    assert!(matches!(
+        &instruction.kind,
+        CompiledInstructionKind::Perform(effect)
+            if matches!(
+                effect.as_ref(),
+                SpellEffectKind::CreateTokens {
+                    count: Amount::Count(CountExpression::GraveyardCards {
+                        owners: RelativePlayerSet::Controller,
+                        filter: Some(filter),
+                    }),
+                    ..
+                } if filter.exact_name.as_deref() == Some("Other Card")
+            )
+    ));
+
     for (label, unsupported_count) in [
-        (
-            "other_dynamic_source",
-            "Count(GraveyardCardsNamed(owners: Controller, name: \"Other Card\"))",
-        ),
         (
             "opponent_graveyard",
             "Count(GraveyardCards(owners: Opponents, filter: Some((card_type: Some(Creature)))))",

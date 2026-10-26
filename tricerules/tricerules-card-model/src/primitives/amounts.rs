@@ -85,12 +85,6 @@ pub enum CountExpression {
     BattlefieldCreatures {
         filter: BattlefieldCreatureCountFilter,
     },
-    /// Count nontoken card objects with `name` in the selected players' public graveyards.
-    /// `owners` is relative to the resolving spell or ability's controller.
-    GraveyardCardsNamed {
-        owners: RelativePlayerSet,
-        name: String,
-    },
     /// The committed, identity-free number of creatures that died during the current turn.
     /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
     CreatureDeathsThisTurn,
@@ -199,7 +193,7 @@ impl CountExpression {
             Self::BattlefieldPermanents { .. } => true,
             // A keyword-dependent creature scope would need CR 613 dependency ordering in layer 6.
             Self::BattlefieldCreatures { filter } => filter.required_keywords.is_empty(),
-            Self::GraveyardCards { .. } | Self::GraveyardCardsNamed { .. } => true,
+            Self::GraveyardCards { .. } => true,
             Self::CardsInHand {
                 players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
             } => true,
@@ -287,11 +281,7 @@ impl CountExpression {
                 Ok(())
             }
             CountExpression::BattlefieldCreatures { filter } => filter.validate(),
-            CountExpression::GraveyardCardsNamed { name, .. } if name.trim().is_empty() => {
-                Err("graveyard card count name cannot be empty".into())
-            }
-            CountExpression::GraveyardCardsNamed { .. }
-            | CountExpression::CreatureDeathsThisTurn
+            CountExpression::CreatureDeathsThisTurn
             | CountExpression::CardsDrawnThisTurn { .. }
             | CountExpression::CardsMatchingResult { .. }
             | CountExpression::CardsMatchingResultForAffectedPlayer { .. }

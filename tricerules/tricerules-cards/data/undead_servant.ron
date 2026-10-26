@@ -16,7 +16,10 @@
       effect: [
         CreateTokens(
           token: "zombie_b_2_2",
-          count: Count(GraveyardCardsNamed(owners: Controller, name: "Undead Servant")),
+          count: Count(GraveyardCards(
+            owners: Controller,
+            filter: Some((exact_name: Some("Undead Servant"))),
+          )),
         ),
       ],
     ),

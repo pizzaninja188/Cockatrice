@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword,
     PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, TargetFilter,
-    TargetKind, TriggerCondition,
+    TargetKind, TriggerCondition, ZoneCardFilter,
 };
 
 fn creature_target() -> TargetFilter {
@@ -92,9 +92,12 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
     );
 
     let growth = registry.get("growth_cycle").unwrap().primary_face();
-    let same_growths = CountExpression::GraveyardCardsNamed {
+    let same_growths = CountExpression::GraveyardCards {
         owners: RelativePlayerSet::Controller,
-        name: "Growth Cycle".into(),
+        filter: Some(ZoneCardFilter {
+            exact_name: Some("Growth Cycle".into()),
+            ..ZoneCardFilter::default()
+        }),
     };
     assert_eq!(
         growth.spell_effect,
@@ -152,9 +155,12 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
         servant.triggered_abilities[0].effect,
         [SpellEffectKind::CreateTokens {
             token: "zombie_b_2_2".into(),
-            count: Amount::Count(CountExpression::GraveyardCardsNamed {
+            count: Amount::Count(CountExpression::GraveyardCards {
                 owners: RelativePlayerSet::Controller,
-                name: "Undead Servant".into(),
+                filter: Some(ZoneCardFilter {
+                    exact_name: Some("Undead Servant".into()),
+                    ..ZoneCardFilter::default()
+                }),
             }),
             who: PlayerRecipient::Controller,
             tapped: false,

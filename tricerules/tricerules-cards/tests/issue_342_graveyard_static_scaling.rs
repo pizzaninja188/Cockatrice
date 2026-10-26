@@ -133,11 +133,27 @@ fn issue_342_attached_scaling_rejects_unscaled_and_event_counts() {
 }
 
 #[test]
-fn issue_342_self_scaling_accepts_named_graveyard_counts() {
-    let card = self_scaling("GraveyardCardsNamed(owners: Controller, name: \"Gy Creature\")");
-    assert!(
-        registry_with(&card).is_ok(),
-        "a named public graveyard count must scale static P/T"
+fn issue_342_self_scaling_accepts_exact_name_graveyard_filter() {
+    let card = self_scaling(
+        "GraveyardCards(owners: Controller, filter: Some((exact_name: Some(\"Gy Creature\"))))",
+    );
+    let registry = registry_with(&card).expect("an exact-name public graveyard count scales P/T");
+    let definition = registry.get("gy_source").expect("fixture registered");
+    let StaticAbilityDef::CountScaledSelfPt { count, .. } =
+        &definition.primary_face().static_abilities[0].definition
+    else {
+        panic!("expected CountScaledSelfPt");
+    };
+    assert_eq!(
+        count,
+        &CountExpression::GraveyardCards {
+            owners: RelativePlayerSet::Controller,
+            filter: Some(ZoneCardFilter {
+                exact_name: Some("Gy Creature".into()),
+                ..ZoneCardFilter::default()
+            }),
+        },
+        "the generic count preserves the exact-name filter"
     );
 }
 
