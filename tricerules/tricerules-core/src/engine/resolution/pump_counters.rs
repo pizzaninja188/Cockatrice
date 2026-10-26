@@ -1062,6 +1062,18 @@ pub(super) fn set_source_base_power(
     Ok(EffectOutcome::Continue)
 }
 
+fn add_permanent_keyword_grant(cx: &mut EffectCx<'_>, oid: ObjectId, keyword: Keyword) {
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(cx.top.id),
+        affected: AffectedScope::Single(oid),
+        kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+}
+
 pub(super) fn grant_keywords_all_permanents(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1083,15 +1095,7 @@ pub(super) fn grant_keywords_all_permanents(
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for oid in affected {
         for keyword in &keywords {
-            cx.engine.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: Some(cx.top.id),
-                affected: AffectedScope::Single(oid),
-                kind: ContinuousEffectKind::Layer6AddKeyword(*keyword),
-                condition: None,
-                duration: EffectDuration::UntilEndOfTurn,
-                timestamp: cx.engine.state.command_index,
-            });
+            add_permanent_keyword_grant(cx, oid, *keyword);
         }
     }
     cx.events.push(ev_log(format!(
@@ -1127,15 +1131,7 @@ pub(super) fn protect_all_permanents_you_control_with_counters(
 
     for &oid in &affected {
         for keyword in [Keyword::Hexproof, Keyword::Indestructible] {
-            cx.engine.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: Some(cx.top.id),
-                affected: AffectedScope::Single(oid),
-                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-                condition: None,
-                duration: EffectDuration::UntilEndOfTurn,
-                timestamp: cx.engine.state.command_index,
-            });
+            add_permanent_keyword_grant(cx, oid, keyword);
         }
         cx.engine.add_damage_prevention(
             Some(cx.top),
