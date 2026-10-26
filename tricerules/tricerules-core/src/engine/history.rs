@@ -2172,19 +2172,7 @@ impl GameEngine {
         oid: u32,
         zone_change_generation: u64,
     ) -> (i64, i64) {
-        if self
-            .state
-            .objects
-            .get(&oid)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
-            && self
-                .state
-                .zone_change_generation
-                .get(&oid)
-                .copied()
-                .unwrap_or(0)
-                == zone_change_generation
-        {
+        if self.object_is_current_battlefield_generation(oid, zone_change_generation) {
             return self
                 .characteristics(oid)
                 .map(|c| (c.signed_power.unwrap_or(0), c.signed_toughness.unwrap_or(0)))
@@ -2195,6 +2183,27 @@ impl GameEngine {
             .get(&(oid, zone_change_generation))
             .map(|(power, toughness)| (power.unwrap_or(0), toughness.unwrap_or(0)))
             .unwrap_or((0, 0))
+    }
+
+    /// Read a keyword from one exact battlefield incarnation, using generation-keyed LKI after
+    /// it leaves. Callers that consume a chosen object's characteristics must not fall through
+    /// to a later permanent that reuses the same ObjectId.
+    pub(super) fn object_has_keyword_at_generation(
+        &self,
+        oid: u32,
+        zone_change_generation: u64,
+        keyword: Keyword,
+    ) -> bool {
+        let is_same_battlefield_object =
+            self.object_is_current_battlefield_generation(oid, zone_change_generation);
+        if is_same_battlefield_object {
+            return self.effective_has_keyword(oid, keyword);
+        }
+
+        self.state
+            .last_known_keywords_by_generation
+            .get(&(oid, zone_change_generation))
+            .is_some_and(|keywords| keywords.contains(&keyword))
     }
 
     /// CR 608.2h: read the exact source incarnation's current public characteristics, or its

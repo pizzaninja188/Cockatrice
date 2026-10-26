@@ -1829,7 +1829,9 @@ impl GameEngine {
                 let mut out = Vec::new();
 
                 if let DamageRecipient::Player(defender_id) = event.recipient {
-                    if let Some(obj) = self.state.objects.get(&source_id) {
+                    if let Some(obj) = self.state.objects.get(&source_id).filter(|_| {
+                        self.object_is_current_battlefield_generation(source_id, source_generation)
+                    }) {
                         let (card_id, face_index) = self
                             .effective_card_identity(source_id)
                             .map(|(card_id, face_index)| (card_id.to_string(), face_index))
@@ -4683,6 +4685,60 @@ mod tests {
                 damaged_player != 1
             );
         }
+    }
+
+    #[test]
+    fn old_damage_event_does_not_borrow_a_returned_sources_self_trigger() {
+        let (mut engine, source) = trigger_limit_source();
+        engine.state.objects.get_mut(&source).unwrap().card_id = "thieving_otter".into();
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("source leaves");
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("same object returns");
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        assert_ne!(current_generation, old_generation);
+
+        let damage_event = |generation| {
+            let mut event =
+                DamageEvent::noncombat(source, 0, "Thieving Otter", DamageRecipient::Player(1), 1);
+            event.source.zone_change_generation = Some(generation);
+            event.source.types = vec!["Creature".into()];
+            GameEvent::DamageDealt { event }
+        };
+
+        assert!(engine
+            .collect_triggers(&damage_event(old_generation), &[])
+            .is_empty());
+        assert_eq!(
+            engine
+                .collect_triggers(&damage_event(current_generation), &[])
+                .len(),
+            1,
+            "the returned object's own current damage trigger remains active"
+        );
     }
 
     fn target_condition_match(

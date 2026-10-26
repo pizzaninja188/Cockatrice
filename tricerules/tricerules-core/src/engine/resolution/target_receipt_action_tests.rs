@@ -312,6 +312,48 @@ fn invoke(
     Ok((outcome, events, effect_result))
 }
 
+fn invoke_explore(
+    engine: &mut GameEngine,
+    top: &StackItem,
+    receipts: &[StackTarget],
+) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, EffectResult), EngineError> {
+    let targets = receipts
+        .iter()
+        .map(|target| target.object_id)
+        .collect::<Vec<_>>();
+    let role_targets = vec![targets.clone()];
+    let role_group_indices = [0];
+    let previous_effect_result = EffectResult::default();
+    let mut effect_result = EffectResult::default();
+    let mut events = Vec::new();
+    let outcome = {
+        let mut cx = EffectCx {
+            engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &role_targets,
+            target_receipts: receipts,
+            target_role_group_indices: &role_group_indices,
+            top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "Target receipt Explore fixture",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            resume_previous_result: None,
+            program_state: None,
+        };
+        zones::explore(
+            &mut cx,
+            SpellEffectKind::Explore {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            },
+        )
+    }?;
+    Ok((outcome, events, effect_result))
+}
+
 fn action_fixture(action: ChosenAction) -> (GameEngine, Vec<ObjectId>, Vec<u32>) {
     let mut engine = fixture_engine();
     match action {
@@ -419,6 +461,48 @@ fn chosen_action_receipts_reject_reentered_incarnations() {
         still_acted.is_empty(),
         "stale resolution-start receipts must not act on a returned incarnation: {still_acted:?}"
     );
+}
+
+#[test]
+fn chosen_exile_then_explore_uses_the_retained_receipt_lki() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let land = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .find(|id| engine.state.objects[id].card_id == "forest")
+        .expect("fixture Forest");
+    engine.state.players[0]
+        .library
+        .retain(|candidate| *candidate != land);
+    engine.state.players[0].library.push_front(land);
+    let receipts = vec![receipt(&engine, target, 0)];
+    let top = item(receipts.clone());
+    let old_generation = receipts[0]
+        .zone_change_generation
+        .expect("target receipt generation");
+
+    let (outcome, _, _) = invoke(&mut engine, &top, &receipts, &[0], ChosenAction::Exile)
+        .expect("resolve ExileChosen");
+    assert_eq!(outcome, EffectOutcome::Continue);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_ne!(engine.state.zone_change_generation[&target], old_generation);
+
+    let (outcome, events, _) = invoke_explore(&mut engine, &top, &receipts)
+        .expect("resolve ExploreChosen using its retained target receipt");
+    assert_eq!(outcome, EffectOutcome::Continue);
+    assert_eq!(engine.state.objects[&land].zone, Zone::Hand);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(
+        engine.state.objects[&target].counter_count(CounterKind::PlusOnePlusOne),
+        0
+    );
+    assert!(events.iter().any(|event| matches!(
+        &event.ev,
+        Some(rv1::ruled_event::Ev::CardsRevealed(reveal))
+            if reveal.cards.iter().any(|card| card.object_id == land)
+    )));
 }
 
 fn action_applied(

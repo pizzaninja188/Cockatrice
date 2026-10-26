@@ -426,6 +426,22 @@ impl EffectCx<'_> {
         .then_some(selected.object_id)
     }
 
+    /// Return this role's retained selection, including stale object generations for LKI.
+    fn target_receipt_in_role(
+        &self,
+        object_id: ObjectId,
+        role_index: usize,
+    ) -> Option<&StackTarget> {
+        let role_targets = self.targets_by_role.get(role_index)?;
+        if !role_targets.contains(&object_id) {
+            return None;
+        }
+        let group_index = *self.target_role_group_indices.get(role_index)?;
+        self.target_receipts
+            .iter()
+            .find(|receipt| receipt.object_id == object_id && receipt.group_index == group_index)
+    }
+
     /// A resolution-start target remains usable only through the role that selected it and the
     /// same object incarnation. The filter itself was already checked at CR 608.2b.
     fn target_is_current_in_role(&self, object_id: ObjectId, role_index: usize) -> bool {
@@ -510,21 +526,13 @@ impl EffectCx<'_> {
         object_id: ObjectId,
         role_index: usize,
     ) -> Option<TokenCopySnapshot> {
-        let role_targets = self.targets_by_role.get(role_index)?;
-        let group_index = *self.target_role_group_indices.get(role_index)?;
-        if !role_targets.contains(&object_id) {
-            return None;
-        }
-        let receipt = self.target_receipts.iter().find(|target| {
-            target.object_id == object_id
-                && target.group_index == group_index
-                && target.zone_change_generation.is_some()
-        })?;
+        let receipt = self.target_receipt_in_role(object_id, role_index)?;
+        let generation = receipt.zone_change_generation?;
         super::copying::token_copy_snapshot_for_incarnation(
             &self.engine.state,
             self.engine.registry,
             object_id,
-            receipt.zone_change_generation?,
+            generation,
         )
     }
 
@@ -1392,27 +1400,7 @@ impl GameEngine {
                 .and_then(|definition| definition.face(top.face_index))
                 .is_some_and(|face| face.keywords.contains(&keyword));
         };
-
-        let current_generation = self
-            .state
-            .zone_change_generation
-            .get(&source_id)
-            .copied()
-            .unwrap_or(0);
-        let source_is_same_battlefield_object = current_generation == top.source_zone_change
-            && self
-                .state
-                .objects
-                .get(&source_id)
-                .is_some_and(|object| object.zone == Zone::Battlefield);
-        if source_is_same_battlefield_object {
-            return self.effective_has_keyword(source_id, keyword);
-        }
-
-        self.state
-            .last_known_keywords_by_generation
-            .get(&(source_id, top.source_zone_change))
-            .is_some_and(|keywords| keywords.contains(&keyword))
+        self.object_has_keyword_at_generation(source_id, top.source_zone_change, keyword)
     }
 
     /// CR 608.2b target snapshot. Writing the filtered grouped records back to this local stack

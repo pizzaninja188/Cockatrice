@@ -86,26 +86,63 @@ pub(super) fn creature_deals_damage_equal_to_power(
     if !cx.target_is_current_in_role(recipient, 1) {
         return Ok(EffectOutcome::Continue);
     }
-    let Some(characteristics) = cx.engine.characteristics(source) else {
+    let Some(source_generation) = cx
+        .target_receipt_in_role(source, 0)
+        .and_then(|receipt| receipt.zone_change_generation)
+    else {
         return Ok(EffectOutcome::Continue);
     };
-    if !characteristics.is_creature() {
+    let source_is_same_battlefield_object = cx
+        .engine
+        .object_is_current_battlefield_generation(source, source_generation);
+    let controller = if source_is_same_battlefield_object {
+        cx.engine.controller_of(source)
+    } else {
+        cx.engine
+            .state
+            .last_known_controller_by_generation
+            .get(&(source, source_generation))
+            .copied()
+    };
+    let Some(controller) = controller else {
         return Ok(EffectOutcome::Continue);
-    }
-    let amount = characteristics.power.unwrap_or(0);
-    let controller = characteristics.controller;
-    let source_has_deathtouch = cx.engine.effective_has_keyword(source, Keyword::Deathtouch);
-    let source_has_lifelink = cx.engine.effective_has_keyword(source, Keyword::Lifelink);
+    };
+    let amount = cx
+        .engine
+        .object_power_toughness(source, source_generation)
+        .0
+        .clamp(0, i64::from(u32::MAX)) as u32;
+    let source_label = if source_is_same_battlefield_object {
+        object_display_name(&cx.engine.state, cx.engine.registry, source)
+    } else {
+        cx.engine
+            .state
+            .last_known_names_by_generation
+            .get(&(source, source_generation))
+            .and_then(|names| names.iter().find(|name| !name.is_empty()))
+            .cloned()
+            .unwrap_or_else(|| "Unknown source".to_string())
+    };
+    let mut event = DamageEvent::noncombat(
+        source,
+        controller,
+        source_label,
+        DamageRecipient::Permanent(recipient),
+        amount,
+    );
+    event.source.zone_change_generation = Some(source_generation);
     let damage = vec![DamageSpec {
-        event: DamageEvent::noncombat(
+        event,
+        source_has_deathtouch: cx.engine.object_has_keyword_at_generation(
             source,
-            controller,
-            object_display_name(&cx.engine.state, cx.engine.registry, source),
-            DamageRecipient::Permanent(recipient),
-            amount,
+            source_generation,
+            Keyword::Deathtouch,
         ),
-        source_has_deathtouch,
-        source_has_lifelink,
+        source_has_lifelink: cx.engine.object_has_keyword_at_generation(
+            source,
+            source_generation,
+            Keyword::Lifelink,
+        ),
     }];
     let Some(completed) = cx
         .engine
@@ -606,6 +643,71 @@ mod damage_source_tests {
         )
     }
 
+    fn resolve_chosen_power_damage(
+        engine: &mut GameEngine,
+        source: ObjectId,
+        source_generation: u64,
+        recipient: ObjectId,
+        include_source_receipt: bool,
+    ) -> Result<EffectOutcome, EngineError> {
+        let top = item(900, None);
+        let recipient_generation = engine
+            .state
+            .zone_change_generation
+            .get(&recipient)
+            .copied()
+            .unwrap_or(0);
+        let targets = vec![source, recipient];
+        let targets_by_role = vec![vec![source], vec![recipient]];
+        let mut target_receipts = Vec::new();
+        if include_source_receipt {
+            target_receipts.push(StackTarget {
+                object_id: source,
+                group_index: 0,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                zone_change_generation: Some(source_generation),
+                required_controller: None,
+            });
+        }
+        target_receipts.push(StackTarget {
+            object_id: recipient,
+            group_index: 1,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(recipient_generation),
+            required_controller: None,
+        });
+        let target_role_group_indices = vec![0, 1];
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut events = Vec::new();
+        let mut cx = EffectCx {
+            engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &targets_by_role,
+            target_receipts: &target_receipts,
+            target_role_group_indices: &target_role_group_indices,
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "test bite",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            resume_previous_result: None,
+            program_state: None,
+        };
+        creature_deals_damage_equal_to_power(
+            &mut cx,
+            SpellEffectKind::CreatureDealsDamageEqualToPower {
+                source: TargetFilter::default_creature(),
+                target: TargetFilter::default_creature(),
+            },
+        )
+    }
+
     #[test]
     fn source_bound_fight_resolves_with_only_the_opposing_creature_targeted() {
         let (mut engine, first, second) = fight_engine();
@@ -658,5 +760,225 @@ mod damage_source_tests {
 
         assert_eq!(engine.state.players[0].life, 14);
         assert_eq!(engine.state.objects[&first].damage, 4);
+    }
+
+    #[test]
+    fn chosen_power_damage_uses_the_captured_source_generation_after_return() {
+        let (mut engine, source, recipient) = fight_engine();
+        engine.state.players[0].life = 10;
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("source leaves");
+        engine.state.continuous_effects.clear();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("same object returns under the opponent's control");
+        engine.state.objects.get_mut(&source).expect("source").power = Some(6);
+        assert_ne!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation
+        );
+
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, true)
+                .expect("captured source damage"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&recipient].damage, 2);
+        assert_eq!(engine.state.players[0].life, 12);
+    }
+
+    #[test]
+    fn chosen_power_damage_requires_a_role_zero_generation_receipt() {
+        let (mut engine, source, recipient) = fight_engine();
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, false)
+                .expect("missing receipt fails closed"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&recipient].damage, 0);
+    }
+
+    #[test]
+    fn chosen_power_damage_still_requires_the_recipient_generation() {
+        let (mut engine, source, recipient) = fight_engine();
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            recipient,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("recipient leaves");
+
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, true)
+                .expect("departed recipient remains a no-op"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&recipient].damage, 0);
+    }
+
+    #[test]
+    fn chosen_power_damage_keeps_a_current_same_generation_source_control() {
+        let (mut engine, source, recipient) = fight_engine();
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, true)
+                .expect("same-generation source damage"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&recipient].damage, 2);
+    }
+
+    #[test]
+    fn chosen_power_damage_projects_zero_for_same_generation_without_power() {
+        let (mut engine, source, recipient) = fight_engine();
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("source leaves");
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("same object returns");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let old_power = engine
+            .state
+            .last_known_pt_by_generation
+            .get(&(source, old_generation))
+            .expect("old generation power is retained")
+            .0;
+        assert_eq!(old_power, Some(2));
+        let mut values = engine.copiable_values_for(source).expect("copiable values");
+        values.face.types = vec!["Artifact".into()];
+        values.face.power = None;
+        values.face.toughness = None;
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .expect("source")
+            .copiable_values = Some(values);
+        let characteristics = engine.characteristics(source).expect("current source");
+        assert!(!characteristics.is_creature());
+        assert_eq!(characteristics.signed_power, None);
+
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, true)
+                .expect("current exact generation projects zero"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&recipient].damage, 0);
+    }
+
+    #[test]
+    fn chosen_power_damage_clamps_signed_power_above_u32_max() {
+        let (mut engine, source, recipient) = fight_engine();
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let oversized_power = i64::from(u32::MAX) + 1;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer7bSetPower {
+                power: oversized_power,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        assert_eq!(
+            engine.object_power_toughness(source, source_generation).0,
+            oversized_power
+        );
+        assert_eq!(
+            resolve_chosen_power_damage(&mut engine, source, source_generation, recipient, true)
+                .expect("clamped damage is representable"),
+            EffectOutcome::Continue
+        );
+        assert_eq!(
+            engine.state.objects[&recipient].damage,
+            u32::MAX,
+            "damage from power above u32::MAX must clamp to the maximum damage amount"
+        );
     }
 }

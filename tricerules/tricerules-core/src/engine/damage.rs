@@ -450,14 +450,23 @@ impl GameEngine {
         let item = &stack.item;
         for spec in &mut damage {
             let item_source = item.source_permanent_id.unwrap_or(item.id);
-            spec.event.source.zone_change_generation = if spec.event.source.object_id == item_source
-                && item.source_permanent_id.is_some()
+            let stack_source_matches = spec.event.source.object_id == item_source
+                && (item.source_permanent_id.is_none()
+                    || spec
+                        .event
+                        .source
+                        .zone_change_generation
+                        .is_none_or(|generation| generation == item.source_zone_change));
+            if item.source_permanent_id.is_some() && stack_source_matches {
+                spec.event.source.zone_change_generation = Some(item.source_zone_change);
+            } else if item.source_permanent_id.is_none()
+                && spec.event.source.object_id == item.id
+                && item.is_copy
             {
-                Some(item.source_zone_change)
-            } else if spec.event.source.object_id == item.id && item.is_copy {
-                None
-            } else {
-                self.state
+                spec.event.source.zone_change_generation = None;
+            } else if spec.event.source.zone_change_generation.is_none() {
+                spec.event.source.zone_change_generation = self
+                    .state
                     .objects
                     .contains_key(&spec.event.source.object_id)
                     .then(|| {
@@ -466,18 +475,35 @@ impl GameEngine {
                             .get(&spec.event.source.object_id)
                             .copied()
                             .unwrap_or(0)
-                    })
-            };
+                    });
+            }
             spec.event.source.controller = self.damage_source_controller(&spec.event);
-            spec.event.source.wither = if spec.event.source.object_id == item_source {
+            spec.event.source.wither = if stack_source_matches {
                 self.resolving_source_has_keyword(item, Keyword::Wither)
             } else {
-                self.effective_has_keyword(spec.event.source.object_id, Keyword::Wither)
+                spec.event
+                    .source
+                    .zone_change_generation
+                    .is_some_and(|generation| {
+                        self.object_has_keyword_at_generation(
+                            spec.event.source.object_id,
+                            generation,
+                            Keyword::Wither,
+                        )
+                    })
             };
-            let source = if spec.event.source.object_id == item_source {
+            let source = if stack_source_matches {
                 TargetSourceIdentity::for_stack_item(self, item)
             } else {
-                TargetSourceIdentity::current(self, spec.event.source.object_id)
+                spec.event
+                    .source
+                    .zone_change_generation
+                    .map(|generation| {
+                        TargetSourceIdentity::captured(spec.event.source.object_id, generation)
+                    })
+                    .unwrap_or_else(|| {
+                        TargetSourceIdentity::current(self, spec.event.source.object_id)
+                    })
             };
             let (colors, types) = source.quality_values(self);
             spec.event.source.colors = colors;
@@ -610,19 +636,9 @@ impl GameEngine {
         let Some(generation) = event.source.zone_change_generation else {
             return event.source.controller;
         };
-        let is_current_battlefield_generation = self
-            .state
-            .zone_change_generation
-            .get(&event.source.object_id)
-            .copied()
-            .unwrap_or(0)
-            == generation
-            && self
-                .state
-                .objects
-                .get(&event.source.object_id)
-                .is_some_and(|object| object.zone == Zone::Battlefield);
-        let current_controller = match is_current_battlefield_generation {
+        let current_controller = match self
+            .object_is_current_battlefield_generation(event.source.object_id, generation)
+        {
             true => self.controller_of(event.source.object_id),
             false => None,
         };
@@ -4486,6 +4502,335 @@ mod tests {
             engine.state.turn_history.current.dealt_damage_objects,
             vec![(source, generation)],
             "damage prevented to zero does not create a source fact"
+        );
+    }
+
+    #[test]
+    fn damage_preparation_preserves_explicit_departed_source_information() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_230,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let source = move_bear_to_battlefield(&mut engine);
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        for (timestamp, keyword) in [Keyword::Deathtouch, Keyword::Lifelink, Keyword::Wither]
+            .into_iter()
+            .enumerate()
+        {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(source),
+                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: timestamp as u64,
+            });
+        }
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("depart source");
+        engine.state.continuous_effects.clear();
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("return same object under the other player");
+        engine.state.objects.get_mut(&source).unwrap().card_id = "serra_angel".into();
+        assert_ne!(engine.state.zone_change_generation[&source], old_generation);
+        assert_eq!(engine.controller_of(source), Some(1));
+
+        let mut resolving_spell = source_item(900, 0);
+        resolving_spell.id = 900;
+        resolving_spell.source_permanent_id = None;
+        resolving_spell.source_owner = None;
+        resolving_spell.ability_text = None;
+        resolving_spell.is_triggered = false;
+        resolving_spell.card_id = "test_spell".into();
+        let mut event = DamageEvent::noncombat(
+            source,
+            1,
+            "Grizzly Bears LKI",
+            DamageRecipient::Player(0),
+            1,
+        );
+        event.source.zone_change_generation = Some(old_generation);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &resolving_spell,
+                vec![DamageSpec {
+                    event,
+                    source_has_deathtouch: true,
+                    source_has_lifelink: true,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("damage batch processes")
+            .expect("unprevented damage completes immediately");
+        let source = &completed[0].spec.event.source;
+        assert_eq!(source.zone_change_generation, Some(old_generation));
+        assert_eq!(source.controller, 0);
+        assert!(source.wither);
+        assert_eq!(source.colors, vec![Color::Green]);
+        assert_eq!(source.types, vec!["Creature"]);
+        assert_eq!(source.label, "Grizzly Bears LKI");
+        assert!(completed[0].spec.source_has_deathtouch);
+        assert!(completed[0].spec.source_has_lifelink);
+    }
+
+    #[test]
+    fn chosen_damage_keeps_receipt_generation_when_it_aliases_the_ability_source() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_232,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let source = move_bear_to_battlefield(&mut engine);
+        let recipient = move_bear_to_battlefield(&mut engine);
+        let ability_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Wither),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("ability source leaves");
+        engine.state.continuous_effects.clear();
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("same ObjectId returns under the other player");
+        let returned_generation = engine.state.zone_change_generation[&source];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .expect("returned source")
+            .card_id = "serra_angel".into();
+        let mut values = engine.copiable_values_for(source).expect("copiable values");
+        values.face.types = vec!["Artifact".into()];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .expect("returned source")
+            .copiable_values = Some(values);
+        assert_ne!(ability_generation, returned_generation);
+        assert_eq!(engine.controller_of(source), Some(1));
+
+        let mut ability = source_item(900, ability_generation);
+        ability.source_permanent_id = Some(source);
+        ability.source_owner = Some(0);
+        let mut event = DamageEvent::noncombat(
+            source,
+            0,
+            "chosen source",
+            DamageRecipient::Permanent(recipient),
+            1,
+        );
+        event.source.zone_change_generation = Some(returned_generation);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &ability,
+                vec![DamageSpec {
+                    event,
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("damage completes")
+            .expect("no replacement choice is needed");
+
+        let prepared = &completed[0].spec.event.source;
+        assert_eq!(prepared.zone_change_generation, Some(returned_generation));
+        assert_eq!(prepared.controller, 1);
+        assert!(!prepared.wither, "the returned incarnation lacks Wither");
+        assert_eq!(prepared.colors, vec![Color::White]);
+        assert_eq!(prepared.types, vec!["Artifact"]);
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .expect("damage commits");
+        assert_eq!(engine.state.objects[&recipient].damage, 1);
+        assert_eq!(
+            engine.state.objects[&recipient].counter_count(CounterKind::MinusOneMinusOne),
+            0,
+            "the old ability source's Wither must not affect returned-source damage"
+        );
+    }
+
+    #[test]
+    fn parked_prevention_keeps_old_damage_source_and_commits_once() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_231,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let source = move_bear_to_battlefield(&mut engine);
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("source leaves");
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("same object returns under the other player");
+        assert_ne!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            old_generation
+        );
+        engine.add_damage_prevention(
+            None,
+            "first fixed shield",
+            DamagePreventionScope::Recipient(1),
+            DamagePreventionAmount::FixedPerEvent(1),
+        );
+        engine.add_damage_prevention(
+            None,
+            "second fixed shield",
+            DamagePreventionScope::Recipient(1),
+            DamagePreventionAmount::FixedPerEvent(1),
+        );
+        let mut item = source_item(900, 0);
+        item.source_permanent_id = None;
+        item.source_owner = None;
+        item.is_triggered = false;
+        item.card_id = "test_spell".into();
+        let mut event = DamageEvent::noncombat(
+            source,
+            0,
+            "Grizzly Bears LKI",
+            DamageRecipient::Player(1),
+            3,
+        );
+        event.source.zone_change_generation = Some(old_generation);
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event,
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("damage batch parks for the prevention order")
+            .is_none());
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+            engine.state.pending_replacement_event.take()
+        else {
+            panic!("two prevention effects require an order choice")
+        };
+        engine.state.pending_resolution = None;
+        assert_eq!(
+            batch.damage[0].spec.event.source.zone_change_generation,
+            Some(old_generation)
+        );
+        assert_eq!(batch.damage[0].spec.event.source.controller, 0);
+        assert_eq!(batch.damage[0].spec.event.source.colors, vec![Color::Green]);
+        assert_eq!(batch.damage[0].spec.event.source.types, vec!["Creature"]);
+        assert_eq!(batch.damage[0].spec.event.source.label, "Grizzly Bears LKI");
+
+        let first = batch.applications[0].clone();
+        engine
+            .apply_damage_replacement_application(
+                &mut batch,
+                first.event_index,
+                first.application,
+                &mut Vec::new(),
+            )
+            .expect("apply the selected shield");
+        let DamageBatchProgress::Complete(completed) = engine
+            .advance_damage_batch(batch, &mut Vec::new())
+            .expect("the single remaining shield completes")
+        else {
+            panic!("one remaining fixed shield should not require another choice")
+        };
+        assert_eq!(completed.len(), 1);
+        assert_eq!(completed[0].result.dealt, 1);
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .expect("damage completion commits once");
+        assert_eq!(engine.state.players[1].life, 19);
+        assert_eq!(
+            engine.state.turn_history.current.dealt_damage_objects,
+            vec![(source, old_generation)]
         );
     }
 }

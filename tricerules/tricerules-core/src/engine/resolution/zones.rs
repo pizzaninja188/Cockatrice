@@ -5720,17 +5720,33 @@ pub(super) fn explore(
     };
     let explorer = match subject {
         EffectSubject::Chosen(_) => {
-            let Some(object_id) = cx.resolve_battlefield_subject(&subject) else {
+            let Some(object_id) = cx
+                .targets_by_role
+                .first()
+                .and_then(|targets| targets.first())
+                .copied()
+            else {
                 return Ok(EffectOutcome::Continue);
             };
-            let zone_change_generation = cx
+            let Some(zone_change_generation) = cx
+                .target_receipt_in_role(object_id, 0)
+                .and_then(|receipt| receipt.zone_change_generation)
+            else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let is_current_battlefield_incarnation = cx
                 .engine
-                .state
-                .zone_change_generation
-                .get(&object_id)
-                .copied()
-                .unwrap_or(0);
-            let Some(controller_at_event) = cx.engine.controller_of(object_id) else {
+                .object_is_current_battlefield_generation(object_id, zone_change_generation);
+            let controller_at_event = if is_current_battlefield_incarnation {
+                cx.engine.controller_of(object_id)
+            } else {
+                cx.engine
+                    .state
+                    .last_known_controller_by_generation
+                    .get(&(object_id, zone_change_generation))
+                    .copied()
+            };
+            let Some(controller_at_event) = controller_at_event else {
                 return Ok(EffectOutcome::Continue);
             };
             TriggerObjectRef {
@@ -5755,33 +5771,40 @@ pub(super) fn explore(
         _ => return Err(EngineError::Illegal("unsupported Explore subject")),
     };
     let controller = explorer.controller_at_event;
+    let explorer_is_current_battlefield_incarnation =
+        cx.engine.object_is_current_battlefield_generation(
+            explorer.object_id,
+            explorer.zone_change_generation,
+        );
     let Some(player_idx) = cx.engine.state.player_idx(controller) else {
         return Ok(EffectOutcome::Continue);
     };
     let revealed_id = cx.engine.state.players[player_idx].library.front().copied();
 
     if revealed_id.is_none() {
-        if let Some(proposal) = cx.engine.proposed_object_counter_placement(
-            controller,
-            explorer.object_id,
-            [(CounterKind::PlusOnePlusOne, 1)],
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        ) {
-            let receipts = cx.engine.begin_counter_placement_batch(
-                vec![proposal],
-                ParkedStackResolution::new(cx.top.clone()),
-                crate::state::CounterPlacementCompletion::Explore {
-                    controller,
-                    explorer,
-                    revealed: None,
-                    spell_label: cx.spell_label.to_owned(),
-                },
-                cx.events,
-            )?;
-            let Some(receipts) = receipts else {
-                return Ok(EffectOutcome::Suspended);
-            };
-            cx.effect_result.counter_placements.extend(receipts);
+        if explorer_is_current_battlefield_incarnation {
+            if let Some(proposal) = cx.engine.proposed_object_counter_placement(
+                controller,
+                explorer.object_id,
+                [(CounterKind::PlusOnePlusOne, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            ) {
+                let receipts = cx.engine.begin_counter_placement_batch(
+                    vec![proposal],
+                    ParkedStackResolution::new(cx.top.clone()),
+                    crate::state::CounterPlacementCompletion::Explore {
+                        controller,
+                        explorer,
+                        revealed: None,
+                        spell_label: cx.spell_label.to_owned(),
+                    },
+                    cx.events,
+                )?;
+                let Some(receipts) = receipts else {
+                    return Ok(EffectOutcome::Suspended);
+                };
+                cx.effect_result.counter_placements.extend(receipts);
+            }
         }
         cx.events.push(ev_log(format!(
             "P{controller} explores with an empty library ({}).",
@@ -5859,31 +5882,33 @@ pub(super) fn explore(
 
     let mut stack = ParkedStackResolution::new(cx.top.clone());
     stack.previous_result = cx.previous_effect_result.clone();
-    if let Some(proposal) = cx.engine.proposed_object_counter_placement(
-        controller,
-        explorer.object_id,
-        [(CounterKind::PlusOnePlusOne, 1)],
-        super::super::continuous::CounterPlacementOrigin::Effect,
-    ) {
-        let receipts = cx.engine.begin_counter_placement_batch(
-            vec![proposal],
-            stack.clone(),
-            crate::state::CounterPlacementCompletion::Explore {
-                controller,
-                explorer,
-                revealed: Some(revealed),
-                spell_label: cx.spell_label.to_owned(),
-            },
-            cx.events,
-        )?;
-        let Some(receipts) = receipts else {
-            return Ok(EffectOutcome::Suspended);
-        };
-        stack
-            .previous_result
-            .counter_placements
-            .extend(receipts.clone());
-        cx.effect_result.counter_placements.extend(receipts);
+    if explorer_is_current_battlefield_incarnation {
+        if let Some(proposal) = cx.engine.proposed_object_counter_placement(
+            controller,
+            explorer.object_id,
+            [(CounterKind::PlusOnePlusOne, 1)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) {
+            let receipts = cx.engine.begin_counter_placement_batch(
+                vec![proposal],
+                stack.clone(),
+                crate::state::CounterPlacementCompletion::Explore {
+                    controller,
+                    explorer,
+                    revealed: Some(revealed),
+                    spell_label: cx.spell_label.to_owned(),
+                },
+                cx.events,
+            )?;
+            let Some(receipts) = receipts else {
+                return Ok(EffectOutcome::Suspended);
+            };
+            stack
+                .previous_result
+                .counter_placements
+                .extend(receipts.clone());
+            cx.effect_result.counter_placements.extend(receipts);
+        }
     }
     cx.engine.park_explore_choice(
         stack,

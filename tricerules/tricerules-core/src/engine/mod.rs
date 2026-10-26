@@ -2020,17 +2020,25 @@ impl GameEngine {
         let Some(source_id) = item.source_permanent_id else {
             return true;
         };
+        self.object_is_current_battlefield_generation(source_id, item.source_zone_change)
+    }
+
+    pub(super) fn object_is_current_battlefield_generation(
+        &self,
+        object_id: ObjectId,
+        generation: u64,
+    ) -> bool {
         self.state
             .objects
-            .get(&source_id)
+            .get(&object_id)
             .is_some_and(|object| object.zone == Zone::Battlefield)
             && self
                 .state
                 .zone_change_generation
-                .get(&source_id)
+                .get(&object_id)
                 .copied()
                 .unwrap_or(0)
-                == item.source_zone_change
+                == generation
     }
 
     /// Central CR 701.27 / 710 face-change primitive. Ineligible actions are no-ops.
