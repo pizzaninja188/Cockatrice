@@ -1953,9 +1953,6 @@ pub enum SpellEffectKind {
     DoubleCounters {
         target: TargetFilter,
     },
-    /// The Millennium Calendar adds its current number of Time counters to itself (CR 701.10e).
-    /// This remains source-bound and intentionally does not double other counter kinds.
-    DoubleTimeCounters,
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -3913,7 +3910,6 @@ impl SpellEffectKind {
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::SetSourceBasePower { .. }
-            | SpellEffectKind::DoubleTimeCounters
             | SpellEffectKind::SetClassLevel { .. }
             | SpellEffectKind::SolveCase
             | SpellEffectKind::PreventAllCombatDamageTurn

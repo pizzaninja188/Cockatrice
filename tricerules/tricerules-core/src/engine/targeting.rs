@@ -1933,7 +1933,6 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileGraveyards { .. }
         | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
         | SpellEffectKind::Proliferate
-        | SpellEffectKind::DoubleTimeCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
         | SpellEffectKind::RevealCohort
         | SpellEffectKind::MoveCohortPartition { .. }

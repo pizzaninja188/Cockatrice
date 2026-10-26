@@ -219,7 +219,15 @@ fn millennium_calendar_is_registered_with_its_complete_card_identity() {
     assert_eq!(activation.costs.len(), 2);
     assert!(matches!(
         &activation.effect[..],
-        [tricerules_cards::SpellEffectKind::DoubleTimeCounters]
+        [tricerules_cards::SpellEffectKind::PutCounters {
+            counter: tricerules_cards::CounterKind::Time,
+            count: tricerules_cards::Amount::Count(
+                tricerules_cards::primitives::CountExpression::SourceCounterCount {
+                    counter: tricerules_cards::CounterKind::Time,
+                }
+            ),
+            subject: tricerules_cards::primitives::EffectSubject::Source,
+        }]
     ));
 }
 
@@ -425,6 +433,112 @@ fn activation_doubles_only_time_counters_and_zero_stays_zero() {
             "other counter kinds are unchanged"
         );
     }
+}
+
+#[test]
+fn activation_uses_the_normal_counter_replacement_pipeline() {
+    let mut engine = engine(2_026_101_014);
+    let calendar = inject_permanent_on_battlefield(&mut engine, 0, CALENDAR);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    engine
+        .state
+        .objects
+        .get_mut(&calendar)
+        .unwrap()
+        .set_counter(CounterKind::Time, 3);
+    engine
+        .state
+        .objects
+        .get_mut(&calendar)
+        .unwrap()
+        .set_counter(CounterKind::Quest, 5);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+
+    apply_ability(&mut engine, 0, calendar, 0, vec![]).expect("activate Calendar");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&calendar].counter_count(CounterKind::Time),
+        9,
+        "Doubling Season doubles the three Time counters placed by the effect"
+    );
+    assert_eq!(
+        engine.state.objects[&calendar].counter_count(CounterKind::Quest),
+        5,
+        "the activation leaves other counter kinds unchanged"
+    );
+}
+
+#[test]
+fn activation_does_not_affect_a_returned_calendar() {
+    let mut engine = engine(2_026_101_015);
+    let calendar = inject_permanent_on_battlefield(&mut engine, 0, CALENDAR);
+    engine
+        .state
+        .objects
+        .get_mut(&calendar)
+        .unwrap()
+        .set_counter(CounterKind::Time, 3);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+
+    apply_ability(&mut engine, 0, calendar, 0, vec![]).expect("activate Calendar");
+    let first_generation = engine
+        .state
+        .zone_change_generation
+        .get(&calendar)
+        .copied()
+        .unwrap_or(0);
+    dev_move_calendar(&mut engine, DevZone::Graveyard);
+    dev_move_calendar(&mut engine, DevZone::Battlefield);
+    assert!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&calendar)
+            .copied()
+            .unwrap_or(0)
+            > first_generation
+    );
+    engine
+        .state
+        .objects
+        .get_mut(&calendar)
+        .unwrap()
+        .set_counter(CounterKind::Time, 7);
+    engine
+        .state
+        .objects
+        .get_mut(&calendar)
+        .unwrap()
+        .set_counter(CounterKind::Quest, 11);
+
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&calendar].zone, Zone::Battlefield);
+    assert_eq!(
+        engine.state.objects[&calendar].counter_count(CounterKind::Time),
+        7,
+        "the old activation cannot place counters on the returned object"
+    );
+    assert_eq!(
+        engine.state.objects[&calendar].counter_count(CounterKind::Quest),
+        11,
+        "the returned object's other counters remain unchanged"
+    );
 }
 
 #[test]
