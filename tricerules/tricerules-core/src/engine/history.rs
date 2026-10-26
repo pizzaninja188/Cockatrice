@@ -66,6 +66,45 @@ pub(super) fn battlefield_permanent_matches(
         })
 }
 
+fn battlefield_creature_source_is_excluded(
+    state: &GameState,
+    filter: &tricerules_card_model::BattlefieldCreatureCountFilter,
+    oid: ObjectId,
+    context: ConditionContext<'_>,
+) -> bool {
+    filter.exclude_source
+        && oid == context.source_object_id
+        && state.zone_change_generation.get(&oid).copied().unwrap_or(0)
+            == context.source_zone_change
+}
+
+fn battlefield_creature_matches(
+    state: &GameState,
+    filter: &tricerules_card_model::BattlefieldCreatureCountFilter,
+    oid: ObjectId,
+    c: &Characteristics,
+    context: ConditionContext<'_>,
+) -> bool {
+    !battlefield_creature_source_is_excluded(state, filter, oid, context)
+        && relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
+        && c.is_creature()
+        && filter
+            .subtype
+            .as_ref()
+            .is_none_or(|subtype| c.has_type(subtype))
+        && filter
+            .required_keywords
+            .iter()
+            .all(|keyword| c.has_keyword(*keyword))
+        && state.objects.get(&oid).is_some_and(|object| {
+            filter.tapped.is_none_or(|tapped| object.tapped == tapped)
+                && (!filter.requires_any_counter || object.has_any_counter())
+                && filter
+                    .required_counter
+                    .is_none_or(|counter| object.counter_count(counter) > 0)
+        })
+}
+
 pub(super) fn battlefield_quantity_value(
     state: &GameState,
     expression: &CountExpression,
@@ -93,31 +132,7 @@ pub(super) fn battlefield_quantity_value(
                 battlefield_permanent_matches(state, filter, *oid, c, context)
             }
             CountExpression::BattlefieldCreatures { filter } => {
-                relative_player_set_contains(
-                    state,
-                    filter.controllers,
-                    context.controller,
-                    c.controller,
-                ) && c.is_creature()
-                    && (!filter.exclude_source
-                        || *oid != context.source_object_id
-                        || state.zone_change_generation.get(oid).copied().unwrap_or(0)
-                            != context.source_zone_change)
-                    && filter
-                        .subtype
-                        .as_ref()
-                        .is_none_or(|subtype| c.has_type(subtype))
-                    && filter
-                        .required_keywords
-                        .iter()
-                        .all(|keyword| c.has_keyword(*keyword))
-                    && state.objects.get(oid).is_some_and(|object| {
-                        filter.tapped.is_none_or(|tapped| object.tapped == tapped)
-                            && (!filter.requires_any_counter || object.has_any_counter())
-                            && filter
-                                .required_counter
-                                .is_none_or(|counter| object.counter_count(counter) > 0)
-                    })
+                battlefield_creature_matches(state, filter, *oid, c, context)
             }
             _ => false,
         })
@@ -1563,11 +1578,7 @@ impl GameEngine {
                 })
                 .is_some_and(|mana_value| condition.matches_value(mana_value)),
             GameCondition::BattlefieldCreatureCount { filter, .. } => {
-                condition.matches_value(self.battlefield_creature_count(
-                    filter,
-                    context.controller,
-                    context.source_object_id,
-                ))
+                condition.matches_value(self.battlefield_creature_count(filter, context))
             }
             GameCondition::BattlefieldAggregate {
                 filter,
@@ -1899,52 +1910,22 @@ impl GameEngine {
     pub(super) fn battlefield_creature_count(
         &self,
         filter: &tricerules_card_model::BattlefieldCreatureCountFilter,
-        controller: PlayerId,
-        source_object_id: ObjectId,
+        context: ConditionContext<'_>,
     ) -> u32 {
         let count = self
             .state
             .players
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
-            .filter(|oid| !filter.exclude_source || *oid != source_object_id)
+            .filter(|oid| {
+                !battlefield_creature_source_is_excluded(&self.state, filter, *oid, context)
+            })
             .filter_map(|oid| {
                 self.characteristics(oid)
                     .map(|characteristics| (oid, characteristics))
             })
             .filter(|(oid, characteristics)| {
-                relative_player_set_contains(
-                    &self.state,
-                    filter.controllers,
-                    controller,
-                    characteristics.controller,
-                ) && characteristics.is_creature()
-                    && (!filter.requires_any_counter
-                        || self
-                            .state
-                            .objects
-                            .get(oid)
-                            .is_some_and(GameObject::has_any_counter))
-                    && filter.required_counter.is_none_or(|counter| {
-                        self.state
-                            .objects
-                            .get(oid)
-                            .is_some_and(|object| object.counter_count(counter) > 0)
-                    })
-                    && filter.tapped.is_none_or(|tapped| {
-                        self.state
-                            .objects
-                            .get(oid)
-                            .is_some_and(|object| object.tapped == tapped)
-                    })
-                    && filter
-                        .subtype
-                        .as_ref()
-                        .is_none_or(|subtype| characteristics.has_type(subtype))
-                    && filter
-                        .required_keywords
-                        .iter()
-                        .all(|keyword| characteristics.has_keyword(*keyword))
+                battlefield_creature_matches(&self.state, filter, *oid, characteristics, context)
             })
             .count();
         clamp_public_count(count)
@@ -4636,8 +4617,20 @@ mod tests {
             stack_item: None,
             previous_effect_result: None,
         };
+        let amount_count = |engine: &GameEngine| {
+            battlefield_quantity_value(
+                &engine.state,
+                &CountExpression::BattlefieldCreatures {
+                    filter: filter.clone(),
+                },
+                context,
+                |oid| engine.characteristics(oid),
+            )
+            .expect("battlefield creature amount")
+        };
 
-        assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 0);
+        assert_eq!(engine.battlefield_creature_count(&filter, context), 0);
+        assert_eq!(amount_count(&engine), 0);
         assert!(!engine.condition_holds(&condition, context));
 
         for counter in [
@@ -4652,7 +4645,8 @@ mod tests {
                 .get_mut(&bear)
                 .expect("bear")
                 .set_counter(counter, 1);
-            assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 1);
+            assert_eq!(engine.battlefield_creature_count(&filter, context), 1);
+            assert_eq!(amount_count(&engine), 1);
             assert!(engine.condition_holds(&condition, context));
             engine
                 .state
@@ -4660,7 +4654,8 @@ mod tests {
                 .get_mut(&bear)
                 .expect("bear")
                 .set_counter(counter, 0);
-            assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 0);
+            assert_eq!(engine.battlefield_creature_count(&filter, context), 0);
+            assert_eq!(amount_count(&engine), 0);
             assert!(!engine.condition_holds(&condition, context));
         }
 
@@ -4670,11 +4665,82 @@ mod tests {
             .get_mut(&opposing_bear)
             .expect("opposing bear")
             .set_counter(CounterKind::Stun, 1);
+        assert_eq!(engine.battlefield_creature_count(&filter, context), 0);
         assert_eq!(
-            engine.battlefield_creature_count(&filter, 0, 0),
+            amount_count(&engine),
             0,
             "controller-relative counts must not include an opponent's countered creature"
         );
+    }
+
+    #[test]
+    fn battlefield_creature_count_excludes_only_the_captured_source_incarnation() {
+        let decks = Some(vec![
+            deck_with_cards(&["dwynens_elite"], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            124_002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let source = move_to_battlefield(&mut engine, 0, "dwynens_elite");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
+            controllers: RelativePlayerSet::Controller,
+            subtype: Some("Elf".into()),
+            required_keywords: vec![],
+            tapped: Some(false),
+            requires_any_counter: false,
+            required_counter: None,
+            exclude_source: true,
+        };
+        let condition = GameCondition::BattlefieldCreatureCount {
+            filter: filter.clone(),
+            min: Some(1),
+            max: Some(1),
+        };
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: source,
+            source_zone_change: generation,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+        let amount_count = |engine: &GameEngine| {
+            battlefield_quantity_value(
+                &engine.state,
+                &CountExpression::BattlefieldCreatures {
+                    filter: filter.clone(),
+                },
+                context,
+                |oid| engine.characteristics(oid),
+            )
+            .expect("battlefield creature amount")
+        };
+
+        assert_eq!(engine.battlefield_creature_count(&filter, context), 0);
+        assert_eq!(amount_count(&engine), 0);
+        assert!(!engine.condition_holds(&condition, context));
+
+        engine
+            .state
+            .zone_change_generation
+            .insert(source, generation + 1);
+
+        assert_eq!(engine.battlefield_creature_count(&filter, context), 1);
+        assert_eq!(amount_count(&engine), 1);
+        assert!(engine.condition_holds(&condition, context));
     }
 
     #[test]

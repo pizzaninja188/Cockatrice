@@ -195,6 +195,53 @@ fn dwynens_elite_rechecks_the_other_elf_condition_on_resolution() {
 }
 
 #[test]
+fn dwynens_old_trigger_counts_the_returned_source_as_another_elf() {
+    let mut engine = engine(130_031);
+    let other_elf = inject_creature_on_battlefield(&mut engine, 0, "elvish_visionary");
+    let source = cast_creature(&mut engine, "dwynens_elite");
+    let old_generation = engine.state.zone_change_generation[&source];
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the original trigger is pending"
+    );
+
+    for target in [other_elf, source] {
+        inject_card_into_hand(&mut engine, 0, "unsummon");
+        grant_pool(&mut engine, 0);
+        let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+        engine
+            .apply_scenario_command(0, &cast_spell(unsummon, target_object(target)))
+            .expect("cast Unsummon while the original trigger waits");
+        pass_both_players(&mut engine);
+    }
+
+    assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the original trigger remains pending"
+    );
+
+    let returned_source = move_ready_to_battlefield(&mut engine, 0, "dwynens_elite");
+
+    assert_eq!(returned_source, source, "the same physical card reenters");
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert!(engine.state.zone_change_generation[&source] > old_generation);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the old trigger is still the only trigger"
+    );
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        battlefield_token_oids(&engine, 0, "elf_warrior_g_1_1").len(),
+        1
+    );
+}
+
+#[test]
 fn delta_bloodflies_rechecks_the_live_counter_condition() {
     let mut engine = engine(130_040);
     inject_card_into_hand(&mut engine, 0, "delta_bloodflies");
