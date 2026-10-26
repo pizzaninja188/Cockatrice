@@ -273,17 +273,23 @@ plus ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Their bounds, along with other
 accepted targetless forms, are described below.
 
-One narrow ability `Choose` requirement is admitted for the Trade Route Envoy shape:
-`BattlefieldCreatureCount` with `controllers: Controller`, `requires_any_counter: true`,
-`exclude_source: false`, `min: Some(1)`, `max: None`, and no subtype, keyword, tapped, or
-specific-counter constraints. This predicate is admitted only as an ability `Choose` requirement;
-generic Program `If` remains unchanged. Trade Route Envoy is the reviewed use: its mandatory
-controller `Choose` has one free `Draw(1)` branch and a Source +1/+1-counter `Otherwise`. The live
-condition determines whether a countered controller creature exists; branch availability also
-checks whether the free draw instruction can start under the current draw limit. With that creature
-still present, Narset's exhausted opponent draw limit makes Envoy's draw branch unavailable, so
-`Otherwise` places the counter (CR 101.2, 101.3, 118.3, 614.17b; this is a reasoned application,
-not a card-specific ruling). This is not a general rule that every card that does not actually draw
+Program `GameCondition` checks used by `If`, `Choose`, and conditional library-search predicates
+share one finite live-state validator. It admits `BattlefieldCreatureCount` with
+`controllers: Controller`, `Opponents`, or `All`, plus every model-validated creature filter and
+valid inclusive bounds. It also admits `BattlefieldAggregate(Count)` and `TotalPower` with any
+model-validated battlefield filter and valid bounds, and `MaximumPower` with a positive minimum,
+an optional maximum, and any model-validated battlefield filter. All battlefield aggregates
+require `exclude_observed_object: false` and may use only Controller, Opponents, or All at the root
+and every nested `any_of` node. `TargetedPlayer` is unsupported because these conditions do not
+resolve target-group bindings. `validate_live()` performs structural validation for these
+profiles; the compiler adds no card-shaped filter restrictions. Trade Route Envoy is the reviewed
+creature-count use:
+its mandatory controller `Choose` has one free `Draw(1)` branch and a Source +1/+1-counter
+`Otherwise`. Its live condition determines whether a countered controller creature exists; branch
+availability also checks whether the free draw instruction can start under the current draw limit.
+With that creature still present, Narset's exhausted opponent draw limit makes Envoy's draw branch
+unavailable, so `Otherwise` places the counter (CR 101.2, 101.3, 118.3, 614.17b; this is a
+reasoned application, not a card-specific ruling). This is not a general rule that every card that does not actually draw
 selects `Otherwise`: an available draw with an empty library is still attempted and commits the
 library-loss state, and an Abundance replacement suspends/resumes the started draw without
 re-running `Choose` or counting as an actual card draw. See the [Trade Route Envoy review
@@ -474,14 +480,14 @@ declared Commander is sacrificed into a graveyard, the search branch and parent 
 the CR 903.9a state-based action is checked (CR 704.4). If a hand-bound library search finds a
 Commander, its owner makes the CR 903.9b Command-zone-or-Hand choice before movement, then the same
 search continuation completes.
-`If` may also inspect the controller's current graveyard with `GraveyardAggregate(CardCount)`,
-validated inclusive bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain
-recursive for admitted leaves. The only `DistinctCardTypes` exception is a direct `If` condition in
-a spell Program with `owners: Controller`, `filter: None`, `min: Some(4)`, and `max: None`; this
-preserves Impossible Inferno's exact Delirium profile. Other graveyard owners and aggregate
-profiles remain unsupported, and the exception cannot be wrapped in `AllOf` or `AnyOf` or used by
-an ability Program. The existing Controller `CardCount` condition remains valid. A direct
-top-level Program `If` may also test `Void`, which is sampled when that instruction resolves before
+Program `GameCondition` checks admit validated `GraveyardAggregate(CardCount)` and
+`DistinctCardTypes` conditions with `owners: Controller`, `Opponents`, or `All`, any valid inclusive
+bounds, and an optional validated `ZoneCardFilter`. `AllOf` and `AnyOf` remain recursive for these
+leaves. `TargetedPlayer` owners are unsupported because the graveyard aggregate does not resolve a
+target-group binding. Impossible Inferno continues to use its Controller `DistinctCardTypes`
+condition for Delirium; the compiler no longer specializes admission to that card's exact threshold
+or filter shape. A direct top-level Program `If` may also test `Void`, which is sampled when that
+instruction resolves before
 the selected branch begins; a later draw-replacement suspension does not reevaluate the condition
 (CR 608.2c, 608.2h). `Void` is not admitted inside `AllOf`/`AnyOf`, as a `Choose` requirement, or
 as the predicate for a conditional top-of-library search. Ability Programs may use the closed
@@ -512,24 +518,22 @@ recipient is `Controller`. The explicit filter is validated by the normal gravey
 contract. This count is read when the `CreateTokens` instruction resolves (CR 608.2h); The Final
 Days counts creature cards in its controller's graveyard after the cast snapshot selects the
 graveyard branch.
-`If` may also inspect the current battlefield with `BattlefieldAggregate(Count)`, inclusive count
-bounds, and a validated `BattlefieldPermanentFilter`. This family requires
-`exclude_observed_object: false` and `Controller` at the root filter and every recursively nested
-`any_of` filter node; `AllOf` and `AnyOf` may compose only admitted condition leaves. The count is
-evaluated when its instruction runs, after preceding steps. Hero in Training counts another
-controlled permanent with the Hero subtype, including noncreature Kindred Heroes and a returned
-new generation of the same physical card. Tend the Sprigs counts each controlled permanent once
-when it matches Land or Treefolk after its Basic Land search. These shapes do not admit other
-legacy creature counts, observed-object-dependent counts, or other relative player sets. Other
-battlefield aggregate leaves remain unsupported except for the separate exact `MaximumPower` form
-below.
-`If` separately admits one `BattlefieldAggregate(MaximumPower)` form: exactly the controller's
-creatures, `min: Some(positive)`, `max: None`, `exclude_observed_object: false`, and every other
-`BattlefieldPermanentFilter` field at its default. It uses live power when that instruction runs;
-it does not admit another cohort, bound, filter, or observed-object context. Scalestorm Summoner
-uses this condition in its triggered ability. Fanatic of Rhonas's mana condition and Drowsing
-Tyrannodon's attack restriction are existing `MaximumPower` analogues; this Program shape reuses
-the current condition evaluator and adds no runtime operation.
+`BattlefieldCreatureCount` and `BattlefieldAggregate(Count)` conditions use live battlefield state
+when their instruction runs, after preceding steps. `BattlefieldAggregate(Count)` and `TotalPower`
+accept a validated `BattlefieldPermanentFilter` and ordinary inclusive bounds;
+`MaximumPower` requires a positive minimum and accepts an optional maximum. Every battlefield
+aggregate requires `exclude_observed_object: false`. Their root and nested `any_of` filters may
+select Controller, Opponents, or All; `TargetedPlayer` is unsupported at every level. The
+creature-count condition supports all of its validated filter and bound fields except a
+`TargetedPlayer` cohort. `AllOf` and `AnyOf` may recursively compose these conditions with other
+admitted leaves. Hero in Training counts another controlled permanent with the Hero subtype,
+including noncreature Kindred Heroes and a returned new generation of the same physical card.
+Tend the Sprigs counts each controlled permanent once when it matches Land or Treefolk after its
+Basic Land search. Trade Route Envoy checks for a countered controller creature. Scalestorm Summoner
+uses `MaximumPower` in its triggered ability. Fanatic of Rhonas's mana condition and Drowsing
+Tyrannodon's attack restriction are existing `MaximumPower` analogues. Mosswort Bridge checks
+`TotalPower` for its linked-card choice. These Program conditions reuse current evaluators and add
+no runtime operation. `DistinctNames` remains unsupported.
 `ReturnAllToOwnersHand` is also an accepted resultless leaf. Its validated permanent filter defines
 the simultaneous cohort; Commander owner-hand replacement choices suspend and resume that same
 operation, and the leaf cannot bind or yield a result.
@@ -739,12 +743,12 @@ and the [participant redaction path](../../../libcockatrice_network/libcockatric
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and `ChoosePermanents` constraints
 must be empty.
-`If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, controller
-`GraveyardAggregate(CardCount)`, controller-filtered `BattlefieldAggregate(Count)`, the exact
-controller-Creature `BattlefieldAggregate(MaximumPower)` form with a positive `min`, no `max`,
-default remaining filter fields, and no observed-object exclusion, plus the ability-only source
-condition family described above. That source family also applies in `Choose` requirements; it does
-not extend to spell Programs, conditional-search predicates, event conditions, or cross-object
+`If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, validated graveyard aggregates,
+`BattlefieldCreatureCount`, `BattlefieldAggregate(Count)`, `TotalPower`, and positive-minimum
+`MaximumPower`, with the player-set and filter restrictions described above. Those live-state
+conditions share the same validator in `Choose` requirements and conditional search predicates.
+The ability-only source-condition family described above also applies in `Choose` requirements; it
+does not extend to spell Programs, conditional-search predicates, event conditions, or cross-object
 matching. `AllOf` and `AnyOf` recursively combine only admitted leaves with ordinary nonempty and
 bounds validation. The direct `Void` form remains a separate global turn-history predicate.
 Other contexts and leaf operations fail registration.
@@ -1109,9 +1113,11 @@ with `play_kind: Play`, `filter: None`, and no source return to its owner's hand
 may be followed by later Program instructions; when its linked-play cohort finishes, the engine
 resumes the saved Program cursor so that the remaining instructions resolve once. This profile
 does not add `Cast`, filtered Play, or source-return forms to Programs. Mosswort Bridge's
-`activated_02` uses this generic profile inside its optional Controller `Choose`; its branch still
-checks that Controller creatures have total power of at least 10, with no maximum and the default
-aggregate exclusion fields. This optional non-cost choice uses `DelegateNonCostChoice`; it does not
+`activated_02` uses this generic profile inside its optional Controller `Choose`; its card condition
+checks that Controller creatures have total power of at least 10. Program `TotalPower` conditions
+accept any model-valid inclusive bounds and battlefield filter, while rejecting observed-object
+exclusion and `TargetedPlayer` cohorts. This optional non-cost choice uses
+`DelegateNonCostChoice`; it does not
 use Mimic Vat's optional-cost departure policy. Linked producer identity, card generation, and
 choice visibility remain validated by the existing linked-Exile rules.
 

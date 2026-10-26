@@ -8019,10 +8019,10 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             definition.replace("Battlefield(tapped: true)", "Battlefield(tapped: false)"),
         ),
         (
-            "the predicate remains in the live controller domain",
+            "the predicate excludes unresolved target groups",
             definition.replace(
                 "controllers: Controller, card_type: None",
-                "controllers: Opponents, card_type: None",
+                "controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: None",
             ),
         ),
         (
@@ -8049,7 +8049,8 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             error.contains("conditional")
                 || error.contains("SearchLibrary")
                 || error.contains("If condition")
-                || error.contains("ProgramIf"),
+                || error.contains("ProgramIf")
+                || error.contains("TargetedPlayer"),
             "{label}: unexpected diagnostic: {error}"
         );
     }
@@ -8068,11 +8069,30 @@ fn conditional_top_search_rejects_void_as_its_predicate() {
     );
     let error = invalid_program_reason(&void_condition);
     assert!(
-        error.contains(
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
-        ),
+        error.contains("If condition uses context outside"),
         "Void remains outside the conditional TopOfLibrary search predicate domain: {error}"
     );
+}
+
+#[test]
+fn conditional_top_search_accepts_shared_battlefield_creature_count_conditions() {
+    let definition = resultless_conditional_top_search_program();
+    let condition = definition.replace(
+        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, card_type: None,\n                                    required_subtypes: [\"Dragon\"], exclude_source: false),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
+        "condition: BattlefieldCreatureCount(filter: (controllers: Opponents, requires_any_counter: true), min: Some(1), max: None), destination:",
+    );
+    assert_ne!(
+        condition, definition,
+        "the conditional predicate was replaced"
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&condition], &[])
+        .expect("conditional TopOfLibrary search uses the shared live condition validator");
+    assert!(registry
+        .compiled_program_for_owner(&crate::ProgramOwnerId::face(
+            "program_fixture",
+            crate::CardFaceId::new("program_fixture").unwrap(),
+        ))
+        .is_some());
 }
 
 #[test]
@@ -9165,58 +9185,66 @@ fn program_if_accepts_controller_distinct_card_types_graveyard_condition() {
 }
 
 #[test]
-fn program_if_rejects_other_distinct_card_types_graveyard_profiles() {
-    let exact = "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: None)";
+fn program_if_accepts_generalized_graveyard_aggregate_profiles() {
     let conditions = [
         (
-            "other owner",
-            "GraveyardAggregate(owners: Opponents, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: None)".to_string(),
+            "opponents' filtered CardCount with both bounds",
+            r#"GraveyardAggregate(
+                owners: Opponents, aggregate: CardCount,
+                filter: Some((card_type: Some(Creature), min_mana_value: Some(1), max_mana_value: Some(8))),
+                min: Some(2), max: Some(5),
+            )"#,
         ),
         (
-            "other threshold",
-            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(3), max: None)".to_string(),
+            "all graveyards' filtered DistinctCardTypes",
+            r#"GraveyardAggregate(
+                owners: All, aggregate: DistinctCardTypes,
+                filter: Some((any_of: Some([
+                    (card_type: Some(Creature)),
+                    (card_type: Some(Artifact)),
+                ]))),
+                min: Some(3), max: Some(6),
+            )"#,
         ),
         (
-            "upper bound",
-            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: None, min: Some(4), max: Some(5))".to_string(),
-        ),
-        (
-            "extra filter",
-            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, filter: Some((required_subtypes: [\"Elf\"])), min: Some(4), max: None)".to_string(),
-        ),
-        (
-            "composite wrapper",
-            format!("AllOf([{exact}, ControllerLibraryEmpty])"),
+            "nested CardCount condition",
+            r#"AnyOf([
+                ControllerLibraryEmpty,
+                GraveyardAggregate(
+                    owners: Opponents, aggregate: CardCount,
+                    filter: Some((required_subtypes: ["Elf"])),
+                    min: None, max: Some(4),
+                ),
+            ])"#,
         ),
     ];
 
     for (label, condition) in conditions {
         let body = format!(
-            r#"(steps: [(id: "delirium", kind: If(
+            r#"(steps: [(id: "graveyard_check", kind: If(
                 condition: {condition}, yes: (steps: [], yields: []),
                 no: (steps: [], yields: []),
             ))], yields: [])"#
         );
         let definition = program_fixture(&body);
-        assert!(
-            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
-            "unsupported Delirium condition profile was admitted: {label}"
-        );
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).unwrap_or_else(|error| {
+            panic!("valid graveyard condition profile should compile ({label}): {error}")
+        });
     }
 
-    let ability_definition = ability_program_fixture(
-        "distinct_card_types_ability",
-        &format!(
-            r#"(steps: [(id: "delirium", kind: If(
-                condition: {exact}, yes: (steps: [], yields: []),
-                no: (steps: [], yields: []),
-            ))], yields: [])"#
-        ),
+    let ability_condition = r#"GraveyardAggregate(
+        owners: All, aggregate: DistinctCardTypes,
+        filter: Some((card_type: Some(Creature))),
+        min: Some(2), max: Some(4),
+    )"#;
+    let ability_body = format!(
+        r#"(steps: [(id: "graveyard_check", kind: If(
+            condition: {ability_condition}, yes: (steps: [], yields: []),
+            no: (steps: [], yields: []),
+        ))], yields: [])"#
     );
-    assert!(
-        ability_definition.is_err(),
-        "the Delirium condition profile remains spell-only"
-    );
+    ability_program_fixture("graveyard_aggregate_ability", &ability_body)
+        .expect("validated graveyard aggregates use the shared Ability If path");
 }
 
 #[test]
@@ -9327,9 +9355,7 @@ fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
     );
     let error = invalid_program_reason(&unrelated_turn_history);
     assert!(
-        error.contains(
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
-        ),
+        error.contains("If condition uses context outside"),
         "an unrelated turn-history condition remains rejected: {error}"
     );
 
@@ -9344,35 +9370,33 @@ fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
     );
     let error = invalid_program_reason(&composite_void);
     assert!(
-        error.contains(
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"
-        ),
+        error.contains("If condition uses context outside"),
         "Void remains unsupported inside composite ProgramIf conditions: {error}"
     );
 }
 
 #[test]
-fn program_if_keeps_graveyard_condition_admission_narrow() {
+fn program_if_rejects_targeted_or_malformed_graveyard_conditions() {
     for (label, condition, expected_error) in [
         (
-            "opponent-owned graveyards",
-            "GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))",
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
+            "TargetedPlayer owner",
+            "GraveyardAggregate(owners: TargetedPlayer(group_index: 0, kind: AnyPlayer), aggregate: CardCount, min: Some(1))",
+            "TargetedPlayer",
         ),
         (
-            "distinct card-type aggregates",
-            "GraveyardAggregate(owners: Controller, aggregate: DistinctCardTypes, min: Some(1))",
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
-        ),
-        (
-            "nested unsupported owners",
-            "AllOf([ControllerLibraryEmpty, GraveyardAggregate(owners: Opponents, aggregate: CardCount, min: Some(1))])",
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
+            "TargetedPlayer nested in AnyOf",
+            "AnyOf([ControllerLibraryEmpty, GraveyardAggregate(owners: TargetedPlayer(group_index: 0, kind: AnyPlayer), aggregate: DistinctCardTypes, min: Some(1))])",
+            "TargetedPlayer",
         ),
         (
             "invalid bounds",
             "GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(3), max: Some(2))",
             "GraveyardAggregate min cannot exceed max",
+        ),
+        (
+            "missing bounds",
+            "GraveyardAggregate(owners: Controller, aggregate: CardCount, min: None, max: None)",
+            "GraveyardAggregate requires at least one of min or max",
         ),
         (
             "malformed optional filter",
@@ -9392,7 +9416,7 @@ fn program_if_keeps_graveyard_condition_admission_narrow() {
 }
 
 #[test]
-fn program_if_accepts_controller_battlefield_count_conditions() {
+fn program_if_accepts_supported_battlefield_aggregate_conditions() {
     let fixture = |condition: &str| {
         program_fixture(&format!(
             r#"(steps: [(id: "if", kind: If(
@@ -9404,7 +9428,7 @@ fn program_if_accepts_controller_battlefield_count_conditions() {
     };
     let conditions = [
         (
-            "another Hero",
+            "Controller Count with a subtype filter",
             r#"BattlefieldAggregate(
                 filter: (controllers: Controller, required_subtypes: ["Hero"]),
                 aggregate: Count, min: Some(1), max: None,
@@ -9412,13 +9436,48 @@ fn program_if_accepts_controller_battlefield_count_conditions() {
             )"#,
         ),
         (
-            "Land-or-Treefolk union",
+            "All cohort and mixed-player recursive Count filters",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, any_of: Some([
-                    (controllers: Controller, card_type: Some(Land)),
-                    (controllers: Controller, required_subtypes: ["Treefolk"]),
+                filter: (controllers: All, any_of: Some([
+                    (controllers: Opponents, card_type: Some(Land)),
+                    (controllers: All, required_subtypes: ["Treefolk"]),
                 ])),
-                aggregate: Count, min: Some(7), max: None,
+                aggregate: Count, min: None, max: Some(7),
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "TotalPower with an Opponents cohort, source exclusion, recursive filter, and max only",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Opponents, card_type: Some(Creature),
+                    any_of: Some([
+                        (controllers: All, required_subtypes: ["Elf"]),
+                        (controllers: Opponents, color: Some(Green)),
+                    ]), exclude_source: true),
+                aggregate: TotalPower, min: None, max: Some(0),
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "TotalPower with a zero minimum and an inclusive upper bound",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature),
+                    required_subtypes: ["Elf"], token: Some(false)),
+                aggregate: TotalPower, min: Some(0), max: Some(10),
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "MaximumPower with a positive minimum, optional maximum, and full filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: All, card_type: Some(Creature),
+                    token: Some(true), color: Some(Green), name: Some("test creature"),
+                    required_subtypes: ["Elf"], exclude_source: true,
+                    any_of: Some([
+                        (controllers: Opponents, card_type: Some(Creature)),
+                        (controllers: All, required_supertypes: ["Legendary"]),
+                    ])),
+                aggregate: MaximumPower, min: Some(1), max: Some(5),
                 exclude_observed_object: false,
             )"#,
         ),
@@ -9466,7 +9525,54 @@ fn program_if_accepts_controller_battlefield_count_conditions() {
 }
 
 #[test]
-fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
+fn program_if_accepts_battlefield_creature_count_for_spell_and_ability_programs() {
+    let conditions = [
+        (
+            "Controller creatures carrying any counter",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: Controller, requires_any_counter: true),
+                min: Some(1), max: None,
+            )"#,
+        ),
+        (
+            "All players' filtered creatures with a maximum only",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: All, subtype: Some("Elf"), tapped: Some(false)),
+                min: None, max: Some(8),
+            )"#,
+        ),
+        (
+            "a count inside a composite",
+            r#"AllOf([
+                ControllerLibraryEmpty,
+                BattlefieldCreatureCount(
+                    filter: (controllers: Opponents, required_keywords: [Flying],
+                        required_counter: Some(PlusOnePlusOne), exclude_source: true),
+                    min: Some(2), max: Some(4),
+                ),
+            ])"#,
+        ),
+    ];
+
+    for (label, condition) in conditions {
+        let body = format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition}, yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        let definition = program_fixture(&body);
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).unwrap_or_else(|error| {
+            panic!("valid Spell ProgramIf count should compile ({label}): {error}")
+        });
+        ability_program_fixture("battlefield_count_ability", &body).unwrap_or_else(|error| {
+            panic!("valid Ability ProgramIf count should compile ({label}): {error}")
+        });
+    }
+}
+
+#[test]
+fn program_if_rejects_unsupported_battlefield_condition_contexts() {
     let fixture = |condition: &str| {
         program_fixture(&format!(
             r#"(steps: [(id: "if", kind: If(
@@ -9476,22 +9582,11 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
             ))], yields: [])"#
         ))
     };
-    let unsupported =
-        "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state";
+    let unsupported = "If condition uses context outside";
     let cases = [
         (
             "DistinctNames",
             r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: DistinctNames, min: Some(1))"#,
-            unsupported,
-        ),
-        (
-            "TotalPower",
-            r#"BattlefieldAggregate(filter: (controllers: Controller), aggregate: TotalPower, min: Some(1))"#,
-            unsupported,
-        ),
-        (
-            "legacy BattlefieldCreatureCount",
-            r#"BattlefieldCreatureCount(filter: (controllers: Controller, subtype: Some("Hero")), min: Some(1))"#,
             unsupported,
         ),
         (
@@ -9505,7 +9600,7 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
                 filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Hero"]),
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
-            "ProgramIf battlefield aggregate filters require Controller at every any_of node",
+            "TargetedPlayer",
         ),
         (
             "TargetedPlayer inside any_of",
@@ -9516,7 +9611,15 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
                 ])),
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
-            "ProgramIf battlefield aggregate filters require Controller at every any_of node",
+            "TargetedPlayer",
+        ),
+        (
+            "TargetedPlayer in a creature-count condition",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer)),
+                min: Some(1), max: None,
+            )"#,
+            "TargetedPlayer",
         ),
         (
             "observed object at the root",
@@ -9565,6 +9668,13 @@ fn program_if_keeps_battlefield_count_admission_narrow_and_live_validated() {
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
             "battlefield permanent filter any_of requires at least two branches",
+        ),
+        (
+            "invalid creature-count bounds",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: Controller), min: Some(3), max: Some(2),
+            )"#,
+            "BattlefieldCreatureCount min cannot exceed max",
         ),
     ];
 
@@ -9687,6 +9797,47 @@ fn mosswort_total_power_choose_body(condition: &str) -> String {
 }
 
 #[test]
+fn program_choose_accepts_controller_creature_total_power_thresholds() {
+    use crate::primitives::{CompiledChooseRequirement, CompiledInstructionKind};
+
+    for minimum in [0, 9, u32::MAX] {
+        let condition = format!(
+            "BattlefieldAggregate(\
+                filter: (controllers: Controller, card_type: Some(Creature)),\
+                aggregate: TotalPower, min: Some({minimum}), max: None,\
+                exclude_observed_object: false,\
+            )"
+        );
+        let body = mosswort_total_power_choose_body(&condition);
+        let program = ability_program_fixture("mosswort_condition_compiler_fixture", &body)
+            .unwrap_or_else(|error| {
+                panic!("valid TotalPower minimum {minimum} should compile: {error}")
+            });
+        let [instruction] = program.body.steps.as_slice() else {
+            panic!("the condition fixture retains one Choose instruction");
+        };
+        let CompiledInstructionKind::Choose { branches, .. } = &instruction.kind else {
+            panic!("the condition fixture retains a compiled Choose");
+        };
+        let [branch] = branches.as_slice() else {
+            panic!("the condition fixture has one branch");
+        };
+        assert!(matches!(
+            &branch.requirement,
+            CompiledChooseRequirement::GameCondition(
+                crate::primitives::GameCondition::BattlefieldAggregate {
+                    aggregate: crate::primitives::BattlefieldAggregate::TotalPower,
+                    min: Some(actual),
+                    max: None,
+                    exclude_observed_object: false,
+                    ..
+                }
+            ) if *actual == minimum
+        ));
+    }
+}
+
+#[test]
 fn program_choose_accepts_trade_route_envoy_live_countered_creature_branch() {
     use crate::primitives::{
         CompiledChooseRequirement, CompiledInstructionKind, GameCondition, PlayerRecipient,
@@ -9758,67 +9909,98 @@ fn trade_route_envoy_counter_choose_body(condition: &str) -> String {
 }
 
 #[test]
-fn program_choose_rejects_nonexact_trade_route_envoy_counter_conditions() {
-    let base = r#"BattlefieldCreatureCount(
-        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
-        min: Some(1), max: None,
-    )"#;
+fn program_choose_accepts_valid_battlefield_creature_count_profiles() {
     let cases = [
         (
-            "opponent cohort",
-            base.replace("controllers: Controller", "controllers: Opponents"),
+            "all live filter dimensions and bounded Opponents cohort",
+            r#"BattlefieldCreatureCount(
+                filter: (
+                    controllers: Opponents,
+                    subtype: Some("Elf"),
+                    required_keywords: [Flying],
+                    tapped: Some(false),
+                    requires_any_counter: false,
+                    required_counter: Some(PlusOnePlusOne),
+                    exclude_source: true,
+                ),
+                min: Some(2), max: Some(4),
+            )"#,
         ),
         (
-            "source exclusion",
-            base.replace("exclude_source: false", "exclude_source: true"),
+            "All players and an any-counter cohort with a maximum only",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: All, requires_any_counter: true),
+                min: None, max: Some(3),
+            )"#,
         ),
         (
-            "subtype filter",
-            base.replace(
-                "controllers: Controller",
-                "controllers: Controller, subtype: Some(\"Elf\")",
-            ),
+            "zero lower bound",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: Controller, subtype: Some("Elf")),
+                min: Some(0), max: None,
+            )"#,
         ),
-        (
-            "keyword filter",
-            base.replace(
-                "controllers: Controller",
-                "controllers: Controller, required_keywords: [Flying]",
-            ),
-        ),
-        (
-            "tapped filter",
-            base.replace(
-                "controllers: Controller",
-                "controllers: Controller, tapped: Some(true)",
-            ),
-        ),
-        (
-            "specific counter instead of any counter",
-            base.replace(
-                "requires_any_counter: true",
-                "requires_any_counter: false, required_counter: Some(PlusOnePlusOne)",
-            ),
-        ),
-        (
-            "wrong minimum",
-            base.replace("min: Some(1)", "min: Some(2)"),
-        ),
-        ("missing minimum", base.replace("min: Some(1)", "min: None")),
-        ("maximum bound", base.replace("max: None", "max: Some(2)")),
     ];
 
     for (label, condition) in cases {
-        let body = trade_route_envoy_counter_choose_body(&condition);
-        assert!(
-            ability_program_fixture("trade_route_envoy_compiler_fixture", &body).is_err(),
-            "the Program compiler must reject the {label} counter-count shape"
+        let body = trade_route_envoy_counter_choose_body(condition);
+        ability_program_fixture("trade_route_envoy_compiler_fixture", &body).unwrap_or_else(
+            |error| panic!("valid count profile should compile ({label}): {error}"),
         );
     }
 }
 
 #[test]
-fn program_if_still_rejects_trade_route_envoy_counter_condition() {
+fn program_choose_rejects_targeted_or_malformed_battlefield_creature_count_conditions() {
+    let cases = [
+        (
+            "targeted player without count-path target-group resolution",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer)),
+                min: Some(1), max: None,
+            )"#,
+        ),
+        (
+            "empty subtype",
+            r#"BattlefieldCreatureCount(
+                filter: (subtype: Some("  ")),
+                min: Some(1), max: None,
+            )"#,
+        ),
+        (
+            "conflicting counter predicates",
+            r#"BattlefieldCreatureCount(
+                filter: (requires_any_counter: true, required_counter: Some(PlusOnePlusOne)),
+                min: Some(1), max: None,
+            )"#,
+        ),
+        (
+            "inverted count bounds",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: Controller),
+                min: Some(2), max: Some(1),
+            )"#,
+        ),
+        (
+            "missing both count bounds",
+            r#"BattlefieldCreatureCount(
+                filter: (controllers: Controller),
+                min: None, max: None,
+            )"#,
+        ),
+    ];
+
+    for (label, condition) in cases {
+        let body = trade_route_envoy_counter_choose_body(condition);
+        assert!(
+            ability_program_fixture("trade_route_envoy_compiler_fixture", &body).is_err(),
+            "the Program compiler must reject {label}"
+        );
+    }
+}
+
+#[test]
+fn program_if_accepts_trade_route_envoy_counter_condition() {
     let condition = r#"BattlefieldCreatureCount(
         filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
         min: Some(1), max: None,
@@ -9830,16 +10012,12 @@ fn program_if_still_rejects_trade_route_envoy_counter_condition() {
             no: (steps: [], yields: []),
         ))], yields: [])"#
     );
-    let error = ability_program_fixture("trade_route_envoy_compiler_fixture", &body)
-        .expect_err("the Choose-only profile must not widen generic Program If");
-    assert!(
-        error.contains("If condition uses context outside"),
-        "unexpected Program If diagnostic: {error}"
-    );
+    ability_program_fixture("trade_route_envoy_compiler_fixture", &body)
+        .expect("the shared condition validator admits the live creature-count profile");
 }
 
 #[test]
-fn program_choose_rejects_nonexact_controller_creature_total_power_conditions() {
+fn program_choose_rejects_invalid_or_context_dependent_total_power_conditions() {
     let base = r#"BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature)),
         aggregate: TotalPower, min: Some(10), max: None,
@@ -9847,55 +10025,35 @@ fn program_choose_rejects_nonexact_controller_creature_total_power_conditions() 
     )"#;
     let cases = [
         (
-            "opponent cohort",
-            base.replace("controllers: Controller", "controllers: Opponents"),
+            "missing both bounds",
+            base.replace("min: Some(10), max: None", "min: None, max: None"),
         ),
         (
-            "noncreature filter",
-            base.replace("Some(Creature)", "Some(Land)"),
-        ),
-        ("wrong threshold", base.replace("Some(10)", "Some(9)")),
-        ("maximum bound", base.replace("max: None", "max: Some(20)")),
-        (
-            "supertype filter",
-            base.replace(
-                "card_type: Some(Creature)",
-                "card_type: Some(Creature), required_supertypes: [\"Legendary\"]",
-            ),
-        ),
-        (
-            "token filter",
-            base.replace(
-                "card_type: Some(Creature)",
-                "card_type: Some(Creature), token: Some(true)",
-            ),
-        ),
-        (
-            "name filter",
-            base.replace(
-                "card_type: Some(Creature)",
-                "card_type: Some(Creature), name: Some(\"Elf\")",
-            ),
-        ),
-        (
-            "subtype filter",
-            base.replace(
-                "card_type: Some(Creature)",
-                "card_type: Some(Creature), required_subtypes: [\"Elf\"]",
-            ),
-        ),
-        (
-            "source exclusion",
-            base.replace(
-                "card_type: Some(Creature)",
-                "card_type: Some(Creature), exclude_source: true",
-            ),
+            "inverted bounds",
+            base.replace("min: Some(10), max: None", "min: Some(10), max: Some(9)"),
         ),
         (
             "observed-object exclusion",
             base.replace(
                 "exclude_observed_object: false",
                 "exclude_observed_object: true",
+            ),
+        ),
+        (
+            "TargetedPlayer in the aggregate filter",
+            base.replace(
+                "controllers: Controller, card_type: Some(Creature)",
+                "controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: Some(Creature)",
+            ),
+        ),
+        (
+            "TargetedPlayer nested in any_of",
+            base.replace(
+                "filter: (controllers: Controller, card_type: Some(Creature))",
+                "filter: (controllers: Controller, any_of: Some([\
+                    (controllers: Opponents, card_type: Some(Creature)),\
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: [\"Elf\"]),\
+                ]))",
             ),
         ),
     ];
@@ -10132,85 +10290,19 @@ fn linked_play_compiler_rejects_unsupported_context_and_shapes() {
 fn program_if_rejects_unsupported_maximum_power_shapes() {
     let cases = [
         (
-            "Controller cohort without an explicit Creature filter",
+            "TargetedPlayer cohort",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller), aggregate: MaximumPower,
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: Some(Creature)), aggregate: MaximumPower,
                 min: Some(4), max: None, exclude_observed_object: false,
             )"#,
         ),
         (
-            "opponent cohort",
+            "TargetedPlayer nested in any_of",
             r#"BattlefieldAggregate(
-                filter: (controllers: Opponents, card_type: Some(Creature)),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "noncreature filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Land)),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "required supertype filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature),
-                    required_supertypes: ["Legendary"]),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "token filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), token: Some(true)),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "disjunctive filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), any_of: Some([
-                    (controllers: Controller, card_type: Some(Creature)),
-                    (controllers: Controller, required_subtypes: ["Dinosaur"]),
+                filter: (controllers: All, card_type: Some(Creature), any_of: Some([
+                    (controllers: Opponents, card_type: Some(Creature)),
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Dinosaur"]),
                 ])),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "color filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), color: Some(Green)),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "name filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), name: Some("Grizzly Bears")),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "subtype filter",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature),
-                    required_subtypes: ["Dinosaur"]),
-                aggregate: MaximumPower, min: Some(4), max: None,
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
-            "source exclusion",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), exclude_source: true),
                 aggregate: MaximumPower, min: Some(4), max: None,
                 exclude_observed_object: false,
             )"#,
@@ -10224,14 +10316,6 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
             )"#,
         ),
         (
-            "upper bound",
-            r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature)),
-                aggregate: MaximumPower, min: Some(4), max: Some(5),
-                exclude_observed_object: false,
-            )"#,
-        ),
-        (
             "zero threshold",
             r#"BattlefieldAggregate(
                 filter: (controllers: Controller, card_type: Some(Creature)),
@@ -10240,18 +10324,28 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
             )"#,
         ),
         (
-            "missing threshold",
+            "maximum-only threshold",
             r#"BattlefieldAggregate(
                 filter: (controllers: Controller, card_type: Some(Creature)),
-                aggregate: MaximumPower, min: None, max: None,
+                aggregate: MaximumPower, min: None, max: Some(5),
                 exclude_observed_object: false,
             )"#,
         ),
         (
-            "unsupported TotalPower aggregate",
+            "inverted bounds",
             r#"BattlefieldAggregate(
                 filter: (controllers: Controller, card_type: Some(Creature)),
-                aggregate: TotalPower, min: Some(4), max: None,
+                aggregate: MaximumPower, min: Some(5), max: Some(4),
+                exclude_observed_object: false,
+            )"#,
+        ),
+        (
+            "malformed filter",
+            r#"BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Creature), any_of: Some([
+                    (controllers: Controller, card_type: Some(Creature)),
+                ])),
+                aggregate: MaximumPower, min: Some(4), max: None,
                 exclude_observed_object: false,
             )"#,
         ),
@@ -12732,7 +12826,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
         .expect_err("the clear-table child cannot resolve its parent's alias")
     };
     assert!(
-        clear_table_child_error.contains("If condition uses context outside controller hand"),
+        clear_table_child_error.contains("If condition uses context outside"),
         "the existing Program condition profile rejects the unlowered child alias: {clear_table_child_error}"
     );
     let clear_table_parent_compiled = compile(&child_without_alias_table, Some(&required))
@@ -15493,7 +15587,7 @@ fn spell_program_rejects_dynamic_amount_selectors_and_if_contexts() {
         );
         let reason = invalid_program_reason(&program_fixture(&body));
         assert!(
-            reason.contains("If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state"),
+            reason.contains("If condition uses context outside"),
             "{label}: {reason}"
         );
     }
@@ -15582,7 +15676,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "GameCondition(Void)",
             "None",
-            "If condition uses context outside controller hand, library, CardCount graveyard, or Controller battlefield Count state",
+            "If condition uses context outside",
         ),
         (
             "implicit prior-result input",

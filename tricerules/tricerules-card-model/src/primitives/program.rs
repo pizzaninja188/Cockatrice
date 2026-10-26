@@ -6,12 +6,14 @@
 //! finite authored role signatures compiled below, while the remaining supported instructions
 //! are controller-scoped spell/ability sequences. Draw admits fixed literals and explicitly
 //! bound non-identifying counts from a Program discard result. Private hand-choice amounts remain
-//! fixed literals. `If` admits the global `Void` predicate and, on ability programs, a recursive
-//! source-owned condition family built from bounded `SourceCounterCount`, exact live
-//! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. Ability Choose
-//! requirements additionally admit one exact live controller creature counter-count profile;
-//! that profile remains Choose-only because branch draw availability is checked before selection.
-//! Conditional search predicates remain narrower.
+//! fixed literals. Live battlefield creature-count, battlefield aggregate, and graveyard
+//! aggregate conditions share one validated admission path across `If`, `Choose`, and conditional
+//! search predicates. `If` also admits the global `Void` predicate and, on ability programs, a
+//! recursive source-owned condition family built from bounded `SourceCounterCount`, exact live
+//! `ObjectMatches(Source, AnyPermanent)`, and nonempty `AllOf`/`AnyOf` composition. The ability-only
+//! source family does not extend to spell Programs or conditional-search predicates. `Choose`
+//! separately checks branch applicability before selection, including whether a free draw can
+//! start under the current draw limit; conditional-search predicates remain narrower than `If`.
 //! Permanent choices cannot use event-bound filters or cross-object constraints.
 //! Widening these rules needs a separately typed context/result contract.
 
@@ -2622,15 +2624,6 @@ impl Compiler<'_> {
                         })?;
                         CompiledProgramCondition::Game(condition.as_ref().clone())
                     } else if self.context == EffectContext::Spell
-                        && is_exact_delirium_program_condition(condition)
-                    {
-                        // Preserve Impossible Inferno's existing Delirium check without
-                        // admitting other DistinctCardTypes profiles to authored Programs.
-                        condition.validate_live().map_err(|reason| {
-                            format!("If instruction '{}': {reason}", instruction.id)
-                        })?;
-                        CompiledProgramCondition::Game(condition.as_ref().clone())
-                    } else if self.context == EffectContext::Spell
                         && matches!(&self.owner, ProgramOwnerId::Face(_))
                         && is_spell_target_damage_history_condition(condition)
                     {
@@ -2926,10 +2919,8 @@ impl Compiler<'_> {
                             }
                             ResolutionBranchRequirement::GameCondition(condition) => {
                                 let compiled = if self.context == EffectContext::Ability
-                                    && (is_ability_source_condition_family(condition)
-                                        || is_exact_ability_choose_countered_creature_count(
-                                            condition,
-                                        )) {
+                                    && is_ability_source_condition_family(condition)
+                                {
                                     condition.validate_live().map_err(|reason| {
                                         format!(
                                             "Choose instruction '{}' branch '{}': {reason}",
@@ -6177,6 +6168,16 @@ fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {
     )
 }
 
+fn is_trigger_object_linked_exile(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::Exile {
+            subject: EffectSubject::TriggerObject,
+            linked_exile_id: Some(_),
+        }
+    )
+}
+
 fn exact_trigger_object_linked_exile_body(body: &AuthoredBlock) -> bool {
     if !body.yields.is_empty() {
         return false;
@@ -6190,13 +6191,7 @@ fn exact_trigger_object_linked_exile_body(body: &AuthoredBlock) -> bool {
     let InstructionKind::Perform(effect) = &instruction.kind else {
         return false;
     };
-    matches!(
-        effect.as_ref(),
-        SpellEffectKind::Exile {
-            subject: EffectSubject::TriggerObject,
-            linked_exile_id: Some(_),
-        }
-    )
+    is_trigger_object_linked_exile(effect.as_ref())
 }
 
 fn top_level_ability_id(owner: &ProgramOwnerId) -> Option<&AbilityId> {
@@ -6220,13 +6215,7 @@ fn is_linked_exile_receipt_body(body: &AuthoredBlock) -> bool {
     let InstructionKind::Perform(producer_effect) = &producer_instruction.kind else {
         return false;
     };
-    if !matches!(
-        producer_effect.as_ref(),
-        SpellEffectKind::Exile {
-            subject: EffectSubject::TriggerObject,
-            linked_exile_id: Some(_),
-        }
-    ) {
+    if !is_trigger_object_linked_exile(producer_effect.as_ref()) {
         return false;
     }
 
@@ -6266,30 +6255,32 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
             players: super::ConditionPlayerSet::Relative(super::RelativePlayerSet::Controller),
             ..
         } => {}
-        GameCondition::GraveyardAggregate {
-            owners: RelativePlayerSet::Controller,
-            aggregate: super::GraveyardAggregate::CardCount,
+        GameCondition::GraveyardAggregate { owners, .. } => {
+            validate_program_relative_player_set(*owners, "graveyard aggregate owners")?;
+        }
+        GameCondition::BattlefieldCreatureCount { filter, .. } => {
+            validate_program_relative_player_set(
+                filter.controllers,
+                "battlefield creature-count filter",
+            )?;
+        }
+        GameCondition::BattlefieldAggregate {
+            exclude_observed_object: true,
             ..
-        } => {}
+        } => return Err("event-observed condition requires a supplying trigger".into()),
         GameCondition::BattlefieldAggregate {
             filter,
-            aggregate: super::BattlefieldAggregate::Count,
+            aggregate: super::BattlefieldAggregate::Count | super::BattlefieldAggregate::TotalPower,
+            exclude_observed_object: false,
             ..
         } => validate_program_battlefield_filter(filter)?,
         GameCondition::BattlefieldAggregate {
             filter,
             aggregate: super::BattlefieldAggregate::MaximumPower,
             min: Some(min),
-            max: None,
             exclude_observed_object: false,
-        } => validate_program_maximum_power_filter(filter, *min)?,
-        GameCondition::BattlefieldAggregate {
-            filter,
-            aggregate: super::BattlefieldAggregate::TotalPower,
-            min: Some(10),
-            max: None,
-            exclude_observed_object: false,
-        } => validate_program_total_power_filter(filter)?,
+            ..
+        } if *min > 0 => validate_program_battlefield_filter(filter)?,
         GameCondition::ObjectMatches {
             object: super::ConditionObjectRef::ChosenTarget { .. },
             filter,
@@ -6304,19 +6295,6 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
         _ => return Err(PROGRAM_CONDITION_UNSUPPORTED.into()),
     }
     condition.validate_live()
-}
-
-fn is_exact_delirium_program_condition(condition: &GameCondition) -> bool {
-    matches!(
-        condition,
-        GameCondition::GraveyardAggregate {
-            owners: RelativePlayerSet::Controller,
-            aggregate: super::GraveyardAggregate::DistinctCardTypes,
-            filter: None,
-            min: Some(4),
-            max: None,
-        }
-    )
 }
 
 /// Ability Programs may inspect only a live source permanent and its own bounded counter total.
@@ -6342,86 +6320,30 @@ fn is_ability_source_condition_family(condition: &GameCondition) -> bool {
     }
 }
 
-/// Trade Route Envoy's mandatory Choose branch is available only when its controller controls at
-/// least one creature with any counter. Delta Bloodflies uses the same live predicate on its
-/// intervening-if; this narrow Choose-only admission relies on Program's draw-selectability gate
-/// and does not widen generic Program `If` conditions.
-fn is_exact_ability_choose_countered_creature_count(condition: &GameCondition) -> bool {
-    matches!(
-        condition,
-        GameCondition::BattlefieldCreatureCount {
-            filter,
-            min: Some(1),
-            max: None,
-        } if filter.controllers == RelativePlayerSet::Controller
-            && filter.subtype.is_none()
-            && filter.required_keywords.is_empty()
-            && filter.tapped.is_none()
-            && filter.requires_any_counter
-            && filter.required_counter.is_none()
-            && !filter.exclude_source
-    )
-}
-
 const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(
-    "If condition uses context outside controller hand, library, CardCount graveyard, or ",
-    "Controller battlefield Count state supported by spell_program; ProgramIf also admits ",
-    "only positive-min Controller Creature MaximumPower without max, extra filter fields, ",
-    "or observed-object exclusion, exact Controller Creature TotalPower min 10, and the ",
-    "exact Controller four-type Delirium profile, plus ObjectMatches over a ",
-    "TargetSchema-validated singleton creature ChosenTarget",
+    "If condition uses context outside the finite controller-hand/library, validated ",
+    "graveyard and battlefield aggregate, and TargetSchema-validated singleton-creature ",
+    "ChosenTarget condition set",
 );
 
-fn validate_program_maximum_power_filter(
-    filter: &super::BattlefieldPermanentFilter,
-    min: u32,
+fn validate_program_relative_player_set(
+    players: RelativePlayerSet,
+    role: &str,
 ) -> Result<(), String> {
-    if min == 0
-        || filter.controllers != RelativePlayerSet::Controller
-        || filter.card_type != Some(CardTypeFilter::Creature)
-        || !filter.required_supertypes.is_empty()
-        || filter.token.is_some()
-        || filter.any_of.is_some()
-        || filter.color.is_some()
-        || filter.name.is_some()
-        || !filter.required_subtypes.is_empty()
-        || filter.exclude_source
-    {
-        return Err(PROGRAM_CONDITION_UNSUPPORTED.into());
+    match players {
+        RelativePlayerSet::Controller | RelativePlayerSet::Opponents | RelativePlayerSet::All => {
+            Ok(())
+        }
+        RelativePlayerSet::TargetedPlayer { .. } => Err(format!(
+            "Program {role} cannot use TargetedPlayer without a resolved target-group binding"
+        )),
     }
-    Ok(())
-}
-
-fn validate_program_total_power_filter(
-    filter: &super::BattlefieldPermanentFilter,
-) -> Result<(), String> {
-    if filter
-        != &(super::BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
-            any_of: None,
-            controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Creature),
-            color: None,
-            name: None,
-            required_subtypes: Vec::new(),
-            exclude_source: false,
-        })
-    {
-        return Err(PROGRAM_CONDITION_UNSUPPORTED.into());
-    }
-    Ok(())
 }
 
 fn validate_program_battlefield_filter(
     filter: &super::BattlefieldPermanentFilter,
 ) -> Result<(), String> {
-    if filter.controllers != RelativePlayerSet::Controller {
-        return Err(
-            "ProgramIf battlefield aggregate filters require Controller at every any_of node"
-                .into(),
-        );
-    }
+    validate_program_relative_player_set(filter.controllers, "battlefield aggregate filter")?;
     if let Some(branches) = &filter.any_of {
         for branch in branches {
             validate_program_battlefield_filter(branch)?;
