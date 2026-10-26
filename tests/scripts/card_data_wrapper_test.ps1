@@ -3,35 +3,6 @@ param([string] $PowerShell = (Get-Process -Id $PID).Path)
 
 $fixture = New-WorkflowFixture
 try {
-    # Exercise the real wrapper with a recording native cargo fixture. A nested working
-    # directory and paths with spaces distinguish checkout-relative defaults from CWD.
-    $result = Invoke-WorkflowFixture $fixture 'gen-cards.ps1' @('--dry-run') (Join-Path $fixture 'nested directory')
-    Assert-Workflow ($result.ExitCode -eq 0) "Default input failed: $($result.Output)"
-    $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 1) 'Default input did not invoke cargo exactly once.'
-    $arguments = @($trace[0].Arguments)
-    $inputIndex = [array]::IndexOf($arguments, '--input')
-    Assert-Workflow ($inputIndex -ge 0) 'Default input was not passed to the generator.'
-    Assert-Workflow ($arguments[$inputIndex + 1] -eq (Join-Path $fixture 'oracle-cards.jsonl.gz')) 'Wrong default input path.'
-    Assert-Workflow ($arguments -contains '--dry-run') 'Generator arguments were lost.'
-    $manifestIndex = [array]::IndexOf($arguments, '--manifest-path')
-    Assert-Workflow ($manifestIndex -ge 0 -and $arguments[$manifestIndex + 1] -eq (Join-Path $fixture 'tricerules\Cargo.toml')) 'Wrong manifest path.'
-
-    Remove-Item -LiteralPath (Join-Path $fixture 'oracle-cards.jsonl.gz')
-    $result = Invoke-WorkflowFixture $fixture 'gen-cards.ps1' @('--dry-run')
-    Assert-Workflow ($result.ExitCode -ne 0) 'Missing default input was accepted.'
-    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 1) 'Missing input still invoked cargo.'
-
-    $explicitInput = Join-Path $fixture 'nested directory\custom.jsonl.gz'
-    $result = Invoke-WorkflowFixture $fixture 'gen-cards.ps1' @('--input', $explicitInput, '--dry-run')
-    Assert-Workflow ($result.ExitCode -eq 0) "Explicit input required the missing default: $($result.Output)"
-    $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 2) 'Explicit input did not invoke cargo exactly once.'
-    $arguments = @($trace[1].Arguments)
-    Assert-Workflow (@($arguments | Where-Object { $_ -eq '--input' }).Count -eq 1) 'Explicit input was duplicated.'
-    $inputIndex = [array]::IndexOf($arguments, '--input')
-    Assert-Workflow ($arguments[$inputIndex + 1] -eq $explicitInput) 'Explicit input path was changed.'
-
     Copy-Item -LiteralPath (Join-Path $sourceRepo 'scripts\fetch-scryfall-bulk.ps1') -Destination (Join-Path $fixture 'scripts')
     $fetchFixture = @{}
     $fetchFixture.requests = [Collections.Generic.List[string]]::new()
@@ -106,4 +77,4 @@ try {
     Assert-Workflow (-not (Test-Path -LiteralPath "$failedOutput.meta.json")) 'Failed download published metadata.'
 }
 finally { Remove-WorkflowFixture $fixture }
-Write-Output 'PASS card data wrapper behavior'
+Write-Output 'PASS Scryfall bulk downloader provenance and byte preservation'

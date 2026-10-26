@@ -6,12 +6,11 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{
-    canonical_face_id, external_oracle_lines, normalize_name, parse_type_line, slugify, str_field,
-};
+use super::{canonical_face_id, normalize_name, parse_type_line, str_field};
+use crate::{external_oracle_lines, slugify};
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum Selection<'a> {
+pub enum Selection<'a> {
     Single(&'a str),
     Batch(&'a str),
 }
@@ -38,28 +37,28 @@ impl Selection<'_> {
             return Err("scaffold selection contains no nonblank exact names".into());
         }
         if self.is_single() && requested.len() != 1 {
-            return Err("--scaffold-card accepts exactly one nonblank name".into());
+            return Err("--name accepts exactly one nonblank name".into());
         }
         Ok(requested)
     }
 }
 
 #[derive(Debug, Default)]
-pub(super) struct ExistingCards {
-    pub(super) ids: HashSet<String>,
-    pub(super) names: HashSet<String>,
+pub struct ExistingCards {
+    pub ids: HashSet<String>,
+    pub names: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(super) struct ScaffoldFile {
-    pub(super) file_name: String,
-    pub(super) contents: String,
+pub struct ScaffoldFile {
+    pub file_name: String,
+    pub contents: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct ScaffoldOutput {
-    pub(super) manifest_json: String,
-    pub(super) files: Vec<ScaffoldFile>,
+pub struct ScaffoldOutput {
+    pub manifest_json: String,
+    pub files: Vec<ScaffoldFile>,
 }
 
 #[derive(Debug, Serialize)]
@@ -470,7 +469,7 @@ fn render(card: &Value, provenance: &str) -> Result<ScaffoldFile, String> {
     })
 }
 
-pub(super) fn build(
+pub fn build(
     cards: Vec<Value>,
     selection: Selection<'_>,
     existing: &ExistingCards,
@@ -604,7 +603,7 @@ fn normalized_absolute(path: &Path) -> Result<PathBuf, String> {
     Ok(result)
 }
 
-pub(super) fn write_directory(
+pub fn write_directory(
     output: &ScaffoldOutput,
     out_dir: &Path,
     embedded_data_dir: &Path,
@@ -664,7 +663,7 @@ fn write_new(path: &Path, contents: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
 
-pub(super) fn stdout_bundle(output: &ScaffoldOutput, single: bool) -> Result<String, String> {
+pub fn stdout_bundle(output: &ScaffoldOutput, single: bool) -> Result<String, String> {
     if single && output.files.len() == 1 {
         return Ok(output.files[0].contents.clone());
     }
@@ -995,7 +994,7 @@ mod tests {
 
     #[test]
     fn build_script_only_discovers_ron_below_data() {
-        let build_script = include_str!("../../../build.rs");
+        let build_script = include_str!("../../build.rs");
         assert!(build_script.contains("manifest_dir.join(\"data\")"));
         assert!(build_script.contains("e == \"ron\""));
         assert!("alpha.ron.scaffold".ends_with(".scaffold"));

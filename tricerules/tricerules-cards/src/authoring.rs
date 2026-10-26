@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub mod batch;
 pub mod presentation_audit;
 pub mod review;
+pub mod scaffold;
 pub mod source;
 
 pub use source::{bucket, hash_file};
@@ -41,6 +42,23 @@ pub fn parse_type_line(type_line: &str) -> (Vec<String>, Vec<String>, Vec<String
     }
     let subtypes = right.split_whitespace().map(str::to_string).collect();
     (supertypes, types, subtypes)
+}
+
+fn canonical_face_id(name: &str) -> Result<CardFaceId, String> {
+    let mut id = String::new();
+    let mut separator_pending = false;
+    for character in name.chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator_pending && !id.is_empty() {
+                id.push('_');
+            }
+            id.push(character.to_ascii_lowercase());
+            separator_pending = false;
+        } else {
+            separator_pending = true;
+        }
+    }
+    CardFaceId::new(id)
 }
 
 pub fn ron_files(root: &Path) -> Result<Vec<PathBuf>, String> {

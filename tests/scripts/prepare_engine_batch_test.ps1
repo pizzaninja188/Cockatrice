@@ -17,7 +17,7 @@ try {
     Assert-Workflow ($trace[10].Arguments -contains '--exact') 'Scenario must use exact selection.'
     Assert-Workflow ($trace[11].Arguments -contains '--lib') 'Library regressions must use the lib target.'
     Assert-Workflow ($trace[12].Arguments -contains 'clippy') 'Focused lint missing.'
-    Assert-Workflow (@($trace | Where-Object { $_.Arguments -contains '--refresh-presentation' }).Count -eq 0) 'Engine preparation must not mutate card metadata.'
+    Assert-Workflow (@($trace | Where-Object { $_.Arguments -contains 'card-author' -and $_.Arguments -contains 'metadata' -and $_.Arguments -contains '--refresh' }).Count -eq 0) 'Engine preparation must not mutate card metadata.'
     $summary = Get-Content -LiteralPath (Join-Path $fixture 'review preparation/summary.json') -Raw | ConvertFrom-Json
     Assert-Workflow (-not $summary.semantic_approval -and $summary.final_gate -eq 'pending' -and $summary.steps.Count -eq 8) 'Preparation incorrectly granted final approval.'
     Set-Content -LiteralPath (Join-Path $fixture 'zero-tests') -Value 'fixture'

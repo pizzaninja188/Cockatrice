@@ -1441,8 +1441,8 @@ keeps stable identity markers separate from readable menu and stack labels.
 From the repository root, use the pinned, SHA-verified Oracle snapshot:
 
 ```powershell
-./scripts/gen-cards.ps1 --audit-presentation --inspect-card Forest
-./scripts/gen-cards.ps1 --audit-presentation --check
+./scripts/card-author.ps1 presentation-audit --card Forest
+./scripts/card-author.ps1 presentation-audit --check
 ```
 
 These commands are read-only. Inspection accepts a card name or ID and prints each face's
@@ -1452,7 +1452,7 @@ an exact match between a complete generated description and an Oracle line produ
 suggestion; the tool never applies mappings. Review the mechanics and current Oracle/rulings before
 accepting a suggestion. Index validation cannot prove that a line describes the correct ability.
 
-Ordinary `gen-cards --check` also runs the audit. It rejects unresolved fallback, missing source
+The audit rejects unresolved fallback, missing source
 faces, empty/out-of-range/duplicate/descending line indices, and malformed, duplicate, or stale
 exceptions. After changing a node, update or remove its exception and rerun the check.
 
@@ -1703,395 +1703,92 @@ second real card or mechanic needs it. The legacy `custom_effect` field remains 
 registry validation can name the unsupported key; any non-empty value rejects that card before
 registry admission.
 
-## 8. Generate supported cards
+## 8. Author supported cards directly
 
-Do not hand-author supported vanilla or french-vanilla creatures. From the repository root:
+The checked-in RON files are the source of truth. Fetch the pinned Oracle bulk input when needed with
+`scripts/fetch-scryfall-bulk.ps1`; its adjacent metadata sidecar binds the exact download and SHA.
+Author a complete definition directly in `data/`, using supported typed primitives and stable card,
+face, ability, mode, and choice IDs. Do not add card-specific Rust handlers or a rules-text parser.
+If a card requires unsupported mechanics or composition, record a scoped blocker rather than
+admitting a partial definition.
 
-```powershell
-./scripts/fetch-scryfall-bulk.ps1
-./scripts/gen-cards.ps1 --dry-run
-./scripts/gen-cards.ps1
-```
+### Inspect and check presentation
 
-Generated RON contains stable face/ability IDs and Oracle line references, never Oracle prose.
-Refresh may replace only files carrying valid generator provenance. Oracle Tags are advisory and
-cannot select mechanics, IDs, or presentation mappings. Review the dry run and generated diff;
-never accept unrelated bulk churn.
-
-### Extend the exact-recipe catalog
-
-When a named repeated template has a demonstrated throughput benefit from generation and existing
-typed primitives express the complete behavior, a justified recipe can be added to
-[`recipes.rs`](../src/bin/gen_cards/recipes.rs). Keep recipes in typed Rust; do not add an external
-or stringly rules DSL.
-
-Each recipe requires:
-
-- a stable `RecipeId` that names the semantic surface and operation;
-- the narrowest applicable `RecipeSurface`;
-- an exact matcher that emits typed `tricerules-cards` data;
-- at least two distinct named positive calibration cards; and
-- reviewed negative near-misses covering the closest optional, bounded, conditional, or
-  additional-clause forms.
-
-Every functional Oracle clause must match exactly one applicable recipe. Zero matches remain
-unsupported, while multiple matches are an ambiguity error listing the matching recipe IDs. Do
-not loosen normalization or accept a near-match merely to increase coverage.
-
-After focused catalog tests pass, preview and deliberately include newly qualifying cards:
+From the repository root, use the offline authoring CLI:
 
 ```powershell
-./scripts/gen-cards.ps1 --dry-run --include-new
-./scripts/gen-cards.ps1 --include-new
+./scripts/card-author.ps1 presentation-audit --input oracle-cards.jsonl.gz --card Forest
+./scripts/card-author.ps1 presentation-audit --input oracle-cards.jsonl.gz --check
 ```
 
-Review every new generated RON file and the presentation-fingerprint/checklist changes. An ordinary
-generation run or `update-card-data.ps1 -Mode Refresh` updates provenance-owned files that are
-already tracked; neither opts new candidates into the registry.
+Inspection prints normalized numbered Oracle lines, fingerprints, node mappings, intentional
+exceptions, and unresolved fallback nodes. Suggestions are advisory; the command never changes
+mappings. Review the exact Oracle record and current rulings before accepting a mapping.
 
-Use `gen-cards --check` against the pinned SHA-verified snapshot to detect drift without writing.
-Both PowerShell generator wrappers preserve the child's exit code. For the combined read-only
-generator and checklist check, use the workflow entry point from the repository root:
+`scripts/update-card-data.ps1 -Mode Check` verifies the full direct-RON review-map evidence,
+source metadata and SHA, presentation audit and fingerprints, and the card checklist without
+changing tracked files. Presentation exceptions need a specific reason. Do not use `Fallback`
+to avoid checking line numbers; it is an explicit presentation choice, not a TODO marker. When
+a node changes, update or remove its exception and rerun the check.
 
-```powershell
-./scripts/update-card-data.ps1 -Mode Check
-```
-
-To rank unsupported Oracle clauses without changing generated data, write an explicit candidate
-report destination:
-
-```powershell
-./scripts/gen-cards.ps1 --candidate-report build/candidates.json
-./scripts/gen-cards.ps1 --candidate-report build/cube-candidates.json --target-names cube-names.txt
-```
-
-The optional target file contains one exact whole-card or face name per nonblank line. Unknown or
-ambiguous names fail the command without writing the report. The stable JSON clusters normalized
-clauses by descending printing-independent card count, retains face and source-routing context,
-and keeps any optional Oracle Tags summary advisory and separate from the clause signatures.
-
-### Bounded typed recipe families
-
-`FixedSourceCreatureDamage` in `recipes.rs` is the first private parameterized family. It owns
-only the complete `<exact face rules name> deals N damage to target creature.` clause. It uses
-the existing `DamageTarget`, creature filter and modal targeting builder; the resolving spell
-remains the damage source. Exact formatted comparison rejects alternative numeric spellings,
-overflow, variables, other source names, qualifiers, optionality and appended instructions.
-Other damage grammars retain their own recipes.
-
-The reviewed catalog instances are now **spell 3**, **spell 4**, **spell 5**, **modal 3**, and
-**modal 4**. The #449 structural pilot admitted only spell 4, modal 3, and modal 4 and
-deliberately left the other spell-surface amounts unsupported; #452 added the `Five` amount
-variant plus the two reviewed spell instances (Three and Five) after complete-card preflight
-of the pinned corpus. Each instance keeps its own recipe ID, report label and calibration
-metadata. All instances participate in the ordinary exact-one matcher: identical emissions from
-overlapping owners are still an ambiguity error, and one amount never implies another surface.
-The previous three bespoke recognizers were removed together. Modal assembly headers, bounds,
-ordered recipe sets, stable mode IDs and presentation mappings are unchanged.
-
-To add a future family, implement a private typed parameter domain and recognizer/emitter, then
-register explicitly reviewed instances through ordinary `Recipe` entries and their existing
-function-pointer matcher. No branch in the top-level card parser is needed. Keep per-instance
-source calibrations and stable metadata, but share the grammar, emitter and parameterized tests.
-Review observed corpus values before extending a parameter enum or admitting another surface;
-do not accept every integer just because the runtime primitive can store it. Run the complete
-definition, semantic evidence and admission workflow separately from clause recognition. A
-recognized modal bullet never authorizes a new aggregate or card combination.
-
-The #449 pilot scanned the pinned SHA-verified corpus
-(`9611b5d93b20478a0ee46bae8b20a9eb39ee980f0ef4f5f6f6aaa8f7ab010ab2`). Exact complete lines/bullets
-observed amounts 1, 2, 3, 4, 5, 6, 7 and 13 on respectively 3, 6, 10, 21, 18, 4, 2 and 1
-printing-independent identities. Those observations include unsupported cards and are not
-admission evidence. This structural pilot deliberately retains existing supported combinations:
-**zero newly recognized clauses, zero newly eligible complete cards, zero admitted identities**.
-Full dependency inventories compared all 38,626 identities with no classification, observation,
-recipe-label or eligibility changes. Canonical checks against the pre-extraction output proved
-byte equality for all 2,425 generated definitions and the fingerprint catalog both after the
-builder extraction and after enabling the family. No metadata migration is needed.
-
-Issue #452 used the same extraction as a throughput pilot and added two reviewed spell instances:
-
-- **spell 3** completes Ragefire and Repulsor Rays.
-- **spell 5** completes Scorching Shot (pinned-Standard), Command the Storm, Concentrated Fire,
-  Direct Hit, and Engulfing Eruption.
-
-The complete-card preflight excluded the observed amount-2 (Breath of Fire) and amount-7 (Fiery
-Finish) spell singletons as unreviewed, and left the four already-eligible spell-4 identities
-(Bathe in Dragonfire, Electrify, Explosive Shot, Flame Slash) outside the retained cohort to keep
-the pilot bounded. No modal damage instance was added: the modal identities that print a
-`deals N damage to target creature` bullet with an unadmitted amount each also print at least one
-unsupported bullet, so a new parameter would not have completed a card. Measured marginal work
-for the two instances was one added enum variant in total plus one catalog entry each — two
-positive calibrations and four reviewed negative near-misses apiece — plus the shared
-characterization/negative matrix; the seven-card cohort then cost one pinned
-`--dry-run --include-new` preview, review of seven generated definitions, one registry matrix,
-one shared semantic scenario matrix, and seven conformance baseline rows (seven `cast`
-`exercised`, no new abilities). The three-damage and five-damage instances remain exact-one
-matched. This is a measured cohort of **seven complete Oracle identities**, not a projection.
-
-Measured duplication: three authored grammar comparisons and three typed damage constructions
-become one of each, with three small catalog adapters. The two repeated modal wrappers become
-one. Existing calibration rows stay intact; one shared characterization matrix covers all three
-instances, and one shared negative matrix covers both surfaces. Test code grows to cover the
-failure boundary, full RON equality and Iroh's targeted mode; this is not a claim of fewer total
-lines or new card coverage. Session inventories and comparison evidence stay under `build/`,
-not in a persistent campaign tracker.
-
-Source review on 2026-09-19 fetched exact-name Scryfall records and `rulings_uri` for Bombard,
-Iroh's Demonstration, Abrade and Bathe in Dragonfire; all returned no rulings. #452 additionally
-fetched the same data for Ragefire, Repulsor Rays, Scorching Shot, Command the Storm, Concentrated
-Fire, Direct Hit and Engulfing Eruption; all returned no rulings. The
-[official rules page](https://magic.wizards.com/en/rules) linked the 2026-09-25 rules text.
-CR 120.2b (damage source), 115.1a (spell targets), 608.2b (target revalidation), and 700.2a/c
-(modes and their targets) govern the preserved semantics.
-
-Interaction audit: compile-time source/face matching emits existing typed definitions; runtime
-state authority, physical source identity/generations, target legality, resolution order and
-damage processing are unchanged. Existing engine scenarios remain, with explicit targeted-mode
-acceptance/rejection and bounded completion added for Iroh. The #452 cohort adds exact-damage,
-illegal-target-class and CR 608.2b fizzle scenarios using the same command boundary. No new
-player assumptions, fields, visibility flows or public offers are introduced. Protobuf, relay,
-Qt, freeform and manual GUI acceptance are N/A because their contracts and generated inputs are
-unchanged. Generator tests, feature-enabled Clippy, conformance and the full Rust/card-data gate
-remain required.
-
-### Independent modal composition pilot
-
-Issue #450 keeps `RecipeSurface`, `RecipeEmission`, and the spell/trigger wrappers as distinct
-authoring contexts, but shares private typed construction for controller draw, fixed life gain,
-and controller token creation. `IndependentModalComposition` validates the already-emitted
-`ModalDef`/`ModeDef` values rather than introducing another runtime IR. Its contract requires:
-
-- one contiguous half-open Oracle-line span per bullet, in printed order, with stable sequential
-  mode IDs and an exact presentation line;
-- valid selection bounds and at least two distinct exact mode recipes;
-- a successfully compiled existing `TargetSchema`, with no target groups or linked cast cost for
-  this pilot;
-- only controller `Draw(Fixed(1..=4))`, `GainLife(Fixed(2..=6))`, or controller
-  `CreateTokens(Fixed(n))` effects, in their emitted order; and
-- every referenced token ID to exist in the embedded token registry.
-
-The reviewed initial clause signatures are the existing one-card draw, Food/Human token modes and
-exact registered-token mode recipes, plus standalone controller draws of two through four cards
-and standalone controller life gains of two through six. This is not an amount/surface
-cross-product: each clause still needs one exact `ModalMode` recipe, and complete-card admission
-still validates the whole header, every bullet and every nested payload. Conditional or shared
-targets, result references, variable/budgeted or repeatable selection, additional costs (including
-Teamwork and Spree), targeted-player effects, unsupported riders, duplicate modes and unknown
-tokens remain rejected.
-
-Ordinary `Choose one`, two-bullet `Choose one or both`, and reviewed three/four-bullet `Choose
-two` assemblies, plus the exact creature-ETB wrapper, may use the pilot. Teamwork and every other
-wrapper stay on their specialized path. Pilot admission and `reviewed_modal_mode_pair` are an
-exclusive-or: overlap fails closed. The complete pinned-corpus comparison retained identical
-eligibility, failure and production recipe-label classifications for all **38,626** identities
-and all **4,887** pinned-Standard identities. It added diagnostic observations to **43** identities,
-including six pinned-Standard identities (Demonic Pact, Splatter Technique, Apothecary Stomper,
-Charming Prince, Witherbloom Charm and Wardens of the Cycle), but admitted **zero** new identities.
-Exhibition Magician and A-Exhibition Magician are explicit missing-token candidates: their exact
-Citizen bullet is observed, but `citizen_gw_1_1` is not registered, so both remain ineligible.
-
-No legacy mode-set allowance was replaced because no currently allowed aggregate consists wholly
-of the pilot effect set. Every existing `reviewed_modal_mode_pair` entry remains the compatibility
-boundary for its prior composition; the new validator only owns disjoint, independently supported
-combinations. Synthetic spell and creature-ETB tests prove a new combination needs no bespoke
-whole-card pair matcher, while registered Divination, Elvish Visionary and Pawpatch Formation
-tests preserve their exact effects, recipients, trigger/modal wrapper, stable IDs and Oracle
-presentation mappings.
-
-Issue #452's bounded corpus preflight found **zero fully supported independent-modal candidates**
-in the same pinned snapshot. Only four modal identities print bullets that all fall inside the
-pilot's draw/life/token grammar, and all four are unsupported token-copy effects (Ember Island
-Production, Mirage Mockery, One Dozen Eyes, Saheeli's Artistry). Every other near-miss identity
-pairs a supported draw/life/token bullet with at least one unsupported bullet or wrapper (for
-example Demonic Pact, Splatter Technique, Apothecary Stomper, Charming Prince, Witherbloom Charm,
-and Wardens of the Cycle). The pilot therefore reported the route as corpus-exhausted and did not
-widen the effect grammar, add a modal mode, or admit an identity. Future modal admissions need a
-new reviewed mode recipe or new composition support first; the empty result says nothing about
-the validator's correctness, only that the pinned corpus holds no complete card it can own.
-
-Source review on 2026-09-19 fetched exact Scryfall records and each `rulings_uri` for Divination,
-Elvish Visionary, Pawpatch Formation, Exhibition Magician and A-Exhibition Magician. Only Pawpatch
-returned rulings, whose Food notes were reviewed. The official 2026-06-19 Comprehensive Rules
-govern through CR 700.2a-b/d (modal selection and nonrepeatability), 608.2c (printed resolution
-order), 121.1-2 (draws), 603.6a (entry triggers), and 111.10a-b (Treasure and Food definitions).
-
-Interaction audit: tricerules remains the sole runtime authority; the generator only validates
-and emits existing typed effects. Card/face/ability/mode identities and source/controller roles are
-preserved. No zone-change identity, timing, target, replacement, visibility, protocol, relay, Qt,
-or freeform contract changes. C++ and manual GUI acceptance are N/A. Generator tests,
-feature-enabled Clippy, semantic fixture/registered-card regressions and the full Rust/card-data
-gate remain required.
+Client resolution remains all-or-fallback. The `cockatrice.ruled.presentation` logging category
+reports missing cards or faces, absent or invalid fingerprints, hash mismatches, and invalid line
+selections. Display text never determines legality.
 
 ### Scaffold source-backed authoring
 
-For complete-card dependencies and projected individual/pair unlocks, use the separate
-[versioned dependency report](DEPENDENCY-REPORT.md). It inventories the full pinned corpus and
-its Standard subset, distinguishes generator eligibility from registered support, and requires
-reviewed evidence before counting a whole identity as unlocked. The clause report above remains
-unchanged.
-
-When useful, scaffold the clerical source fields for a selected card from
-the same pinned, SHA-verified Oracle bulk input:
+When a scaffold helps with clerical fields, select one exact whole-card name or a file of exact
+names from the same SHA-verified Oracle input:
 
 ```powershell
-./scripts/gen-cards.ps1 --scaffold-card "Black Lotus"
-./scripts/gen-cards.ps1 --scaffold-batch selected-cards.txt --scaffold-out-dir build/scaffolds
+./scripts/card-author.ps1 scaffold --name "Black Lotus" --input oracle-cards.jsonl.gz
+./scripts/card-author.ps1 scaffold --names selected-cards.txt --input oracle-cards.jsonl.gz --out build/scaffolds
 ```
 
-Single-card mode writes the incomplete scaffold to stdout by default. Batch stdout is a stable JSON
-bundle containing the manifest and scaffold contents. `--scaffold-out-dir` instead writes a
-`manifest.json` plus deterministic `*.ron.scaffold` files. The command refuses output anywhere
-under `tricerules-cards/data/` and refuses every overwrite; the extra `.scaffold` suffix and the
-unresolved sentinel fields prevent accidental registry loading. Reprints collapse by Oracle ID.
-Unknown, ambiguous, colliding, unsupported-layout, and already-implemented selections are recorded
-separately in the batch manifest. A single refused selection fails the command. Use
-`--inspect-existing` only to report an already-implemented match; it never emits replacement RON or
-renumbers the authored stable IDs.
+Without `--out`, the command prints a JSON bundle. With `--out`, it writes a manifest and
+deterministic `*.ron.scaffold` files. It refuses output under `data/` and refuses to overwrite
+existing files. Reprints collapse by Oracle ID; unknown, ambiguous, colliding, unsupported-layout,
+and already-implemented selections are reported separately. Use `--inspect-existing` to report an
+implemented match without emitting a replacement.
 
-Scaffolds contain source identity, faces, printed characteristics, normalized numbered Oracle lines,
-candidate ability/choice IDs, presentation review prompts, and the per-card research checklist. The
-IDs are deliberately marked for author confirmation: Oracle line boundaries are not trusted
-mechanical boundaries. The tool never selects effects, costs, targets, conditions, or legality.
+Scaffolds carry source identity, faces, printed characteristics, normalized numbered Oracle
+lines, candidate ability and choice IDs, presentation prompts, and a research checklist. They
+leave all mechanics unresolved. Confirm every field and ID, remove both unresolved sentinels only
+after the complete definition and presentation have been reviewed, then save the authored file as
+`.ron` under `data/`. A scaffold is never evidence that the card is implemented.
 
-To turn a reviewed scaffold into authored RON:
+### Review direct-RON drafts
 
-1. Fetch and review the exact card, its `rulings_uri`, and the relevant current CR sections.
-2. Choose the lowest complete implementation tier and hand-author every mechanical field.
-3. Confirm, merge, split, rename, or remove candidate IDs, then keep accepted IDs stable.
-4. Resolve every presentation mapping and prerequisite or record intentional partial support.
-5. Remove both unresolved sentinels, rename the file to `.ron` under `data/`, and complete all
-   checks in sections 9 and 10. A scaffold is never evidence that the card is implemented.
-
-### Reviewed direct-RON path
-
-Choose the authoring route in this order:
-
-1. Reuse a shipped exact recipe when it already covers the complete card.
-2. Otherwise use reviewed handwritten RON for supported cards, including repeated templates.
-   Two matching cards alone do not justify a new parser or recipe family.
-3. Develop a new typed recipe only with a concrete expected throughput benefit for a named cohort.
-   Actual generator changes retain positive calibrations and negative near-misses; handwritten
-   additions do not need matcher tests. Preserve existing generated cards and their checks.
-4. File a scoped runtime blocker when any required cost, timing, choice, target, effect,
-   presentation, or composition semantics are unsupported. Do not partially admit the card.
-
-For the direct-RON route, keep incomplete drafts outside `data/`. A complete copied definition may
-be edited directly in `data/` during the normal red/green workflow; no scaffold/promotion ceremony
-is required. Create a version-1 JSON review map. Select one pinned source identity with either
-`oracle_id` or `exact_name`. Cover every
-normalized Oracle line exactly once with either `typed_paths` (JSON pointers into the validated
-runtime-shaped definition) or a nonblank `unresolved_reason`. Primitive references are optional
-navigation hints: omit routine symbol/path inventories already evident in the typed definition.
-List every referenced token ID and semantic fixtures. The tool does not infer these mappings.
+Keep incomplete drafts outside `data/`. A version-1 JSON review map selects one pinned source
+identity with `oracle_id` or `exact_name`, covers every normalized Oracle line exactly once with
+typed paths or a nonblank unresolved reason, lists referenced token IDs and semantic fixtures, and
+records full-definition review. The tool does not infer mappings. Primitive references are
+optional navigation hints; omit routine inventories already evident in the typed definition.
 
 ```powershell
-./scripts/gen-cards.ps1 `
-  --review-draft build/direct-ron/my_card.ron `
-  --review-map build/direct-ron/my_card.review.json `
-  --review-out build/direct-ron/my_card.packet.json
+./scripts/card-author.ps1 review --draft build/direct-ron/my_card.ron --map build/direct-ron/my_card.review.json --out build/direct-ron/my_card.packet.json
 ```
 
-The command is an offline, separate mode. It verifies the pinned bulk SHA, resolves names to one
-Oracle ID, validates source layout and face identity, rejects scaffold sentinels, loads the draft
-through the production registry validators and shipped token namespace, rejects registry ID/name
-collisions, verifies complete nonoverlapping span coverage and typed paths, and refuses drafts or
-outputs under embedded `data/` plus all output overwrites. It records source/rulings links, per-face
-Oracle fingerprints, presentation values, tokens, primitive references, semantic-fixture plans,
-and structurally ranked nearby registered definitions. Nearby definitions are inspect-only; names,
-prose similarity, and rank never establish support.
+Review verifies the pinned bulk SHA, exact Oracle identity and face layout, production registry
+validation, token namespace, registry collisions, complete source-span coverage, typed paths, and
+safe no-overwrite output. A packet is structural review evidence only; it never proves mechanical
+equivalence or grants semantic approval. The author and an independent reviewer must check Oracle
+text and current rulings, then run the planned semantic evidence.
 
-Packets always set `mechanical_equivalence_proven` to `false`. A structurally valid, fully mapped
-but semantically wrong draft can therefore produce review evidence but can never be described as
-mechanically proven. `promotion_ready_for_human_review` only means there are no explicitly
-unresolved spans and the map records complete-definition review confirmation. The author and an
-independent reviewer still establish Oracle/rulings equivalence and execute the planned semantic
-evidence.
+For already registered definitions, `card-author review --existing` permits inspect-only review;
+it never replaces the checked-in RON or stable IDs. The checked-in Divination and Elvish Visionary
+maps are examples. Promotion remains an explicit authored-card change: save reviewed RON under
+`data/`, preserve stable IDs, refresh and inspect source fingerprints and `CARDS.md`, add
+registry and applicable semantic/presentation evidence, then run the full Rust and card-data gate.
+Refresh changes metadata and the checklist only; it never rewrites card RON.
 
-The checked-in Divination and Elvish Visionary maps demonstrate inspect-only review of existing
-definitions without permitting replacement:
+### Preflight and blocker lane
 
-```powershell
-./scripts/gen-cards.ps1 --review-existing `
-  --review-draft tricerules/tricerules-cards/data/divination.ron `
-  --review-map tricerules/tricerules-cards/authoring/review-maps/divination.json `
-  --review-out build/direct-ron/divination.packet.json
-
-./scripts/gen-cards.ps1 --review-existing `
-  --review-draft tricerules/tricerules-cards/data/elvish_visionary.ron `
-  --review-map tricerules/tricerules-cards/authoring/review-maps/elvish_visionary.json `
-  --review-out build/direct-ron/elvish_visionary.packet.json
-```
-
-Issue #452 promoted the first identities through this path: `stand_up_for_yourself` (Stand Up for
-Yourself, destroy target creature with power 3 or greater) and `oracles_restoration` (Oracle's
-Restoration, pump/draw/life in printed order). Their maps are checked in beside the inspect-only
-examples and can be rerun with `--review-existing` after any change:
-
-```powershell
-./scripts/gen-cards.ps1 --review-existing `
-  --review-draft tricerules/tricerules-cards/data/stand_up_for_yourself.ron `
-  --review-map tricerules/tricerules-cards/authoring/review-maps/stand_up_for_yourself.json `
-  --review-out build/direct-ron/stand_up_for_yourself.packet.json
-
-./scripts/gen-cards.ps1 --review-existing `
-  --review-draft tricerules/tricerules-cards/data/oracles_restoration.ron `
-  --review-map tricerules/tricerules-cards/authoring/review-maps/oracles_restoration.json `
-  --review-out build/direct-ron/oracles_restoration.packet.json
-```
-
-Use `oracle_id` in the map whenever a whole-card name is ambiguous across oracle IDs: the `sos`
-Oracle's Restoration and its `asos` art-series namesake normalize to the same name and an
-`exact_name` selection is refused. Promotion also added explicit narrow target prompts
-(`Choose target creature with power 3 or greater`, `Choose target creature you control`), a
-registry/presentation matrix, semantic scenarios for accepted and illegal paths plus CR 608.2b
-fizzling, and conformance baseline rows (`oracles_restoration` exercised; `stand_up_for_yourself`
-recorded as `unsupported: target group 0 needs a richer fixture` because the shared conformance
-fixture has no power-three-or-greater creature, while the dedicated scenario exercises it).
-Runner-up Nimble Thopterist was excluded because `thopter_c_1_1_flying` is not in the embedded
-token registry.
-
-After a draft and packet pass review, promotion remains an explicit authored-card change: copy the
-reviewed draft to its canonical handwritten `.ron` path under `data/`; recheck stable card, face,
-ability, mode, and choice IDs; refresh and review Oracle fingerprints and `CARDS.md`; add the
-complete-definition registry assertions, applicable happy/illegal semantic scenarios, presentation
-and conformance coverage, and checklist evidence; then run the full Rust/card-data gate. Never
-promote an unresolved packet, overwrite an existing identity, add generator provenance to direct
-RON, or let Refresh modify a handwritten card.
-
-### Authoring throughput and the dependency-driven blocker lane
-
-The #452 bounded pilot (corpus `9611b5d9...`, starting revision `82960669a`, one writer with an
-independent read-only review) established the following as the default campaign workflow:
-
-1. **Preflight the complete card before authoring.** Use the versioned dependency report,
-   `--candidate-report`, and targeted pinned-corpus scans to enumerate every face, clause, cost,
-   target, choice, token, and presentation prerequisite. Classify each remaining requirement
-   against the actual emitter/validator/consumer/tests. A recognized clause, recipe name, or
-   effect enum is never evidence of complete support.
-2. **Prefer direct authoring for supported cards.** Reuse complete shipped recipes; otherwise use
-   handwritten RON, even for shared templates. New recipes need a throughput justification. Any needed
-   runtime, choice, target, or presentation contract becomes a scoped blocker. Do not partially
-   admit a card to keep a batch moving, and do not widen a grammar because a route's candidate
-   set came back empty.
-3. **Reuse evidence; do not re-run it for measurement.** #447-#451 evidence (dependency
-   inventory, semantic fixtures, family extraction, modal validator, review tool) was consumed
-   as-is. Admission from a pinned cohort input uses `--dry-run --include-new` followed by
-   `--include-new` and then canonical Refresh, which restores canonical provenance and the full
-   fingerprint catalog. Measure selection/preflight, implementation, review, verification, and
-   rework separately; never infer phase timing from commit spacing.
-4. **Review a frozen patch while verification is serialized.** Snapshot the intended diff, hash
-   it, and have an independent reviewer inspect that exact patch and its evidence read-only.
-   Run the focused and full gates on the same frozen content, and return findings as rework
-   before treating the evidence as final. Escalate review depth only for demonstrated semantic
-   risk; keep engine/primitive changes on the deeper-review path.
-5. **Select shared blockers by verified complete-card unlocks.** A blocker is an assignment
-   candidate only when its deliverable is the last remaining requirement for specific named
-   identities and its evidence is reviewed. Verify the runtime/protocol/UI impact of the
-   deliverable before assigning it, give the blocking mechanism one owner, and return the
-   unlocked identities to a single routine owner for complete-card preflight and admission.
-   Do not implement unrelated blockers to grow a batch, and never count a blocker-only mapping
-   as implemented coverage.
+Before authoring, verify the exact Oracle identity, all faces and clauses, costs, targets, choices,
+tokens, presentation, and required tests. A recognized phrase or parsed effect is not proof that a
+complete card is supported. Prefer existing typed primitives and complete-card semantic evidence.
+When required behavior is missing, record a scoped engine blocker and keep the card out of the
+registry until its full behavior is supported.
 
 ## 9. Track partial implementations
 

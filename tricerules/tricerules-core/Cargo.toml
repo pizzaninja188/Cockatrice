@@ -15,6 +15,7 @@ serde_json = "1"
 
 [dev-dependencies]
 tricerules-cards = { path = "../tricerules-cards" }
+ron.workspace = true
 proptest.workspace = true
 
 [features]

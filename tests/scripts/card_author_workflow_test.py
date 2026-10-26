@@ -29,7 +29,8 @@ class AuthoringWorkflow(unittest.TestCase):
         self.target = {
             "name": "Authoring Trial", "oracle_id": "trial",
             "layout": "normal", "mana_cost": "{3}{U}",
-            "type_line": "Sorcery", "oracle_text": "Draw three cards.",
+            "type_line": "Sorcery", "colors": ["U"], "oracle_text": "Draw three cards.",
+            "scryfall_uri": "https://example.invalid/card/trial",
             "rulings_uri": "https://example.invalid/rulings",
         }
         source = dict(self.target, name="Divination", oracle_id="divination",
@@ -88,6 +89,49 @@ class AuthoringWorkflow(unittest.TestCase):
         }))
         error = self.call("search", "--name", "Authoring Trial", "--bulk", self.bulk, ok=False)
         self.assertIn("SHA-256 mismatch", error)
+        ron = self.root / "card.ron"
+        ron.write_bytes(b"(id: \"preserve_me\")\n")
+        fingerprints = self.root / "fingerprints.tsv"
+        fingerprints.write_bytes(b"existing fingerprints\n")
+        command = [str(EXE), "metadata", "--input", str(self.bulk), "--metadata", str(self.meta),
+                   "--presentation-registry", str(fingerprints), "--refresh"]
+        result = subprocess.run(command, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SHA-256 mismatch", result.stderr)
+        self.assertEqual(ron.read_bytes(), b"(id: \"preserve_me\")\n")
+        self.assertEqual(fingerprints.read_bytes(), b"existing fingerprints\n")
+
+    def test_scaffold_cli_uses_verified_sources_and_safe_output(self):
+        out = self.root / "scaffold"
+        command = [str(EXE), "scaffold", "--name", "Authoring Trial",
+                   "--input", str(self.bulk), "--metadata", str(self.meta), "--out", str(out)]
+        result = subprocess.run(command, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["scaffolded"][0]["name"], "Authoring Trial")
+        draft = (out / "authoring_trial.ron.scaffold").read_text(encoding="utf-8")
+        self.assertIn('__mechanics_unresolved: true', draft)
+        self.assertIn('__presentation_review_unresolved: true', draft)
+        result = subprocess.run(command, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to overwrite", result.stderr)
+        self.assertEqual((out / "authoring_trial.ron.scaffold").read_text(encoding="utf-8"), draft)
+
+        inspect = subprocess.run(
+            [str(EXE), "scaffold", "--name", "Divination", "--input", str(self.bulk),
+             "--metadata", str(self.meta), "--inspect-existing"],
+            cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(inspect.returncode, 0, inspect.stderr)
+        self.assertEqual(json.loads(inspect.stdout)["manifest"]["already_implemented"][0]["name"], "Divination")
+
+        names = self.root / "names.txt"
+        names.write_text("Authoring Trial\nDivination\n", encoding="utf-8")
+        batch = self.root / "batch"
+        self.call("scaffold", "--names", names, "--input", self.bulk, "--metadata", self.meta,
+                  "--inspect-existing", "--out", batch)
+        manifest = json.loads((batch / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([row["name"] for row in manifest["scaffolded"]], ["Authoring Trial"])
+        self.assertEqual([row["name"] for row in manifest["already_implemented"]], ["Divination"])
 
     def test_bulk_sidecar_requires_all_metadata_and_string_values(self):
         valid = json.loads(self.meta.read_text())

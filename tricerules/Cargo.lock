@@ -819,6 +819,7 @@ dependencies = [
  "proptest",
  "prost",
  "rand 0.8.6",
+ "ron",
  "serde",
  "serde_json",
  "thiserror",

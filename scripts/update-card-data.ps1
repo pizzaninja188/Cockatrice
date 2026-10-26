@@ -1,10 +1,9 @@
 <#
 .SYNOPSIS
-    Check canonical card data without editing it, or explicitly refresh existing generated data.
+    Check canonical direct-RON card data without editing it, or refresh source metadata.
 .DESCRIPTION
-    Check writes only logs and a temporary checklist under build. Refresh regenerates existing
-    provenance-owned RON and fingerprints, validates the new checklist before replacing CARDS.md,
-    without repeating the final Check. MetadataOnly refreshes source fingerprints without recipe generation.
+    Check writes only logs and a temporary checklist under build. Refresh updates Oracle source
+    fingerprints, validates the new checklist before replacing CARDS.md, and never writes card RON.
     Refresh is preparation, not verification. Neither mode downloads sources or includes new cards.
     Relative source paths are resolved from the repository root, independent of the caller's cwd.
 #>
@@ -12,7 +11,6 @@
 param(
     [ValidateSet('Check', 'Refresh')]
     [string] $Mode = 'Check',
-    [switch] $MetadataOnly,
     [string] $OracleBulk,
     [string] $CardsXml
 )
@@ -46,8 +44,6 @@ function Test-CanonicalCardData {
         'metadata', '--input', $OracleBulk, '--check'
     )
     if ($code -ne 0) { return $code }
-    $code = Invoke-CardTool 'Generated card check' 'gen-cards.ps1' @('--input', $OracleBulk, '--check')
-    if ($code -ne 0) { return $code }
     $code = Invoke-CardTool 'Checklist name validation' 'gen-card-checklist.ps1' @(
         '--cards-xml', $CardsXml, '--out', $candidate, '--check'
     )
@@ -69,7 +65,6 @@ function Test-CanonicalCardData {
 }
 
 try {
-    if ($MetadataOnly -and $Mode -ne 'Refresh') { throw '-MetadataOnly requires -Mode Refresh; Check always validates the full corpus.' }
     if (-not $OracleBulk) { $OracleBulk = 'oracle-cards.jsonl.gz' }
     if (-not $CardsXml) {
         if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; pass -CardsXml.' }
@@ -85,13 +80,9 @@ try {
     $checklist = Join-Path $repo 'tricerules\CARDS.md'
 
     if ($Mode -eq 'Refresh') {
-        if ($MetadataOnly) {
-            $code = Invoke-CardTool 'Refresh card metadata' 'card-author.ps1' @(
-                'metadata', '--input', $OracleBulk, '--refresh'
-            )
-        } else {
-            $code = Invoke-CardTool 'Refresh generated card data' 'gen-cards.ps1' @('--input', $OracleBulk)
-        }
+        $code = Invoke-CardTool 'Refresh card metadata' 'card-author.ps1' @(
+            'metadata', '--input', $OracleBulk, '--refresh'
+        )
         if ($code -ne 0) { exit $code }
         $code = Invoke-CardTool 'Validate refreshed checklist' 'gen-card-checklist.ps1' @(
             '--cards-xml', $CardsXml, '--out', $candidate, '--check'

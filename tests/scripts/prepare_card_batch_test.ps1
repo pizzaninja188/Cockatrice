@@ -12,7 +12,7 @@ try {
     Assert-Workflow ($trace[11].Arguments -contains 'registry_execution_matches_reviewed_baseline') 'Conformance must precede refresh.'
     Assert-Workflow ($trace[0].Cwd -eq (Join-Path $fixture 'tricerules')) 'Wrong Cargo working directory.'
     Assert-Workflow ($trace[12].Arguments -contains 'tricerules-cards/authoring') 'Authoring-only code must be linted before review.'
-    Assert-Workflow ($trace[13].Arguments -contains '--refresh-presentation') 'Preparation must use metadata-only refresh.'
+    Assert-Workflow ($trace[13].Arguments -contains 'card-author' -and $trace[13].Arguments -contains 'metadata' -and $trace[13].Arguments -contains '--refresh') 'Preparation must refresh source metadata through card-author.'
     foreach ($pattern in @('rustfmt', 'card_ids_follow_slug_convention', 'registry_execution_matches_reviewed_baseline', 'cargo clippy')) {
         $before = @(Read-WorkflowTrace $fixture).Count
         [IO.File]::WriteAllText((Join-Path $fixture 'fail-pattern'), $pattern)
@@ -20,7 +20,7 @@ try {
         Assert-Workflow ($result.ExitCode -eq 7) "Preparation lost failing command exit status: $($result.ExitCode) $($result.Output)"
         Assert-Workflow ($result.Output -match 'fixture complete failure log') 'Preparation hid failure output.'
         $new = @(Read-WorkflowTrace $fixture | Select-Object -Skip $before)
-        Assert-Workflow (@($new | Where-Object { $_.Arguments -contains '--refresh-presentation' }).Count -eq 0) 'Failed precheck reached refresh.'
+        Assert-Workflow (@($new | Where-Object { $_.Arguments -contains '--refresh' }).Count -eq 0) 'Failed precheck reached refresh.'
     }
     Remove-Item -LiteralPath (Join-Path $fixture 'fail-pattern')
     Set-Content -LiteralPath (Join-Path $fixture 'bad-evidence') -Value 'fixture'

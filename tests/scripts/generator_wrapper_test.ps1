@@ -1,7 +1,7 @@
 param([string] $PowerShell = (Get-Process -Id $PID).Path)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$fixture = Join-Path ([IO.Path]::GetTempPath()) ('cockatrice-generator-wrapper-' + [guid]::NewGuid())
+$fixture = Join-Path ([IO.Path]::GetTempPath()) ('cockatrice-checklist-wrapper-' + [guid]::NewGuid())
 $originalPath = $env:PATH
 $originalMixedPath = $env:Path
 New-Item -ItemType Directory -Path $fixture | Out-Null
@@ -9,13 +9,12 @@ try {
     $env:PATH = "$fixture;$originalPath"
     foreach ($expected in @(7, 0)) {
         Set-Content -LiteralPath (Join-Path $fixture 'cargo.cmd') -Encoding Ascii -Value @(
-            '@echo generator-stdout',
-            '@echo generator-stderr 1>&2',
+            '@echo checklist-stdout',
+            '@echo checklist-stderr 1>&2',
             "@exit /b $expected"
         )
-        foreach ($script in @('gen-cards.ps1', 'gen-card-checklist.ps1')) {
+        foreach ($script in @('gen-card-checklist.ps1')) {
             $arguments = @('-NoProfile', '-File', (Join-Path $repo "scripts\$script"))
-            if ($script -eq 'gen-cards.ps1') { $arguments += @('--input', 'fixture-input') }
             # Native stderr is diagnostic output, not the command's success status.
             $ErrorActionPreference = 'Continue'
             $output = (& $PowerShell @arguments 2>&1) -join "`n"
@@ -24,17 +23,16 @@ try {
             if ($actual -ne $expected) {
                 throw "$script returned $actual instead of $expected.`n$output"
             }
-            if ($output -notmatch 'generator-stdout' -or $output -notmatch 'generator-stderr') {
-                throw "$script lost generator output: $output"
+            if ($output -notmatch 'checklist-stdout' -or $output -notmatch 'checklist-stderr') {
+                throw "$script lost checklist output: $output"
             }
         }
     }
     Remove-Item Env:PATH -ErrorAction SilentlyContinue
     Remove-Item Env:Path -ErrorAction SilentlyContinue
     $env:Path = Join-Path $env:SystemRoot 'System32'
-    foreach ($script in @('gen-cards.ps1', 'gen-card-checklist.ps1')) {
+    foreach ($script in @('gen-card-checklist.ps1')) {
         $arguments = @('-NoProfile', '-File', (Join-Path $repo "scripts\$script"))
-        if ($script -eq 'gen-cards.ps1') { $arguments += @('--input', 'fixture-input') }
         $ErrorActionPreference = 'Continue'
         $output = (& $PowerShell @arguments 2>&1) -join "`n"
         $actual = $LASTEXITCODE
@@ -54,4 +52,4 @@ finally {
     }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
-Write-Output 'PASS generator wrapper regression'
+Write-Output 'PASS checklist wrapper regression'

@@ -20,12 +20,11 @@
 - **Implementation references:** embedded loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`; typed entry-cost lookup: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::entry_unless_cost`; choice creation and payment eligibility: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::park_entry_cost_choice`; validated payment, life loss, and replacement completion: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::finish_entry_cost_choice`.
 - **Evidence and limits:** The engine recognizes the self-entry replacement on the proposed event, asks the destination controller, marks the payment branch unavailable when life is insufficient, records an accepted life payment, and applies the tapped replacement on decline. The shared land scenario asserts both faces' exact life totals, battlefield/tapped state, and mana colors. Other life amounts, additional entry replacements, and interactions with global or conditional tapped-entry effects are not established by these card scenarios.
 
-## Generator recognition
+## Authoring path
 
-- **Status:** `Not recognized`.
-- **Recipe and input shapes:** `static.enters_tapped.unless_pay_life_2` recognizes only the exact two-life shockland wording.
-- **References and limits:** `tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs#match_shockland_entry_payment` emits `EntryCost::PayLife { amount: 2 }` for that exact string. Its negative calibration rejects the otherwise matching three-life wording used here. Both delivered definitions therefore use reviewed direct RON; this generator limitation is not a runtime-support gap.
-
+Both delivered definitions are reviewed direct RON. Their three-life entry behavior is established
+by the definitions, shared validator, and scenario coverage; differences from other card wordings
+do not imply a runtime-support gap.
 ## Shipped card evidence
 
 - `bridgeworks_battle_tanglespan_bridgeworks` — definition: [Bridgeworks Battle // Tanglespan Bridgeworks](../../../data/bridgeworks_battle_tanglespan_bridgeworks.ron) — review map: [map](../../review-maps/bridgeworks_battle_tanglespan_bridgeworks.json). Oracle ID `9d581188-ce80-494e-bd38-f411e1f4efb5`; Scryfall printing [MH3 #249](https://scryfall.com/card/mh3/249/bridgeworks-battle-tanglespan-bridgeworks), [record](https://api.scryfall.com/cards/ebef3db0-2b58-4581-a79c-fbca9a059e63), and [rulings](https://api.scryfall.com/cards/ebef3db0-2b58-4581-a79c-fbca9a059e63/rulings) were checked on 2026-09-27. Front: `{2}{G}`, Sorcery, green, no power/toughness; its source text is mapped at face line 1. Back: no mana cost, Land, colorless, no power/toughness; line 1 is the life-payment entry clause and line 2 is `{T}: Add {G}.` The relevant ruling confirms the optional fight's target legality is separate from the still-legal pump.

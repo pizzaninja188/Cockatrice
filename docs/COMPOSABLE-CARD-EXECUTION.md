@@ -557,7 +557,7 @@ semantic ownership. An instruction sequence never substitutes for a simultaneous
 | [`run_effect_list_with_previous`](../tricerules/tricerules-core/src/engine/resolution/mod.rs) rebuilds flattened branches and advances a flat index | An immutable compiled program plus explicit block/cursor frames owns sequencing |
 | [`EffectResult` and `ParkedStackResolution`](../tricerules/tricerules-core/src/state.rs) carry one implicit previous result | Private typed immutable result slots, an in-flight operation and a saved frame stack |
 | [`DrawCompletion`](../tricerules/tricerules-core/src/engine/draw.rs) includes `BeginDiscard` and `BrainstormPutBack` sequencing | Draw completion resumes the owning operation/frame; follow-up card actions are instructions |
-| [`RecipeEmission`](../tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs) and exact-text matchers assemble separate special combinations | Reviewed parameterized templates emit the same typed programs as handwritten RON |
+| Exact-text recipe matchers assembled some special combinations | Direct RON uses the same typed programs as the rest of the checked-in card corpus |
 | [`SubmitResolutionChoice`](../libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto) answers whichever prompt is current | Every answer names the exact active `resolution_prompt_id` |
 
 This is semantic consolidation. Moving existing branches into smaller files is insufficient.

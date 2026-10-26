@@ -62,7 +62,7 @@ try {
     }
     & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') @evidenceArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $arguments = @('-Mode', 'Refresh', '-MetadataOnly')
+    $arguments = @('-Mode', 'Refresh')
     if ($OracleBulk) { $arguments += @('-OracleBulk', $OracleBulk) }
     if ($CardsXml) { $arguments += @('-CardsXml', $CardsXml) }
     & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -NoProfile `

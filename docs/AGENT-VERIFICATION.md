@@ -164,7 +164,7 @@ restores the caller's environment afterward. It accepts the same local `-OracleB
 overrides as Refresh. It checks formatting without editing code, runs specified scenarios, and
 checks unconfirmed maps structurally through inspect-only packets; this does not approve maps or replace
 the final gate. When the exact prechecks already passed on unchanged content, use the underlying
-`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly rather than repeating them. Preparation's
+`update-card-data.ps1 -Mode Refresh` directly rather than repeating them. Preparation's
 optional map subset is never accepted by the final evidence gate, which checks every map and
 requires independent review confirmation. Freeze a compatible ready batch after preparation and
 review it together; run one final affected-side gate on the stable combined batch. Additions to an
@@ -231,21 +231,20 @@ Check is the default update mode. It first validates checked-in direct-RON maps 
 test references with `scripts/check-card-evidence.ps1`. The checker builds referenced test targets
 once per package using Cargo JSON artifacts, then lists normal and ignored tests directly from
 those exact executables. It never searches for old binaries or persists a test inventory cache;
-missing or ambiguous artifacts and failed listings fail the gate. Listing is not execution evidence: the full
-Rust suite must also pass on the same content. It runs the generator check and validates a temporary checklist,
-then compares that checklist with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It
-writes only build artifacts. For handwritten cards, Refresh with `-MetadataOnly` updates fingerprints
-without evaluating recipes or rewriting generated RON, then validates and replaces `CARDS.md`.
-Omit `-MetadataOnly` when generator recipes or generated card output need refreshing.
+missing or ambiguous artifacts and failed listings fail the gate. Listing is not execution evidence;
+the full Rust suite must also pass on the same content. It checks source metadata, bulk SHA and
+presentation fingerprints through `card-author`, then validates a temporary checklist and compares
+it with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It writes only build artifacts.
+Refresh updates presentation fingerprints, validates and replaces `CARDS.md`, and never rewrites
+card RON.
 Refresh is preparation only: it does not repeat Check or validate semantic evidence. Review its
 diff and run the final gate, which includes the full Check regardless of refresh mode. Do not
-also run a standalone Check routinely. Neither command stages files, downloads sources, or
-enables `--include-new`. `-MetadataOnly` is rejected with Check; it cannot narrow the final gate.
+also run a standalone Check routinely. Neither command stages files or downloads sources.
 
 Optional `-OracleBulk` and `-CardsXml` override the existing local source defaults. Relative paths
-resolve from the repository root. Bulk metadata remains the adjacent `<input>.meta.json` and the
-generator verifies its SHA. Failed checklist name validation preserves the old checklist; earlier
-generated RON/fingerprint writes during Refresh remain available for review.
+resolve from the repository root. Bulk metadata remains the adjacent `<input>.meta.json`; the
+authoring source check verifies its SHA before any fingerprint refresh. Failed checklist name
+validation preserves the old checklist; a successful metadata refresh changes no card RON.
 
 The legacy `gen-card-checklist.ps1 --check` validates names **and writes its output**. Use the new
 Check entry point for verification that must leave tracked files untouched.

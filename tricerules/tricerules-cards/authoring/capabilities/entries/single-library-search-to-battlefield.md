@@ -68,18 +68,10 @@
   fixture is engine regression evidence for serial entry choices and tail resumption, not a separate
   shipped-card semantic claim.
 
-## Generator recognition
+## Authoring path
 
-- **Status:** `Partial`.
-- **Recipe and input shapes:** Recipe `spell.search_library.basic_land.battlefield_tapped` recognizes
-  the exact single-basic-land, tapped-battlefield, then-shuffle spell clause. Recipe
-  `station.etb.sac_land_search_two` recognizes Larval Scoutlander's exact optional land-or-Lander
-  sacrifice followed by a search for up to two Basic Lands tapped and a shuffle.
-- **References and limits:** `tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs#match_spell_search_basic_land_battlefield_tapped`
-  implements the spell matcher; the issue-specific station recipe is in the same file. This entry's
-  subtype-OR example is outside the spell recipe's exact input shape; other generator routes for
-  that wording were not assessed.
-
+The reviewed Rampant Growth, Farseek, and Larval Scoutlander definitions are direct RON. Runtime
+coverage above is independent of any text-to-card generation route.
 ## Shipped card evidence
 
 - `rampant_growth` — definition: [Rampant Growth](../../../data/rampant_growth.ron) — review map:

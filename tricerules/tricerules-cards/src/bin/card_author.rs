@@ -42,7 +42,7 @@ fn new_file(path: &Path, text: &str) -> Result<(), String> {
 fn run() -> Result<Value, String> {
     let mut args = std::env::args().skip(1);
     let command = args.next().ok_or(
-        "commands: search, clone, inspect, prepare, validate-batch, queue-save, queue-check, metadata, presentation-audit, review",
+        "commands: search, clone, inspect, prepare, validate-batch, queue-save, queue-check, metadata, presentation-audit, review, scaffold",
     )?;
     let mut options: BTreeMap<String, Vec<String>> = BTreeMap::new();
     while let Some(flag) = args.next() {
@@ -72,6 +72,14 @@ fn run() -> Result<Value, String> {
                 "existing",
                 "preparation",
             ],
+            "scaffold" => &[
+                "input",
+                "metadata",
+                "name",
+                "names",
+                "out",
+                "inspect-existing",
+            ],
             _ => return Err("unknown command".into()),
         };
         if !allowed.contains(&key) || (key != "depends" && options.contains_key(key)) {
@@ -81,6 +89,7 @@ fn run() -> Result<Value, String> {
             "metadata" => matches!(key, "check" | "refresh"),
             "presentation-audit" => key == "check",
             "review" => matches!(key, "existing" | "preparation"),
+            "scaffold" => key == "inspect-existing",
             _ => false,
         };
         let value = if switch {
@@ -93,6 +102,56 @@ fn run() -> Result<Value, String> {
     let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = package.parent().unwrap().parent().unwrap();
     let data = package.join("data");
+    if command == "scaffold" {
+        let single_name = options.get("name").map(|v| v[0].as_str());
+        let batch_names = options
+            .get("names")
+            .map(|v| fs::read_to_string(&v[0]).map_err(|e| e.to_string()))
+            .transpose()?;
+        let selection = match (single_name, batch_names.as_deref()) {
+            (Some(name), None) => scaffold::Selection::Single(name),
+            (None, Some(names)) => scaffold::Selection::Batch(names),
+            _ => return Err("scaffold requires exactly one of --name or --names".into()),
+        };
+        let bulk = options
+            .get("input")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| repo.join("oracle-cards.jsonl.gz"));
+        let metadata = options
+            .get("metadata")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| source::default_metadata_path(&bulk));
+        let provenance = source::load_provenance(&bulk, &metadata)?;
+        let mut cards = Vec::new();
+        source::for_each_gzipped_jsonl(&bulk, |card| {
+            cards.push(card);
+            true
+        })?;
+        let registry = tricerules_cards::registry::from_embedded()
+            .map_err(|error| format!("failed to load embedded card registry: {error}"))?;
+        let mut existing = scaffold::ExistingCards::default();
+        for definition in registry.definitions() {
+            existing.ids.insert(definition.id.clone());
+            existing
+                .names
+                .extend(definition.deck_input_names().map(normalize_name));
+        }
+        let output = scaffold::build(
+            cards,
+            selection,
+            &existing,
+            &provenance,
+            options.contains_key("inspect-existing"),
+        )?;
+        if let Some(out) = options.get("out") {
+            let out = PathBuf::from(&out[0]);
+            scaffold::write_directory(&output, &out, &data)?;
+            return Ok(json!({"directory":out,"scaffolded":output.files.len(),
+                "meaning":"Incomplete source-backed drafts only; mechanics and presentation require review"}));
+        }
+        let bundle = scaffold::stdout_bundle(&output, false)?;
+        return serde_json::from_str(&bundle).map_err(|error| error.to_string());
+    }
     if command == "metadata" {
         let check = options.contains_key("check");
         let refresh = options.contains_key("refresh");

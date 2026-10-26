@@ -19,12 +19,10 @@ sha2 = { version = "0.10", optional = true }
 [dev-dependencies]
 proptest.workspace = true
 
-# Codegen/tracking binaries are feature-gated so default builds/CI don't pull their deps.
+# Optional authoring/tracking binaries keep their dependencies out of default game builds.
 [features]
 # Implementation-tracking checklist generator (see src/bin/gen_checklist.rs).
 checklist = ["dep:roxmltree"]
-# Fail-closed exact-recipe card generator (see src/bin/gen_cards.rs).
-gencards = ["authoring"]
 # Offline authoring tools; never enabled by the game server.
 authoring = ["dep:serde_json", "dep:flate2", "dep:sha2"]
 
@@ -37,11 +35,6 @@ required-features = ["authoring"]
 name = "gen-checklist"
 path = "src/bin/gen_checklist.rs"
 required-features = ["checklist"]
-
-[[bin]]
-name = "gen-cards"
-path = "src/bin/gen_cards.rs"
-required-features = ["gencards"]
 
 [[test]]
 name = "batch_registry"

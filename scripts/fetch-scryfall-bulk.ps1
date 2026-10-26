@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutFile) { $OutFile = Join-Path $repoRoot "oracle-cards.jsonl.gz" }
 if (-not $TagsOutFile) { $TagsOutFile = Join-Path $repoRoot "oracle-tags.jsonl.gz" }
-$ua = "Cockatrice-tricerules-gencards/1.0 (https://github.com/Cockatrice/Cockatrice)"
+$ua = "Cockatrice-tricerules-authoring/1.0 (https://github.com/Cockatrice/Cockatrice)"
 $headers = @{ "User-Agent" = $ua; "Accept" = "application/json" }
 
 Write-Host "Querying Scryfall bulk-data index..."

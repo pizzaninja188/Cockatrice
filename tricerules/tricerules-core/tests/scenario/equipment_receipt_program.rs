@@ -3,10 +3,14 @@ use std::sync::OnceLock;
 
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
+use tricerules_cards::card_def::RawCardDefinition;
 use tricerules_cards::primitives::{
-    ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
+    AuthoredBlock, AuthoredChooseBranch, ContinuousEffectKind, ControllerReference,
+    DelayedTokenSacrificeTiming, EffectDuration, Instruction, InstructionKind, PermanentTypeFilter,
+    PlayerRecipient, ResolutionBranchRequirement, ResolutionCost, SpellEffectKind,
     TypeLineAddition, TypeLineReplacement,
 };
+use tricerules_cards::{AbilityPresentation, Amount, CardFaceId, ChoiceId};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::{AttachmentRecipient, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -81,29 +85,101 @@ const GENERIC_OPTIONAL_EQUIPMENT_CHOICE_RON: &str = r#"
 fn generic_equipment_receipt_registry() -> &'static tricerules_cards::CardRegistry {
     static REGISTRY: OnceLock<tricerules_cards::CardRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let card = include_str!("../../../tricerules-cards/data/generated/k/kyoshi_battle_fan.ron")
-            .replace("kyoshi_battle_fan", GENERIC_EQUIPMENT_REUSE)
-            .replace("Kyoshi Battle Fan", "Generic Equipment");
-        let card = card.replace(
-            "token:\"ally_w_1_1\",count:1,who:Controller,tapped:false,sacrifice_timing:None",
-            "token:\"soldier_w_1_1\",count:2,who:SourceController,tapped:true,sacrifice_timing:Some(NextEndStep)",
-        );
-        let attachment_source = "(id:\"attach_created_tokens\",input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))])";
-        assert_eq!(
-            card.matches(attachment_source).count(),
-            1,
-            "the generated attachment instruction must match exactly once"
-        );
-        let card = card.replace(
-            attachment_source,
-            "(id:\"choose_attachment\",bind:[],input:None,kind:Choose(choice:\"attach_created_cohort\",chooser:Controller,optional:false,branches:[(branch_id:\"attach\",presentation:Fallback,cost:None,requirement:Always,body:(steps:[(id:\"attach_created_tokens\",bind:[],input:Some(\"created_tokens\"),kind:Perform(AttachEquipment(equipment:Source,creature:PreviousEffectObjects)))],yields:[]))],otherwise:(steps:[],yields:[]))),(id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1)))],yields:[])",
-        );
-        assert!(card.contains("token:\"soldier_w_1_1\",count:2"));
-        assert!(card.contains("id:\"choose_attachment\""));
-        assert!(card.contains("id:\"tail\",bind:[],input:None,kind:Perform(GainLife(amount:1))"));
+        let source =
+            include_str!("../../../tricerules-cards/data/generated/k/kyoshi_battle_fan.ron");
+        let mut definition: RawCardDefinition = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+            .from_str(source)
+            .expect("the generated Kyoshi definition parses");
+        definition.id = GENERIC_EQUIPMENT_REUSE.into();
+        definition.name = "Generic Equipment".into();
+        definition.face_id =
+            CardFaceId::new(GENERIC_EQUIPMENT_REUSE).expect("generic Equipment face ID");
+
+        let ability = definition
+            .triggered_abilities
+            .iter_mut()
+            .find(|ability| ability.ability_id.as_str() == "triggered_01")
+            .expect("Kyoshi Battle Fan has its generated ETB ability");
+        let program = ability
+            .program
+            .as_mut()
+            .expect("Kyoshi Battle Fan has its generated ETB program");
+        let create_tokens = program
+            .body
+            .steps
+            .iter_mut()
+            .find(|instruction| instruction.id == "create_tokens")
+            .expect("the ETB program creates the named token result");
+        assert_eq!(create_tokens.bind, ["created_tokens"]);
+        let InstructionKind::Perform(effect) = &mut create_tokens.kind else {
+            panic!("the token-producing instruction performs an effect");
+        };
+        let SpellEffectKind::CreateTokens {
+            token,
+            count,
+            who,
+            tapped,
+            sacrifice_timing,
+        } = effect.as_mut()
+        else {
+            panic!("the token-producing instruction creates tokens");
+        };
+        *token = "soldier_w_1_1".into();
+        *count = Amount::Fixed(2);
+        *who = PlayerRecipient::SourceController;
+        *tapped = true;
+        *sacrifice_timing = Some(DelayedTokenSacrificeTiming::NextEndStep);
+
+        let attachment_index = program
+            .body
+            .steps
+            .iter()
+            .position(|instruction| instruction.id == "attach_created_tokens")
+            .expect("the ETB program attaches its created token cohort");
+        let attachment = program.body.steps.remove(attachment_index);
+        assert_eq!(attachment.input.as_deref(), Some("created_tokens"));
+        let choice = Instruction {
+            id: "choose_attachment".into(),
+            bind: Vec::new(),
+            input: None,
+            kind: InstructionKind::Choose {
+                choice: ChoiceId::new("attach_created_cohort").expect("stable choice ID"),
+                chooser: PlayerRecipient::Controller,
+                optional: false,
+                branches: vec![AuthoredChooseBranch {
+                    branch_id: ChoiceId::new("attach").expect("stable branch ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::Always,
+                    body: AuthoredBlock {
+                        steps: vec![attachment],
+                        yields: Vec::new(),
+                    },
+                }],
+                otherwise: AuthoredBlock {
+                    steps: Vec::new(),
+                    yields: Vec::new(),
+                },
+            },
+        };
+        program.body.steps.insert(attachment_index, choice);
+        program.body.steps.push(Instruction {
+            id: "tail".into(),
+            bind: Vec::new(),
+            input: None,
+            kind: InstructionKind::Perform(Box::new(SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            })),
+        });
+
+        let card = ron::to_string(&definition).expect("the typed fixture serializes as RON");
         tricerules_cards::CardRegistry::from_chunks_and_tokens(
             &[&card],
-            &[include_str!("../../../tricerules-cards/data/tokens/soldier_w_1_1.ron")],
+            &[include_str!(
+                "../../../tricerules-cards/data/tokens/soldier_w_1_1.ron"
+            )],
         )
         .expect("generic Equipment receipt fixture validates without production card data")
     })

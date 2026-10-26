@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:-$REPO_ROOT/oracle-cards.jsonl.gz}"
 INCLUDE_TAGS="${2:-}"
 TAGS_OUT="$REPO_ROOT/oracle-tags.jsonl.gz"
-UA="Cockatrice-tricerules-gencards/1.0 (https://github.com/Cockatrice/Cockatrice)"
+UA="Cockatrice-tricerules-authoring/1.0 (https://github.com/Cockatrice/Cockatrice)"
 
 command -v curl >/dev/null || { echo "error: curl is required" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq is required" >&2; exit 1; }

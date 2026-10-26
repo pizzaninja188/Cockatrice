@@ -4,8 +4,8 @@ Use this short execution path for card campaigns. Scope, models and delivery per
 from current user/campaign policy, not an older checklist. Root/subsystem AGENTS.md retain authority.
 Routine cards start with a shipped analogue and its relevant assertions. Reuse instructions already
 present in context; consult the authoring reference for unfamiliar rules and semantic differences,
-not as a mandatory opening-section read for every card. Generator/workbench references are needed
-only when using or changing those tools. A concrete missing semantic contract takes the capability
+not as a mandatory opening-section read for every card. Consult the authoring/workbench reference
+only when its workflow applies. A concrete missing semantic contract takes the capability
 path; a missing card file alone does not.
 
 | Requirement | Source of truth |
@@ -26,8 +26,8 @@ mechanical facts, not semantic approval. No new index, schema, packet or timing 
 routine work; use optional tools only when they save work on the actual batch.
 The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) is the broader migration target;
 its proposed types and operations are not all accepted authoring syntax.
-Checked-in generated RON uses compact typed renderers; unresolved clone drafts retain explicit
-defaults and review sentinels.
+Checked-in RON files are the authoritative hand-edited source; clone and scaffold drafts remain
+incomplete and retain review sentinels until reviewed.
 
 ## Routine cards: reuse first
 
@@ -59,12 +59,12 @@ defaults and review sentinels.
    Check remaining card prerequisites; a primitive-only mapping is not a complete card. Compare
    the closest existing primitive. Generalize only for demonstrated uses; justify specialized
    behavior if only one use fits.
-   Use existing analogue, candidate and dependency reports to inspect several representative
-   remaining cards before choosing a capability family. Compare shared semantics and differences
-   in ordering, replacements, layers, identity and private choice/resume behavior against current
-   code, then select the smallest complete shared primitive. Reports route this comparison; they
-   do not prove semantic compatibility. Avoid speculative extensions, unrelated audits or extra
-   dossiers, and deliver a stable verified batch before expanding it.
+   Use current `card-author prepare` and `search` commands with current evidence to inspect
+   representative remaining cards before choosing a capability family. Compare shared semantics
+   and differences in ordering, replacements, layers, identity and private choice/resume behavior
+   against current code, then select the smallest complete shared primitive. These tools route this
+   comparison; they do not prove semantic compatibility. Avoid speculative extensions, unrelated
+   audits or extra dossiers, and deliver a stable verified batch before expanding it.
 2. Before substantial implementation, obtain bounded independent design review: intended behavior,
    exact sources/rulings, existing APIs/analogue, affected producers/consumers, choice/resume,
    identity, relevant checklist risks and proposed regressions. One concise record suffices.
