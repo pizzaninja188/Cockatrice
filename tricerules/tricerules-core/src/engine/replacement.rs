@@ -522,7 +522,7 @@ impl GameEngine {
         entry_face: Option<usize>,
     ) -> String {
         let Some(object) = self.state.objects.get(&object_id) else {
-            return format!("[object {object_id}]");
+            return "[object]".to_string();
         };
         if object.face_down {
             return match object.zone {
@@ -3063,8 +3063,8 @@ impl GameEngine {
                         }) =>
                     {
                         Some(format!(
-                            "{} (P{}, object {}) — permanents enter tapped",
-                            face.name, source.controller, source.id
+                            "{} (P{}) — permanents enter tapped",
+                            face.name, source.controller
                         ))
                     }
                     StaticAbilityDef::EntersWithCounters {
@@ -3072,8 +3072,8 @@ impl GameEngine {
                         ..
                     } if self.battlefield_counter_replacement_affects(source.id, filter, event) => {
                         Some(format!(
-                            "{} (P{}, object {}) — enters with counters",
-                            face.name, source.controller, source.id
+                            "{} (P{}) — enters with counters",
+                            face.name, source.controller
                         ))
                     }
                     _ => None,
@@ -5929,7 +5929,16 @@ impl GameEngine {
         let object_id = event.object_id;
         let chosen_x = event.chosen_x;
         let entry_cause = event.entry_cause.clone();
+        let concealed_face_down_entry = self.state.objects.get(&object_id).is_some_and(|object| {
+            matches!(object.zone, Zone::Hand | Zone::Library) && object.face_down
+        });
         let door_event = self.commit_battlefield_entry_state(event, attached_to)?;
+        if concealed_face_down_entry {
+            let generation = self.state.zone_change_generation[&object_id];
+            out.push(events::ev_presentation_identity_break(
+                object_id, generation,
+            ));
+        }
         let mut trigger_events = vec![GameEvent::EntersBattlefield {
             object_id,
             chosen_x,

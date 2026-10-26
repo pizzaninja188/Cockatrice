@@ -739,8 +739,10 @@ Private, non-revealing Hand searches do not emit an explicit `CardsRevealed` eve
 redacts library-search candidate details from non-deciders and removes the persistent movement
 identity unless the engine authorizes public disclosure. Concealed physical moves also omit the
 selected source identity and use an anonymous source slot for observers. These safeguards cover
-the movement projection; they do not establish universal unlinkability for every public object map
-or face-down interaction. See
+the movement projection. A concealed-zone card emerging face down also receives a new public
+presentation handle and projected generation, while trusted engine and physical bindings retain
+its exact identity. These measures do not establish universal unlinkability for every authorized
+private search or hidden-zone interaction. See
 [`PermanentMoved`](../../../libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto#L2337)
 and the [participant redaction path](../../../libcockatrice_network/libcockatrice/network/server/remote/game/ruled_broadcast_router.cpp#L585).
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use

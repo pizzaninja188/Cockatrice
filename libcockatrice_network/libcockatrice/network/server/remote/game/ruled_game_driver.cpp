@@ -149,6 +149,10 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
         // The canonical envelope is a trusted Servatrice->engine/replay shape, never client input.
         return Response::RespInvalidCommand;
     }
+    // Only authenticated client payloads use presentation handles. Internal departures and
+    // replay/server commands already contain canonical engine identities.
+    if (!internalDeparture && !broadcaster->canonicalizeClientCommand(playerId, ruledCmd))
+        return Response::RespInvalidCommand;
     if (ruledCmd.has_preview_declare_blockers()) {
         // Cockatrice-only: show tentative blocks to the opponent. Never touch the engine or replay log.
         constexpr int declareBlockersToolbarPhase = 6;
@@ -199,8 +203,8 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
         }
         if (!response.ok() || !response.has_batch() || !response.batch().has_payment_preview())
             return Response::RespContextError;
-        broadcaster->sendPaymentPreview(playerId, response.batch().payment_preview());
-        return Response::RespOk;
+        return broadcaster->sendPaymentPreview(playerId, response.batch().payment_preview())
+                   ? Response::RespOk : Response::RespContextError;
     }
     const QByteArray payload = canonicalGameplayCommand(playerId, ruledCmd);
     if (payload.isEmpty()) {

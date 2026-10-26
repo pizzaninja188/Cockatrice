@@ -150,12 +150,13 @@ new `LegalActions`.
 
 ## 3. Identity glossary
 
-The most confusing thing in the codebase: six different ids for what a player thinks of as "a
+The most confusing thing in the codebase: distinct ids for what a player thinks of as "a
 card". Nothing here is interchangeable.
 
 | Name | Type | Minted by | Scope / lifetime |
 |---|---|---|---|
 | **engine `ObjectId`** (`oid`) | `u32` / proto `uint32` / `quint32` | engine (`GameState::next_object_id`) | One game object, from creation until it leaves the game. Allocation starts **above** the highest `PlayerId` so a player target and an object can share the `TargetRef.object_id` field unambiguously. |
+| **presentation object handle** | positive `uint32` | Servatrice, per session and incarnation epoch | Client-facing object references in events, maps and offered actions. May initially equal the canonical `ObjectId`; it changes when a card emerges face down from a concealed zone. Client commands return the handle and projected generation. |
 | **engine `PlayerId`** | `i32` | Servatrice seat id, mirrored into the engine | The seat. Also travels as `TargetRef.object_id` for player targets. |
 | **tricerules `card_id`** (`cardId`) | `String`, `snake_case` slug | `tricerules-cards` registry; `id == slugify(name)` (enforced by a registry test) | Printing-independent identity of a *card definition*. Tokens live in a separate id namespace and are deliberately absent from the session catalog. |
 | **Oracle name** | `QString` / `String` | `cards.xml` (Scryfall) | Display and deck lists. The **only** card identity that crosses IPC in `PlayerDeck`; the engine resolves it with `CardRegistry::id_for_name` (trim + lowercase; every face name of a multi-face card resolves to the one card id). |
@@ -193,10 +194,20 @@ independent of this storage format.
 | Map | Built by | Direction | Notes |
 |---|---|---|---|
 | `CardCatalog` | **engine**, once, in the `SessionStart` response | `card_id` ↔ Oracle name (+ types, `is_permanent`, per-face labels and exact display-database names) | `FIELD_VISIBILITY_SERVER_ONLY` — it enumerates deck contents, so it is stripped from every client copy. Servatrice reads it through `RuledGameDriver::ruledCardIdForName` / `ruledCardNameForId` / `ruledFaceDisplayName` and **never derives an engine id from a name itself**. |
-| `BattlefieldObjectMap` | **Servatrice**, every batch | `(player_id, oid)` → `Server_Card.id`, plus ordinal, `summoning_sick`, `keywords`, `is_creature` | Covers the battlefield **and** the stack zones. Client-side it fills `ownerCardIdToEngineOid` / `engineOidToCardId` / the keyword and creature maps. |
+| `BattlefieldObjectMap` | **Servatrice**, every batch | `(player_id, handle)` → `Server_Card.id`, plus ordinal, `summoning_sick`, `keywords`, `is_creature` | Covers the battlefield **and** the stack zones. Client-side it fills `ownerCardIdToEngineOid` / `engineOidToCardId` / the keyword and creature maps; those legacy names contain presentation handles. |
 | `HandSlotMap` | **Servatrice**, on change | `(player_id, hand_index)` → `Server_Card.id` | Recipient-private: redaction keeps only the recipient's own rows. Fills `ownedCardToEngineHandSlot`. Sent only when the mapping differs from the last broadcast (plus whenever the participant set changes — a joiner/reconnector starts empty — and on `resetForNewGame`). **Absent means unchanged; present is a full replacement**, so `applyHandSlotMap` clears before filling. |
-| `GraveyardObjectMap` | **Servatrice**, every batch | `(player_id, oid)` → `Server_Card.id` | Graveyard targeting and public-zone actions, including generation-bound land plays. Fills `graveyardEngineOidToServerCardId`. |
+| `GraveyardObjectMap` / `ExileObjectMap` | **Servatrice**, every batch | `(player_id, handle)` → `Server_Card.id` | Public-zone targeting and actions, including generation-bound land plays. |
 | `RuledPlayerBinding` | **Servatrice**, per player, from each `ZoneViewSync` | `oid` ↔ `Server_Card.id` (battlefield + hand + stack), separately for the graveyard | The server-side source the three maps above are generated from. |
+
+The relay projects canonical references only after physical synchronization. A server-only,
+event-ordered identity boundary starts a fresh handle and generation projection for a card entering
+the battlefield or exile face down from a concealed zone; public in-place turn-down keeps its
+existing handle. Earlier event and last-known-information references retain their own epoch.
+The relay accepts only handles issued to the authenticated participant and rejects retired handles;
+it translates them back before previews and engine commands. Reconnects reuse active session handles,
+and reset discards them. Snapshot provenance and schema checks fail closed when an identity cannot
+be projected safely. Engine state, physical bindings, logged commands and deterministic replay keep
+canonical identities. `CardsRevealed` occurrence IDs are also projected to opaque session IDs.
 
 Public graveyard and exile moves record their post-move physical IDs immediately. A zone view
 preserves those bindings and reorders the physical pile to the reverse of the engine's

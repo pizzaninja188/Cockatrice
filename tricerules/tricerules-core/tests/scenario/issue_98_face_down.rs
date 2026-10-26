@@ -494,6 +494,19 @@ fn manifest_dread_privately_chooses_one_top_card_and_moves_both_exact_objects() 
         tricerules_core::Zone::Battlefield
     );
     assert!(engine.state.objects[&top[1]].face_down);
+    let identity_break = completed
+        .events
+        .iter()
+        .position(|event| {
+            matches!(&event.ev, Some(Ev::PresentationIdentityBreak(boundary))
+            if boundary.object_id == top[1]
+                && boundary.zone_change_generation == engine.state.zone_change_generation[&top[1]])
+        })
+        .expect("the relay receives a generation-bound identity boundary");
+    let visible_move = completed.events.iter().position(|event| {
+        matches!(&event.ev, Some(Ev::PermanentMoved(moved)) if moved.object_id == top[1])
+    }).expect("manifest emits its physical move");
+    assert!(identity_break < visible_move);
     assert_eq!(
         engine.state.objects[&top[0]].zone,
         tricerules_core::Zone::Graveyard

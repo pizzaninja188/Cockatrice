@@ -108,7 +108,7 @@ impl GameEngine {
                     .get(object_id)
                     .and_then(|object| self.registry.get(&object.card_id))
                     .map(|definition| definition.name.clone())
-                    .unwrap_or_else(|| format!("[object {object_id}]"))
+                    .unwrap_or_else(|| "[object]".to_string())
             })
             .collect();
         let copied_name = self

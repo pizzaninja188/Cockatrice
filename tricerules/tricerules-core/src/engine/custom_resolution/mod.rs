@@ -2240,7 +2240,7 @@ impl GameEngine {
         }
         entry.event.battle_protector = Some(protector);
         let events = vec![ev_log(format!(
-            "P{} chooses P{protector} to protect Battle object {battle_id}.",
+            "P{} chooses P{protector} to protect the Battle.",
             pending.deciding_player
         ))];
         self.complete_pending_battlefield_entry(pending, entry.event, entry.completion, events)

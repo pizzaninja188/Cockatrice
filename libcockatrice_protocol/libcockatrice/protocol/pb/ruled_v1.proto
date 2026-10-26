@@ -1300,6 +1300,7 @@ message AttackManaAbilityUndoOption {
   string source_label = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool reversible = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string unavailable_reason = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint64 source_zone_change_generation = 6 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message CommitAttackDeclaration {
@@ -1422,7 +1423,15 @@ message RuledEvent {
     // An exact stack object removed from the game without a destination move (for example,
     // an object owned by a player who left the game). Real zone moves use PermanentMoved.
     StackObjectRemoved stack_object_removed = 40 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // A concealed card is becoming a publicly trackable face-down object. The relay changes
+    // its presentation identity at this ordered boundary; canonical engine identity is unchanged.
+    PresentationIdentityBreak presentation_identity_break = 41 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   }
+}
+
+message PresentationIdentityBreak {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message AttackPaymentRequired {
@@ -1446,6 +1455,8 @@ message TriggerOrderCandidate {
   string source_card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string ability_text = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   PresentationRef ability_presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Event-time incarnation of the source. It may have left and reentered since this trigger.
+  optional uint64 source_zone_change_generation = 7 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // A player must choose which of their simultaneous triggered abilities goes on the stack next
@@ -1970,6 +1981,8 @@ message CardsRevealed {
   string reveal_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 source_object_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string source_description = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Original source incarnation, retained with a long-lived reveal receipt.
+  optional uint64 source_zone_change_generation = 7 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message ActivateAbility {
@@ -2039,6 +2052,8 @@ message TriggerNeedsTarget {
   uint32 max_modes = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated LegalSpellMode modes = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PresentationRef ability_presentation = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Event-time source incarnation; used only for relay presentation identity selection.
+  optional uint64 source_zone_change_generation = 11 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).
@@ -2281,6 +2296,14 @@ message RuledPerPlayerView {
   // Current top identity is sent only to this player while a library-top permission is active.
   // This is separate from the full server-only library mapping used to bind physical cards.
   optional PrivateLibraryTopView private_library_top = 43 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Complete face-down exile identities, for the relay's presentation-epoch validation only.
+  // This does not grant any player the right to look at the cards.
+  repeated PresentationExileIdentity presentation_face_down_exiles = 44 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+}
+
+message PresentationExileIdentity {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message PrivateLibraryTopView {
@@ -2393,6 +2416,8 @@ message ExileObjectMap {
     int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     uint32 engine_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     int32 server_card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // Relay-only corroboration of the physical card's face-down state.
+    bool face_down = 4 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   }
   repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }

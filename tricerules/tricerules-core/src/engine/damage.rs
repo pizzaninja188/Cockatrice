@@ -1311,10 +1311,9 @@ impl GameEngine {
             };
             let recipient = match damage.spec.event.recipient {
                 DamageRecipient::Player(player) => format!("player {player}"),
-                DamageRecipient::Permanent(oid) => format!(
-                    "{} (object {oid})",
+                DamageRecipient::Permanent(oid) => {
                     object_display_name(&self.state, self.registry, oid)
-                ),
+                }
             };
             let summary = format!(
                 "{description} ({} damage from {} to {recipient}.)",

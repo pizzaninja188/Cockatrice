@@ -353,6 +353,13 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "face-down identity map was not restricted to the controller";
     EXPECT_TRUE(p1.sawManifestPublicFaceDown && p2.sawManifestPublicFaceDown)
         << "both clients did not receive the public face-down 2/2";
+    EXPECT_NE(p1.manifestChoiceHandle, 0u);
+    EXPECT_NE(p1.manifestOid, p1.manifestChoiceHandle)
+        << "face-down emergence reused the concealed choice's identity";
+    EXPECT_EQ(p1.manifestMapHandle, p1.manifestOid);
+    EXPECT_EQ(p2.manifestMapHandle, p2.manifestOid);
+    EXPECT_EQ(p1.manifestOid, p2.manifestOid)
+        << "the two clients did not receive the same trackable public identity";
     EXPECT_TRUE(p1.sawManifestFaceChanged && p2.sawManifestFaceChanged)
         << "both clients did not receive the in-place turn-face-up change";
     EXPECT_TRUE(p1.sawManifestPhysicalFaceDown && p2.sawManifestPhysicalFaceDown && p1.sawManifestPhysicalFaceUp &&

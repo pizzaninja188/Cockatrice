@@ -326,9 +326,9 @@ impl GameEngine {
         }
         let batch = finish_with_events(
             self,
-            vec![ev_log(format!(
-                "[dev] public zone choice fixture selected object {selected}."
-            ))],
+            vec![ev_log(
+                "[dev] public zone choice fixture selected an object.".to_string(),
+            )],
         );
         Ok(batch)
     }

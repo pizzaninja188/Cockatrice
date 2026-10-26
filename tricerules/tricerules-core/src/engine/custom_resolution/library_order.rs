@@ -406,7 +406,10 @@ impl GameEngine {
                 .get(&selected)
                 .copied()
                 .unwrap_or(0);
-            self.commit_observed_zone_move(selected, Zone::Exile, None, &mut ev)?;
+            // Zone observers can emit public references during the move. Place the presentation
+            // boundary before those events, after the move succeeds and its generation is known.
+            let mut move_events = Vec::new();
+            self.commit_observed_zone_move(selected, Zone::Exile, None, &mut move_events)?;
             let generation = self
                 .state
                 .zone_change_generation
@@ -423,6 +426,8 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("Hideaway exile did not complete"));
             }
+            ev.push(events::ev_presentation_identity_break(selected, generation));
+            ev.extend(move_events);
             self.state
                 .objects
                 .get_mut(&selected)
@@ -1233,6 +1238,7 @@ mod library_look_choose_battlefield_tests {
             reveal_id: "event:7:2".into(),
             source_object_id: 90_001,
             source_description: "Transient public choice".into(),
+            source_zone_change_generation: None,
         };
         let mut events = vec![RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(

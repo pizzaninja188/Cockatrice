@@ -863,6 +863,11 @@ fn identical_path_groups_publish_distinct_source_labels() {
         .expect("initial response publishes the player's restricted mana");
     let groups = &pool.restricted_groups;
     assert_eq!(groups.len(), 2);
+    let first_group = engine.state.players[0].restricted_mana[0].restriction_group_id;
+    let second_group = engine.state.players[0].restricted_mana[1].restriction_group_id;
+    assert_ne!(first_group, second_group);
+    assert_eq!(groups[0].restriction_group_id, first_group);
+    assert_eq!(groups[1].restriction_group_id, second_group);
     assert_ne!(groups[0].display_label, groups[1].display_label);
     let first_presentation = groups[0]
         .presentation
@@ -878,12 +883,18 @@ fn identical_path_groups_publish_distinct_source_labels() {
         first_presentation.fallback_text,
         second_presentation.fallback_text
     );
-    assert!(first_presentation
-        .fallback_text
-        .contains(&first.to_string()));
-    assert!(second_presentation
-        .fallback_text
-        .contains(&second.to_string()));
+    for group in groups {
+        let presentation = group
+            .presentation
+            .as_ref()
+            .expect("source-bound presentation");
+        assert_eq!(presentation.fallback_text, group.display_label);
+        assert!(group
+            .display_label
+            .contains(&format!("mana group #{}", group.restriction_group_id)));
+        assert!(!group.display_label.contains("source object"));
+        assert!(!group.display_label.contains("generation"));
+    }
 }
 
 #[test]

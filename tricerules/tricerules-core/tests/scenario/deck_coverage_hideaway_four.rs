@@ -9,8 +9,9 @@ use tricerules_cards::{
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
-    cost_selection::Selection, ruled_command::Cmd, CastSource, CostObjectRef, CostObjectRefs,
-    CostSelection, LandSource, PaymentMana, PaymentSelection, ResolutionChoiceDecision,
+    cost_selection::Selection, ruled_command::Cmd, ruled_event::Ev, CastSource, CostObjectRef,
+    CostObjectRefs, CostSelection, LandSource, PaymentMana, PaymentSelection,
+    ResolutionChoiceDecision,
 };
 
 const MOSSWORT: &str = "mosswort_bridge";
@@ -101,9 +102,18 @@ fn resolve_hideaway_look(engine: &mut GameEngine, chooser: i32, chosen_card: u32
     assert_eq!(pending.presentation.min, 1);
     assert_eq!(pending.presentation.max, 1);
     assert!(pending.presentation.candidates.contains(&chosen_card));
-    engine
+    let completed = engine
         .apply_scenario_command(chooser, &submit_resolution_choice(vec![chosen_card]))
         .expect("exile the selected Hideaway card face down");
+    let identity_break = completed.events.iter().position(|event| {
+        matches!(&event.ev, Some(Ev::PresentationIdentityBreak(boundary))
+            if boundary.object_id == chosen_card
+                && boundary.zone_change_generation == engine.state.zone_change_generation[&chosen_card])
+    }).expect("the relay receives a generation-bound Hideaway identity boundary");
+    let visible_move = completed.events.iter().position(|event| {
+        matches!(&event.ev, Some(Ev::PermanentMoved(moved)) if moved.object_id == chosen_card)
+    }).expect("Hideaway emits its physical move");
+    assert!(identity_break < visible_move);
     assert_eq!(engine.state.objects[&chosen_card].zone, Zone::Exile);
     assert!(engine.state.objects[&chosen_card].face_down);
 }

@@ -102,6 +102,8 @@ public:
     bool sawManifestPhysicalFaceUp = false;
     bool sawManifestPhysicalFaceUpIdentity = false;
     quint32 manifestOid = 0;
+    quint32 manifestChoiceHandle = 0;
+    quint32 manifestMapHandle = 0;
     quint64 manifestGeneration = 0;
     int manifestServerCardId = -1;
     bool devRoomConjureSent = false;

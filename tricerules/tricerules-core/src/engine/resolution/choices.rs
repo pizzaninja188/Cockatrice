@@ -492,7 +492,7 @@ pub(super) fn choose_permanents(
                 .get(oid)
                 .and_then(|object| cx.engine.registry.get(&object.card_id))
                 .map(|definition| definition.name.clone())
-                .unwrap_or_else(|| format!("[object {oid}]"))
+                .unwrap_or_else(|| "[object]".to_string())
         })
         .collect::<Vec<_>>();
     let prompt = permanent_choice_prompt(&filter, min, max);

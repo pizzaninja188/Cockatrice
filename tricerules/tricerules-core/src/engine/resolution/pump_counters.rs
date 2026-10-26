@@ -793,8 +793,9 @@ pub(super) fn earthbend(
         .into_iter()
         .collect();
     cx.events.push(ev_log(format!(
-        "{} earthbends {oid} for {count}.",
-        cx.spell_label
+        "{} earthbends {} for {count}.",
+        cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, oid)
     )));
     super::misc::create_delayed_trigger(
         cx,
@@ -905,8 +906,9 @@ pub(super) fn animate_self(
     }
     let duration_label = resolving_duration_label(&duration);
     cx.events.push(ev_log(format!(
-        "{} animates {oid} as a {base_power}/{base_toughness} creature{duration_label}",
-        cx.spell_label
+        "{} animates {} as a {base_power}/{base_toughness} creature{duration_label}",
+        cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, oid)
     )));
     Ok(EffectOutcome::Continue)
 }

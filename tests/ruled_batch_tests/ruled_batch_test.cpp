@@ -577,6 +577,21 @@ protected:
         return game->ruled()->broadcaster->redactBatchForParticipant(batch, participant);
     }
 
+    bool prepareIdentityBatch(const ruled::v1::RuledEventBatch &batch)
+    {
+        return game->ruled()->broadcaster->presentationIdentity.beginBatch(batch);
+    }
+
+    void resetPresentationIdentity()
+    {
+        game->ruled()->broadcaster->presentationIdentity.reset();
+    }
+
+    bool canonicalizeClientCommand(int playerId, ruled::v1::RuledCommand &command)
+    {
+        return game->ruled()->broadcaster->canonicalizeClientCommand(playerId, command);
+    }
+
     void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
     {
         ruled::v1::IpcResponse fixture = response;
@@ -935,10 +950,17 @@ TEST_F(RuledBatchTest, RevealSnapshotsReachBothSeatsWithoutDependingOnCurrentPhy
         card->set_card_name("Grizzly Bears");
         // No physical binding is necessary: this is a historical engine-authored snapshot,
         // so moves or a shuffle in the same command cannot erase or substitute its identity.
+        std::string presentedId;
         for (auto *recipient : {p1, p2}) {
             auto received = redactFor(batch, recipient);
             ASSERT_EQ(received.events_size(), 1);
-            EXPECT_EQ(received.events(0).cards_revealed().SerializeAsString(), reveal->SerializeAsString());
+            auto presented = received.events(0).cards_revealed();
+            EXPECT_FALSE(presented.reveal_id().empty());
+            EXPECT_NE(presented.reveal_id(), reveal->reveal_id());
+            if (presentedId.empty()) presentedId = presented.reveal_id();
+            EXPECT_EQ(presented.reveal_id(), presentedId);
+            presented.set_reveal_id(reveal->reveal_id());
+            EXPECT_EQ(presented.SerializeAsString(), reveal->SerializeAsString());
         }
     }
 }
@@ -1057,6 +1079,13 @@ TEST_F(RuledBatchTest, ClientCannotSupplyCanonicalPolicyRows)
 
 TEST_F(RuledBatchTest, BlockerPreviewRequiresDeclareBlockersAndTheNonactivePlayer)
 {
+    ruled::v1::RuledEventBatch offers;
+    for (auto *recipient : {p1, p2}) {
+        auto *pair = (*offers.mutable_legal_by_player())[recipient->getPlayerId()].add_legal_block_pairs();
+        pair->set_attacker_id(101);
+        pair->set_blocker_id(202);
+        redactFor(offers, recipient);
+    }
     ruled::v1::RuledCommand preview;
     auto *pair = preview.mutable_preview_declare_blockers()->add_block_pairs();
     pair->set_attacker_id(101);
@@ -1246,6 +1275,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     p1Cast->set_cast_method(ruled::v1::CAST_METHOD_SNEAK);
     auto *sneakChoice = p1Cast->mutable_cost_choices()->add_choices();
     sneakChoice->set_kind(ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
+    sneakChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
     sneakChoice->add_candidate_ids(7);
     auto *sneakCandidate = sneakChoice->add_candidate_objects()->mutable_object();
     sneakCandidate->set_object_id(7);
@@ -1301,7 +1331,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *p2Cast = p2Legal.add_hand_actions();
     p2Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p2Cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
-    p2Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(9);
+    auto *p2Choice = p2Cast->mutable_cost_choices()->add_choices();
+    p2Choice->set_zone(ruled::v1::COST_CHOICE_ZONE_HAND);
+    p2Choice->add_candidate_ids(9);
     auto *p2Reduction = (*p2Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
     p2Reduction->set_application_id(702);
     p2Reduction->set_generic_mana(4);
@@ -1830,6 +1862,7 @@ TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithou
     revealedCard->set_card_name("Forest");
     updatePendingResolutionChoiceCache(seed);
 
+    std::string presentedRevealId;
     for (Server_Player *recipient : {p1, p2}) {
         ResponseContainer reconnect(-1);
         game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
@@ -1861,7 +1894,11 @@ TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithou
                                            });
         ASSERT_NE(snapshot, restored.events().end());
         ASSERT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 1);
-        EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals(0).reveal_id(), "draw:52:801:1");
+        const auto &revealId = snapshot->active_public_reveal_snapshot().reveals(0).reveal_id();
+        EXPECT_FALSE(revealId.empty());
+        EXPECT_NE(revealId, "draw:52:801:1");
+        if (presentedRevealId.empty()) presentedRevealId = revealId;
+        EXPECT_EQ(revealId, presentedRevealId);
     }
 }
 
@@ -5109,6 +5146,7 @@ TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyA
     preview.set_ok(true);
     preview.mutable_batch()->add_events()->mutable_active_public_reveal_snapshot();
     game->ruled()->broadcastRuledResponse(preview, false);
+    std::string presentedEntryRevealId;
     for (Server_Player *recipient : {p1, p2}) {
         ResponseContainer reconnect(-1);
         game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
@@ -5128,7 +5166,13 @@ TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyA
         const auto snapshot = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_active_public_reveal_snapshot(); });
         ASSERT_NE(snapshot, restored.events().end());
         ASSERT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 1);
-        EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals(0).SerializeAsString(), reveal->SerializeAsString());
+        auto presented = snapshot->active_public_reveal_snapshot().reveals(0);
+        EXPECT_FALSE(presented.reveal_id().empty());
+        EXPECT_NE(presented.reveal_id(), reveal->reveal_id());
+        if (presentedEntryRevealId.empty()) presentedEntryRevealId = presented.reveal_id();
+        EXPECT_EQ(presented.reveal_id(), presentedEntryRevealId);
+        presented.set_reveal_id(reveal->reveal_id());
+        EXPECT_EQ(presented.SerializeAsString(), reveal->SerializeAsString());
         EXPECT_FALSE(std::any_of(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_cards_revealed() || event.has_permanent_moved(); }));
     }
     active->clear_reveals();
@@ -8839,6 +8883,563 @@ TEST_F(RuledBatchTest, PrivateLibraryMoveToFaceDownExileDoesNotPublishSourcePhys
     EXPECT_FALSE(observerMove->has_card_name());
     EXPECT_NE(observerMove->new_card_id(), privateSourceId);
     EXPECT_EQ(observerMove->new_card_id(), selected->getId());
+}
+
+TEST_F(RuledBatchTest, ConcealedLibraryToFaceDownExileDoesNotIdentifySourceToOwner)
+{
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    auto *first = addCardToDeck(p1, "Grizzly Bears");
+    auto *selected = addCardToDeck(p1, "Hill Giant");
+    const int privateSourceId = selected->getId();
+    bindLibraryObject(p1, 211u, first);
+    bindLibraryObject(p1, 212u, selected);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *move = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(212u);
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p2->getPlayerId());
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    move->set_face_down(true);
+    callBatchApply(response);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards().first(), selected);
+    const auto *ownerMove = lastMoveCard(*p1Capture);
+    ASSERT_NE(ownerMove, nullptr);
+    EXPECT_EQ(ownerMove->position(), 0);
+    EXPECT_EQ(ownerMove->card_id(), -1);
+    EXPECT_FALSE(ownerMove->has_card_name());
+    EXPECT_NE(ownerMove->new_card_id(), privateSourceId);
+    EXPECT_EQ(ownerMove->new_card_id(), selected->getId());
+}
+
+TEST_F(RuledBatchTest, ConcealedEmergenceUsesTrackableHandleAndRejectsRetiredIdentity)
+{
+    constexpr quint32 oid = 9802;
+    ruled::v1::RuledEventBatch earlier;
+    auto *before = earlier.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    before->set_object_id(oid);
+    before->set_zone_change_generation(3);
+    before->set_effective_display_name("Grizzly Bears");
+    ASSERT_TRUE(prepareIdentityBatch(earlier));
+    auto old = redactFor(earlier, p2);
+    const auto oldHandle = old.events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    ASSERT_EQ(oldHandle, oid);
+
+    ruled::v1::RuledEventBatch emerged;
+    auto *departure = emerged.add_events()->mutable_permanent_moved();
+    departure->set_object_id(oid);
+    departure->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    departure->set_object_id_publicly_observable(true);
+    auto *boundary = emerged.add_events()->mutable_presentation_identity_break();
+    boundary->set_object_id(oid);
+    boundary->set_zone_change_generation(7);
+    auto *after = emerged.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    after->set_object_id(oid);
+    after->set_zone_change_generation(7);
+    after->set_face_down(true);
+    auto *map = emerged.add_events()->mutable_battlefield_object_map()->add_entries();
+    map->set_engine_object_id(oid);
+    map->set_server_card_id(91);
+    auto *action = (*emerged.mutable_legal_by_player())[p2->getPlayerId()].add_permanent_actions();
+    action->set_object_id(oid);
+    action->set_zone_change_generation(7);
+    ASSERT_TRUE(prepareIdentityBatch(emerged));
+    const auto projected = redactFor(emerged, p2);
+    ASSERT_EQ(projected.events_size(), 3);
+    EXPECT_EQ(projected.events(0).permanent_moved().object_id(), oldHandle);
+    const auto &faceDown = projected.events(1).zone_view().per_player(0).battlefield_objects(0);
+    const quint32 newHandle = faceDown.object_id();
+    EXPECT_NE(newHandle, oldHandle);
+    EXPECT_NE(faceDown.zone_change_generation(), 7u);
+    EXPECT_EQ(projected.events(2).battlefield_object_map().entries(0).engine_object_id(), newHandle);
+    ASSERT_EQ(projected.legal_by_player().at(p2->getPlayerId()).permanent_actions_size(), 1);
+    const auto &offer = projected.legal_by_player().at(p2->getPlayerId()).permanent_actions(0);
+    EXPECT_EQ(offer.object_id(), newHandle);
+    EXPECT_EQ(offer.zone_change_generation(), faceDown.zone_change_generation());
+
+    ruled::v1::RuledCommand allowed;
+    auto *command = allowed.mutable_execute_permanent_action();
+    command->set_object_id(newHandle);
+    command->set_expected_zone_change_generation(offer.zone_change_generation());
+    ASSERT_TRUE(canonicalizeClientCommand(p2->getPlayerId(), allowed));
+    EXPECT_EQ(allowed.execute_permanent_action().object_id(), oid);
+    EXPECT_EQ(allowed.execute_permanent_action().expected_zone_change_generation(), 7u);
+    ruled::v1::RuledCommand stale;
+    stale.mutable_execute_permanent_action()->set_object_id(oldHandle);
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), stale));
+    ruled::v1::RuledCommand unissued;
+    unissued.mutable_execute_permanent_action()->set_object_id(newHandle);
+    EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), unissued));
+
+    // Historical trigger and reveal receipts retain the old incarnation, without making its
+    // retired handle usable as an authenticated command again.
+    ruled::v1::RuledEventBatch lki;
+    auto *trigger = lki.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(oid);
+    trigger->set_source_zone_change_generation(3);
+    auto *reveal = lki.add_events()->mutable_cards_revealed();
+    reveal->set_source_object_id(oid);
+    reveal->set_source_zone_change_generation(3);
+    reveal->set_reveal_id("stack:9802:cost:0");
+    ASSERT_TRUE(prepareIdentityBatch(lki));
+    const auto past = redactFor(lki, p2);
+    ASSERT_EQ(past.events_size(), 2);
+    EXPECT_EQ(past.events(0).trigger_needs_target().source_permanent_id(), oldHandle);
+    EXPECT_EQ(past.events(1).cards_revealed().source_object_id(), oldHandle);
+    EXPECT_NE(past.events(1).cards_revealed().reveal_id(), "stack:9802:cost:0");
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), stale));
+
+    // Repeated publication of a boundary preserves both sides of its original event ordering.
+    ASSERT_TRUE(prepareIdentityBatch(emerged));
+    const auto repeated = redactFor(emerged, p2);
+    ASSERT_EQ(repeated.events_size(), 3);
+    EXPECT_EQ(repeated.events(0).permanent_moved().object_id(), oldHandle);
+    EXPECT_EQ(repeated.events(1).zone_view().per_player(0).battlefield_objects(0).object_id(), newHandle);
+
+    resetPresentationIdentity();
+    ruled::v1::RuledCommand afterReset;
+    afterReset.mutable_execute_permanent_action()->set_object_id(newHandle);
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), afterReset));
+}
+
+TEST_F(RuledBatchTest, FaceDownSnapshotsRequireSafeIncarnationProvenance)
+{
+    // Startup can contain a face-down object with no preceding marker: mint a private handle.
+    ruled::v1::RuledEventBatch startup;
+    auto *initial = startup.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    initial->set_object_id(11001);
+    initial->set_zone_change_generation(7);
+    initial->set_face_down(true);
+    ASSERT_TRUE(prepareIdentityBatch(startup));
+    const auto first = redactFor(startup, p2);
+    const auto initialHandle = first.events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    EXPECT_NE(initialHandle, 11001u);
+    ASSERT_TRUE(prepareIdentityBatch(startup));
+    EXPECT_EQ(redactFor(startup, p2).events(0).zone_view().per_player(0).battlefield_objects(0).object_id(), initialHandle);
+
+    // A visible permanent turned face down in place remains the same trackable object.
+    ruled::v1::RuledEventBatch faceUp;
+    auto *visible = faceUp.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    visible->set_object_id(11002);
+    visible->set_zone_change_generation(2);
+    ASSERT_TRUE(prepareIdentityBatch(faceUp));
+    const quint32 visibleHandle = redactFor(faceUp, p2).events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    visible->set_face_down(true);
+    ASSERT_TRUE(prepareIdentityBatch(faceUp));
+    EXPECT_EQ(redactFor(faceUp, p2).events(0).zone_view().per_player(0).battlefield_objects(0).object_id(), visibleHandle);
+
+    // A different incarnation without the required engine boundary is withheld.
+    visible->set_zone_change_generation(3);
+    EXPECT_FALSE(prepareIdentityBatch(faceUp));
+
+    // A startup snapshot cannot retroactively associate an earlier event with its hidden card.
+    ruled::v1::RuledEventBatch ambiguous;
+    auto *prior = ambiguous.add_events()->mutable_permanent_moved();
+    prior->set_object_id(11003);
+    auto *later = ambiguous.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    later->set_object_id(11003);
+    later->set_zone_change_generation(1);
+    later->set_face_down(true);
+    EXPECT_FALSE(prepareIdentityBatch(ambiguous));
+}
+
+TEST_F(RuledBatchTest, MultipleEmergencesInOneBatchUseEachEventTimeEpoch)
+{
+    constexpr quint32 oid = 11020;
+    ruled::v1::RuledEventBatch initial;
+    auto *first = initial.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    first->set_object_id(oid);
+    first->set_zone_change_generation(1);
+    ASSERT_TRUE(prepareIdentityBatch(initial));
+    const quint32 original = redactFor(initial, p2).events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+
+    ruled::v1::RuledEventBatch batch;
+    auto addDeparture = [&] {
+        auto *move = batch.add_events()->mutable_permanent_moved();
+        move->set_object_id(oid);
+        move->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+        move->set_object_id_publicly_observable(true);
+    };
+    auto addEmergence = [&](quint64 generation) {
+        auto *boundary = batch.add_events()->mutable_presentation_identity_break();
+        boundary->set_object_id(oid);
+        boundary->set_zone_change_generation(generation);
+        auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+        object->set_object_id(oid);
+        object->set_zone_change_generation(generation);
+        object->set_face_down(true);
+    };
+    addDeparture();
+    addEmergence(2);
+    addDeparture();
+    addEmergence(4);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto projected = redactFor(batch, p2);
+    ASSERT_EQ(projected.events_size(), 4);
+    const quint32 middle = projected.events(1).zone_view().per_player(0).battlefield_objects(0).object_id();
+    const quint32 current = projected.events(3).zone_view().per_player(0).battlefield_objects(0).object_id();
+    EXPECT_EQ(projected.events(0).permanent_moved().object_id(), original);
+    EXPECT_EQ(projected.events(2).permanent_moved().object_id(), middle);
+    EXPECT_NE(original, middle);
+    EXPECT_NE(middle, current);
+    EXPECT_NE(original, current);
+
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto repeated = redactFor(batch, p2);
+    ASSERT_EQ(repeated.events_size(), 4);
+    EXPECT_EQ(repeated.events(0).permanent_moved().object_id(), original);
+    EXPECT_EQ(repeated.events(1).zone_view().per_player(0).battlefield_objects(0).object_id(), middle);
+    EXPECT_EQ(repeated.events(2).permanent_moved().object_id(), middle);
+    EXPECT_EQ(repeated.events(3).zone_view().per_player(0).battlefield_objects(0).object_id(), current);
+    ruled::v1::RuledCommand stale;
+    stale.mutable_execute_permanent_action()->set_object_id(middle);
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), stale));
+}
+
+TEST_F(RuledBatchTest, AliasedPackedMapsMixedTargetsAndCombatEdgesRoundTrip)
+{
+    constexpr quint32 attackerId = 11040;
+    constexpr quint32 defenderId = 11041;
+    constexpr quint64 attackerGeneration = 7;
+    constexpr quint64 defenderGeneration = 9;
+    const quint32 playerId = static_cast<quint32>(p1->getPlayerId());
+    ruled::v1::RuledEventBatch batch;
+    for (const auto &[id, generation] : {std::pair<quint32, quint64>{attackerId, attackerGeneration},
+                                         {defenderId, defenderGeneration}}) {
+        auto *marker = batch.add_events()->mutable_presentation_identity_break();
+        marker->set_object_id(id);
+        marker->set_zone_change_generation(generation);
+    }
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    for (const auto &[id, generation] : {std::pair<quint32, quint64>{attackerId, attackerGeneration},
+                                         {defenderId, defenderGeneration}}) {
+        auto *card = view->add_battlefield_objects();
+        card->set_object_id(id);
+        card->set_zone_change_generation(generation);
+        card->set_face_down(true);
+    }
+    auto &legal = (*batch.mutable_legal_by_player())[p2->getPlayerId()];
+    const quint64 abilityKey = (quint64{attackerId} << 32) | 7u;
+    const quint64 zoneKey = (quint64{defenderId} << 8) | 3u;
+    const quint64 costKey = (quint64{attackerId} << 32) | 8u;
+    const quint64 manaKey = (quint64{defenderId} << 32) | 9u;
+    auto &abilityTargets = (*legal.mutable_valid_targets_by_ability())[abilityKey];
+    abilityTargets.add_groups()->add_valid_permanent_ids(defenderId);
+    auto *application = abilityTargets.add_targeting_cost_applications();
+    auto *playerTarget = application->add_affected_targets();
+    playerTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    playerTarget->set_object_id(playerId);
+    auto *objectTarget = application->add_affected_targets();
+    objectTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    objectTarget->set_object_id(defenderId);
+    (*legal.mutable_valid_targets_by_zone_object())[zoneKey].add_groups()->add_valid_stack_ids(attackerId);
+    auto &costs = (*legal.mutable_cost_choices_by_ability())[costKey];
+    auto *hand = costs.add_choices();
+    hand->set_zone(ruled::v1::COST_CHOICE_ZONE_HAND);
+    hand->add_candidate_ids(attackerId); // A numeric hand slot must never be interpreted as an object.
+    auto *permanents = costs.add_choices();
+    permanents->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    permanents->add_candidate_ids(defenderId);
+    auto *costObject = permanents->add_candidate_objects()->mutable_object();
+    costObject->set_object_id(defenderId);
+    costObject->set_zone_change_generation(defenderGeneration);
+    (*legal.mutable_mana_payment_by_ability())[manaKey].add_eligible_restricted_mana_group_ids(19);
+    auto *objectEdge = legal.add_legal_attack_assignments();
+    objectEdge->set_attacker_object_id(attackerId);
+    objectEdge->set_attacker_zone_change_generation(attackerGeneration);
+    objectEdge->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    objectEdge->mutable_defender()->set_object_id(defenderId);
+    objectEdge->mutable_defender()->set_expected_zone_change_generation(defenderGeneration);
+    objectEdge->set_defender_zone_change_generation(defenderGeneration);
+    objectEdge->set_defending_player_id(p1->getPlayerId());
+    auto *playerEdge = legal.add_legal_attack_assignments();
+    playerEdge->set_attacker_object_id(attackerId);
+    playerEdge->set_attacker_zone_change_generation(attackerGeneration);
+    playerEdge->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    playerEdge->mutable_defender()->set_object_id(playerId);
+    playerEdge->set_defending_player_id(p1->getPlayerId());
+    auto *sentinelEdge = legal.add_legal_attack_assignments();
+    sentinelEdge->set_attacker_object_id(attackerId);
+    sentinelEdge->set_attacker_zone_change_generation(attackerGeneration);
+    sentinelEdge->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    sentinelEdge->mutable_defender()->set_expected_zone_change_generation(0);
+
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto projected = redactFor(batch, p2);
+    ASSERT_EQ(projected.events_size(), 1);
+    const auto &cards = projected.events(0).zone_view().per_player(0).battlefield_objects();
+    ASSERT_EQ(cards.size(), 2);
+    const quint32 attacker = cards.Get(0).object_id();
+    const quint32 defender = cards.Get(1).object_id();
+    const quint64 attackerPresentedGeneration = cards.Get(0).zone_change_generation();
+    const quint64 defenderPresentedGeneration = cards.Get(1).zone_change_generation();
+    ASSERT_NE(attacker, attackerId);
+    ASSERT_NE(defender, defenderId);
+    ASSERT_NE(attacker, defender);
+    ASSERT_TRUE(projected.legal_by_player().contains(p2->getPlayerId()));
+    const auto &out = projected.legal_by_player().at(p2->getPlayerId());
+    const quint64 mappedAbilityKey = (quint64{attacker} << 32) | 7u;
+    const quint64 mappedZoneKey = (quint64{defender} << 8) | 3u;
+    const quint64 mappedCostKey = (quint64{attacker} << 32) | 8u;
+    const quint64 mappedManaKey = (quint64{defender} << 32) | 9u;
+    ASSERT_TRUE(out.valid_targets_by_ability().contains(mappedAbilityKey));
+    EXPECT_FALSE(out.valid_targets_by_ability().contains(abilityKey));
+    const auto &targets = out.valid_targets_by_ability().at(mappedAbilityKey);
+    ASSERT_EQ(targets.groups_size(), 1);
+    EXPECT_EQ(targets.groups(0).valid_permanent_ids(0), defender);
+    ASSERT_EQ(targets.targeting_cost_applications_size(), 1);
+    ASSERT_EQ(targets.targeting_cost_applications(0).affected_targets_size(), 2);
+    EXPECT_EQ(targets.targeting_cost_applications(0).affected_targets(0).object_id(), playerId);
+    EXPECT_EQ(targets.targeting_cost_applications(0).affected_targets(1).object_id(), defender);
+    ASSERT_TRUE(out.valid_targets_by_zone_object().contains(mappedZoneKey));
+    EXPECT_FALSE(out.valid_targets_by_zone_object().contains(zoneKey));
+    EXPECT_EQ(out.valid_targets_by_zone_object().at(mappedZoneKey).groups(0).valid_stack_ids(0), attacker);
+    ASSERT_TRUE(out.cost_choices_by_ability().contains(mappedCostKey));
+    EXPECT_FALSE(out.cost_choices_by_ability().contains(costKey));
+    const auto &mappedCosts = out.cost_choices_by_ability().at(mappedCostKey);
+    ASSERT_EQ(mappedCosts.choices_size(), 2);
+    EXPECT_EQ(mappedCosts.choices(0).candidate_ids(0), attackerId);
+    EXPECT_EQ(mappedCosts.choices(1).candidate_ids(0), defender);
+    EXPECT_EQ(mappedCosts.choices(1).candidate_objects(0).object().object_id(), defender);
+    EXPECT_EQ(mappedCosts.choices(1).candidate_objects(0).object().zone_change_generation(), defenderPresentedGeneration);
+    ASSERT_TRUE(out.mana_payment_by_ability().contains(mappedManaKey));
+    EXPECT_FALSE(out.mana_payment_by_ability().contains(manaKey));
+    EXPECT_EQ(out.mana_payment_by_ability().at(mappedManaKey).eligible_restricted_mana_group_ids(0), 19u);
+
+    ASSERT_EQ(out.legal_attack_assignments_size(), 3);
+    const auto &objectOut = out.legal_attack_assignments(0);
+    EXPECT_EQ(objectOut.attacker_object_id(), attacker);
+    EXPECT_EQ(objectOut.attacker_zone_change_generation(), attackerPresentedGeneration);
+    EXPECT_EQ(objectOut.defender().object_id(), defender);
+    EXPECT_EQ(objectOut.defender().expected_zone_change_generation(), defenderPresentedGeneration);
+    EXPECT_EQ(objectOut.defender_zone_change_generation(), defenderPresentedGeneration);
+    const auto &playerOut = out.legal_attack_assignments(1);
+    EXPECT_EQ(playerOut.defender().object_id(), playerId);
+    EXPECT_EQ(playerOut.defender_zone_change_generation(), 0u);
+    const auto &sentinelOut = out.legal_attack_assignments(2);
+    EXPECT_EQ(sentinelOut.defender().object_id(), 0u);
+    EXPECT_EQ(sentinelOut.defender().expected_zone_change_generation(), 0u);
+    EXPECT_EQ(sentinelOut.defender_zone_change_generation(), 0u);
+
+    ruled::v1::RuledCommand command;
+    *command.mutable_declare_attackers()->mutable_assignments() = out.legal_attack_assignments();
+    ASSERT_TRUE(canonicalizeClientCommand(p2->getPlayerId(), command));
+    const auto &returnedObject = command.declare_attackers().assignments(0);
+    EXPECT_EQ(returnedObject.attacker_object_id(), attackerId);
+    EXPECT_EQ(returnedObject.attacker_zone_change_generation(), attackerGeneration);
+    EXPECT_EQ(returnedObject.defender().object_id(), defenderId);
+    EXPECT_EQ(returnedObject.defender().expected_zone_change_generation(), defenderGeneration);
+    EXPECT_EQ(returnedObject.defender_zone_change_generation(), defenderGeneration);
+    const auto &returnedPlayer = command.declare_attackers().assignments(1);
+    EXPECT_EQ(returnedPlayer.attacker_object_id(), attackerId);
+    EXPECT_EQ(returnedPlayer.attacker_zone_change_generation(), attackerGeneration);
+    EXPECT_EQ(returnedPlayer.defender().object_id(), playerId);
+    EXPECT_EQ(returnedPlayer.defender_zone_change_generation(), 0u);
+    const auto &returnedSentinel = command.declare_attackers().assignments(2);
+    EXPECT_EQ(returnedSentinel.defender().object_id(), 0u);
+    EXPECT_EQ(returnedSentinel.defender().expected_zone_change_generation(), 0u);
+    EXPECT_EQ(returnedSentinel.defender_zone_change_generation(), 0u);
+}
+
+TEST_F(RuledBatchTest, FaceDownExileSnapshotMustMatchPhysicalAndEngineProvenance)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *player = batch.add_events()->mutable_zone_view()->add_per_player();
+    player->add_exile_object_ids(11010);
+    auto *physical = batch.add_events()->mutable_exile_object_map()->add_entries();
+    physical->set_engine_object_id(11010);
+    physical->set_server_card_id(12);
+    physical->set_face_down(true);
+    EXPECT_FALSE(prepareIdentityBatch(batch));
+    auto *identity = player->add_presentation_face_down_exiles();
+    identity->set_object_id(11010);
+    identity->set_zone_change_generation(8);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto view = redactFor(batch, p2);
+    ASSERT_EQ(view.events_size(), 2);
+    const auto handle = view.events(0).zone_view().per_player(0).exile_object_ids(0);
+    EXPECT_NE(handle, 11010u);
+    EXPECT_EQ(view.events(1).exile_object_map().entries(0).engine_object_id(), handle);
+    EXPECT_FALSE(view.events(1).exile_object_map().entries(0).face_down());
+    EXPECT_EQ(view.events(0).zone_view().per_player(0).presentation_face_down_exiles_size(), 0);
+}
+
+TEST_F(RuledBatchTest, FaceDownExileHandlePreservesFormerControllerLookRightsButNotOwnerKnowledge)
+{
+    constexpr quint32 oid = 11025;
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    ruled::v1::RuledEventBatch publicBefore;
+    auto *old = publicBefore.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    old->set_object_id(oid);
+    old->set_zone_change_generation(2);
+    ASSERT_TRUE(prepareIdentityBatch(publicBefore));
+    for (Server_AbstractParticipant *viewer : {static_cast<Server_AbstractParticipant *>(p1),
+                                               static_cast<Server_AbstractParticipant *>(p2),
+                                               static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto projected = redactFor(publicBefore, viewer);
+        EXPECT_EQ(projected.events(0).zone_view().per_player(0).battlefield_objects(0).object_id(), oid);
+    }
+
+    Server_Card *physical = addCardToExile(p1, "Island");
+    physical->setFaceDown(true);
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *boundary = seed.mutable_batch()->add_events()->mutable_presentation_identity_break();
+    boundary->set_object_id(oid);
+    boundary->set_zone_change_generation(17);
+    auto *view = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {}, {});
+    ownerView.add_exile_object_ids(oid);
+    auto *provenance = ownerView.add_presentation_face_down_exiles();
+    provenance->set_object_id(oid);
+    provenance->set_zone_change_generation(17);
+    auto viewerView = buildPerPlayerView(p2, {}, {});
+    auto *hidden = viewerView.add_hideaway_exile_cards();
+    hidden->set_object_id(oid);
+    hidden->set_zone_change_generation(17);
+    hidden->set_card_id("island");
+    hidden->set_owner_player_id(p1->getPlayerId());
+    *view->add_per_player() = ownerView;
+    *view->add_per_player() = viewerView;
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    updatePendingResolutionChoiceCache(seed);
+    ASSERT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, oid), physical);
+    auto batch = seed.batch();
+    const auto maps = appendedServerMaps();
+    for (const auto &event : maps.events())
+        batch.add_events()->CopyFrom(event);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    quint32 newHandle = 0;
+    for (Server_AbstractParticipant *viewer : {static_cast<Server_AbstractParticipant *>(p1),
+                                               static_cast<Server_AbstractParticipant *>(p2),
+                                               static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto projected = redactFor(batch, viewer);
+        const ruled::v1::FaceDownObjectMap *faceMap = nullptr;
+        const ruled::v1::ExileObjectMap *publicMap = nullptr;
+        for (const auto &event : projected.events()) {
+            if (event.has_face_down_object_map()) faceMap = &event.face_down_object_map();
+            if (event.has_exile_object_map()) publicMap = &event.exile_object_map();
+        }
+        ASSERT_NE(faceMap, nullptr);
+        ASSERT_NE(publicMap, nullptr);
+        ASSERT_EQ(publicMap->entries_size(), 1);
+        const quint32 handle = publicMap->entries(0).engine_object_id();
+        EXPECT_NE(handle, oid);
+        if (!newHandle) newHandle = handle;
+        EXPECT_EQ(handle, newHandle);
+        if (viewer == p2) {
+            ASSERT_EQ(faceMap->entries_size(), 1);
+            EXPECT_EQ(faceMap->entries(0).engine_object_id(), handle);
+            EXPECT_NE(faceMap->entries(0).zone_change_generation(), 17u);
+            EXPECT_EQ(faceMap->entries(0).server_card_id(), physical->getId());
+            EXPECT_EQ(faceMap->entries(0).card_name(), "Island");
+        } else {
+            EXPECT_EQ(faceMap->entries_size(), 0);
+        }
+    }
+
+    // A reconnect restores the former controller's same handle and look right, not the owner's.
+    for (Server_Player *viewer : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(viewer, reconnect, true);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto faceMap = std::find_if(restored.events().begin(), restored.events().end(),
+                                         [](const auto &event) { return event.has_face_down_object_map(); });
+        ASSERT_NE(faceMap, restored.events().end());
+        if (viewer == p2) {
+            ASSERT_EQ(faceMap->face_down_object_map().entries_size(), 1);
+            EXPECT_EQ(faceMap->face_down_object_map().entries(0).engine_object_id(), newHandle);
+            EXPECT_EQ(faceMap->face_down_object_map().entries(0).card_name(), "Island");
+        } else {
+            EXPECT_EQ(faceMap->face_down_object_map().entries_size(), 0);
+        }
+    }
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, oid), physical);
+}
+
+TEST_F(RuledBatchTest, UnvalidatedFaceDownMapAndUnknownFieldsFailClosedWithoutIssuingHandles)
+{
+    ruled::v1::RuledEventBatch unvalidated;
+    auto *map = unvalidated.add_events()->mutable_face_down_object_map()->add_entries();
+    map->set_engine_object_id(11030);
+    map->set_zone_change_generation(3);
+    EXPECT_FALSE(prepareIdentityBatch(unvalidated));
+
+    ruled::v1::RuledEventBatch malformed;
+    auto *object = malformed.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(11031);
+    object->set_zone_change_generation(3);
+    auto *later = malformed.add_events();
+    later->mutable_phase_changed();
+    later->GetReflection()->MutableUnknownFields(later)->AddVarint(500, 1);
+    ASSERT_TRUE(prepareIdentityBatch(malformed));
+    EXPECT_EQ(redactFor(malformed, p2).events_size(), 0);
+    ruled::v1::RuledCommand guessed;
+    guessed.mutable_execute_permanent_action()->set_object_id(11031);
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), guessed));
+
+    ruled::v1::RuledEventBatch unknownRoot;
+    unknownRoot.GetReflection()->MutableUnknownFields(&unknownRoot)->AddVarint(500, 1);
+    EXPECT_EQ(redactFor(unknownRoot, p2).events_size(), 0);
+    ruled::v1::RuledEventBatch unknownPrompt;
+    auto *prompt = unknownPrompt.mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->GetReflection()->MutableUnknownFields(prompt)->AddVarint(500, 1);
+    EXPECT_FALSE(redactFor(unknownPrompt, p2).has_resolution_prompt_state());
+}
+
+TEST_F(RuledBatchTest, IdentityHandlesAvoidPlayerAndLaterObjectCollisions)
+{
+    ruled::v1::RuledEventBatch first;
+    auto *object = first.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(static_cast<quint32>(p1->getPlayerId()));
+    object->set_zone_change_generation(1);
+    ASSERT_TRUE(prepareIdentityBatch(first));
+    const quint32 firstHandle = redactFor(first, p2).events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    EXPECT_NE(firstHandle, static_cast<quint32>(p1->getPlayerId()));
+    ruled::v1::RuledEventBatch later;
+    auto *action = (*later.mutable_legal_by_player())[p2->getPlayerId()].add_permanent_actions();
+    action->set_object_id(firstHandle);
+    action->set_zone_change_generation(2);
+    ASSERT_TRUE(prepareIdentityBatch(later));
+    const auto mapped = redactFor(later, p2).legal_by_player().at(p2->getPlayerId()).permanent_actions(0);
+    EXPECT_NE(mapped.object_id(), firstHandle);
+    ruled::v1::RuledCommand command;
+    command.mutable_execute_permanent_action()->set_object_id(mapped.object_id());
+    command.mutable_execute_permanent_action()->set_expected_zone_change_generation(mapped.zone_change_generation());
+    ASSERT_TRUE(canonicalizeClientCommand(p2->getPlayerId(), command));
+    EXPECT_EQ(command.execute_permanent_action().object_id(), firstHandle);
+    EXPECT_EQ(command.execute_permanent_action().expected_zone_change_generation(), 2u);
+}
+
+TEST_F(RuledBatchTest, IdentityTranslationUsesExactActiveChoiceDomain)
+{
+    ruled::v1::IpcResponse response;
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p2->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_AURA_PLAYER);
+    choice->set_resolution_prompt_id(40);
+    choice->add_candidate_object_ids(p1->getPlayerId());
+    auto *prompt = response.mutable_batch()->mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(p2->getPlayerId());
+    prompt->set_resolution_prompt_id(40);
+    updatePendingResolutionChoiceCache(response);
+    ruled::v1::RuledCommand command;
+    auto *submit = command.mutable_submit_resolution_choice();
+    submit->set_resolution_prompt_id(39);
+    submit->add_chosen_object_ids(p1->getPlayerId());
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(), command));
+    submit->set_resolution_prompt_id(40);
+    ASSERT_TRUE(canonicalizeClientCommand(p2->getPlayerId(), command));
+    EXPECT_EQ(submit->chosen_object_ids(0), static_cast<quint32>(p1->getPlayerId()));
 }
 
 TEST_F(RuledBatchTest, PublicMovementIdentityIsRestoredOnlyWhenEngineAuthorizesIt)

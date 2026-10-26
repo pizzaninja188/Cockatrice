@@ -79,6 +79,236 @@ public:
     }
 };
 
+class ManifestPrivacyDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    bool sawShuffle = false;
+    std::vector<ruled::v1::FaceDownObjectMap::Entry> faceDownIdentities;
+    void onRuledEvent(const ruled::v1::RuledEvent &event) override
+    {
+        OpeningDriver::onRuledEvent(event);
+        if (event.has_log() && event.log().text().find("shuffles their library.") != std::string::npos)
+            sawShuffle = true;
+        if (event.has_face_down_object_map())
+            for (const auto &entry : event.face_down_object_map().entries())
+                faceDownIdentities.push_back(entry);
+    }
+};
+
+TEST_F(RuledE2ESmokeTest, ShuffledFormerPublicCardEmergesFaceDownWithNewTrackableHandle)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    ManifestPrivacyDriver p1(true, QStringLiteral("manifestprivacy1"), &transcript);
+    ManifestPrivacyDriver p2(false, QStringLiteral("manifestprivacy2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    // One library card remains after the opening hand. This makes the known former public card
+    // available to Manifest Dread after a real shuffle; the graveyard remainder can disclose it by
+    // elimination, so this fixture tests identity correlation rather than name secrecy.
+    ASSERT_TRUE(p1.selectDeck(deckXml({{8, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "manifest privacy start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "manifest privacy start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 &&
+           !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+             p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+        p1.pump(25);
+        p2.pump(25);
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](ManifestPrivacyDriver &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        const int beforeStack = p1.stackDepth;
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+            if (p1.stateVersion > before1 && p2.stateVersion > before2 &&
+                p1.priorityPlayer == p2.priorityPlayer && p1.stackDepth == p2.stackDepth &&
+                !sender.legacyCastCommit && !sender.translatedCastCommitInFlight &&
+                (!command.has_cast_spell() || p1.stackDepth == beforeStack + 1))
+                return true;
+        }
+        return false;
+    };
+    auto put = [&](const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        command.mutable_dev_command()->set_target_player_id(p1.myId);
+        auto *entry = command.mutable_dev_command()->mutable_put_card_in_zone();
+        entry->set_card_name(name);
+        entry->set_zone(zone);
+        entry->set_ready(true);
+        return send(p1, command, QStringLiteral("manifest fixture put %1").arg(QString::fromLatin1(name)));
+    };
+    ASSERT_TRUE(put("Hill Giant", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    const auto publicCards = p2.battlefieldByPlayer.at(p1.myId);
+    const auto prior = std::find_if(publicCards.begin(), publicCards.end(), [](const auto &card) {
+        return card.cardId == QLatin1String("hill_giant");
+    });
+    ASSERT_NE(prior, publicCards.end());
+    const quint32 priorHandle = prior->oid;
+    ASSERT_NE(priorHandle, 0u);
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(priorHandle));
+    const int priorPhysicalId = p2.serverCardByEngineOid.at(priorHandle);
+    ruled::v1::RuledCommand toLibrary;
+    toLibrary.mutable_dev_command()->set_target_player_id(p1.myId);
+    toLibrary.mutable_dev_command()->mutable_move_card()->set_card_name("Hill Giant");
+    toLibrary.mutable_dev_command()->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_LIBRARY);
+    ASSERT_TRUE(send(p1, toLibrary, QStringLiteral("put known Giant into library")));
+    ASSERT_TRUE(put("Evolving Wilds", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    const auto &battlefield = p1.battlefieldByPlayer.at(p1.myId);
+    const auto wilds = std::find_if(battlefield.begin(), battlefield.end(), [](const auto &card) {
+        return card.cardId == QLatin1String("evolving_wilds");
+    });
+    ASSERT_NE(wilds, battlefield.end());
+    ruled::v1::RuledCommand activate;
+    p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), wilds->oid);
+    activate.mutable_activate_ability()->set_ability_index(0);
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("activate Evolving Wilds")));
+    ruled::v1::RuledCommand pass;
+    pass.mutable_pass_priority();
+    ASSERT_TRUE(send(p1, pass, QStringLiteral("pass Wilds P1")));
+    ASSERT_TRUE(send(p2, pass, QStringLiteral("pass Wilds P2")));
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    ruled::v1::RuledCommand declineSearch;
+    declineSearch.mutable_submit_resolution_choice();
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, declineSearch, QStringLiteral("search for no land and shuffle")));
+    EXPECT_TRUE(p1.sawShuffle && p2.sawShuffle);
+
+    ASSERT_TRUE(put("Manifest Dread", ruled::v1::DEV_ZONE_HAND));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_g(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_r(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(4);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("manifest and turn-up mana")));
+    const auto *spell = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Manifest Dread"));
+    ASSERT_NE(spell, nullptr);
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(spell->hand_index());
+    ASSERT_TRUE(send(p1, cast, QStringLiteral("cast Manifest Dread")));
+    ASSERT_TRUE(send(p1, pass, QStringLiteral("pass Manifest P1")));
+    ASSERT_TRUE(send(p2, pass, QStringLiteral("pass Manifest P2")));
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_MANIFEST_DREAD);
+    const auto choice = *p1.pendingChoice;
+    int selected = -1;
+    for (int i = 0; i < choice.candidate_names_size(); ++i)
+        if (choice.candidate_names(i) == "Hill Giant") selected = i;
+    ASSERT_GE(selected, 0);
+    EXPECT_EQ(choice.candidate_object_ids(selected), priorHandle);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+    const auto physicalBefore1 = p1.physicalMoveEvents.size();
+    const auto physicalBefore2 = p2.physicalMoveEvents.size();
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(choice.candidate_object_ids(selected));
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, choose, QStringLiteral("manifest known Giant")));
+
+    auto faceDown = [&](const ManifestPrivacyDriver &client) -> std::optional<ObservedState::Permanent> {
+        for (const auto &card : client.battlefieldByPlayer.at(p1.myId))
+            if (card.faceDown) return card;
+        return std::nullopt;
+    };
+    const auto actorCard = faceDown(p1);
+    const auto observerCard = faceDown(p2);
+    ASSERT_TRUE(actorCard && observerCard);
+    EXPECT_NE(actorCard->oid, priorHandle);
+    EXPECT_EQ(actorCard->oid, observerCard->oid);
+    EXPECT_EQ(actorCard->generation, observerCard->generation);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(actorCard->oid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(actorCard->oid));
+    EXPECT_EQ(p1.serverCardByEngineOid.at(actorCard->oid), p2.serverCardByEngineOid.at(actorCard->oid));
+    EXPECT_NE(p1.serverCardByEngineOid.at(actorCard->oid), priorPhysicalId);
+    const auto ownIdentity = std::find_if(p1.faceDownIdentities.begin(), p1.faceDownIdentities.end(), [&](const auto &entry) {
+        return entry.engine_object_id() == actorCard->oid && entry.card_name() == "Hill Giant";
+    });
+    ASSERT_NE(ownIdentity, p1.faceDownIdentities.end());
+    EXPECT_TRUE(p2.faceDownIdentities.empty());
+    for (const auto &pair : {std::make_pair(&p1, physicalBefore1), std::make_pair(&p2, physicalBefore2)}) {
+        const auto &moves = pair.first->physicalMoveEvents;
+        const auto move = std::find_if(moves.begin() + pair.second, moves.end(), [](const auto &event) {
+            return event.start_zone() == ZoneNames::DECK && event.target_zone() == ZoneNames::TABLE && event.face_down();
+        });
+        ASSERT_NE(move, moves.end());
+        EXPECT_EQ(move->card_id(), -1);
+        EXPECT_EQ(move->position(), 0);
+        EXPECT_FALSE(move->has_card_name());
+    }
+    const auto action = std::find_if(p1.latestLegal.permanent_actions().begin(), p1.latestLegal.permanent_actions().end(),
+                                     [&](const auto &item) { return item.object_id() == actorCard->oid &&
+                                         item.kind() == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP; });
+    ASSERT_NE(action, p1.latestLegal.permanent_actions().end());
+    EXPECT_EQ(action->zone_change_generation(), actorCard->generation);
+    ruled::v1::RuledCommand turnUp;
+    turnUp.mutable_execute_permanent_action()->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+    turnUp.mutable_execute_permanent_action()->set_object_id(action->object_id());
+    turnUp.mutable_execute_permanent_action()->set_expected_zone_change_generation(action->zone_change_generation());
+
+    auto stale = turnUp;
+    stale.mutable_execute_permanent_action()->set_object_id(priorHandle);
+    const quint64 staleCommandId = p1.nextCmdId;
+    p1.sendRuled(stale, QStringLiteral("reject retired public handle"));
+    QElapsedTimer rejected;
+    rejected.start();
+    while (!p1.responses.count(staleCommandId) && rejected.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    ASSERT_TRUE(p1.responses.count(staleCommandId));
+    EXPECT_NE(p1.responses.at(staleCommandId).response_code(), Response::RespOk);
+
+    ruled::v1::RuledCommand preview;
+    auto *payment = preview.mutable_preview_payment();
+    payment->set_transaction_id(91001);
+    payment->set_revision(1);
+    *payment->mutable_execute_permanent_action() = turnUp.execute_permanent_action();
+    auto *available = payment->mutable_execute_permanent_action()->mutable_payment()->mutable_mana();
+    available->set_w(p1.myPool.w);
+    available->set_u(p1.myPool.u);
+    available->set_b(p1.myPool.b);
+    available->set_r(p1.myPool.r);
+    available->set_g(p1.myPool.g);
+    available->set_c(p1.myPool.c);
+    const int previousPreviews = p1.paymentPreviewCount;
+    p1.sendRuled(preview, QStringLiteral("preview face-up payment using public handle"));
+    QElapsedTimer previewWait;
+    previewWait.start();
+    while (p1.paymentPreviewCount == previousPreviews && previewWait.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    ASSERT_GT(p1.paymentPreviewCount, previousPreviews);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    *turnUp.mutable_execute_permanent_action()->mutable_payment() = p1.paymentPreview.selection();
+    for (const auto &restricted : p1.paymentPreview.restricted_mana())
+        *turnUp.mutable_execute_permanent_action()->add_restricted_mana() = restricted;
+    ASSERT_TRUE(send(p1, turnUp, QStringLiteral("turn manifested Giant face up")));
+    EXPECT_FALSE(faceDown(p1));
+    EXPECT_FALSE(faceDown(p2));
+}
+
 TEST_F(RuledE2ESmokeTest, DemonicTutorConcealsSelectedIdentityFromTheOtherClient)
 {
     const auto started = startServers();

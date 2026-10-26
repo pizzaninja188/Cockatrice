@@ -19,13 +19,13 @@ pub(super) fn restriction_requires_source_tracking(restriction: &ManaSpendingRes
 pub(super) fn source_bound_mana_group_label(
     restriction: &ManaSpendingRestriction,
     origin: &ManaSpendingOrigin,
+    restriction_group_id: u32,
 ) -> String {
     format!(
-        "{} (player {}, source object {} generation {}) — {}",
+        "{} (player {}, mana group #{}) — {}",
         origin.source_label,
         origin.controller,
-        origin.source_object_id,
-        origin.source_zone_change_generation,
+        restriction_group_id,
         restriction.fallback_label()
     )
 }

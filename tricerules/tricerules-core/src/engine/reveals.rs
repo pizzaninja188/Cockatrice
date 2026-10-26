@@ -46,6 +46,10 @@ pub(crate) fn reveal_cards(
                     reveal_id: String::new(),
                     source_object_id,
                     source_description: source_description.into(),
+                    source_zone_change_generation: state
+                        .zone_change_generation
+                        .get(&source_object_id)
+                        .copied(),
                 });
                 groups.len() - 1
             });
@@ -231,6 +235,7 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
                         pending.transaction_id,
                     ),
                     source_object_id: pending.source_object_id,
+                    source_zone_change_generation: Some(pending.source_zone_change_generation),
                     source_description: pending.source_description.clone(),
                     zone_owner_player_id: source.owner,
                     source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
@@ -274,6 +279,11 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
                 reveals.push(rv1::CardsRevealed {
                     reveal_id: format!("stack:{}:cost:{}", item.id, receipt.group_index),
                     source_object_id: item.id,
+                    source_zone_change_generation: eng
+                        .state
+                        .zone_change_generation
+                        .get(&item.id)
+                        .copied(),
                     source_description: source_description.clone(),
                     zone_owner_player_id: item.controller,
                     source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
@@ -314,6 +324,11 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
                     format!("stack:{}:activation", item.id)
                 },
                 source_object_id: item.id,
+                source_zone_change_generation: eng
+                    .state
+                    .zone_change_generation
+                    .get(&item.id)
+                    .copied(),
                 source_description: card_name.clone(),
                 zone_owner_player_id: item.source_owner.unwrap_or(item.controller),
                 source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,

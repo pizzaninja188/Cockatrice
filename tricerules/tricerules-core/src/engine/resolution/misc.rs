@@ -91,8 +91,9 @@ pub(super) fn copy_target_artifact_with_mana_value_x(
     object.copy_revision = object.copy_revision.saturating_add(1);
     object.active_copy_occurrence = Some(object.copy_revision);
     cx.events.push(ev_log(format!(
-        "{} becomes a copy of artifact {target}.",
+        "{} becomes a copy of {}.",
         cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, target),
     )));
     Ok(EffectOutcome::Continue)
 }
@@ -520,8 +521,9 @@ pub(super) fn gain_control(
     });
     cx.engine.reindex_battlefield_control(cx.events);
     cx.events.push(ev_log(format!(
-        "{} changes control of {target} {duration_label}",
+        "{} changes control of {} {duration_label}",
         cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, target),
     )));
     Ok(EffectOutcome::Continue)
 }
@@ -559,7 +561,8 @@ pub(super) fn give_control_of_source_to_attacking_player(
     });
     cx.engine.reindex_battlefield_control(cx.events);
     cx.events.push(ev_log(format!(
-        "P{attacking_player} gains control of permanent {source_id}."
+        "P{attacking_player} gains control of {}.",
+        object_display_name(&cx.engine.state, cx.engine.registry, source_id)
     )));
     Ok(EffectOutcome::Continue)
 }

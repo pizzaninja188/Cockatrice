@@ -19,12 +19,13 @@
 #include <libcockatrice/utility/zone_names.h>
 
 RuledBroadcastRouter::RuledBroadcastRouter(Server_Game *_game, RuledBatchSynchronizer *_synchronizer)
-    : game(_game), synchronizer(_synchronizer)
+    : game(_game), synchronizer(_synchronizer), presentationIdentity(_game)
 {
 }
 
 void RuledBroadcastRouter::resetForNewGame()
 {
+    presentationIdentity.reset();
     lastBroadcastHandSlotMap.Clear();
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
@@ -53,6 +54,10 @@ void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool au
     toSend.set_error(resp.error());
     toSend.mutable_batch()->CopyFrom(resp.batch());
     appendServerObjectMaps(toSend);
+    if (!presentationIdentity.beginBatch(toSend.batch())) {
+        qWarning() << "ruled presentation identity boundary is invalid; suppressing batch";
+        return;
+    }
     if (game->ruled()->diagnostics()) {
         game->ruled()->diagnostics()->projection(toSend);
         game->ruled()->diagnostics()->journal().state("relay", synchronizer->diagnosticSnapshot());
@@ -566,11 +571,15 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
             }
             auto *player = static_cast<Server_Player *>(ab);
             const auto &oidMap = synchronizer->playerBinding(player->getPlayerId()).exileEngineOidToServerCardId;
+            Server_CardZone *exile = player->getZones().value(ZoneNames::EXILE);
             for (auto it = oidMap.constBegin(); it != oidMap.constEnd(); ++it) {
                 auto *entry = map->add_entries();
                 entry->set_player_id(player->getPlayerId());
                 entry->set_engine_object_id(it.key());
                 entry->set_server_card_id(it.value());
+                Server_Card *card = exile ? exile->getCard(it.value(), nullptr, false) : nullptr;
+                if (card)
+                    entry->set_face_down(card->getFaceDown());
             }
         }
         // An empty map is meaningful: it clears client-side identity after the last exiled card
@@ -968,6 +977,11 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         filtered.mutable_events(moveIt.key())->mutable_permanent_moved()->set_object_id(moveIt.value());
     }
 
+    if (!presentationIdentity.project(filtered, participant->getPlayerId())) {
+        qWarning() << "ruled presentation identity projection failed; suppressing batch";
+        filtered.Clear();
+        return filtered;
+    }
     clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_SERVER_ONLY);
     for (int ei = filtered.events_size() - 1; ei >= 0; --ei) {
         if (filtered.events(ei).ev_case() == ruled::v1::RuledEvent::EV_NOT_SET) {
@@ -977,11 +991,20 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     return filtered;
 }
 
-void RuledBroadcastRouter::sendPaymentPreview(int playerId, const ruled::v1::PaymentPreview &preview)
+bool RuledBroadcastRouter::canonicalizeClientCommand(int playerId, ruled::v1::RuledCommand &command)
+{
+    const auto *choice = pendingResolutionChoice && pendingResolutionChoice->deciding_player_id() == playerId
+                             ? &*pendingResolutionChoice : nullptr;
+    return presentationIdentity.canonicalize(command, playerId, choice);
+}
+
+bool RuledBroadcastRouter::sendPaymentPreview(int playerId, const ruled::v1::PaymentPreview &preview)
 {
     // Reviewed private-query boundary. Do not inject maps, retain reconnect state, or broadcast.
     ruled::v1::RuledEventBatch batch;
     *batch.mutable_payment_preview() = preview;
+    if (!presentationIdentity.projectPayment(*batch.mutable_payment_preview(), playerId))
+        return false;
     Event_RuledPayload event;
     if (game->ruled()->diagnostics())
         game->ruled()->diagnostics()->decorate(event);
@@ -989,4 +1012,5 @@ void RuledBroadcastRouter::sendPaymentPreview(int playerId, const ruled::v1::Pay
     GameEventStorage storage;
     storage.enqueueGameEvent(event, -1, GameEventStorageItem::SendToPrivate, playerId);
     storage.sendToGame(game);
+    return true;
 }

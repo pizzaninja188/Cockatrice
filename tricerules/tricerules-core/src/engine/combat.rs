@@ -622,6 +622,7 @@ impl GameEngine {
                 rv1::AttackManaAbilityUndoOption {
                     activation_command_index: receipt.activation_command_index,
                     source_object_id: receipt.source.object_id,
+                    source_zone_change_generation: Some(receipt.source.zone_change_generation),
                     source_label: receipt.source_label.clone(),
                     reversible,
                     unavailable_reason: unavailable_reason.unwrap_or_default().into(),

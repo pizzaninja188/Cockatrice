@@ -335,6 +335,8 @@ void SeededGameDriver::onRuledEvent(const ruled::v1::RuledEvent &ev)
         }
     } else if (ev.has_battlefield_object_map()) {
         for (const auto &entry : ev.battlefield_object_map().entries()) {
+            if (manifestServerCardId >= 0 && entry.server_card_id() == manifestServerCardId)
+                manifestMapHandle = entry.engine_object_id();
             if (sawEvolvingWildsPhysicalDeckToTable && evolvingWildsPhysicalCardId >= 0 &&
                 entry.server_card_id() == evolvingWildsPhysicalCardId) {
                 if (evolvingWildsChosenOid != 0 && evolvingWildsChosenOid != entry.engine_object_id()) {
@@ -1129,7 +1131,9 @@ void SeededGameDriver::act()
                 return;
             }
             choice->add_chosen_object_ids(rcr.candidate_object_ids(chosen));
-            manifestOid = rcr.candidate_object_ids(chosen);
+            manifestChoiceHandle = rcr.candidate_object_ids(chosen);
+            // The concealed card receives a fresh public identity when it emerges.
+            manifestOid = 0;
             submittedManifestChoice = true;
         } else if (isOpponentHand) {
             int chosen = -1;

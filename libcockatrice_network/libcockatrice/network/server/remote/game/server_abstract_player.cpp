@@ -499,6 +499,19 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
 
         eventPrivate.set_x(newX);
 
+        // A library owner does not necessarily have a right to inspect a card exiled face down
+        // (for example, another player's Hideaway). The source id and position can reconnect a
+        // previously public card to its new anonymous physical id after a shuffle. Consume an
+        // anonymous library placeholder; authorized viewers receive identity from the ruled
+        // FaceDownObjectMap instead. Keep the new id so the destination remains trackable.
+        if (concealRuledSource && startzone->getType() == ServerInfo_Zone::HiddenZone && faceDown &&
+            targetzone->getType() == ServerInfo_Zone::PublicZone) {
+            eventPrivate.set_card_id(-1);
+            eventPrivate.set_position(0);
+            eventPrivate.clear_card_name();
+            eventPrivate.clear_new_card_provider_id();
+        }
+
         // Other clients need a list index to remove from a private hand when card_ids are not mirrored locally
         // (opponent hands use contentsKnown=false and CardItems keep id -1). Hidden zones (e.g. library) already
         // sent position here; add Private -> Public (hand to stack/table) so takeCard(position, ...) succeeds.

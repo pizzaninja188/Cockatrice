@@ -12,6 +12,7 @@ set(HEADERS
     game/server_counter.h
     game/rules_relay.h
     game/ruled_broadcast_router.h
+    game/ruled_presentation_identity.h
     game/ruled_batch_synchronizer.h
     game/ruled_game_driver.h
     game/ruled_game_session.h
@@ -49,6 +50,7 @@ add_library(
   game/server_counter.cpp
   game/rules_relay.cpp
   game/ruled_broadcast_router.cpp
+  game/ruled_presentation_identity.cpp
   game/ruled_batch_synchronizer.cpp
   game/ruled_relay_diagnostic_state.cpp
   game/ruled_game_driver.cpp

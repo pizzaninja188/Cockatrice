@@ -401,7 +401,11 @@ impl GameEngine {
                 let display_label = origin.map_or_else(
                     || restriction.fallback_label(),
                     |origin| {
-                        super::mana_spending::source_bound_mana_group_label(restriction, origin)
+                        super::mana_spending::source_bound_mana_group_label(
+                            restriction,
+                            origin,
+                            restriction_group_id,
+                        )
                     },
                 );
                 let mut presentation = self
@@ -905,6 +909,25 @@ impl GameEngine {
             graveyard_object_ids: p.graveyard.clone(),
             // Engine ObjectIds for each card in this player's public exile zone.
             exile_object_ids: p.exile.clone(),
+            presentation_face_down_exiles: p
+                .exile
+                .iter()
+                .filter(|id| {
+                    self.state
+                        .objects
+                        .get(id)
+                        .is_some_and(|object| object.face_down)
+                })
+                .map(|id| rv1::PresentationExileIdentity {
+                    object_id: *id,
+                    zone_change_generation: self
+                        .state
+                        .zone_change_generation
+                        .get(id)
+                        .copied()
+                        .unwrap_or(0),
+                })
+                .collect(),
             hideaway_exile_cards: private_hideaway_exiles
                 .into_iter()
                 .map(|((object_id, generation), (card_id, owner_player_id))| {
@@ -1188,7 +1211,7 @@ pub(super) fn object_display_name(
                 .map(|values| values.display_name.clone())
                 .or_else(|| registry.get(&object.card_id).map(|d| d.name.clone()))
         })
-        .unwrap_or_else(|| format!("[object {}]", oid))
+        .unwrap_or_else(|| "[object]".to_string())
 }
 
 fn describe_target_for_log(
@@ -1319,6 +1342,17 @@ pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
     }
 }
 
+pub(super) fn ev_presentation_identity_break(object_id: ObjectId, generation: u64) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::PresentationIdentityBreak(
+            rv1::PresentationIdentityBreak {
+                object_id,
+                zone_change_generation: generation,
+            },
+        )),
+    }
+}
+
 /// CR 603.3b: ask `deciding_player` for the order their simultaneous triggers go on the stack.
 ///
 /// Self-describing by design — the candidates are not on the stack yet, so a client cannot resolve
@@ -1342,6 +1376,7 @@ pub(super) fn ev_trigger_order_required(
                         source_card_name: staged.card_name.clone(),
                         ability_text: staged.ability_text.clone(),
                         ability_presentation: staged.presentation.clone(),
+                        source_zone_change_generation: Some(staged.source_zone_change),
                     })
                     .collect(),
             },

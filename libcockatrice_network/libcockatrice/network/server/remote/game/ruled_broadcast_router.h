@@ -5,6 +5,7 @@
 // maps, applies fail-closed protobuf visibility redaction, and retains only reconnect state.
 
 #include "../server_response_containers.h"
+#include "ruled_presentation_identity.h"
 
 #include <QHash>
 #include <QSet>
@@ -22,7 +23,8 @@ class RuledBroadcastRouter
 public:
     RuledBroadcastRouter(Server_Game *game, RuledBatchSynchronizer *synchronizer);
 
-    void sendPaymentPreview(int playerId, const ruled::v1::PaymentPreview &preview);
+    bool sendPaymentPreview(int playerId, const ruled::v1::PaymentPreview &preview);
+    bool canonicalizeClientCommand(int playerId, ruled::v1::RuledCommand &command);
     void resetForNewGame();
     void broadcast(const ruled::v1::IpcResponse &response, bool authoritative = true);
     void enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant, ResponseContainer &rc);
@@ -36,6 +38,7 @@ private:
 
     Server_Game *const game;
     RuledBatchSynchronizer *const synchronizer;
+    RuledPresentationIdentity presentationIdentity;
     ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;

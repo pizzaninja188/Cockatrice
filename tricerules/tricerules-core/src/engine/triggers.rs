@@ -3235,6 +3235,7 @@ impl GameEngine {
                             max_modes,
                             modes: modal_modes.unwrap_or_default(),
                             ability_presentation: presentation.clone(),
+                            source_zone_change_generation: Some(source_zone_change),
                         },
                     )),
                 });
