@@ -269,9 +269,23 @@ fn bushwhack_search_mode_reveals_a_basic_land_to_hand() {
     let choice = find_resolution_choice(&batch).expect("library search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert!(choice.candidate_object_ids.contains(&land));
-    engine
+    let completed = engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .expect("choose basic land");
+
+    assert!(completed.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(reveal))
+            if reveal.cards.iter().any(|card| card.object_id == land)
+    )));
+    assert!(
+        completed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(movement))
+                if movement.object_id == land && movement.object_id_publicly_observable
+        )),
+        "a revealed search explicitly authorizes its movement identity"
+    );
 
     assert!(engine.state.players[0].hand.contains(&land));
     assert_eq!(engine.state.objects[&land].zone, Zone::Hand);

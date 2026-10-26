@@ -51,6 +51,16 @@ bool ruledAllowsCrossPlayerMove(const Server_Game *game,
     return false;
 }
 
+bool ruledConcealsMoveSource(const Server_Game *game,
+                            const Server_CardZone *startZone,
+                            const Server_CardZone *targetZone,
+                            bool destinationFaceDown)
+{
+    return game && game->getRuledGame() && startZone && targetZone &&
+           startZone->getType() != ServerInfo_Zone::PublicZone &&
+           (destinationFaceDown || targetZone->getType() != ServerInfo_Zone::PublicZone);
+}
+
 void clearRuledFieldsByVisibility(google::protobuf::Message *message, ruled::v1::FieldVisibility visibility)
 {
     if (!message) {

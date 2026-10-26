@@ -12,6 +12,14 @@ pub(super) struct NumericCheckpoint {
     first_strike: bool,
 }
 
+impl NumericCheckpoint {
+    /// Failed ordinary commands retain their existing rules-specific rollback semantics, but
+    /// must not retain disclosure evidence from a tentative move that was never published.
+    pub(super) fn restore_move_disclosure_receipts(&mut self, state: &mut GameState) {
+        state.move_disclosure_receipts = std::mem::take(&mut self.state.move_disclosure_receipts);
+    }
+}
+
 impl GameEngine {
     pub(super) fn numeric_checkpoint(&self) -> NumericCheckpoint {
         NumericCheckpoint {

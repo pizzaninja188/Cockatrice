@@ -1,6 +1,113 @@
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
+#[test]
+fn demonic_tutor_selection_stays_private_after_a_known_card_is_shuffled() {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+    let decks = Some(vec![
+        deck_with(
+            "swamp",
+            &[
+                "totally_lost",
+                "mystical_tutor",
+                "demonic_tutor",
+                "counterspell",
+            ],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91_032,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    for card in ["totally_lost", "mystical_tutor", "demonic_tutor"] {
+        ensure_in_hand(&mut engine, 0, card);
+    }
+    let known = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let instant = inject_library_card(&mut engine, 0, "counterspell");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 4,
+            ..Default::default()
+        },
+    );
+    let lost = hand_index_for_card(&engine, 0, "totally_lost");
+    engine
+        .apply_scenario_command(0, &cast_spell(lost, target_object(known)))
+        .expect("cast Totally Lost");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    let public_move = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Totally Lost");
+    assert!(public_move.events.iter().any(|event| matches!(
+        &event.ev, Some(Ev::PermanentMoved(moved))
+            if moved.object_id == known && moved.object_id_publicly_observable
+    )));
+    assert_eq!(
+        engine.state.players[0].library.front().copied(),
+        Some(known)
+    );
+
+    let search = cast_instant_and_resolve(
+        &mut engine,
+        0,
+        "mystical_tutor",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert!(find_resolution_choice(&search)
+        .unwrap()
+        .candidate_object_ids
+        .contains(&instant));
+    let shuffled = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![instant]))
+        .expect("reveal and shuffle");
+    assert!(shuffled.events.iter().any(|event| matches!(
+        &event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+    )));
+    assert!(engine.state.players[0].library.contains(&known));
+
+    let search = cast_instant_and_resolve(
+        &mut engine,
+        0,
+        "demonic_tutor",
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    assert!(find_resolution_choice(&search)
+        .unwrap()
+        .candidate_object_ids
+        .contains(&known));
+    let chosen = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![known]))
+        .expect("private search");
+    assert!(chosen.events.iter().any(|event| matches!(
+        &event.ev, Some(Ev::PermanentMoved(moved))
+            if moved.object_id == known && !moved.object_id_publicly_observable
+    )));
+    assert!(!chosen
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    assert!(engine.state.players[0].hand.contains(&known));
+}
+
 /// Demonic Tutor: successful search — the chosen library card arrives in hand and the library
 /// is shuffled afterward.
 #[test]
@@ -125,6 +232,26 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
             ))
         )),
         "Demonic Tutor does not reveal its found card"
+    );
+    let moved = completion
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.object_id == mountain_oid =>
+            {
+                Some(moved)
+            }
+            _ => None,
+        })
+        .expect("the exact physical library card moves to hand");
+    assert_eq!(
+        moved.destination(),
+        tricerules_proto::ruled::v1::permanent_moved::Destination::Hand
+    );
+    assert!(
+        !moved.object_id_publicly_observable,
+        "the selected library identity is private"
     );
 
     assert!(e.state.pending_resolution.is_none(), "resolution completed");

@@ -1857,6 +1857,7 @@ impl GameEngine {
             last_known_copy_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
+            move_disclosure_receipts: HashMap::new(),
             commander_sba_checked_generations: HashMap::new(),
             battlefield_entry_timestamps: HashMap::new(),
             next_game_rule_timestamp: 0,
@@ -2507,7 +2508,7 @@ impl GameEngine {
         // An earlier instruction can change the numeric domain before a later gain, P/T change,
         // or damage replacement. Capture the whole command; restore typed numeric and bounded
         // authored-program invariant failures below.
-        let numeric_checkpoint = self.numeric_checkpoint();
+        let mut numeric_checkpoint = self.numeric_checkpoint();
         self.state.untapped_this_command.clear();
         // Canonical settlement may discard every intermediate ZoneView and publish one final
         // replacement. Preserve the cache that describes what was actually published before this
@@ -2529,12 +2530,17 @@ impl GameEngine {
             self.restore_numeric_checkpoint(numeric_checkpoint);
             return result;
         }
+        if result.is_err() {
+            numeric_checkpoint.restore_move_disclosure_receipts(&mut self.state);
+        }
         if let (Ok(batch), Some(policies), Some(cache_before)) =
             (result.as_mut(), auto_pass_policies, zone_view_cache_before)
         {
             if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
                 if requires_complete_command_rollback(&error) {
                     self.restore_numeric_checkpoint(numeric_checkpoint);
+                } else {
+                    numeric_checkpoint.restore_move_disclosure_receipts(&mut self.state);
                 }
                 return Err(error);
             }

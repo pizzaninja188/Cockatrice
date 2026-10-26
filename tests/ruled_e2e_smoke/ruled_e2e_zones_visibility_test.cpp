@@ -65,6 +65,140 @@ public:
     }
 };
 
+class PrivateSearchDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    std::vector<ruled::v1::PermanentMoved> movements;
+    void onRuledEvent(const ruled::v1::RuledEvent &event) override
+    {
+        OpeningDriver::onRuledEvent(event);
+        if (event.has_permanent_moved()) {
+            movements.push_back(event.permanent_moved());
+        }
+    }
+};
+
+TEST_F(RuledE2ESmokeTest, DemonicTutorConcealsSelectedIdentityFromTheOtherClient)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    PrivateSearchDriver p1(true, QStringLiteral("tutorprivacy1"), &transcript);
+    PrivateSearchDriver p2(false, QStringLiteral("tutorprivacy2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{20, QStringLiteral("Swamp")}, {20, QStringLiteral("Grizzly Bears")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "private search start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "private search start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](PrivateSearchDriver &sender, const ruled::v1::RuledCommand &command) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        const int stackBefore = p1.stackDepth;
+        sender.sendRuled(command, QStringLiteral("private search regression"));
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+            if (p1.stateVersion > before1 && p2.stateVersion > before2 &&
+                p1.priorityPlayer == p2.priorityPlayer && p1.stackDepth == p2.stackDepth &&
+                !sender.legacyCastCommit && !sender.translatedCastCommitInFlight &&
+                (!command.has_cast_spell() || p1.stackDepth == stackBefore + 1)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    ruled::v1::RuledCommand put;
+    put.mutable_dev_command()->set_target_player_id(p1.myId);
+    put.mutable_dev_command()->mutable_put_card_in_zone()->set_card_name("Demonic Tutor");
+    put.mutable_dev_command()->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+    ASSERT_TRUE(send(p1, put));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_b(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, mana));
+    const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Demonic Tutor"));
+    ASSERT_NE(action, nullptr);
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+    ASSERT_TRUE(send(p1, cast));
+    ruled::v1::RuledCommand pass;
+    pass.mutable_pass_priority();
+    ASSERT_TRUE(send(p1, pass));
+    ASSERT_TRUE(send(p2, pass));
+    ASSERT_TRUE(p1.pendingChoice);
+    const auto choice = *p1.pendingChoice;
+    ASSERT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    ASSERT_GT(choice.candidate_object_ids_size(), 1);
+    ASSERT_EQ(choice.candidate_object_ids_size(), choice.candidate_names_size());
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+    const int selected = choice.candidate_object_ids_size() - 1;
+    const quint32 selectedOid = choice.candidate_object_ids(selected);
+    const std::string selectedName = choice.candidate_names(selected);
+    const auto ownerBefore = p1.movements.size();
+    const auto observerBefore = p2.movements.size();
+    const auto ownerPhysicalBefore = p1.physicalMoveEvents.size();
+    const auto observerPhysicalBefore = p2.physicalMoveEvents.size();
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(selectedOid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, choose));
+    for (const auto *client : {&p1, &p2}) {
+        const auto offset = client == &p1 ? ownerBefore : observerBefore;
+        const auto moved = std::find_if(client->movements.begin() + offset, client->movements.end(), [&](const auto &m) {
+            return m.owner_player_id() == p1.myId && m.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND;
+        });
+        ASSERT_NE(moved, client->movements.end());
+        EXPECT_EQ(moved->object_id(), 0u);
+        EXPECT_TRUE(moved->card_id().empty());
+    }
+    const auto ownerMove = std::find_if(p1.physicalMoveEvents.begin() + ownerPhysicalBefore,
+                                        p1.physicalMoveEvents.end(), [](const auto &move) {
+        return move.start_zone() == ZoneNames::DECK && move.target_zone() == ZoneNames::HAND;
+    });
+    const auto observerMove = std::find_if(p2.physicalMoveEvents.begin() + observerPhysicalBefore,
+                                           p2.physicalMoveEvents.end(), [](const auto &move) {
+        return move.start_zone() == ZoneNames::DECK && move.target_zone() == ZoneNames::HAND;
+    });
+    ASSERT_NE(ownerMove, p1.physicalMoveEvents.end());
+    ASSERT_NE(observerMove, p2.physicalMoveEvents.end());
+    EXPECT_GT(ownerMove->position(), 0);
+    EXPECT_EQ(ownerMove->card_name(), selectedName);
+    EXPECT_GE(ownerMove->new_card_id(), 0);
+    EXPECT_EQ(observerMove->position(), 0);
+    EXPECT_EQ(observerMove->card_id(), -1);
+    EXPECT_EQ(observerMove->new_card_id(), -1);
+    EXPECT_FALSE(observerMove->has_card_name());
+}
+
 TEST_F(RuledE2ESmokeTest, BlueSunRealTwincastDrawsPrivatelyAndMovesOnlyTheOriginalToLibrary)
 {
     const auto started = startServers();

@@ -709,6 +709,13 @@ impl GameEngine {
                             card_id: before_object.card_id.clone(),
                             controller_player_id: before_object.controller,
                             face_down: before_object.face_down,
+                            object_id_publicly_observable:
+                                super::resolution::movement_identity_is_public(
+                                    after_object.zone,
+                                    after_object.face_down,
+                                    before_object.zone,
+                                    before_object.face_down,
+                                ),
                             ..Default::default()
                         })),
                     });

@@ -459,6 +459,7 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
 
         bool targetHiddenToOthers = faceDown || (targetzone->getType() != ServerInfo_Zone::PublicZone);
         bool sourceHiddenToOthers = card->getFaceDown() || (startzone->getType() != ServerInfo_Zone::PublicZone);
+        const bool concealRuledSource = ruledConcealsMoveSource(game, startzone, targetzone, faceDown);
 
         int oldCardId = card->getId();
         if ((faceDown && (startzone != targetzone)) || (targetzone->getPlayer() != startzone->getPlayer())) {
@@ -506,17 +507,19 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
                                            (startzone->getType() == ServerInfo_Zone::PrivateZone &&
                                             targetzone->getType() == ServerInfo_Zone::PublicZone);
         if (sendHandIndexToOthers) {
-            eventOthers.set_position(position);
+            eventOthers.set_position(concealRuledSource ? 0 : position);
         }
         if (
             // other players are not allowed to be able to track which card is which in private zones like the hand
             (targetzone->getType() != ServerInfo_Zone::PrivateZone)) {
-            eventOthers.set_x(newX);
+            eventOthers.set_x(concealRuledSource && targetzone->getType() == ServerInfo_Zone::HiddenZone ? 0 : newX);
         }
 
         if ((startzone->getType() == ServerInfo_Zone::PublicZone) ||
             (targetzone->getType() == ServerInfo_Zone::PublicZone)) {
-            eventOthers.set_card_id(oldCardId);
+            if (!concealRuledSource) {
+                eventOthers.set_card_id(oldCardId);
+            }
             if (!(sourceHiddenToOthers && targetHiddenToOthers)) {
                 QString publicCardName = card->getName();
                 eventOthers.set_card_name(publicCardName.toStdString());

@@ -8731,3 +8731,145 @@ TEST_F(RuledBatchTest, ResolvingAbilityCannotBindOrMoveAnIdenticallyNamedPhysica
     callBatchApply(spellResponse);
     EXPECT_EQ(spell->getZone(), p1->getZones().value(ZoneNames::GRAVE));
 }
+
+TEST_F(RuledBatchTest, PrivateLibrarySelectionDoesNotDisclosePersistentObjectIdentity)
+{
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    auto projectSelection = [&](quint32 selectedOid, Server_AbstractParticipant *recipient) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(p1->getPlayerId());
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+        choice->set_min(1);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(211u);
+        choice->add_candidate_object_ids(212u);
+        choice->add_candidate_card_ids("grizzly_bears");
+        choice->add_candidate_card_ids("island");
+        choice->add_candidate_names("Grizzly Bears");
+        choice->add_candidate_names("Island");
+        auto *move = batch.add_events()->mutable_permanent_moved();
+        move->set_object_id(selectedOid);
+        move->set_owner_player_id(p1->getPlayerId());
+        move->set_controller_player_id(p1->getPlayerId());
+        move->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+        move->set_card_id(selectedOid == 211u ? "grizzly_bears" : "island");
+        return redactFor(batch, recipient);
+    };
+    for (Server_AbstractParticipant *recipient : {static_cast<Server_AbstractParticipant *>(p1),
+                                                 static_cast<Server_AbstractParticipant *>(p2),
+                                                 static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto bears = projectSelection(211u, recipient);
+        const auto island = projectSelection(212u, recipient);
+        ASSERT_EQ(bears.events_size(), 2);
+        ASSERT_EQ(island.events_size(), 2);
+        const int expectedCandidates = recipient == p1 ? 2 : 0;
+        EXPECT_EQ(bears.events(0).resolution_choice_required().candidate_object_ids_size(), expectedCandidates);
+        EXPECT_EQ(bears.events(0).resolution_choice_required().candidate_names_size(), expectedCandidates);
+        EXPECT_TRUE(bears.events(1).permanent_moved().card_id().empty());
+        EXPECT_EQ(bears.events(1).permanent_moved().object_id(), 0u);
+        EXPECT_EQ(bears.SerializeAsString(), island.SerializeAsString())
+            << "the private selected identity must not change the recipient projection";
+    }
+}
+
+TEST_F(RuledBatchTest, PrivateLibraryMoveDoesNotPublishSelectedPhysicalPosition)
+{
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    auto *first = addCardToDeck(p1, "Grizzly Bears");
+    auto *selected = addCardToDeck(p1, "Hill Giant");
+    bindLibraryObject(p1, 211u, first);
+    bindLibraryObject(p1, 212u, selected);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *move = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(212u);
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p1->getPlayerId());
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    move->set_card_id("hill_giant");
+    callBatchApply(response);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().last(), selected);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards().first(), first);
+    const auto *ownerMove = lastMoveCard(*p1Capture);
+    ASSERT_NE(ownerMove, nullptr);
+    EXPECT_EQ(ownerMove->position(), 1);
+    EXPECT_EQ(ownerMove->card_name(), "Hill Giant");
+    EXPECT_EQ(ownerMove->new_card_id(), selected->getId());
+    const auto *observerMove = lastMoveCard(*p2Capture);
+    ASSERT_NE(observerMove, nullptr);
+    EXPECT_EQ(observerMove->position(), 0)
+        << "the opponent removes an anonymous library slot, not the selected physical position";
+    EXPECT_FALSE(observerMove->has_card_name());
+    EXPECT_EQ(observerMove->card_id(), -1);
+    EXPECT_EQ(observerMove->new_card_id(), -1);
+}
+
+TEST_F(RuledBatchTest, PrivateLibraryMoveToFaceDownExileDoesNotPublishSourcePhysicalIdentity)
+{
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2->setUserInterface(p2Capture.get());
+    auto *first = addCardToDeck(p1, "Grizzly Bears");
+    auto *selected = addCardToDeck(p1, "Hill Giant");
+    const int privateSourceId = selected->getId();
+    bindLibraryObject(p1, 211u, first);
+    bindLibraryObject(p1, 212u, selected);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *move = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(212u);
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p1->getPlayerId());
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    move->set_face_down(true);
+    callBatchApply(response);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards().first(), selected);
+    const auto *observerMove = lastMoveCard(*p2Capture);
+    ASSERT_NE(observerMove, nullptr);
+    EXPECT_EQ(observerMove->position(), 0);
+    EXPECT_EQ(observerMove->card_id(), -1);
+    EXPECT_FALSE(observerMove->has_card_name());
+    EXPECT_NE(observerMove->new_card_id(), privateSourceId);
+    EXPECT_EQ(observerMove->new_card_id(), selected->getId());
+}
+
+TEST_F(RuledBatchTest, PublicMovementIdentityIsRestoredOnlyWhenEngineAuthorizesIt)
+{
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    ruled::v1::RuledEventBatch batch;
+    for (auto destination : {ruled::v1::PermanentMoved::DESTINATION_HAND,
+                             ruled::v1::PermanentMoved::DESTINATION_LIBRARY}) {
+        auto *movement = batch.add_events()->mutable_permanent_moved();
+        movement->set_object_id(destination == ruled::v1::PermanentMoved::DESTINATION_HAND ? 301u : 302u);
+        movement->set_owner_player_id(p1->getPlayerId());
+        movement->set_destination(destination);
+        movement->set_card_id("grizzly_bears");
+        movement->set_object_id_publicly_observable(true);
+    }
+    auto *unclassified = batch.add_events()->mutable_permanent_moved();
+    unclassified->set_object_id(303u);
+    unclassified->set_owner_player_id(p1->getPlayerId());
+    unclassified->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    for (Server_AbstractParticipant *recipient : {static_cast<Server_AbstractParticipant *>(p1),
+                                                 static_cast<Server_AbstractParticipant *>(p2),
+                                                 static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto projected = redactFor(batch, recipient);
+        ASSERT_EQ(projected.events_size(), 3);
+        EXPECT_EQ(projected.events(0).permanent_moved().object_id(), 301u);
+        EXPECT_EQ(projected.events(1).permanent_moved().object_id(), 302u);
+        EXPECT_EQ(projected.events(2).permanent_moved().object_id(), 0u);
+        for (const auto &event : projected.events()) {
+            EXPECT_TRUE(event.permanent_moved().card_id().empty());
+            EXPECT_FALSE(event.permanent_moved().object_id_publicly_observable());
+        }
+    }
+}

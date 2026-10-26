@@ -872,6 +872,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     QHash<int, ruled::v1::TriggerNeedsTarget> routedTriggerChoices;
     QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
     QHash<int, ruled::v1::FaceDownObjectMap> ownFaceDownMaps;
+    QHash<int, quint32> publicMovedObjectIds;
     if (batch.has_resolution_prompt_state()) {
         const auto &prompt = batch.resolution_prompt_state();
         if (prompt.active() && prompt.deciding_player_id() == participant->getPlayerId() &&
@@ -892,6 +893,8 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             ownHandSlotMaps.insert(ei, event.hand_slot_map());
         } else if (event.has_face_down_object_map()) {
             ownFaceDownMaps.insert(ei, event.face_down_object_map());
+        } else if (event.has_permanent_moved() && event.permanent_moved().object_id_publicly_observable()) {
+            publicMovedObjectIds.insert(ei, event.permanent_moved().object_id());
         }
     }
 
@@ -958,6 +961,11 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     }
     for (auto faceDownIt = ownFaceDownMaps.constBegin(); faceDownIt != ownFaceDownMaps.constEnd(); ++faceDownIt) {
         filtered.mutable_events(faceDownIt.key())->mutable_face_down_object_map()->CopyFrom(faceDownIt.value());
+    }
+    // An unknown or private movement never restores its stable engine identity. In particular,
+    // a library-to-hand move cannot be linked to an earlier public incarnation after a shuffle.
+    for (auto moveIt = publicMovedObjectIds.constBegin(); moveIt != publicMovedObjectIds.constEnd(); ++moveIt) {
+        filtered.mutable_events(moveIt.key())->mutable_permanent_moved()->set_object_id(moveIt.value());
     }
 
     clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_SERVER_ONLY);

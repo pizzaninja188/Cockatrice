@@ -2335,7 +2335,7 @@ message AbilityLogPresentation {
 // countering it; abilities and copies use their own stack-retirement events. Servers translate
 // this into the matching Cockatrice moveCard from the source to the destination zone.
 message PermanentMoved {
-  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -2360,6 +2360,10 @@ message PermanentMoved {
   int32 controller_player_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   bool face_down = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   optional uint32 source_library_position = 7 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // The engine authorizes disclosure of this exact movement identity only when the movement
+  // was observable to every participant. Absent/false fails closed; the relay always uses the
+  // unredacted object_id for physical synchronization before projecting recipient copies.
+  bool object_id_publicly_observable = 8 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // A player's life total changed. delta is signed (negative = loss).

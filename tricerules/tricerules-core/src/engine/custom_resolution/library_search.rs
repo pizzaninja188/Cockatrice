@@ -1608,12 +1608,20 @@ self.state.pending_resolution = Some(PendingResolution {
                         if origin != Some(Zone::Hand) {
                             self.commit_observed_zone_move(oid, Zone::Hand, None, &mut ev)?;
                             if let Some(owner) = owner {
-                                ev.push(permanent_moved_event(
+                                let mut movement = permanent_moved_event(
                                     &self.state,
                                     oid,
                                     owner,
                                     rv1::permanent_moved::Destination::Hand,
-                                ));
+                                );
+                                if reveal {
+                                    if let Some(rv1::ruled_event::Ev::PermanentMoved(moved)) =
+                                        movement.ev.as_mut()
+                                    {
+                                        moved.object_id_publicly_observable = true;
+                                    }
+                                }
+                                ev.push(movement);
                             }
                         }
                         if reveal {

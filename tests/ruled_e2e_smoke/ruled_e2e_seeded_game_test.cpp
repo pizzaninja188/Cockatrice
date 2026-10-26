@@ -4,6 +4,38 @@ namespace ruled_e2e
 {
 namespace
 {
+TEST(SeededGameDriverTest, RedactedLibraryMoveDoesNotMatchUnknownTarget)
+{
+    QStringList transcript;
+    for (const auto role : {SeededGameDriver::Role::Aggressor, SeededGameDriver::Role::Hoarder}) {
+        SeededGameDriver driver(role, QStringLiteral("observer"), &transcript);
+        ruled::v1::RuledEvent event;
+        auto *move = event.mutable_permanent_moved();
+        move->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+
+        // A redacted hidden-zone move has no ObjectId. It must not match the
+        // sentinel used before the publicly visible control target is known.
+        driver.onRuledEvent(event);
+        driver.onBatchEventsComplete(ruled::v1::RuledEventBatch{});
+        EXPECT_FALSE(driver.sawLibraryPermanentMoved);
+        EXPECT_FALSE(driver.sawLibraryTargetAbsentFromBattlefield);
+    }
+
+    SeededGameDriver driver(SeededGameDriver::Role::Aggressor, QStringLiteral("observer"), &transcript);
+    driver.controlTargetOid = 105;
+    ruled::v1::RuledEvent event;
+    auto *move = event.mutable_permanent_moved();
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    driver.onRuledEvent(event);
+    EXPECT_FALSE(driver.sawLibraryPermanentMoved);
+    move->set_object_id(106);
+    driver.onRuledEvent(event);
+    EXPECT_FALSE(driver.sawLibraryPermanentMoved);
+    move->set_object_id(105);
+    driver.onRuledEvent(event);
+    EXPECT_TRUE(driver.sawLibraryPermanentMoved);
+}
+
 TEST_F(RuledE2ESmokeTest, FullSeededGame)
 {
     const auto started = startServers();

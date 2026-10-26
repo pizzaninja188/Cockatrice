@@ -42,6 +42,13 @@ bool ruledAllowsCrossPlayerMove(const Server_Game *game,
                                 const Server_CardZone *startZone,
                                 const Server_CardZone *targetZone);
 
+/// A ruled move between concealed identities must not expose the physical source id or slot
+/// to observers. Public face-down destinations still need their new anonymous id for targeting.
+bool ruledConcealsMoveSource(const Server_Game *game,
+                            const Server_CardZone *startZone,
+                            const Server_CardZone *targetZone,
+                            bool destinationFaceDown);
+
 /// Reflection-based fail-closed clearing used by ruled broadcast redaction. Every field
 /// reachable from RuledEventBatch is classified in ruled_v1.proto; fields with `visibility`
 /// are cleared recursively, including fields introduced by future protocol changes.

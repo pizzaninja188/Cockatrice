@@ -735,12 +735,12 @@ Creature restriction, so a noncreature Kindred Dragon qualifies (CR 109.2, 205.3
 search keeps that destination shape and accepts a predicate from the same live condition domain as
 Program `If`; source/cast snapshots and other condition contexts remain excluded.
 
-Private, non-revealing Hand searches do not emit an explicit `CardsRevealed` event, and the relay
-redacts library-search candidate details from non-deciders while keeping hand views private.
-However, `PermanentMoved.object_id` is public: an observer who already knows an object's identity can
-correlate that same object moving from Library to Hand. Do not promise that the current protocol
-prevents every inference of a selected card's identity. This is a preexisting relay/protocol privacy
-boundary shared by legacy and Program searches; a fix requires separate scope. See
+Private, non-revealing Hand searches do not emit an explicit `CardsRevealed` event. The relay
+redacts library-search candidate details from non-deciders and removes the persistent movement
+identity unless the engine authorizes public disclosure. Concealed physical moves also omit the
+selected source identity and use an anonymous source slot for observers. These safeguards cover
+the movement projection; they do not establish universal unlinkability for every public object map
+or face-down interaction. See
 [`PermanentMoved`](../../../libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto#L2337)
 and the [participant redaction path](../../../libcockatrice_network/libcockatrice/network/server/remote/game/ruled_broadcast_router.cpp#L585).
 Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use

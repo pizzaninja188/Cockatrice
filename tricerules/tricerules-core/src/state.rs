@@ -594,6 +594,18 @@ pub enum Zone {
     Command,
 }
 
+/// Event-time source of the latest committed move, for recipient projection only.
+/// The generation, destination and command index prevent an older public move from
+/// authorizing disclosure of a later hidden movement.
+#[derive(serde::Serialize, Debug, Clone, Copy)]
+pub(crate) struct MoveDisclosureReceipt {
+    pub origin: Zone,
+    pub destination: Zone,
+    pub origin_face_down: bool,
+    pub destination_generation: u64,
+    pub command_index: u64,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct GameObject {
     pub id: ObjectId,
@@ -3737,6 +3749,8 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
+    /// The latest committed move per physical object, used to construct privacy-safe events.
+    pub(crate) move_disclosure_receipts: HashMap<ObjectId, MoveDisclosureReceipt>,
     /// Last CR 704.6d/903.9a commander zone-change generation offered to its owner. A declined
     /// choice consumes only that generation; a later zone change creates a new opportunity.
     pub commander_sba_checked_generations: HashMap<ObjectId, u64>,

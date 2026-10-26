@@ -503,7 +503,7 @@ void SeededGameDriver::onRuledEvent(const ruled::v1::RuledEvent &ev)
         if (moved.card_id() == "say_its_name" && moved.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE) {
             ++sayItsNameGraveToExileCount;
         }
-        if (moved.object_id() == controlTargetOid &&
+        if (controlTargetOid != 0 && moved.object_id() == controlTargetOid &&
             moved.destination() == ruled::v1::PermanentMoved::DESTINATION_LIBRARY) {
             sawLibraryPermanentMoved = true;
         }

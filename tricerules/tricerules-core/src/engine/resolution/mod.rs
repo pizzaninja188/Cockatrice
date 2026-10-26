@@ -3751,8 +3751,26 @@ pub(super) fn deal_opening_card(
     Ok(())
 }
 
-/// Build a `PermanentMoved` event, stamping the tricerules `card_id` from the object so
-/// servers can resolve cards that have no engine-oid mapping (e.g. milled library cards).
+/// A face-up public zone or a visible battlefield/stack object makes the movement observable.
+pub(super) fn movement_identity_is_public(
+    origin: Zone,
+    origin_face_down: bool,
+    destination: Zone,
+    destination_face_down: bool,
+) -> bool {
+    let public_source = matches!(
+        origin,
+        Zone::Battlefield | Zone::Graveyard | Zone::Stack | Zone::Command
+    ) || (origin == Zone::Exile && !origin_face_down);
+    let public_destination = !destination_face_down
+        && matches!(
+            destination,
+            Zone::Battlefield | Zone::Graveyard | Zone::Exile | Zone::Command
+        );
+    public_source || public_destination
+}
+
+/// Build a `PermanentMoved` event with the private physical identity needed by the relay.
 pub(crate) fn permanent_moved_event(
     state: &GameState,
     oid: ObjectId,
@@ -3789,6 +3807,33 @@ pub(crate) fn permanent_moved_event(
         .get(&oid)
         .map(|o| o.controller)
         .unwrap_or(owner_player_id);
+    let reported_zone = match destination {
+        rv1::permanent_moved::Destination::Hand => Some(Zone::Hand),
+        rv1::permanent_moved::Destination::Library => Some(Zone::Library),
+        rv1::permanent_moved::Destination::Battlefield => Some(Zone::Battlefield),
+        rv1::permanent_moved::Destination::Graveyard => Some(Zone::Graveyard),
+        rv1::permanent_moved::Destination::Exile => Some(Zone::Exile),
+        rv1::permanent_moved::Destination::Command => Some(Zone::Command),
+        rv1::permanent_moved::Destination::Unspecified => None,
+    };
+    let object_id_publicly_observable = state.objects.get(&oid).is_some_and(|object| {
+        state
+            .move_disclosure_receipts
+            .get(&oid)
+            .is_some_and(|receipt| {
+                receipt.command_index == state.command_index
+                    && receipt.destination == object.zone
+                    && reported_zone == Some(receipt.destination)
+                    && state.zone_change_generation.get(&oid).copied()
+                        == Some(receipt.destination_generation)
+                    && movement_identity_is_public(
+                        receipt.origin,
+                        receipt.origin_face_down,
+                        receipt.destination,
+                        object.face_down,
+                    )
+            })
+    });
     rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
             object_id: oid,
@@ -3800,6 +3845,7 @@ pub(crate) fn permanent_moved_event(
                 object.face_down && matches!(object.zone, Zone::Battlefield | Zone::Exile)
             }),
             source_library_position: None,
+            object_id_publicly_observable,
         })),
     }
 }
@@ -4214,7 +4260,7 @@ pub(super) fn commit_zone_move(
     // A move to the same named zone is still a zone change and creates a new object (CR 400.7).
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
-    if old_zone.is_some() {
+    if let Some(origin) = old_zone {
         state.activated_ability_slots.remove(&oid);
         state.spell_effects_carry_to_permanent.remove(&oid);
         state.spell_entry_facts.remove(&oid);
@@ -4225,6 +4271,16 @@ pub(super) fn commit_zone_move(
             .warped_permanent_incarnations
             .retain(|&(object_id, generation)| object_id != oid || generation != prior_generation);
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
+        state.move_disclosure_receipts.insert(
+            oid,
+            crate::state::MoveDisclosureReceipt {
+                origin,
+                destination: z,
+                origin_face_down: state.objects[&oid].face_down,
+                destination_generation: prior_generation + 1,
+                command_index: state.command_index,
+            },
+        );
         state
             .active_exile_play_permissions
             .retain(|permission| permission.object_id != oid);
@@ -4696,6 +4752,111 @@ mod anthem_scope_tests {
         let player_index = engine.state.player_idx(controller).expect("controller");
         engine.state.players[player_index].battlefield.push(id);
         id
+    }
+
+    #[test]
+    fn movement_disclosure_tracks_the_current_committed_move() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            9101,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let oid = add_creature(&mut engine, 0);
+        move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Library, None).unwrap();
+        let public_move = permanent_moved_event(
+            &engine.state,
+            oid,
+            0,
+            rv1::permanent_moved::Destination::Library,
+        );
+        let Some(rv1::ruled_event::Ev::PermanentMoved(public_move)) = public_move.ev else {
+            panic!("move")
+        };
+        assert!(public_move.object_id_publicly_observable);
+        let old_receipt = engine.state.move_disclosure_receipts[&oid];
+        super::super::shuffle_player_library_for_current_command(&mut engine.state, 0);
+        move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Hand, None).unwrap();
+        let private_move = permanent_moved_event(
+            &engine.state,
+            oid,
+            0,
+            rv1::permanent_moved::Destination::Hand,
+        );
+        let Some(rv1::ruled_event::Ev::PermanentMoved(private_move)) = private_move.ev else {
+            panic!("move")
+        };
+        assert!(!private_move.object_id_publicly_observable);
+        let current_receipt = engine.state.move_disclosure_receipts[&oid];
+        engine
+            .state
+            .move_disclosure_receipts
+            .insert(oid, old_receipt);
+        let stale = permanent_moved_event(
+            &engine.state,
+            oid,
+            0,
+            rv1::permanent_moved::Destination::Hand,
+        );
+        let Some(rv1::ruled_event::Ev::PermanentMoved(stale)) = stale.ev else {
+            panic!("move")
+        };
+        assert!(
+            !stale.object_id_publicly_observable,
+            "an old public receipt cannot authorize a later move"
+        );
+        engine
+            .state
+            .move_disclosure_receipts
+            .insert(oid, current_receipt);
+        engine.state.command_index += 1;
+        let old_command = permanent_moved_event(
+            &engine.state,
+            oid,
+            0,
+            rv1::permanent_moved::Destination::Hand,
+        );
+        let Some(rv1::ruled_event::Ev::PermanentMoved(old_command)) = old_command.ev else {
+            panic!("move")
+        };
+        assert!(
+            !old_command.object_id_publicly_observable,
+            "a previous command cannot authorize a movement"
+        );
+    }
+
+    #[test]
+    fn movement_disclosure_keeps_public_stack_exits() {
+        for destination in [Zone::Hand, Zone::Library] {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                9102,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
+            let oid = add_creature(&mut engine, 0);
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Stack, None)
+                .unwrap();
+            move_object_to_zone(&mut engine.state, engine.registry, oid, destination, None)
+                .unwrap();
+            let proto_destination = if destination == Zone::Hand {
+                rv1::permanent_moved::Destination::Hand
+            } else {
+                rv1::permanent_moved::Destination::Library
+            };
+            let movement = permanent_moved_event(&engine.state, oid, 0, proto_destination);
+            let Some(rv1::ruled_event::Ev::PermanentMoved(movement)) = movement.ev else {
+                panic!("move")
+            };
+            assert!(movement.object_id_publicly_observable);
+            assert_eq!(movement.object_id, oid);
+        }
     }
 
     #[test]
