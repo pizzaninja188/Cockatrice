@@ -1026,6 +1026,91 @@ fn authored_program_targets_publish_and_submit_for_activated_and_triggered_owner
 }
 
 #[test]
+fn authored_program_reuses_resolution_start_target_legality_after_tapping_target() {
+    let source = r#"(
+        id: "authored_program_tap_then_stun_source",
+        name: "Authored Program Tap Then Stun Source",
+        face_id: "authored_program_tap_then_stun_source",
+        mana_cost: "{0}",
+        types: ["Creature"],
+        power: 2,
+        toughness: 2,
+        activated_abilities: [(
+            ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [], effect: [],
+            program: Some((body: (steps: [
+                (id: "tap", kind: Perform(Tap(subject: Chosen((
+                    kind: Creature, controller: Opponent, tapped: Some(false),
+                ))))),
+                (id: "stun", kind: Perform(PutCounters(
+                    counter: Stun, count: 1, subject: Chosen((
+                        kind: Creature, controller: Opponent, tapped: Some(false),
+                    )),
+                ))),
+            ], yields: []), target_bindings: [
+                (instruction_id: "tap", role: Target, target_group_index: 0),
+                (instruction_id: "stun", role: Target, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose an untapped opposing creature", effect_indices: [])])),
+            timing: Normal, conditions: [], activation_limit: None,
+        )]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                source,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("tap-then-stun fixture compiles against one shared target group"),
+    ));
+    let decks = Some(vec![
+        deck_with(
+            "forest",
+            &["authored_program_tap_then_stun_source", "forest", "forest"],
+        ),
+        deck_with("forest", &["grizzly_bears", "forest", "forest"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_434, &[0, 1], 20, decks, true)
+        .expect("tap-then-stun fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let opposing_creature = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    let source = relocate_to_battlefield(
+        &mut engine,
+        0,
+        "authored_program_tap_then_stun_source",
+        false,
+    );
+
+    let ability_key = u64::from(source) << 32;
+    assert_eq!(
+        engine.initial_response_batch().legal_by_player[&0].valid_targets_by_ability[&ability_key]
+            .groups[0]
+            .valid_permanent_ids,
+        vec![opposing_creature]
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &activate_ability_for(&engine, source, 0, target_object(opposing_creature)),
+        )
+        .expect("submit the initially legal shared target");
+    pass_priority_round(&mut engine);
+
+    assert!(engine.state.objects[&opposing_creature].tapped);
+    assert_eq!(
+        engine.state.objects[&opposing_creature]
+            .counters
+            .get(&tricerules_card_model::CounterKind::Stun),
+        Some(&1),
+        "CR 608.2b legality is fixed at resolution start; tapping the target must not invalidate the next instruction"
+    );
+}
+
+#[test]
 fn authored_program_static_grant_uses_its_exact_nested_ability_owner() {
     let grantor = r#"(
         id: "authored_program_grant_source",

@@ -22,16 +22,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
             None => Ok(EffectOutcome::Suspended),
         };
     }
-    let Some(target) = cx.targets.first().copied().filter(|target| {
-        target_filter_legal_at_resolution(
-            cx.engine,
-            tricerules_card_model::primitives::chaos_warp_target_filter(),
-            *target,
-            cx.controller,
-            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-            cx.top.trigger_context,
-        )
-    }) else {
+    let Some(target) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let owner = cx.engine.state.objects[&target].owner;

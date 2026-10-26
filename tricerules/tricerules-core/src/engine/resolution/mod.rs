@@ -9,8 +9,8 @@ use super::targeting::{
     ability_mode_program, attachment_recipient_for_target, battlefield_objects_matching,
     effect_has_legal_target_at_resolution, face_mode_program, face_program, graveyard_target_legal,
     object_matches_mass_filter, object_matches_scoped_mass_filter,
-    stack_target_identity_is_current, target_filter_legal_at_resolution,
-    target_role_legal_at_resolution, target_schema_with_program, TargetSourceIdentity,
+    stack_target_identity_is_current, target_role_legal_at_resolution, target_schema_with_program,
+    TargetSourceIdentity,
 };
 use super::*;
 use tricerules_card_model::primitives::{
@@ -81,6 +81,8 @@ pub(in crate::engine) mod library_cohorts;
 pub(super) mod life;
 mod mass;
 mod misc;
+#[cfg(test)]
+mod target_receipt_action_tests;
 pub(in crate::engine) use misc::attach_equipment_ids;
 #[cfg(test)]
 mod portal_sacrifice_tests;
@@ -353,8 +355,8 @@ struct EffectCx<'a> {
     events: &'a mut Vec<rv1::RuledEvent>,
     targets: &'a [ObjectId],
     targets_by_role: &'a [Vec<ObjectId>],
-    target_damage: &'a [u32],
-    target_group_indices: &'a [u32],
+    target_receipts: &'a [StackTarget],
+    target_role_group_indices: &'a [u32],
     top: &'a StackItem,
     controller: PlayerId,
     /// The player an untargeted, player-scoped effect acts on. Equals `controller` for spells,
@@ -424,40 +426,135 @@ impl EffectCx<'_> {
         .then_some(selected.object_id)
     }
 
+    /// A resolution-start target remains usable only through the role that selected it and the
+    /// same object incarnation. The filter itself was already checked at CR 608.2b.
+    fn target_is_current_in_role(&self, object_id: ObjectId, role_index: usize) -> bool {
+        let Some(role_targets) = self.targets_by_role.get(role_index) else {
+            return false;
+        };
+        let Some(&group_index) = self.target_role_group_indices.get(role_index) else {
+            return false;
+        };
+        target_receipt_is_current_in_role(
+            self.engine,
+            role_targets,
+            self.target_receipts,
+            group_index,
+            object_id,
+            None,
+        )
+    }
+
+    /// Battlefield actions require an object receipt, so player targets cannot pass by sharing
+    /// the ObjectId wire representation.
+    fn battlefield_target_is_current_in_role(
+        &self,
+        object_id: ObjectId,
+        role_index: usize,
+    ) -> bool {
+        self.target_in_zone_is_current_in_role(object_id, role_index, Zone::Battlefield)
+    }
+
+    fn target_in_zone_is_current_in_role(
+        &self,
+        object_id: ObjectId,
+        role_index: usize,
+        expected_zone: Zone,
+    ) -> bool {
+        let Some(role_targets) = self.targets_by_role.get(role_index) else {
+            return false;
+        };
+        let Some(&group_index) = self.target_role_group_indices.get(role_index) else {
+            return false;
+        };
+        target_receipt_is_current_in_role(
+            self.engine,
+            role_targets,
+            self.target_receipts,
+            group_index,
+            object_id,
+            Some(expected_zone),
+        )
+    }
+
+    fn first_current_battlefield_target(&self, role_index: usize) -> Option<ObjectId> {
+        self.targets_by_role
+            .get(role_index)?
+            .iter()
+            .copied()
+            .find(|&object_id| self.battlefield_target_is_current_in_role(object_id, role_index))
+    }
+
+    fn current_battlefield_targets(&self, role_index: usize) -> Vec<ObjectId> {
+        self.targets_by_role
+            .get(role_index)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|&object_id| self.battlefield_target_is_current_in_role(object_id, role_index))
+            .collect()
+    }
+
+    fn first_current_graveyard_target(&self, role_index: usize) -> Option<ObjectId> {
+        self.targets_by_role
+            .get(role_index)?
+            .iter()
+            .copied()
+            .find(|&object_id| {
+                self.target_in_zone_is_current_in_role(object_id, role_index, Zone::Graveyard)
+            })
+    }
+
+    fn target_token_copy_snapshot_in_role(
+        &self,
+        object_id: ObjectId,
+        role_index: usize,
+    ) -> Option<TokenCopySnapshot> {
+        let role_targets = self.targets_by_role.get(role_index)?;
+        let group_index = *self.target_role_group_indices.get(role_index)?;
+        if !role_targets.contains(&object_id) {
+            return None;
+        }
+        let receipt = self.target_receipts.iter().find(|target| {
+            target.object_id == object_id
+                && target.group_index == group_index
+                && target.zone_change_generation.is_some()
+        })?;
+        super::copying::token_copy_snapshot_for_incarnation(
+            &self.engine.state,
+            self.engine.registry,
+            object_id,
+            receipt.zone_change_generation?,
+        )
+    }
+
+    fn target_token_copy_snapshots_in_role(
+        &self,
+        role_index: usize,
+    ) -> Vec<(ObjectId, TokenCopySnapshot)> {
+        self.targets_by_role
+            .get(role_index)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter_map(|object_id| {
+                self.target_token_copy_snapshot_in_role(object_id, role_index)
+                    .map(|snapshot| (object_id, snapshot))
+            })
+            .collect()
+    }
+
     fn resolve_battlefield_subject(&self, subject: &EffectSubject) -> Option<ObjectId> {
         match subject {
             EffectSubject::PreviousEffectObject => self.previous_battlefield_object(),
-            EffectSubject::Chosen(filter) => self.targets.first().copied().filter(|object_id| {
-                target_filter_legal_at_resolution(
-                    self.engine,
-                    filter,
-                    *object_id,
-                    self.controller,
-                    TargetSourceIdentity::for_stack_item(self.engine, self.top),
-                    self.top.trigger_context,
-                )
-            }),
+            EffectSubject::Chosen(_) => self.first_current_battlefield_target(0),
             _ => resolve_effect_subject(self.engine, self.top, self.targets, subject),
         }
     }
 
     fn resolve_battlefield_subjects(&self, subject: &EffectSubject) -> Vec<ObjectId> {
         match subject {
-            EffectSubject::Chosen(filter) => self
-                .targets
-                .iter()
-                .copied()
-                .filter(|object_id| {
-                    target_filter_legal_at_resolution(
-                        self.engine,
-                        filter,
-                        *object_id,
-                        self.controller,
-                        TargetSourceIdentity::for_stack_item(self.engine, self.top),
-                        self.top.trigger_context,
-                    )
-                })
-                .collect(),
+            EffectSubject::Chosen(_) => self.current_battlefield_targets(0),
             _ => self
                 .resolve_battlefield_subject(subject)
                 .into_iter()
@@ -480,6 +577,37 @@ impl EffectCx<'_> {
         };
         Some((object_id, source_id))
     }
+}
+
+fn target_receipt_is_current_in_role(
+    engine: &GameEngine,
+    role_targets: &[ObjectId],
+    receipts: &[StackTarget],
+    group_index: u32,
+    object_id: ObjectId,
+    expected_zone: Option<Zone>,
+) -> bool {
+    role_targets.contains(&object_id)
+        && receipts
+            .iter()
+            .find(|target| target.object_id == object_id && target.group_index == group_index)
+            .is_some_and(|target| match target.zone_change_generation {
+                Some(_) => {
+                    stack_target_identity_is_current(engine, target)
+                        && engine.state.objects.get(&object_id).is_some_and(|object| {
+                            object.zone == expected_zone.unwrap_or(Zone::Battlefield)
+                        })
+                        && expected_zone.is_none_or(|zone| {
+                            zone != Zone::Graveyard
+                                || target.kind == rv1::TargetRefKind::Graveyard as i32
+                        })
+                }
+                None if expected_zone.is_none() => engine
+                    .state
+                    .player_idx(object_id as PlayerId)
+                    .is_some_and(|index| !engine.state.players[index].has_lost),
+                None => false,
+            })
 }
 
 impl GameEngine {
@@ -826,15 +954,33 @@ mod player_recipient_order_tests {
 
     #[test]
     fn targeted_player_recipient_reads_only_its_authored_group() {
-        assert_eq!(target_player_from_group(&[30, 20], &[1, 0], 0), Some(20));
-        assert_eq!(target_player_from_group(&[30, 20], &[1, 0], 2), None);
+        let targets = [
+            StackTarget {
+                object_id: 30,
+                group_index: 1,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Player as i32,
+                zone_change_generation: None,
+                required_controller: None,
+            },
+            StackTarget {
+                object_id: 20,
+                group_index: 0,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Player as i32,
+                zone_change_generation: None,
+                required_controller: None,
+            },
+        ];
+        assert_eq!(target_player_from_group(&targets, 0), Some(20));
+        assert_eq!(target_player_from_group(&targets, 2), None);
     }
 }
 
 fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
     match who {
         PlayerRecipient::TargetedPlayer { group_index, .. } => {
-            target_player_from_group(cx.targets, cx.target_group_indices, group_index)
+            target_player_from_group(cx.target_receipts, group_index)
                 .into_iter()
                 .collect()
         }
@@ -865,22 +1011,10 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             }
         }
         PlayerRecipient::ControllerOfTargetGroup { group_index } => {
-            let object_id = cx.targets.iter().zip(cx.target_group_indices).find_map(
-                |(&object_id, &target_group)| (target_group == group_index).then_some(object_id),
-            );
             let target = cx
-                .top
-                .targets
+                .target_receipts
                 .iter()
-                .chain(
-                    cx.top
-                        .chosen_modes
-                        .iter()
-                        .flat_map(|mode| mode.targets.iter()),
-                )
-                .find(|target| {
-                    target.group_index == group_index && Some(target.object_id) == object_id
-                });
+                .find(|target| target.group_index == group_index);
             target
                 .and_then(|target| {
                     let generation = target.zone_change_generation?;
@@ -1033,15 +1167,10 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
 
 /// The player id represented by one authored target group. Player targets share the engine's
 /// ObjectId wire slot, but their group index is typed separately from permanent targets.
-fn target_player_from_group(
-    targets: &[ObjectId],
-    target_group_indices: &[u32],
-    group_index: u32,
-) -> Option<PlayerId> {
-    targets
-        .iter()
-        .zip(target_group_indices)
-        .find_map(|(&id, &group)| (group == group_index).then_some(id as PlayerId))
+fn target_player_from_group(targets: &[StackTarget], group_index: u32) -> Option<PlayerId> {
+    targets.iter().find_map(|target| {
+        (target.group_index == group_index).then_some(target.object_id as PlayerId)
+    })
 }
 
 fn source_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {
@@ -1155,6 +1284,8 @@ fn resolve_zone_effect_subject(
     engine: &GameEngine,
     top: &StackItem,
     targets: &[ObjectId],
+    target_receipts: &[StackTarget],
+    target_role_group_indices: &[u32],
     subject: &EffectSubject,
 ) -> Option<ObjectId> {
     if let EffectSubject::TriggerObject = subject {
@@ -1188,23 +1319,20 @@ fn resolve_zone_effect_subject(
             .then_some(observed.object_id);
     }
     if matches!(subject, EffectSubject::Chosen(_)) {
-        // Target legality was snapshotted when this resolution began. If a parked continuation
-        // resumes after that object left or changed zones, treat the chosen zone effect as a
-        // no-op instead of moving a stale or new incarnation by ObjectId alone.
+        // Mode effects carry only the selected mode's role receipts here. Match its exact role
+        // rather than searching the stack-wide target list, where a sibling mode can reuse the
+        // same group index. Chosen zone effects target battlefield permanents; source and trigger
+        // objects retain their separate nonbattlefield LKI handling above.
         let object_id = targets.first().copied()?;
-        let expected_generation = top
-            .targets
-            .iter()
-            .find(|target| target.object_id == object_id)?
-            .zone_change_generation?;
-        let current_generation = engine
-            .state
-            .zone_change_generation
-            .get(&object_id)
-            .copied()
-            .unwrap_or(0);
-        return (current_generation == expected_generation
-            && engine.state.objects.contains_key(&object_id))
+        let group_index = *target_role_group_indices.first()?;
+        return target_receipt_is_current_in_role(
+            engine,
+            targets,
+            target_receipts,
+            group_index,
+            object_id,
+            Some(Zone::Battlefield),
+        )
         .then_some(object_id);
     }
     if !matches!(subject, EffectSubject::Source) {
@@ -1241,8 +1369,7 @@ fn resolve_zone_effect_subject(
 pub(super) struct ResolutionEffect {
     pub(super) effect: SpellEffectKind,
     targets: Vec<ObjectId>,
-    target_damage: Vec<u32>,
-    target_group_indices: Vec<u32>,
+    target_receipts: Vec<StackTarget>,
     /// Absolute authored group index for each target-filter role, ordered by filter index.
     role_group_indices: Vec<u32>,
 }
@@ -2031,54 +2158,49 @@ impl GameEngine {
             (effects, name)
         };
 
-        let build_entries = |effects: &[SpellEffectKind],
-                             targeting: Option<&TargetingDef>,
-                             chosen_targets: &[StackTarget],
-                             program: Option<
-            &tricerules_card_model::primitives::CompiledProgram,
-        >| {
-            let schema = target_schema_with_program(effects, targeting, program);
-            effects
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(effect_index, effect)| {
-                    let mut role_groups = schema
-                        .groups
-                        .iter()
-                        .enumerate()
-                        .flat_map(|(group_index, group)| {
-                            group.bindings.iter().filter_map(move |binding| {
-                                (binding.effect_index == effect_index)
-                                    .then_some((binding.role_index, group_index as u32))
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    role_groups.sort_by_key(|(filter_index, _)| *filter_index);
-                    let role_group_indices = role_groups
-                        .into_iter()
-                        .map(|(_, group_index)| group_index)
-                        .collect::<Vec<_>>();
-                    let selected = chosen_targets
-                        .iter()
-                        .filter(|target| {
-                            role_group_indices.is_empty()
-                                || role_group_indices.contains(&target.group_index)
-                        })
-                        .collect::<Vec<_>>();
-                    ResolutionEffect {
-                        effect,
-                        targets: selected.iter().map(|target| target.object_id).collect(),
-                        target_damage: selected.iter().map(|target| target.damage_amount).collect(),
-                        target_group_indices: selected
+        let build_entries =
+            |effects: &[SpellEffectKind],
+             targeting: Option<&TargetingDef>,
+             chosen_targets: &[StackTarget],
+             program: Option<&tricerules_card_model::primitives::CompiledProgram>| {
+                let schema = target_schema_with_program(effects, targeting, program);
+                effects
+                    .iter()
+                    .cloned()
+                    .enumerate()
+                    .map(|(effect_index, effect)| {
+                        let mut role_groups = schema
+                            .groups
                             .iter()
-                            .map(|target| target.group_index)
-                            .collect(),
-                        role_group_indices,
-                    }
-                })
-                .collect::<Vec<_>>()
-        };
+                            .enumerate()
+                            .flat_map(|(group_index, group)| {
+                                group.bindings.iter().filter_map(move |binding| {
+                                    (binding.effect_index == effect_index)
+                                        .then_some((binding.role_index, group_index as u32))
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        role_groups.sort_by_key(|(filter_index, _)| *filter_index);
+                        let role_group_indices = role_groups
+                            .into_iter()
+                            .map(|(_, group_index)| group_index)
+                            .collect::<Vec<_>>();
+                        let selected = chosen_targets
+                            .iter()
+                            .filter(|target| {
+                                role_group_indices.is_empty()
+                                    || role_group_indices.contains(&target.group_index)
+                            })
+                            .collect::<Vec<_>>();
+                        ResolutionEffect {
+                            effect,
+                            targets: selected.iter().map(|target| target.object_id).collect(),
+                            target_receipts: selected.iter().map(|target| **target).collect(),
+                            role_group_indices,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
 
         let mut resolution_effects: Vec<ResolutionEffect> = Vec::new();
         if !top.chosen_modes.is_empty() {
@@ -2235,8 +2357,7 @@ impl GameEngine {
             let ResolutionEffect {
                 effect,
                 targets: effect_targets,
-                target_damage: effect_target_damage,
-                target_group_indices,
+                target_receipts,
                 role_group_indices,
             } = entry;
             if !role_group_indices.is_empty() && effect_targets.is_empty() {
@@ -2246,12 +2367,10 @@ impl GameEngine {
             let targets_by_role = role_group_indices
                 .iter()
                 .map(|group_index| {
-                    effect_targets
+                    target_receipts
                         .iter()
-                        .zip(&target_group_indices)
-                        .filter_map(|(&target, target_group)| {
-                            (target_group == group_index).then_some(target)
-                        })
+                        .filter(|target| target.group_index == *group_index)
+                        .map(|target| target.object_id)
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
@@ -2262,8 +2381,8 @@ impl GameEngine {
                     events,
                     targets: &effect_targets,
                     targets_by_role: &targets_by_role,
-                    target_damage: &effect_target_damage,
-                    target_group_indices: &target_group_indices,
+                    target_receipts: &target_receipts,
+                    target_role_group_indices: &role_group_indices,
                     top,
                     controller,
                     affected_player: top.trigger_context.affected_player.unwrap_or(controller),
@@ -3749,14 +3868,14 @@ pub(super) fn snapshot_creature_scope(
 
 fn scoped_player_target(
     engine: &GameEngine,
-    targets: &[ObjectId],
-    target_group_indices: &[u32],
+    targets: &[StackTarget],
     group_index: u32,
 ) -> Option<PlayerId> {
     targets
         .iter()
-        .zip(target_group_indices)
-        .find_map(|(&id, &group)| (group == group_index).then_some(id as PlayerId))
+        .find_map(|target| {
+            (target.group_index == group_index).then_some(target.object_id as PlayerId)
+        })
         .filter(|&player| {
             engine
                 .state
@@ -3770,15 +3889,13 @@ pub(super) fn snapshot_mass_creature_scope(
     filter: &CreatureScopeFilter,
     controller: PlayerId,
     source: ObjectId,
-    targets: &[ObjectId],
-    target_group_indices: &[u32],
+    targets: &[StackTarget],
 ) -> Vec<ObjectId> {
     let Some(CreatureScopeController::TargetedPlayer { group_index, .. }) = filter.controller
     else {
         return snapshot_creature_scope(engine, filter, controller, source);
     };
-    let Some(player) = scoped_player_target(engine, targets, target_group_indices, group_index)
-    else {
+    let Some(player) = scoped_player_target(engine, targets, group_index) else {
         return Vec::new();
     };
     let mut ordinary = filter.clone();
@@ -4776,7 +4893,7 @@ mod attached_subject_tests {
         ));
 
         assert_eq!(
-            resolve_zone_effect_subject(&engine, &item, &[target], &subject),
+            resolve_zone_effect_subject(&engine, &item, &[target], &item.targets, &[0], &subject,),
             Some(target),
             "the captured target incarnation remains eligible for its zone effect"
         );
@@ -4787,7 +4904,7 @@ mod attached_subject_tests {
             .insert(target, captured_generation + 1);
         assert!(engine.state.objects.contains_key(&target));
         assert_eq!(
-            resolve_zone_effect_subject(&engine, &item, &[target], &subject),
+            resolve_zone_effect_subject(&engine, &item, &[target], &item.targets, &[0], &subject,),
             None,
             "the same ObjectId in a later zone-change generation is a new object"
         );
@@ -6175,8 +6292,7 @@ mod attached_subject_tests {
         .map(|effect| ResolutionEffect {
             effect,
             targets: vec![],
-            target_damage: vec![],
-            target_group_indices: vec![],
+            target_receipts: vec![],
             role_group_indices: vec![],
         })
         .collect();
@@ -10440,8 +10556,7 @@ mod attached_subject_tests {
             .map(|effect| ResolutionEffect {
                 effect,
                 targets: vec![],
-                target_damage: vec![],
-                target_group_indices: vec![],
+                target_receipts: vec![],
                 role_group_indices: vec![],
             })
             .collect();
@@ -10856,8 +10971,8 @@ mod attached_subject_tests {
             events: &mut events,
             targets: &[original],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &top,
             controller: 0,
             affected_player: 0,
@@ -12129,8 +12244,7 @@ mod attached_subject_tests {
                 .map(|effect| ResolutionEffect {
                     effect,
                     targets: targets.clone(),
-                    target_damage: vec![],
-                    target_group_indices: vec![0; targets.len()],
+                    target_receipts: vec![],
                     role_group_indices: vec![],
                 })
                 .collect();
@@ -12203,10 +12317,9 @@ mod attached_subject_tests {
             ]
             .into_iter()
             .map(|(effect, targets)| ResolutionEffect {
-                target_group_indices: vec![0; targets.len()],
                 targets,
                 effect,
-                target_damage: vec![],
+                target_receipts: vec![],
                 role_group_indices: vec![],
             })
             .collect();
@@ -13060,8 +13173,8 @@ mod attached_subject_tests {
             events: &mut events,
             targets: &[],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &item,
             controller: 10,
             affected_player: 10,
@@ -13458,6 +13571,26 @@ mod source_keyword_tests {
         let first = add_three_toughness_creature(&mut engine, 0);
         let second = add_three_toughness_creature(&mut engine, 1);
         let targets = vec![first, second];
+        let targets_by_role = vec![targets.clone()];
+        let target_receipts = targets
+            .iter()
+            .map(|&object_id| StackTarget {
+                object_id,
+                group_index: 0,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                zone_change_generation: Some(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+                required_controller: None,
+            })
+            .collect::<Vec<_>>();
+        let target_role_group_indices = vec![0];
         let top = deathtouch_spell_item(2);
         let effect = engine
             .registry
@@ -13473,9 +13606,9 @@ mod source_keyword_tests {
             engine: &mut engine,
             events: &mut events,
             targets: &targets,
-            targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            targets_by_role: &targets_by_role,
+            target_receipts: &target_receipts,
+            target_role_group_indices: &target_role_group_indices,
             top: &top,
             controller: 0,
             affected_player: 0,
@@ -13523,8 +13656,8 @@ mod source_keyword_tests {
             events: &mut events,
             targets: &[],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &top,
             controller: 0,
             affected_player: 0,

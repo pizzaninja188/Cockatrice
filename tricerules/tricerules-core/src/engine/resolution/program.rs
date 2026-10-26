@@ -192,8 +192,8 @@ mod source_sacrifice_receipt_tests {
                 events: &mut events,
                 targets: &[],
                 targets_by_role: &[],
-                target_damage: &[],
-                target_group_indices: &[],
+                target_receipts: &[],
+                target_role_group_indices: &[],
                 top: &top,
                 controller: 10,
                 affected_player: 20,
@@ -403,7 +403,7 @@ impl GameEngine {
             program_target_context(&stack.item, compiled, instruction.instruction_address).ok()?;
         if !projected.has_bindings
             || projected.targets.len() != 1
-            || projected.target_group_indices.as_slice() != [target_group_index]
+            || projected.role_group_indices.as_slice() != [target_group_index]
         {
             return None;
         }
@@ -719,8 +719,8 @@ impl GameEngine {
             events,
             targets: &empty_targets,
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &stack.item,
             controller: stack.item.controller,
             affected_player: stack
@@ -1646,8 +1646,8 @@ impl GameEngine {
                             events,
                             targets: &target_context.targets,
                             targets_by_role: &target_context.targets_by_role,
-                            target_damage: &target_context.target_damage,
-                            target_group_indices: &target_context.target_group_indices,
+                            target_receipts: &target_context.target_receipts,
+                            target_role_group_indices: &target_context.role_group_indices,
                             top,
                             controller: top.controller,
                             affected_player,
@@ -1743,6 +1743,8 @@ impl GameEngine {
                 super::resolve_zone_effect_subject(
                     self,
                     top,
+                    &[],
+                    &[],
                     &[],
                     &tricerules_card_model::primitives::EffectSubject::TriggerObject,
                 )
@@ -2095,8 +2097,8 @@ struct ProgramTargetContext {
     has_bindings: bool,
     targets: Vec<ObjectId>,
     targets_by_role: Vec<Vec<ObjectId>>,
-    target_damage: Vec<u32>,
-    target_group_indices: Vec<u32>,
+    target_receipts: Vec<StackTarget>,
+    role_group_indices: Vec<u32>,
 }
 
 /// Route the structural CreatedTokenBatch receipt into its generation-safe chooser. The model
@@ -2250,14 +2252,8 @@ fn program_target_context(
             .map(|target| target.object_id)
             .collect(),
         targets_by_role,
-        target_damage: selected_targets
-            .iter()
-            .map(|target| target.damage_amount)
-            .collect(),
-        target_group_indices: selected_targets
-            .iter()
-            .map(|target| target.group_index)
-            .collect(),
+        target_receipts: selected_targets.iter().map(|target| **target).collect(),
+        role_group_indices,
     })
 }
 
@@ -3823,8 +3819,8 @@ mod countered_ability_source_tests {
                 events: &mut events,
                 targets: &[],
                 targets_by_role: &[],
-                target_damage: &[],
-                target_group_indices: &[],
+                target_receipts: &[],
+                target_role_group_indices: &[],
                 top: &top,
                 controller: 0,
                 affected_player: 0,
@@ -4148,8 +4144,8 @@ mod invariant_rollback_tests {
         let projected = program_target_context(&top, &compiled, rider_address)
             .expect("the named mode supplies the target group input");
         assert_eq!(projected.targets, vec![selected_mode_group_zero]);
-        assert_eq!(projected.target_damage, vec![20]);
-        assert_eq!(projected.target_group_indices, vec![0]);
+        assert_eq!(projected.target_receipts[0].damage_amount, 20);
+        assert_eq!(projected.target_receipts[0].group_index, 0);
         assert!(projected.targets_by_role.is_empty());
         assert!(
             !projected.has_bindings,

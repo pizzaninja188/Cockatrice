@@ -54,7 +54,12 @@ pub(super) fn copy_target_artifact_with_mana_value_x(
     let SpellEffectKind::CopyTargetArtifactWithManaValueX { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let [target] = cx.targets else {
+    let Some(target) = cx
+        .targets_by_role
+        .first()
+        .and_then(|targets| targets.first())
+        .copied()
+    else {
         return Ok(EffectOutcome::Continue);
     };
     let Some(source_id) = cx.top.source_permanent_id else {
@@ -70,9 +75,10 @@ pub(super) fn copy_target_artifact_with_mana_value_x(
     {
         return Ok(EffectOutcome::Continue);
     }
-    let Some(values) = cx.engine.copiable_values_for(*target) else {
+    let Some(snapshot) = cx.target_token_copy_snapshot_in_role(target, 0) else {
         return Ok(EffectOutcome::Continue);
     };
+    let values = snapshot.values;
     let object = cx
         .engine
         .state
@@ -127,7 +133,7 @@ pub(super) fn destroy(
         _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
     let subjects: Vec<ObjectId> = match &subject {
-        EffectSubject::Chosen(_) => cx.targets.to_vec(),
+        EffectSubject::Chosen(_) => cx.current_battlefield_targets(0),
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
@@ -201,7 +207,7 @@ pub(super) fn sacrifice(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let subjects: Vec<ObjectId> = match &subject {
-        EffectSubject::Chosen(_) => cx.targets.to_vec(),
+        EffectSubject::Chosen(_) => cx.current_battlefield_targets(0),
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
@@ -291,17 +297,17 @@ pub(super) fn sacrifice(
 /// left alone if it is no longer on the battlefield (CR 608.2b: it changed zones after targeting),
 /// and a permanent already in the requested state is a legal target that simply does nothing.
 fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcome, EngineError> {
+    let targets = cx.current_battlefield_targets(0);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let spell_label = cx.spell_label;
 
     let tap_events = if tapped {
-        engine.tap_permanents(cx.controller, targets)
+        engine.tap_permanents(cx.controller, &targets)
     } else {
         Vec::new()
     };
-    for &tid in targets {
+    for &tid in &targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let on_battlefield = engine
             .state
@@ -370,28 +376,20 @@ pub(super) fn skip_next_untap(
     let SpellEffectKind::SkipNextUntap { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    for tid in cx.targets.iter().copied() {
-        let on_battlefield = cx
+    for tid in cx.current_battlefield_targets(0) {
+        let generation = cx
             .engine
             .state
-            .objects
+            .zone_change_generation
             .get(&tid)
-            .is_some_and(|object| object.zone == Zone::Battlefield);
-        if on_battlefield {
-            let generation = cx
-                .engine
-                .state
-                .zone_change_generation
-                .get(&tid)
-                .copied()
-                .unwrap_or(0);
-            cx.engine.state.skip_next_untap.insert((tid, generation));
-            let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
-            cx.events.push(ev_log(format!(
-                "{} keeps {subject_name} from untapping during its controller's next untap step",
-                cx.spell_label
-            )));
-        }
+            .copied()
+            .unwrap_or(0);
+        cx.engine.state.skip_next_untap.insert((tid, generation));
+        let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+        cx.events.push(ev_log(format!(
+            "{} keeps {subject_name} from untapping during its controller's next untap step",
+            cx.spell_label
+        )));
     }
     Ok(EffectOutcome::Continue)
 }
@@ -443,18 +441,9 @@ pub(super) fn gain_control(
     let SpellEffectKind::GainControl { duration, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&target) = cx.targets.first() else {
+    let Some(target) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
-    if !cx
-        .engine
-        .state
-        .objects
-        .get(&target)
-        .is_some_and(|object| object.zone == Zone::Battlefield)
-    {
-        return Ok(EffectOutcome::Continue);
-    }
     let duration = match duration {
         GainControlDuration::UntilEndOfTurn => EffectDuration::UntilEndOfTurn,
         GainControlDuration::WhileYouControlSource => {
@@ -646,16 +635,7 @@ pub(super) fn create_delayed_trigger(
                 .as_ref()
                 .and_then(|cohort| cohort.first())
                 .map(|object| object.object_id),
-            EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    target,
-                    *object_id,
-                    cx.controller,
-                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                    cx.top.trigger_context,
-                )
-            }),
+            EffectSubject::Chosen(_) => cx.first_current_battlefield_target(0),
             EffectSubject::TargetAlias(_) => {
                 return Err(EngineError::Illegal(
                     "unlowered target alias reached delayed-trigger resolution",
@@ -853,9 +833,9 @@ fn attach_equipment_source(
     cx: &mut EffectCx<'_>,
     effect_name: &str,
 ) -> Result<EffectOutcome, EngineError> {
+    let target_id = cx.first_current_battlefield_target(0);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let top = cx.top;
     let spell_label = cx.spell_label;
 
@@ -874,7 +854,7 @@ fn attach_equipment_source(
         )));
         return Ok(EffectOutcome::Continue);
     }
-    if let Some(&target_id) = targets.first() {
+    if let Some(target_id) = target_id {
         if super::super::targeting::equipment_attachment_legal(engine, equip_oid, target_id) {
             let tgt = object_display_name(&engine.state, engine.registry, target_id);
             let eq_name = object_display_name(&engine.state, engine.registry, equip_oid);
@@ -912,7 +892,7 @@ fn attach_equipment_subject(
 ) -> Option<ObjectId> {
     match subject {
         EffectSubject::Chosen(_) => {
-            let object = cx.targets_by_role.get(*chosen_role)?.first().copied();
+            let object = cx.first_current_battlefield_target(*chosen_role);
             *chosen_role += 1;
             object
         }
@@ -1019,12 +999,16 @@ pub(super) fn prevent_next_damage(
     let SpellEffectKind::PreventNextDamage { amount, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let target = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0));
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
 
     // CR 614.1a: place a damage prevention shield on the target object or player.
-    if let Some(&tid) = targets.first() {
+    if let Some(tid) = target {
         engine.add_damage_prevention(
             Some(cx.top),
             cx.spell_label,
@@ -1072,7 +1056,7 @@ pub(super) fn prevent_all_combat_damage_to_target_turn(
     let SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&target_id) = cx.targets.first() else {
+    let Some(target_id) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let generation = cx
@@ -1106,7 +1090,7 @@ pub(super) fn prevent_all_combat_damage_by_target_turn(
     let SpellEffectKind::PreventAllCombatDamageByTargetTurn { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&object_id) = cx.targets.first() else {
+    let Some(object_id) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let zone_change_generation = cx
@@ -1199,31 +1183,28 @@ pub(super) fn regenerate(
     let SpellEffectKind::Regenerate { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let tid = if matches!(subject, EffectSubject::Chosen(_)) {
+        cx.first_current_battlefield_target(0)
+    } else {
+        resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+    };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
-    let top = cx.top;
     let spell_label = cx.spell_label;
-
-    let tid = resolve_effect_subject(engine, top, targets, &subject);
-    if let Some(tid) = tid {
-        let is_creature = engine
+    if let Some(tid) = tid.filter(|tid| {
+        engine
             .state
             .objects
-            .get(&tid)
-            .is_some_and(|o| o.zone == Zone::Battlefield)
-            && engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-        if is_creature {
-            let tgt = object_display_name(&engine.state, engine.registry, tid);
-            if let Some(o) = engine.state.objects.get_mut(&tid) {
-                o.regeneration_shields += 1;
-            }
-            events.push(ev_log(format!(
-                "{tgt} has a regeneration shield ({spell_label})."
-            )));
+            .get(tid)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+    }) {
+        let tgt = object_display_name(&engine.state, engine.registry, tid);
+        if let Some(o) = engine.state.objects.get_mut(&tid) {
+            o.regeneration_shields += 1;
         }
+        events.push(ev_log(format!(
+            "{tgt} has a regeneration shield ({spell_label})."
+        )));
     }
 
     Ok(EffectOutcome::Continue)
@@ -1355,8 +1336,8 @@ mod delayed_trigger_tests {
             events: &mut events,
             targets: &[],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top,
             controller: top.controller,
             affected_player: top.controller,

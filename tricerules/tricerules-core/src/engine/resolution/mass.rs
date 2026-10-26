@@ -48,7 +48,7 @@ pub(super) fn destroy_attached(
     let SpellEffectKind::DestroyAttached { attachments, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&target) = cx.targets.first() else {
+    let Some(target) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let engine = &mut *cx.engine;
@@ -287,12 +287,11 @@ fn scoped_battlefield_objects_with_affected_player(
     players: MassPlayerSet,
     affected_player: PlayerId,
     filter: &TargetFilter,
-    targets: &[ObjectId],
-    target_group_indices: &[u32],
+    target_receipts: &[StackTarget],
 ) -> Vec<ObjectId> {
     let targeted_player = match players {
         MassPlayerSet::TargetedPlayer { group_index, .. } => {
-            scoped_player_target(engine, targets, target_group_indices, group_index)
+            scoped_player_target(engine, target_receipts, group_index)
         }
         _ => None,
     };
@@ -322,8 +321,7 @@ fn scoped_battlefield_objects(
     controller: PlayerId,
     players: impl Into<MassPlayerSet>,
     filter: &TargetFilter,
-    targets: &[ObjectId],
-    target_group_indices: &[u32],
+    target_receipts: &[StackTarget],
 ) -> Vec<ObjectId> {
     scoped_battlefield_objects_with_affected_player(
         engine,
@@ -331,8 +329,7 @@ fn scoped_battlefield_objects(
         players.into(),
         controller,
         filter,
-        targets,
-        target_group_indices,
+        target_receipts,
     )
 }
 
@@ -349,8 +346,7 @@ pub(super) fn sacrifice_all(
         players,
         cx.affected_player,
         &filter,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let snapshot = cx.engine.snapshot_zone_event();
     let before = cohort
@@ -466,8 +462,7 @@ pub(super) fn tap_all(
         players,
         cx.affected_player,
         &filter,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let tap_events = cx.engine.tap_permanents(cx.controller, &affected);
     let tapped = tap_events.len();
@@ -493,8 +488,7 @@ pub(super) fn untap_all(
         players,
         cx.affected_player,
         &filter,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let mut untapped = 0;
     for oid in affected {
@@ -661,8 +655,7 @@ pub(super) fn damage_all(
         players,
         cx.affected_player,
         &kind,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let damage: Vec<_> = affected
         .into_iter()

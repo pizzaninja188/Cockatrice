@@ -20,75 +20,47 @@ pub(super) fn create_token_copies(
             .with_previous_effect_result(cx.previous_effect_result),
     );
     let parked_stack = cx.parked_stack();
-    if source == TokenCopySource::Source {
-        if let Some(snapshot) = cx.engine.source_token_copy_snapshot(cx.top) {
-            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
-                &snapshot,
-                count,
-                parked_stack.clone(),
-                cx.spell_label,
-                cx.events,
-            )?
-            else {
-                return Ok(EffectOutcome::Suspended);
-            };
-            cx.effect_result.produced_objects = produced_objects;
-        }
-        return Ok(EffectOutcome::Continue);
-    }
-    if source == TokenCopySource::TriggerObject {
-        if let Some(snapshot) = cx.engine.trigger_object_token_copy_snapshot(cx.top) {
-            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
-                &snapshot,
-                count,
-                parked_stack.clone(),
-                cx.spell_label,
-                cx.events,
-            )?
-            else {
-                return Ok(EffectOutcome::Suspended);
-            };
-            cx.effect_result.produced_objects = produced_objects;
-        }
-        return Ok(EffectOutcome::Continue);
-    }
-    if let TokenCopySource::LinkedExile {
-        producer_ability_id,
-        linked_exile_id,
-    } = &source
-    {
-        if let Some(snapshot) = zones::linked_exile_copy_snapshot(
+    let snapshot = match &source {
+        TokenCopySource::Source => cx.engine.source_token_copy_snapshot(cx.top),
+        TokenCopySource::TriggerObject => cx.engine.trigger_object_token_copy_snapshot(cx.top),
+        TokenCopySource::LinkedExile {
+            producer_ability_id,
+            linked_exile_id,
+        } => zones::linked_exile_copy_snapshot(
             cx.engine,
             cx.top,
             linked_exile_id.clone(),
             producer_ability_id.clone(),
-        ) {
-            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
-                &snapshot,
-                count,
-                parked_stack.clone(),
-                cx.spell_label,
-                cx.events,
-            )?
-            else {
-                return Ok(EffectOutcome::Suspended);
-            };
-            cx.effect_result.produced_objects = produced_objects;
+        ),
+        TokenCopySource::Chosen(_) => {
+            for (_, snapshot) in cx.target_token_copy_snapshots_in_role(0) {
+                let Some(produced_objects) = cx.engine.create_tokens_from_copy(
+                    &snapshot,
+                    count,
+                    parked_stack.clone(),
+                    cx.spell_label,
+                    cx.events,
+                )?
+                else {
+                    return Ok(EffectOutcome::Suspended);
+                };
+                cx.effect_result.produced_objects.extend(produced_objects);
+            }
+            return Ok(EffectOutcome::Continue);
         }
-        return Ok(EffectOutcome::Continue);
-    }
-    for source in cx.targets {
-        let Some(produced_objects) = cx.engine.create_copied_tokens(
-            *source,
+    };
+    if let Some(snapshot) = snapshot {
+        let Some(produced_objects) = cx.engine.create_tokens_from_copy(
+            &snapshot,
             count,
-            parked_stack.clone(),
+            parked_stack,
             cx.spell_label,
             cx.events,
         )?
         else {
             return Ok(EffectOutcome::Suspended);
         };
-        cx.effect_result.produced_objects.extend(produced_objects);
+        cx.effect_result.produced_objects = produced_objects;
     }
     Ok(EffectOutcome::Continue)
 }

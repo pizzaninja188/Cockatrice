@@ -180,14 +180,11 @@ pub(super) fn ability_mode_program<'a>(
 }
 
 pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef) -> StackTarget {
-    let kind = rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified);
-    let object_target = match kind {
-        rv1::TargetRefKind::Player => false,
-        rv1::TargetRefKind::Permanent
-        | rv1::TargetRefKind::Stack
-        | rv1::TargetRefKind::Graveyard => engine.state.objects.contains_key(&target.object_id),
-        rv1::TargetRefKind::Unspecified => engine.state.objects.contains_key(&target.object_id),
-    };
+    let object_target = engine.state.objects.contains_key(&target.object_id)
+        && matches!(
+            target_ref_identity(engine, target),
+            TargetRefIdentity::Object(..)
+        );
     StackTarget {
         object_id: target.object_id,
         required_controller: None,
@@ -4762,5 +4759,81 @@ mod tests {
         );
         assert_eq!(copy_target.zone_change_generation, None);
         assert!(stack_target_identity_is_current(&engine, &copy_target));
+    }
+
+    #[test]
+    fn capture_stack_target_preserves_player_and_object_domains_on_id_collision() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            219_009,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
+        let colliding_id = 2;
+        assert!(engine.state.objects.contains_key(&colliding_id));
+        engine
+            .state
+            .players
+            .push(crate::state::PlayerState::new(colliding_id as PlayerId, 20));
+
+        let legacy_player_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: colliding_id,
+                kind: rv1::TargetRefKind::Unspecified as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            legacy_player_target.zone_change_generation, None,
+            "legacy player references keep their player domain even when an object shares the id"
+        );
+
+        let explicit_player_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: colliding_id,
+                kind: rv1::TargetRefKind::Player as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(explicit_player_target.zone_change_generation, None);
+
+        let explicit_object_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: colliding_id,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            explicit_object_target.zone_change_generation,
+            Some(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&colliding_id)
+                    .copied()
+                    .unwrap_or(0)
+            ),
+            "an explicit object target keeps its object domain when the id also names a player"
+        );
+
+        let absent_stack_copy_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: u32::MAX,
+                kind: rv1::TargetRefKind::Stack as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            absent_stack_copy_target.zone_change_generation, None,
+            "virtual stack copies without GameObjects keep the prior absent-object receipt"
+        );
     }
 }

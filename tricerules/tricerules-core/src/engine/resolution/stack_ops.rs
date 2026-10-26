@@ -23,22 +23,10 @@ pub(super) fn counter_target_spell(
         // instruction may have removed this spell before a later counter starts; compare the
         // captured generation before looking up its ObjectId so a same-id re-entry cannot satisfy
         // the old target. Modal targets are stored on the chosen mode, not `top.targets`.
-        let target_group_index = cx.target_group_indices.first().copied();
         let matching_target_refs = cx
-            .top
-            .targets
+            .target_receipts
             .iter()
-            .chain(
-                cx.top
-                    .chosen_modes
-                    .iter()
-                    .flat_map(|mode| mode.targets.iter()),
-            )
-            .filter(|target| {
-                target.object_id == tid
-                    && target_group_index
-                        .is_none_or(|group_index| target.group_index == group_index)
-            })
+            .filter(|target| target.object_id == tid)
             .collect::<Vec<_>>();
         let target_identity_is_current =
             counter_target_refs_are_current(engine, &matching_target_refs);
@@ -270,15 +258,14 @@ mod tests {
         let mut result = EffectResult::default();
         let mut events = Vec::new();
         let targets = [target_id];
-        let target_group_indices = [0];
         let outcome = {
             let mut cx = EffectCx {
                 engine: &mut engine,
                 events: &mut events,
                 targets: &targets,
                 targets_by_role: &[],
-                target_damage: &[],
-                target_group_indices: &target_group_indices,
+                target_receipts: &[],
+                target_role_group_indices: &[],
                 top: &top,
                 controller: top.controller,
                 affected_player: top.controller,
@@ -995,8 +982,8 @@ mod cast_color_tests {
             events: &mut events,
             targets: &targets,
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &original,
             controller: 0,
             affected_player: 0,

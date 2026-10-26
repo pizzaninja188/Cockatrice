@@ -84,6 +84,18 @@ fn resolve_with_source_and_target(
     groups: &[u32],
     source: Option<ObjectId>,
 ) {
+    let target_receipts = targets
+        .iter()
+        .zip(groups)
+        .map(|(&object_id, &group_index)| StackTarget {
+            object_id,
+            group_index,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Player as i32,
+            zone_change_generation: None,
+            required_controller: None,
+        })
+        .collect::<Vec<_>>();
     let top = StackItem {
         prototyped: false,
         mana_colors_spent_to_cast: Default::default(),
@@ -126,8 +138,8 @@ fn resolve_with_source_and_target(
         events: &mut events,
         targets,
         targets_by_role: &[],
-        target_damage: &[],
-        target_group_indices: groups,
+        target_receipts: &target_receipts,
+        target_role_group_indices: &[],
         top: &top,
         controller: 3,
         affected_player: 3,
@@ -338,9 +350,17 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
         kind: TargetKind::AnyPlayer,
     };
     let filter = TargetFilter::default_creature();
-    let chosen_player = [11];
+    let chosen_player_id = [11];
+    let chosen_player = [StackTarget {
+        object_id: 11,
+        group_index: 0,
+        damage_amount: 0,
+        kind: rv1::TargetRefKind::Player as i32,
+        zone_change_generation: None,
+        required_controller: None,
+    }];
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player, &[0]),
+        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player),
         [chosen]
     );
     modify(
@@ -351,7 +371,7 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
         },
     );
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player, &[0]),
+        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player),
         [chosen, other]
     );
     resolve_with_target(
@@ -360,7 +380,7 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
             players: scope,
             filter: filter.clone(),
         },
-        &chosen_player,
+        &chosen_player_id,
         &[0],
     );
     assert!(!engine.state.objects[&caster].tapped);
@@ -388,7 +408,7 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
     let opponent = deploy(&mut engine, 2, "grizzly_bears");
     let filter = TargetFilter::default_creature();
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[], &[]),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[]),
         vec![stolen, opponent]
     );
     modify(
@@ -405,7 +425,7 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
         (MassPlayerSet::All, vec![ours, stolen, opponent]),
     ] {
         assert_eq!(
-            scoped_battlefield_objects(&engine, 3, players, &filter, &[], &[]),
+            scoped_battlefield_objects(&engine, 3, players, &filter, &[]),
             expected
         );
         resolve(
@@ -450,7 +470,6 @@ fn affected_player_mass_scope_selects_only_the_event_player() {
         11,
         &filter,
         &[],
-        &[],
     );
     assert_eq!(selected, [affected_land]);
     assert!(!selected.contains(&controller_land));
@@ -468,7 +487,7 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
         ..TargetFilter::default_creature()
     };
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[], &[]),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[]),
         vec![bear, thopter]
     );
     modify(
@@ -495,7 +514,7 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
         ContinuousEffectKind::Layer6AddKeyword(Keyword::Shroud),
     );
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[], &[]),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[]),
         vec![land, thopter]
     );
     resolve(
@@ -535,7 +554,7 @@ fn overlapping_filters_and_no_ops_preserve_one_tap_action() {
         ..Default::default()
     };
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[], &[]),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[]),
         vec![thopter, sword]
     );
     engine.state.objects.get_mut(&thopter).unwrap().tapped = true;

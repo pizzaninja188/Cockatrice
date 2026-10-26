@@ -102,12 +102,9 @@ pub(super) fn choose_cohort_partition(
             "ChooseCohortPartition lost its targeted player binding",
         ));
     };
-    let target_player =
-        super::target_player_from_group(cx.targets, cx.target_group_indices, group_index).ok_or(
-            EngineError::ProgramInvariant(
-                "ChooseCohortPartition is missing its legal target player",
-            ),
-        )?;
+    let target_player = super::target_player_from_group(cx.target_receipts, group_index).ok_or(
+        EngineError::ProgramInvariant("ChooseCohortPartition is missing its legal target player"),
+    )?;
 
     // CR 701.23 still gives the targeted opponent the choice when the found set contains only
     // one or two cards; choosing the full set is a forced choice, but it is not an omitted choice.
@@ -824,8 +821,8 @@ mod tests {
             events: &mut events,
             targets: &[],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &stack,
             controller: 0,
             affected_player: 0,

@@ -261,8 +261,7 @@ pub(super) fn pump_all(
         &filter,
         controller,
         filter_source,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     for oid in affected {
         engine.state.continuous_effects.push(ContinuousEffect {
@@ -310,8 +309,7 @@ pub(super) fn double_power_toughness_all(
         &filter,
         cx.controller,
         source,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     // CR 608.2h / 701.10b,c: fix every creature's two signed values before installing
     // any layer-7c effect. Independent instructions would observe earlier modifications.
@@ -366,8 +364,7 @@ pub(super) fn grant_keywords_all(
         &filter,
         controller,
         filter_source,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let kw_names: Vec<&str> = keywords.iter().map(|k| k.as_str()).collect();
     for oid in affected {
@@ -749,16 +746,7 @@ pub(super) fn earthbend(
         TriggeredAbilityDef, TriggeredCardReference, TypeLineAddition,
     };
     let filter = earthbend_target_filter();
-    let Some(oid) = cx.targets.first().copied().filter(|oid| {
-        target_filter_legal_at_resolution(
-            cx.engine,
-            filter,
-            *oid,
-            cx.controller,
-            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-            cx.top.trigger_context,
-        )
-    }) else {
+    let Some(oid) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let count = cx.engine.resolve_amount(
@@ -963,23 +951,12 @@ pub(super) fn set_base_power_toughness(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::SetBasePowerToughness {
-        target,
-        power,
-        toughness,
+        power, toughness, ..
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(tid) = cx.targets.first().copied().filter(|tid| {
-        target_filter_legal_at_resolution(
-            cx.engine,
-            &target,
-            *tid,
-            cx.controller,
-            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-            cx.top.trigger_context,
-        )
-    }) else {
+    let Some(tid) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -1243,8 +1220,7 @@ pub(super) fn put_counters_all(
         &filter,
         cx.controller,
         filter_source,
-        cx.targets,
-        cx.target_group_indices,
+        cx.target_receipts,
     );
     let proposed = affected
         .into_iter()
@@ -1495,8 +1471,8 @@ mod growth_tests {
             events: &mut events,
             targets: &[],
             targets_by_role: &[],
-            target_damage: &[],
-            target_group_indices: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
             top: &top,
             controller: 0,
             affected_player: 0,

@@ -8,23 +8,8 @@ pub(super) fn apply_combat_restriction(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
 
-    if let CombatRestrictionScope::Chosen(filter) = &scope {
-        let source = TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
-        let affected = cx
-            .targets
-            .iter()
-            .copied()
-            .filter(|oid| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    filter,
-                    *oid,
-                    cx.controller,
-                    source,
-                    cx.top.trigger_context,
-                )
-            })
-            .collect::<Vec<_>>();
+    if let CombatRestrictionScope::Chosen(_) = &scope {
+        let affected = cx.current_battlefield_targets(0);
         for oid in affected {
             cx.engine.state.continuous_effects.push(ContinuousEffect {
                 trigger_grant_origin: None,

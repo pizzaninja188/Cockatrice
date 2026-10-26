@@ -340,10 +340,9 @@ pub(super) fn choose_permanents(
     };
     let targeted_player = match chooser {
         PlayerRecipient::TargetedPlayer { group_index, .. } => Some(
-            super::target_player_from_group(cx.targets, cx.target_group_indices, group_index)
-                .ok_or(EngineError::Illegal(
-                    "permanent choice is missing its targeted player",
-                ))?,
+            super::target_player_from_group(cx.target_receipts, group_index).ok_or(
+                EngineError::Illegal("permanent choice is missing its targeted player"),
+            )?,
         ),
         _ => None,
     };
@@ -750,6 +749,8 @@ pub(in crate::engine) fn resolution_branch_is_live(
                     engine,
                     top,
                     &[],
+                    &[],
+                    &[],
                     &tricerules_card_model::primitives::EffectSubject::TriggerObject,
                 )
                 .is_some(),
@@ -870,18 +871,9 @@ fn branch_draw_recipients(
         .chain(top.chosen_modes.iter().flat_map(|mode| mode.targets.iter()))
         .copied()
         .collect::<Vec<_>>();
-    let target_ids = targets
-        .iter()
-        .map(|target| target.object_id)
-        .collect::<Vec<_>>();
-    let target_groups = targets
-        .iter()
-        .map(|target| target.group_index)
-        .collect::<Vec<_>>();
-
     match who {
         PlayerRecipient::TargetedPlayer { group_index, .. } => {
-            super::target_player_from_group(&target_ids, &target_groups, group_index)
+            super::target_player_from_group(&targets, group_index)
                 .into_iter()
                 .collect()
         }

@@ -47,9 +47,16 @@ pub(super) fn return_to_owners_hand(
             ) {
                 cx.resolve_battlefield_subjects(&subject)
             } else {
-                resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-                    .into_iter()
-                    .collect()
+                resolve_zone_effect_subject(
+                    cx.engine,
+                    cx.top,
+                    cx.targets,
+                    cx.target_receipts,
+                    cx.target_role_group_indices,
+                    &subject,
+                )
+                .into_iter()
+                .collect()
             }
         }
         _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),

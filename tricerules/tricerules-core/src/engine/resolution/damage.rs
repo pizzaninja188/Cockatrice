@@ -15,9 +15,16 @@ pub(super) fn damage_target(
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
     let parked_stack = cx.parked_stack();
+    let Some(tid) = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0))
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let top = cx.top;
     let spell_label = cx.spell_label;
 
@@ -27,9 +34,6 @@ pub(super) fn damage_target(
         AmountContext::for_stack_item(top, top.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    let Some(&tid) = targets.first() else {
-        return Ok(EffectOutcome::Continue);
-    };
     let recipient = engine
         .state
         .player_idx(tid as i32)
@@ -79,6 +83,9 @@ pub(super) fn creature_deals_damage_equal_to_power(
     else {
         return Ok(EffectOutcome::Continue);
     };
+    if !cx.target_is_current_in_role(recipient, 1) {
+        return Ok(EffectOutcome::Continue);
+    }
     let Some(characteristics) = cx.engine.characteristics(source) else {
         return Ok(EffectOutcome::Continue);
     };
@@ -122,18 +129,18 @@ pub(super) fn fight(
     let first_filter_index = matches!(first, EffectSubject::Chosen(_)).then_some(0);
     let second_filter_index = matches!(second, EffectSubject::Chosen(_))
         .then_some(usize::from(first_filter_index.is_some()));
-    let first_targets = first_filter_index
-        .and_then(|index| cx.targets_by_role.get(index))
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    let second_targets = second_filter_index
-        .and_then(|index| cx.targets_by_role.get(index))
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    let Some(first_id) = resolve_effect_subject(cx.engine, cx.top, first_targets, &first) else {
+    let first_id = match first_filter_index {
+        Some(role_index) => cx.first_current_battlefield_target(role_index),
+        None => resolve_effect_subject(cx.engine, cx.top, cx.targets, &first),
+    };
+    let Some(first_id) = first_id else {
         return Ok(EffectOutcome::Continue);
     };
-    let Some(second_id) = resolve_effect_subject(cx.engine, cx.top, second_targets, &second) else {
+    let second_id = match second_filter_index {
+        Some(role_index) => cx.first_current_battlefield_target(role_index),
+        None => resolve_effect_subject(cx.engine, cx.top, cx.targets, &second),
+    };
+    let Some(second_id) = second_id else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -218,7 +225,7 @@ pub(super) fn damage_targets(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::DamageTargets {
-        target: filter,
+        target: _,
         amount,
         division,
         ..
@@ -232,10 +239,17 @@ pub(super) fn damage_targets(
     let source_has_lifelink = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
-    let target_source = TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
+    let targets_by_role = cx.targets_by_role;
+    let target_receipts = cx.target_receipts;
+    let target_role_group_indices = cx.target_role_group_indices;
+    let target_role = targets_by_role
+        .first()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let target_group_index = target_role_group_indices.first().copied();
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
@@ -246,14 +260,16 @@ pub(super) fn damage_targets(
         let legal_count = targets
             .iter()
             .filter(|&&tid| {
-                super::targeting::target_filter_legal_at_resolution(
-                    engine,
-                    &filter,
-                    tid,
-                    controller,
-                    target_source,
-                    cx.top.trigger_context,
-                )
+                target_group_index.is_some_and(|group_index| {
+                    super::target_receipt_is_current_in_role(
+                        engine,
+                        target_role,
+                        target_receipts,
+                        group_index,
+                        tid,
+                        None,
+                    )
+                })
             })
             .count() as u32;
         if legal_count == 0 {
@@ -287,19 +303,24 @@ pub(super) fn damage_targets(
         } else if matches!(division, DamageDivision::PerTarget) {
             per_target_damage
         } else {
-            cx.target_damage.get(i).copied().unwrap_or(0)
+            target_receipts
+                .get(i)
+                .map_or(0, |target| target.damage_amount)
         };
         if damage_amount == 0 {
             continue;
         }
-        if !super::targeting::target_filter_legal_at_resolution(
-            engine,
-            &filter,
-            tid,
-            controller,
-            target_source,
-            cx.top.trigger_context,
-        ) {
+        let current_target = target_group_index.is_some_and(|group_index| {
+            super::target_receipt_is_current_in_role(
+                engine,
+                target_role,
+                target_receipts,
+                group_index,
+                tid,
+                None,
+            )
+        });
+        if !current_target {
             events.push(ev_log(format!(
                 "{spell_label}: target {} is no longer legal, skipping.",
                 tid
@@ -539,10 +560,23 @@ mod damage_source_tests {
         chosen: ObjectId,
     ) -> Result<EffectOutcome, EngineError> {
         let top = item(900, Some(source));
+        let chosen_generation = engine
+            .state
+            .zone_change_generation
+            .get(&chosen)
+            .copied()
+            .unwrap_or(0);
         let targets = vec![chosen];
         let targets_by_role = vec![vec![chosen]];
-        let target_damage = Vec::new();
-        let target_group_indices = vec![0];
+        let target_receipts = vec![StackTarget {
+            object_id: chosen,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(chosen_generation),
+            required_controller: None,
+        }];
+        let target_role_group_indices = vec![0];
         let previous_effect_result = EffectResult::default();
         let mut effect_result = EffectResult::default();
         let mut events = Vec::new();
@@ -551,8 +585,8 @@ mod damage_source_tests {
             events: &mut events,
             targets: &targets,
             targets_by_role: &targets_by_role,
-            target_damage: &target_damage,
-            target_group_indices: &target_group_indices,
+            target_receipts: &target_receipts,
+            target_role_group_indices: &target_role_group_indices,
             top: &top,
             controller: 0,
             affected_player: 0,

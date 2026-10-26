@@ -159,15 +159,39 @@ fn resolve(
         blight_receipts: vec![],
         trigger_context: TriggerContext::default(),
     };
+    let (targets_by_role, target_receipts, target_role_group_indices) =
+        if matches!(caller, Caller::Chosen | Caller::Attached) {
+            let receipts = targets
+                .iter()
+                .map(|&object_id| StackTarget {
+                    object_id,
+                    group_index: 0,
+                    damage_amount: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    zone_change_generation: Some(
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    ),
+                    required_controller: None,
+                })
+                .collect::<Vec<_>>();
+            (vec![targets.clone()], receipts, vec![0])
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
     let mut events = vec![];
     let mut result = EffectResult::default();
     let mut cx = EffectCx {
         engine,
         events: &mut events,
         targets: &targets,
-        targets_by_role: &[],
-        target_damage: &[],
-        target_group_indices: &[],
+        targets_by_role: &targets_by_role,
+        target_receipts: &target_receipts,
+        target_role_group_indices: &target_role_group_indices,
         top: &top,
         controller: 3,
         affected_player: 3,

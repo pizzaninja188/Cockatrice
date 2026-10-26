@@ -235,7 +235,7 @@ pub(super) fn exile_until_source_leaves(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ExileUntilSourceLeaves { target } = effect else {
+    let SpellEffectKind::ExileUntilSourceLeaves { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let Some(source_id) = cx.top.source_permanent_id else {
@@ -260,16 +260,7 @@ pub(super) fn exile_until_source_leaves(
         zone_change_generation: source_generation,
         controller_at_event: source.controller,
     };
-    let Some(target_id) = cx.targets.first().copied().filter(|object_id| {
-        target_filter_legal_at_resolution(
-            cx.engine,
-            &target,
-            *object_id,
-            cx.controller,
-            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-            cx.top.trigger_context,
-        )
-    }) else {
+    let Some(target_id) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
     let Some((owner, target_label)) = cx.engine.state.objects.get(&target_id).map(|object| {
@@ -370,7 +361,13 @@ pub(super) fn target_player_draws(
     let SpellEffectKind::TargetPlayerDraws { count, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(player) = cx.targets.first().copied().map(|target| target as PlayerId) else {
+    let Some(player) = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0))
+        .map(|target| target as PlayerId)
+    else {
         return Ok(EffectOutcome::Continue);
     };
     if cx.engine.state.player_idx(player).is_some() {
@@ -934,7 +931,14 @@ pub(super) fn exile(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let tid = resolve_zone_effect_subject(
+        cx.engine,
+        cx.top,
+        cx.targets,
+        cx.target_receipts,
+        cx.target_role_group_indices,
+        &subject,
+    );
     let result_group = tid.and_then(|object_id| target_exile_result_group(cx, object_id));
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
@@ -999,10 +1003,9 @@ pub(super) fn exile(
                 // publishes the second output. Linked Exile and legacy ExiledObject-only
                 // consumers retain their existing receipt shapes.
                 debug_assert!(cx
-                    .targets
+                    .target_receipts
                     .iter()
-                    .zip(cx.target_group_indices)
-                    .any(|(&target, &group)| target == tid && group == group_index));
+                    .any(|target| target.object_id == tid && target.group_index == group_index));
                 cx.effect_result
                     .cards
                     .push(payment::committed_card_result_entry(
@@ -1074,10 +1077,9 @@ fn target_exile_result_group(cx: &EffectCx<'_>, object_id: ObjectId) -> Option<u
             _ => None,
         })
         .filter(|group_index| {
-            cx.targets
+            cx.target_receipts
                 .iter()
-                .zip(cx.target_group_indices)
-                .any(|(&target, &group)| target == object_id && group == *group_index)
+                .any(|target| target.object_id == object_id && target.group_index == *group_index)
         })
 }
 
@@ -1092,8 +1094,14 @@ pub(super) fn exile_with_owner_cast_permission(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(object_id) = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-    else {
+    let Some(object_id) = resolve_zone_effect_subject(
+        cx.engine,
+        cx.top,
+        cx.targets,
+        cx.target_receipts,
+        cx.target_role_group_indices,
+        &subject,
+    ) else {
         return Ok(EffectOutcome::Continue);
     };
     let Some((owner, is_token)) = cx
@@ -1163,18 +1171,9 @@ pub(super) fn exile_if_would_die_this_turn(
     let SpellEffectKind::ExileIfWouldDieThisTurn { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&object_id) = cx.targets.first() else {
+    let Some(object_id) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
-    if !cx
-        .engine
-        .state
-        .objects
-        .get(&object_id)
-        .is_some_and(|object| object.zone == Zone::Battlefield)
-    {
-        return Ok(EffectOutcome::Continue);
-    }
     let zone_change_generation = cx
         .engine
         .state
@@ -1574,7 +1573,14 @@ pub(super) fn put_in_owners_library(
             return Ok(EffectOutcome::Continue);
         }
     } else {
-        resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+        resolve_zone_effect_subject(
+            cx.engine,
+            cx.top,
+            cx.targets,
+            cx.target_receipts,
+            cx.target_role_group_indices,
+            &subject,
+        )
     };
     if let Some(tid) = tid {
         let Some(object) = cx.engine.state.objects.get(&tid) else {
@@ -1680,14 +1686,28 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
                     .ok_or(EngineError::Illegal(
                         "missing target role for multi-subject library shuffle",
                     ))?;
-                chosen_role += 1;
+                // CR 701.24c still shuffles a chosen object's owner's library when that object
+                // has left the expected zone. Use the captured role to name owners, but only
+                // move objects whose exact battlefield receipts remain current.
                 for &object_id in targets {
+                    if let Some(owner) = cx
+                        .engine
+                        .state
+                        .objects
+                        .get(&object_id)
+                        .map(|object| object.owner)
+                    {
+                        if !affected_owners.contains(&owner) {
+                            affected_owners.push(owner);
+                        }
+                    }
+                }
+                let current_targets = cx.current_battlefield_targets(chosen_role);
+                chosen_role += 1;
+                for object_id in current_targets {
                     let Some(object) = cx.engine.state.objects.get(&object_id) else {
                         continue;
                     };
-                    if object.zone != Zone::Battlefield {
-                        continue;
-                    }
                     if !affected_owners.contains(&object.owner) {
                         affected_owners.push(object.owner);
                     }
@@ -1732,10 +1752,9 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
             "nonland library shuffle requires a targeted player",
         ));
     };
-    let target_player =
-        super::target_player_from_group(cx.targets, cx.target_group_indices, group_index).ok_or(
-            EngineError::Illegal("nonland library shuffle is missing its target player"),
-        )?;
+    let target_player = super::target_player_from_group(cx.target_receipts, group_index).ok_or(
+        EngineError::Illegal("nonland library shuffle is missing its target player"),
+    )?;
     let target_live = cx
         .engine
         .state
@@ -1823,7 +1842,12 @@ pub(super) fn choose_hand_cards(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(&target) = cx.targets.first() else {
+    let Some(target) = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0))
+    else {
         return Ok(EffectOutcome::Continue);
     };
     choose_hand_cards_for_player(
@@ -2368,7 +2392,12 @@ pub(super) fn mill_target_player(
     let SpellEffectKind::MillTargetPlayer { count, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let recipients = cx.targets.first().map(|target| *target as PlayerId);
+    let recipients = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0))
+        .map(|target| target as PlayerId);
     if let Some(recipient) = recipients {
         *cx.effect_result = mill_players(cx, &[recipient], count)?.into();
     }
@@ -2495,13 +2524,17 @@ pub(super) fn target_player_sacrifices(
     let SpellEffectKind::TargetPlayerSacrifices { filter, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let target = cx
+        .targets
+        .first()
+        .copied()
+        .filter(|&target| cx.target_is_current_in_role(target, 0));
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    if let Some(&tid) = targets.first() {
+    if let Some(tid) = target {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
             // Collect matching permanents on the target player's battlefield.
@@ -3857,8 +3890,7 @@ pub(super) fn exile_graveyards(
     let engine = &*cx.engine;
     let target_players: Vec<_> = match players {
         RelativePlayerSet::TargetedPlayer { group_index, .. } => {
-            let Some(player) =
-                super::target_player_from_group(cx.targets, cx.target_group_indices, group_index)
+            let Some(player) = super::target_player_from_group(cx.target_receipts, group_index)
             else {
                 return Ok(EffectOutcome::Continue);
             };
@@ -4264,13 +4296,9 @@ pub(in crate::engine) fn plain_return_entry(
 pub(super) fn exchange_artifact_with_graveyard(
     cx: &mut EffectCx<'_>,
 ) -> Result<EffectOutcome, EngineError> {
-    let (Some(&departure), Some(&incoming)) = (
-        cx.targets_by_role
-            .first()
-            .and_then(|targets| targets.first()),
-        cx.targets_by_role
-            .get(1)
-            .and_then(|targets| targets.first()),
+    let (Some(departure), Some(incoming)) = (
+        cx.first_current_battlefield_target(0),
+        cx.first_current_graveyard_target(1),
     ) else {
         // Welder requires both legal targets even when normal partial-target resolution proceeds.
         return Ok(EffectOutcome::Continue);
@@ -7855,8 +7883,8 @@ mod tests {
                 events: &mut events,
                 targets: &[],
                 targets_by_role: &[],
-                target_damage: &[],
-                target_group_indices: &[],
+                target_receipts: &[],
+                target_role_group_indices: &[],
                 top,
                 controller: 1,
                 affected_player: 1,
@@ -9178,8 +9206,8 @@ mod tests {
                 events: &mut events,
                 targets: &[],
                 targets_by_role: &[],
-                target_damage: &[],
-                target_group_indices: &[],
+                target_receipts: &[],
+                target_role_group_indices: &[],
                 top: &top,
                 controller: 0,
                 affected_player: 0,

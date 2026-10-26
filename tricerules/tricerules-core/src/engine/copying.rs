@@ -63,30 +63,46 @@ pub(super) fn token_copy_snapshot_from(
     })
 }
 
-/// Resolve the generation-bound object observed by a trigger, applying CR 608.2h to its expected
-/// battlefield zone. A later incarnation with the same relay-facing ObjectId is never substituted.
+/// Resolve one battlefield incarnation's copy snapshot, applying CR 608.2h when the object later
+/// leaves. A later incarnation with the same relay-facing ObjectId is never substituted.
+pub(super) fn token_copy_snapshot_for_incarnation(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    object_id: ObjectId,
+    zone_change_generation: u64,
+) -> Option<TokenCopySnapshot> {
+    let same_battlefield_incarnation = state
+        .objects
+        .get(&object_id)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
+        && state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0)
+            == zone_change_generation;
+    if same_battlefield_incarnation {
+        return token_copy_snapshot_from(state, registry, object_id);
+    }
+    state
+        .last_known_copy_by_generation
+        .get(&(object_id, zone_change_generation))
+        .cloned()
+}
+
+/// Resolve the generation-bound object observed by a trigger. The wrapper keeps trigger identity
+/// metadata separate from the copy snapshot lookup used by targeted resolution effects.
 pub(super) fn observed_token_copy_snapshot(
     state: &GameState,
     registry: &'static CardRegistry,
     observed: crate::state::TriggerObjectRef,
 ) -> Option<TokenCopySnapshot> {
-    let same_battlefield_incarnation = state
-        .objects
-        .get(&observed.object_id)
-        .is_some_and(|object| object.zone == Zone::Battlefield)
-        && state
-            .zone_change_generation
-            .get(&observed.object_id)
-            .copied()
-            .unwrap_or(0)
-            == observed.zone_change_generation;
-    if same_battlefield_incarnation {
-        return token_copy_snapshot_from(state, registry, observed.object_id);
-    }
-    state
-        .last_known_copy_by_generation
-        .get(&(observed.object_id, observed.zone_change_generation))
-        .cloned()
+    token_copy_snapshot_for_incarnation(
+        state,
+        registry,
+        observed.object_id,
+        observed.zone_change_generation,
+    )
 }
 
 impl GameEngine {
