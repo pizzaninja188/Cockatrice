@@ -1334,22 +1334,11 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
     }
     if filter.action == CardResultAction::Exile
         && characteristic == BattlefieldQuantityCharacteristic::Power
+        && (target_group_index.is_none() || filter.card_type.is_some())
     {
-        let recipient_group = match effect {
-            SpellEffectKind::GainLife {
-                who: PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
-            } => Some(*group_index),
-            _ => None,
-        };
-        if target_group_index.is_none()
-            || target_group_index != recipient_group
-            || filter.card_type.is_some()
-        {
-            return Err(EngineError::ProgramInvariant(
-                "Exile Power sum requires its exact unfiltered target-controller receipt",
-            ));
-        }
+        return Err(EngineError::ProgramInvariant(
+            "Exile Power sum requires its unfiltered typed target-group receipt",
+        ));
     }
     let ProgramValue::CardResultCohort(cohort) = value else {
         return Err(EngineError::ProgramInvariant(
@@ -2696,6 +2685,176 @@ mod result_count_tests {
                 &effect,
                 &result_type,
                 &value,
+            ),
+            Err(EngineError::ProgramInvariant(_))
+        ));
+    }
+
+    #[test]
+    fn exile_power_sum_accepts_typed_empty_for_damage_and_keeps_receipt_invariants() {
+        let mut engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            122_013,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source_id = *engine
+            .state
+            .objects
+            .keys()
+            .next()
+            .expect("default decks contain a source object");
+        let top = engine.observer_return_item(source_id, 10);
+        let effect = SpellEffectKind::DamagePlayer {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Exile,
+                    players: RelativePlayerSet::All,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::Power,
+            }),
+            who: PlayerRecipient::EachOpponent,
+        };
+        let result_type = ResultType::TargetCardResultCohort {
+            action: CardResultAction::Exile,
+            cardinality: tricerules_card_model::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+            target_group_index: 0,
+        };
+        let empty = cohort_value(Vec::new());
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &effect,
+                &result_type,
+                &empty,
+            )
+            .is_ok(),
+            "a present, correctly typed empty Exile cohort is a zero sum for any admitted consumer"
+        );
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &effect,
+            &result_type,
+            &ProgramValue::Count(0),
+        )
+        .is_err());
+
+        let mut wrong_result_action = result_type.clone();
+        let ResultType::TargetCardResultCohort { action, .. } = &mut wrong_result_action else {
+            unreachable!();
+        };
+        *action = CardResultAction::Destroy;
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &effect,
+            &wrong_result_action,
+            &empty,
+        )
+        .is_err());
+
+        let mut wrong_scope = effect.clone();
+        let SpellEffectKind::DamagePlayer {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum { filter, .. }),
+            ..
+        } = &mut wrong_scope
+        else {
+            unreachable!();
+        };
+        filter.players = RelativePlayerSet::Controller;
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &wrong_scope,
+            &result_type,
+            &empty,
+        )
+        .is_err());
+
+        let mut redundant_card_type = effect.clone();
+        let SpellEffectKind::DamagePlayer {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum { filter, .. }),
+            ..
+        } = &mut redundant_card_type
+        else {
+            unreachable!();
+        };
+        filter.card_type = Some(CardTypeFilter::Creature);
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &redundant_card_type,
+            &result_type,
+            &empty,
+        )
+        .is_err());
+
+        let receipt = CardResultEntry {
+            action: CardResultAction::Exile,
+            affected_player: 20,
+            object_id: 902,
+            zone_change_generation: 2,
+            matched_card_types: vec![CardTypeFilter::Creature],
+            provenance: crate::state::CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Battlefield,
+                input_generation: 1,
+                owner: 20,
+                actual_output_zone: Zone::Exile,
+                output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: None,
+            },
+        };
+        engine
+            .state
+            .last_known_pt_by_generation
+            .insert((902, 1), (Some(4), Some(5)));
+        let public = cohort_value(vec![receipt.clone()]);
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &effect,
+            &result_type,
+            &public,
+        )
+        .is_ok());
+
+        let mut hidden_receipt = receipt;
+        let crate::state::CardResultProvenance::CommittedMovement {
+            output_visibility, ..
+        } = &mut hidden_receipt.provenance
+        else {
+            unreachable!();
+        };
+        *output_visibility = crate::state::CardResultOutputVisibility::UnknownHidden;
+        assert!(matches!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &effect,
+                &result_type,
+                &cohort_value(vec![hidden_receipt]),
+            ),
+            Err(EngineError::ProgramInvariant(_))
+        ));
+
+        engine.state.last_known_pt_by_generation.remove(&(902, 1));
+        assert!(matches!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &effect,
+                &result_type,
+                &public,
             ),
             Err(EngineError::ProgramInvariant(_))
         ));

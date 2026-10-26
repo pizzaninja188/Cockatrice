@@ -448,6 +448,12 @@ pub struct ProgramGroupInput {
     pub group_index: u32,
 }
 
+#[derive(Clone, Copy)]
+struct ExilePowerSumInput {
+    input: Option<ResultSlotId>,
+    unfiltered: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompiledInstructionKind {
     ImportCastPayment,
@@ -671,8 +677,9 @@ impl CompiledProgram {
         validate_targeted_player_damage_pairs(&compiled)?;
         let schema = TargetSchema::compile_program(&compiled, targeting)?;
         validate_spell_target_damage_history_profile(&compiled, &schema, targeting)?;
-        validate_target_card_result_groups(&compiled, &schema)?;
-        compiled.group_inputs = compile_group_inputs(&compiled, context, &schema)?;
+        let (group_inputs, exile_power_sums) = compile_group_inputs(&compiled, context, &schema)?;
+        validate_target_card_result_groups(&compiled, &schema, &exile_power_sums)?;
+        compiled.group_inputs = group_inputs;
         Ok(compiled)
     }
 
@@ -1447,6 +1454,7 @@ fn counter_target_ability_target_group(
 fn validate_target_card_result_groups(
     program: &CompiledProgram,
     schema: &TargetSchema<'_, '_>,
+    exile_power_sums: &[ExilePowerSumInput],
 ) -> Result<(), String> {
     for slot in &program.slots {
         let ResultType::TargetCardResultCohort {
@@ -1494,6 +1502,67 @@ fn validate_target_card_result_groups(
                     "{label} result requires a target group whose bounds are exactly 1..1"
                 ));
             }
+        }
+    }
+    for sum in exile_power_sums {
+        let invalid = || {
+            "Exile Power sum requires an unfiltered typed Exile cohort from an all-Creature target group".to_string()
+        };
+        if !sum.unfiltered {
+            return Err(invalid());
+        }
+        let slot_id = sum.input.ok_or_else(invalid)?;
+        let slot = program
+            .slots
+            .get(slot_id.0 as usize)
+            .filter(|slot| slot.id == slot_id)
+            .ok_or_else(invalid)?;
+        let ResultType::TargetCardResultCohort {
+            action: CardResultAction::Exile,
+            target_group_index,
+            ..
+        } = &slot.result_type
+        else {
+            return Err(invalid());
+        };
+        let group = schema
+            .groups
+            .get(*target_group_index as usize)
+            .ok_or_else(invalid)?;
+        let [binding] = group.bindings.as_slice() else {
+            return Err(invalid());
+        };
+        let super::TargetRole::Filtered(target_filter) = binding.role else {
+            return Err(invalid());
+        };
+        let address = u32::try_from(binding.effect_index).map_err(|_| invalid())?;
+        let target_binding_count = program
+            .target_bindings
+            .iter()
+            .filter(|target| {
+                target.instruction_address == address
+                    && target.target_group_index == *target_group_index
+                    && target.role_index as usize == binding.role_index
+            })
+            .count();
+        let producer = find_instruction_by_address(&program.body, address).ok_or_else(invalid)?;
+        let creature_exile = matches!(
+            &producer.kind,
+            CompiledInstructionKind::Perform(effect)
+                if matches!(
+                    effect.as_ref(),
+                    SpellEffectKind::Exile {
+                        subject: EffectSubject::Chosen(filter),
+                        linked_exile_id: None,
+                    } if filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+                )
+        );
+        if !target_filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+            || target_binding_count != 1
+            || !producer.outputs.contains(&slot_id)
+            || !creature_exile
+        {
+            return Err(invalid());
         }
     }
     Ok(())
@@ -1858,11 +1927,27 @@ fn find_instruction_by_address(
     None
 }
 
-fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInput>) {
+fn collect_group_inputs(
+    block: &CompiledBlock,
+    inputs: &mut Vec<ProgramGroupInput>,
+    exile_power_sums: &mut Vec<ExilePowerSumInput>,
+) {
     for instruction in &block.steps {
         match &instruction.kind {
             CompiledInstructionKind::ImportCastPayment => {}
             CompiledInstructionKind::Perform(effect) => {
+                if let Some((filter, characteristic)) =
+                    effect.previous_effect_card_result_characteristic_sum()
+                {
+                    if filter.action == CardResultAction::Exile
+                        && characteristic == BattlefieldQuantityCharacteristic::Power
+                    {
+                        exile_power_sums.push(ExilePowerSumInput {
+                            input: instruction.input,
+                            unfiltered: filter.card_type.is_none(),
+                        });
+                    }
+                }
                 if let SpellEffectKind::DamagePlayer {
                     who: PlayerRecipient::ControllerOfTargetGroup { group_index },
                     ..
@@ -1879,8 +1964,8 @@ fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInpu
                 }
             }
             CompiledInstructionKind::If { yes, no, .. } => {
-                collect_group_inputs(yes, inputs);
-                collect_group_inputs(no, inputs);
+                collect_group_inputs(yes, inputs, exile_power_sums);
+                collect_group_inputs(no, inputs, exile_power_sums);
             }
             CompiledInstructionKind::Choose {
                 branches,
@@ -1888,9 +1973,9 @@ fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInpu
                 ..
             } => {
                 for branch in branches {
-                    collect_group_inputs(&branch.body, inputs);
+                    collect_group_inputs(&branch.body, inputs, exile_power_sums);
                 }
-                collect_group_inputs(otherwise, inputs);
+                collect_group_inputs(otherwise, inputs, exile_power_sums);
             }
         }
     }
@@ -1924,9 +2009,10 @@ fn compile_group_inputs(
     program: &CompiledProgram,
     context: EffectContext,
     schema: &TargetSchema<'_, '_>,
-) -> Result<Vec<ProgramGroupInput>, String> {
+) -> Result<(Vec<ProgramGroupInput>, Vec<ExilePowerSumInput>), String> {
     let mut inputs = Vec::new();
-    collect_group_inputs(&program.body, &mut inputs);
+    let mut exile_power_sums = Vec::new();
+    collect_group_inputs(&program.body, &mut inputs, &mut exile_power_sums);
     for input in &inputs {
         let group = schema
             .groups
@@ -1973,77 +2059,12 @@ fn compile_group_inputs(
                     );
                 }
             }
-            SpellEffectKind::GainLife { amount, .. } => {
+            SpellEffectKind::GainLife { .. } => {
                 let invalid = || {
                     "GainLife ControllerOfTargetGroup requires a singleton group bound to one object-target role".to_string()
                 };
-                let Some(target_address) =
-                    single_object_target_group_binding(program, group, input.group_index)
-                else {
+                if single_object_target_group_binding(program, group, input.group_index).is_none() {
                     return Err(invalid());
-                };
-                let exile_power_sum = amount.card_result_characteristic_sum().is_some_and(
-                    |(filter, characteristic)| {
-                        filter.action == CardResultAction::Exile
-                            && characteristic == BattlefieldQuantityCharacteristic::Power
-                    },
-                );
-                if exile_power_sum {
-                    if group.min != 1 || group.max != 1 {
-                        return Err(
-                            "Exile Power sum requires a mandatory singleton target group".into(),
-                        );
-                    }
-                    let exact_swords_filter = matches!(
-                        amount,
-                        Amount::Count(CountExpression::CardResultCharacteristicSum {
-                            filter: CardResultFilter {
-                                source: CardResultSource::PreviousEffect,
-                                action: CardResultAction::Exile,
-                                players: RelativePlayerSet::All,
-                                card_type: None,
-                            },
-                            characteristic: BattlefieldQuantityCharacteristic::Power,
-                        })
-                    );
-                    let binding = group.bindings[0];
-                    let matching_creature_exile = matches!(
-                        (binding.role, find_effect_by_address(&program.body, target_address)),
-                        (
-                            super::TargetRole::Filtered(filter),
-                            Some(SpellEffectKind::Exile {
-                                subject: EffectSubject::Chosen(exile_filter),
-                                linked_exile_id: None,
-                            })
-                        ) if is_exact_creature_target_filter(filter)
-                            && is_exact_creature_target_filter(exile_filter)
-                    );
-                    let Some(instruction) =
-                        find_instruction_by_address(&program.body, input.instruction_address)
-                    else {
-                        return Err(
-                            "Swords Exile Power requires its matching typed Exile input".into()
-                        );
-                    };
-                    let typed_exile_input = instruction.input.is_some_and(|slot_id| {
-                        matches!(
-                            program.slots.get(slot_id.0 as usize).map(|slot| &slot.result_type),
-                            Some(ResultType::TargetCardResultCohort {
-                                action: CardResultAction::Exile,
-                                target_group_index,
-                                ..
-                            }) if *target_group_index == input.group_index
-                        )
-                    });
-                    if context != EffectContext::Spell
-                        || !exact_swords_filter
-                        || !matching_creature_exile
-                        || !typed_exile_input
-                    {
-                        return Err(
-                            "Exile Power sum requires the Swords Creature Exile receipt and its matching target-group controller".into(),
-                        );
-                    }
                 }
             }
             _ => {
@@ -2054,7 +2075,7 @@ fn compile_group_inputs(
             }
         }
     }
-    Ok(inputs)
+    Ok((inputs, exile_power_sums))
 }
 
 impl Compiler<'_> {
@@ -3712,45 +3733,6 @@ fn validate_program_card_result_characteristic_sum_input(
                 .into(),
         );
     }
-    if filter.action == CardResultAction::Exile
-        && effect
-            .result_consuming_amount()
-            .and_then(Amount::card_result_characteristic_sum)
-            .is_some_and(|(_, characteristic)| {
-                characteristic == BattlefieldQuantityCharacteristic::Power
-            })
-    {
-        let recipient_group = match effect {
-            EffectOp::GainLife {
-                who: PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
-            } => Some(*group_index),
-            _ => None,
-        };
-        if filter
-            != &(CardResultFilter {
-                source: CardResultSource::PreviousEffect,
-                action: CardResultAction::Exile,
-                players: RelativePlayerSet::All,
-                card_type: None,
-            })
-            || !matches!(
-                (&slot.result_type, recipient_group),
-                (
-                    ResultType::TargetCardResultCohort {
-                        action: CardResultAction::Exile,
-                        target_group_index,
-                        ..
-                    },
-                    Some(group_index)
-                ) if *target_group_index == group_index
-            )
-        {
-            return Err(
-                "Exile Power sum requires the Swords Creature Exile receipt and its matching target-group controller".into(),
-            );
-        }
-    }
     Ok(())
 }
 
@@ -5266,8 +5248,12 @@ fn validate_and_result_types(
             effect.validate(context)?;
             match amount {
                 Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
+                amount if amount.card_result_characteristic_sum().is_some() => {
+                    amount.validate_effect(context)?;
+                    Ok(Vec::new())
+                }
                 _ => Err(
-                    "DamagePlayer EachOpponent in spell_program requires a positive fixed amount"
+                    "DamagePlayer EachOpponent in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
                         .into(),
                 ),
             }
@@ -7042,6 +7028,41 @@ mod target_exile_result_tests {
         (owner, program, targeting)
     }
 
+    fn exile_power_sum_amount(card_type: Option<CardTypeFilter>) -> Amount {
+        Amount::Count(CountExpression::CardResultCharacteristicSum {
+            filter: CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Exile,
+                players: RelativePlayerSet::All,
+                card_type,
+            },
+            characteristic: BattlefieldQuantityCharacteristic::Power,
+        })
+    }
+
+    fn replace_exile_target_filter(program: &mut CardProgram, target_filter: TargetFilter) {
+        let InstructionKind::Perform(effect) = &mut program.body.steps[0].kind else {
+            panic!("first fixture instruction is the typed Exile producer");
+        };
+        let SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        } = effect.as_mut()
+        else {
+            panic!("first fixture instruction targets the exiled permanent");
+        };
+        **filter = target_filter;
+    }
+
+    fn replace_power_sum_consumer(program: &mut CardProgram, consumer: SpellEffectKind) {
+        let instruction = program
+            .body
+            .steps
+            .get_mut(1)
+            .expect("second fixture instruction consumes the Exile result");
+        instruction.kind = InstructionKind::Perform(Box::new(consumer));
+    }
+
     fn compile_gain_life_target_group(
         filter: TargetFilter,
         min: u32,
@@ -7238,40 +7259,130 @@ mod target_exile_result_tests {
     }
 
     #[test]
-    fn swords_power_sum_rejects_optional_group_and_redundant_creature_filter() {
-        for (min, card_type, description) in [
-            (0, Some(CardTypeFilter::Creature), "optional target group"),
-            (1, Some(CardTypeFilter::Creature), "card-type result filter"),
-        ] {
-            let (owner, program, targeting) = swords_power_sum_fixture(min, card_type);
-            assert!(
-                CompiledProgram::compile_with_targeting(
-                    owner,
-                    EffectContext::Spell,
-                    &program,
-                    Some(&targeting),
-                )
-                .is_err(),
-                "the Swords consumer must reject a {description}"
-            );
-        }
+    fn exile_power_sum_accepts_optional_group_and_rejects_redundant_card_type() {
+        let (owner, program, targeting) = swords_power_sum_fixture(0, None);
+        let compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("a present 0..1 Exile result may be empty and sum to zero");
+        assert!(matches!(
+            compiled.slots[1].result_type,
+            ResultType::TargetCardResultCohort {
+                action: CardResultAction::Exile,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1)
+                },
+                target_group_index: 0,
+            }
+        ));
+
+        let (owner, program, targeting) =
+            swords_power_sum_fixture(1, Some(CardTypeFilter::Creature));
+        assert!(
+            CompiledProgram::compile_with_targeting(
+                owner,
+                EffectContext::Spell,
+                &program,
+                Some(&targeting),
+            )
+            .is_err(),
+            "the typed Exile cohort's creature proof makes a result card-type filter redundant"
+        );
     }
 
     #[test]
-    fn target_exile_dual_output_rejects_bad_arity_group_action_and_role() {
-        let (owner, mut bad_arity, targeting) = swords_power_sum_fixture(1, None);
-        bad_arity.body.steps[0].bind.push("unexpected".into());
+    fn exile_power_sum_accepts_filtered_all_creature_predicates() {
+        let (owner, mut program, targeting) = swords_power_sum_fixture(1, None);
+        replace_exile_target_filter(
+            &mut program,
+            TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        tapped: Some(true),
+                        ..TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..TargetFilter::default()
+                        }
+                    },
+                    TargetFilter {
+                        tapped: Some(false),
+                        ..TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..TargetFilter::default()
+                        }
+                    },
+                ]),
+                ..TargetFilter::default()
+            },
+        );
+
+        CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("every terminal target predicate proves Creature");
+    }
+
+    #[test]
+    fn exile_power_sum_rejects_a_mixed_kind_target_predicate() {
+        let (owner, mut program, targeting) = swords_power_sum_fixture(1, None);
+        replace_exile_target_filter(
+            &mut program,
+            TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            },
+        );
+
         assert!(CompiledProgram::compile_with_targeting(
             owner,
             EffectContext::Spell,
-            &bad_arity,
+            &program,
             Some(&targeting),
         )
         .is_err());
+    }
 
-        let (owner, mut bad_group, mut targeting) = swords_power_sum_fixture(1, None);
-        bad_group.body.steps.insert(
-            0,
+    #[test]
+    fn exile_power_sum_supports_an_admitted_damage_amount_consumer() {
+        let (owner, mut program, targeting) = swords_power_sum_fixture(1, None);
+        replace_power_sum_consumer(
+            &mut program,
+            SpellEffectKind::DamagePlayer {
+                amount: exile_power_sum_amount(None),
+                who: PlayerRecipient::EachOpponent,
+            },
+        );
+
+        CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("DamagePlayer EachOpponent can consume an already typed Exile Power sum");
+    }
+
+    #[test]
+    fn exile_power_sum_recipient_may_use_a_distinct_object_target_group() {
+        let (owner, mut program, mut targeting) = swords_power_sum_fixture(1, None);
+        program.body.steps.insert(
+            1,
             Instruction {
                 id: "destroy_other_target".into(),
                 bind: vec!["destroyed".into()],
@@ -7285,17 +7396,124 @@ mod target_exile_result_tests {
                 })),
             },
         );
-        bad_group.target_bindings[0].target_group_index = 1;
-        bad_group.target_bindings.push(ProgramTargetReference {
+        program.target_bindings.push(ProgramTargetReference {
             instruction_id: "destroy_other_target".into(),
             role: ProgramTargetRole::Subject,
-            target_group_index: 0,
+            target_group_index: 1,
         });
-        targeting.groups.push(targeting.groups[0].clone());
+        let InstructionKind::Perform(effect) = &mut program.body.steps[2].kind else {
+            panic!("last fixture instruction consumes the Exile result");
+        };
+        let SpellEffectKind::GainLife { who, .. } = effect.as_mut() else {
+            panic!("the target-group recipient fixture uses GainLife");
+        };
+        *who = PlayerRecipient::ControllerOfTargetGroup { group_index: 1 };
+        targeting.groups.push(super::super::TargetGroupDef {
+            chooser: super::super::TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose another target permanent".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        });
+
+        let compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("the sum producer group and life recipient group are independent");
+        assert_eq!(
+            compiled.group_inputs,
+            [ProgramGroupInput {
+                instruction_address: 2,
+                group_index: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn exile_power_sum_rejects_a_forged_branch_result_group() {
+        let (owner, mut program, mut targeting) = swords_power_sum_fixture(1, None);
+        program.body.steps.insert(
+            1,
+            Instruction {
+                id: "optional_branch".into(),
+                bind: Vec::new(),
+                input: None,
+                kind: InstructionKind::If {
+                    condition: Box::new(GameCondition::Void),
+                    yes: AuthoredBlock {
+                        steps: vec![Instruction {
+                            id: "branch_exile".into(),
+                            bind: vec!["branch_object".into(), "branch_receipt".into()],
+                            input: None,
+                            kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
+                                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                                    kind: TargetKind::Creature,
+                                    ..TargetFilter::default()
+                                })),
+                                linked_exile_id: None,
+                            })),
+                        }],
+                        yields: Vec::new(),
+                    },
+                    no: AuthoredBlock {
+                        steps: Vec::new(),
+                        yields: Vec::new(),
+                    },
+                },
+            },
+        );
+        program.target_bindings.push(ProgramTargetReference {
+            instruction_id: "branch_exile".into(),
+            role: ProgramTargetRole::Subject,
+            target_group_index: 1,
+        });
+        targeting.groups.push(super::super::TargetGroupDef {
+            chooser: super::super::TargetChooser::Controller,
+            min: 0,
+            max: 1,
+            prompt: "Choose a second target creature".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        });
+
+        let mut compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("both Exile producers have valid target groups before the slot is forged");
+        let ResultType::TargetCardResultCohort {
+            target_group_index, ..
+        } = &mut compiled.slots[1].result_type
+        else {
+            panic!("the sum input is the first Exile target-result slot");
+        };
+        *target_group_index = 1;
+        let schema = TargetSchema::compile_program(&compiled, Some(&targeting))
+            .expect("the branch target schema is independently valid");
+        let (_, exile_power_sums) = compile_group_inputs(&compiled, EffectContext::Spell, &schema)
+            .expect("group recipient schema remains valid");
+
+        assert!(validate_target_card_result_groups(&compiled, &schema, &exile_power_sums).is_err());
+    }
+
+    #[test]
+    fn target_exile_dual_output_rejects_bad_arity_action_and_role() {
+        let (owner, mut bad_arity, targeting) = swords_power_sum_fixture(1, None);
+        bad_arity.body.steps[0].bind.push("unexpected".into());
         assert!(CompiledProgram::compile_with_targeting(
             owner,
             EffectContext::Spell,
-            &bad_group,
+            &bad_arity,
             Some(&targeting),
         )
         .is_err());
