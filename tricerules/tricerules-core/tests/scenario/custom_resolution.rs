@@ -1043,7 +1043,7 @@ fn authored_program_reuses_resolution_start_target_legality_after_tapping_target
                     kind: Creature, controller: Opponent, tapped: Some(false),
                 ))))),
                 (id: "stun", kind: Perform(PutCounters(
-                    counter: Stun, count: 1, subject: Chosen((
+                    counter: Stun, count: 2, subject: Chosen((
                         kind: Creature, controller: Opponent, tapped: Some(false),
                     )),
                 ))),
@@ -1105,8 +1105,8 @@ fn authored_program_reuses_resolution_start_target_legality_after_tapping_target
         engine.state.objects[&opposing_creature]
             .counters
             .get(&tricerules_card_model::CounterKind::Stun),
-        Some(&1),
-        "CR 608.2b legality is fixed at resolution start; tapping the target must not invalidate the next instruction"
+        Some(&2),
+        "the shared mandatory target remains legal from resolution start after Tap, and the widened fixed count places both stun counters"
     );
 }
 

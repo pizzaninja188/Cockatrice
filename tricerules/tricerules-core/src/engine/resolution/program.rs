@@ -1731,7 +1731,7 @@ impl GameEngine {
             CompiledChooseRequirement::CastCostReceipt(condition) => {
                 top.cast_cost_condition_matches(condition)
             }
-            CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters => {
+            CompiledChooseRequirement::SourceCanReceiveCounters => {
                 super::pump_counters::can_put_counters(
                     self,
                     top,

@@ -20,8 +20,10 @@ pub use costs::*;
 pub use effects::*;
 pub use keywords::*;
 pub use program::*;
-pub(crate) use targeting::program_effect_target_roles;
 pub use targeting::*;
+pub(crate) use targeting::{
+    is_private_affected_player_discard_profile, program_effect_target_roles,
+};
 
 #[cfg(test)]
 mod tests;

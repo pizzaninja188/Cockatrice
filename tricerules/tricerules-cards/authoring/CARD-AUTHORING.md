@@ -456,7 +456,7 @@ as ordinary effects, plus the existing resultless `RemoveAllCounters` shape, for
 kinds. Replicating Ring and Lavabrink Floodgates use source-counter placement and threshold checks;
 Replicating Ring and Lightning Coils use removal of all counters of one kind. `EffectsApplicable`
 is still admitted only on an ability `Choose` branch whose complete body is one resultless,
-fixed-positive `PutCounters(PlusOnePlusOne, Source)` operation. The engine
+positive fixed `PutCounters(counter, Source)` operation for a validated counter kind. The engine
 checks whether that exact source incarnation can receive the counters both when the menu is offered
 and when a branch answer is validated. A mandatory choice with exactly one live cost-free branch
 enters it automatically and logs the selection; optional choices and paid branches still receive
@@ -566,10 +566,11 @@ other than exactly one remain unsupported. The target remains subject to the usu
 legality checks and destruction/replacement rules.
 
 One separate spell-only profile binds a targeted hand discard. `ChooseHandCards` must use
-`action: Discard`, a positive fixed count, `target: AnyPlayer`, `chooser: AffectedPlayer`, no card
-filter, `optional: false`, and private-look visibility. Bind its result once with
+`action: Discard`, a positive fixed count, an exact default `target: AnyPlayer` or
+`target: OpponentPlayer`, `chooser: AffectedPlayer`, no card filter, `optional: false`, and
+private-look visibility. Bind its result once with
 `ProgramTargetRole::Target` to that instruction's target group, whose schema is exactly one
-`AnyPlayer`. The compiler emits `TargetCardResultCohort { action: Discard, cardinality: 0..count,
+matching player kind. The compiler emits `TargetCardResultCohort { action: Discard, cardinality: 0..count,
 target_group_index }`; the range reflects a target with fewer cards than requested. `CardResultCount`
 is its only consumer and may filter the captured `matched_card_types` snapshot. Gerrard's Verdict
 uses this form to gain 6 life for two visible discarded Lands, otherwise 3 for one; it shares the
@@ -598,8 +599,10 @@ bounds, and event-dependent filters remain unsupported. This does not widen the 
 or targeted hand-discard profiles.
 
 Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
-`subject: Source`, and `ApplyCombatRestriction` may use only `scope: Source` with
+`subject: Source`, and source-scoped `ApplyCombatRestriction` may use only
 `restriction: (cant_be_blocked: true)`; every other restriction field must remain at its default.
+Spell Programs also admit a nonempty validated `ApplyCombatRestriction` on a chosen target whose
+every terminal filter is `Creature`, bound as `Target` to one required single-target group.
 Source sacrifice remains resultless for existing uses such as Command Bridge. When bound, the
 ability Program exposes the existing `CardResultCohort` type with action `Sacrifice`, recipient
 `Controller`, and cardinality 0..1. Its only admitted consumer is an explicit input to a
@@ -858,21 +861,24 @@ controller has no creature, it records Blight without a creature prompt and cont
 Targetful leaves currently accepted include `DamageTarget` with role `Target`, `CounterTargetSpell`
 with role `Spell`, `CounterTargetAbility` with role `StackAbility`,
 `CreateTokenCopies(Chosen(...))` with role `Source`, and `ReturnToOwnersHand(Chosen(...))` and
-`PutInOwnersLibrary(Chosen(...))` with role `Subject`. Ability Programs additionally admit
-`Tap(Chosen(...))`, `PutCounters(Stun, 1, Chosen(Creature))`, and
+`PutInOwnersLibrary(Chosen(...))` with role `Subject`. Spell and Ability Programs additionally
+admit `PutCounters` with any validated counter kind, a fixed count including zero, and a Creature-only
+chosen filter, with role `Target`. They also admit chosen-creature `ApplyCombatRestriction` in
+Spell Programs. Ability Programs additionally admit `Tap(Chosen(...))` and
 `ShufflePermanentsIntoOwnersLibraries([Source, Chosen(...)])` with role `Target`; see their exact
 profiles below. `CounterTargetAbility` has one explicit group with bounds `0..1` or `1..1`; its
 optional bound result may be discarded. A copied permanent source requires exactly one target
 (`min: 1`, `max: 1`).
 
-Ability Programs may use resultless `Tap(Chosen(filter))` and
-`PutCounters(Stun, count: 1, subject: Chosen(Creature filter))` leaves when each is bound as
-`Target` to one required single-target group (`min: 1`, `max: 1`). Both leaves use ordinary permanent
-filter validation. The same group may bind both instructions so they resolve against the same
-selected permanent; Floodpits Drowner's ETB does this for its opponent-controlled creature. The
-Stun-counter form is ability-only; spell Programs retain only their existing narrow
-`PutCounters(PlusOnePlusOne, 1, Chosen(Creature))` form. These bindings reuse the existing target
-and Program-choice protocol; no wire or client choice type is added.
+Spell and Ability Programs may use resultless `PutCounters(counter, count, subject: Chosen(filter))`
+when the counter kind is valid, `count` is a fixed nonnegative literal, every terminal target filter
+is `Creature`, and the effect is bound as `Target` to one required single-target group
+(`min: 1`, `max: 1`). Ability Programs also admit resultless `Tap(Chosen(filter))` under that same
+singleton-target binding. These leaves use ordinary validated target filters, including additional
+predicates and creature-only `any_of` branches. The same group may bind both instructions so they
+resolve against the same selected permanent; Floodpits Drowner's ETB does this for its
+opponent-controlled creature. These bindings reuse the existing target and Program-choice protocol;
+no wire or client choice type is added.
 
 Ability Programs also admit Teferi, Temporal Pilgrim's targeted-opponent profile: bind
 `ChoosePermanents(chooser: TargetedPlayer(group_index: g, kind: OpponentPlayer),

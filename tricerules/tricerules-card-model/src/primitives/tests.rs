@@ -13482,6 +13482,338 @@ fn spell_chosen_destroy_program_captures_a_single_subject_result_for_card_type_c
     assert_eq!(*target_group_index, 0);
 }
 
+fn targeted_spell_effect_program_fixture(
+    card_id: &str,
+    effect: &str,
+    target_bindings: &str,
+    min: u32,
+    max: u32,
+) -> String {
+    format!(
+        r#"(id: "{card_id}", name: "Targeted Effect Program Fixture", face_id: "{card_id}",
+            mana_cost: "{{0}}", types: ["Instant"],
+            targeting: Some((groups: [(min: {min}, max: {max}, prompt: "Choose target", effect_indices: [])])),
+            spell_program: Some((body: (steps: [
+                (id: "effect", bind: [], input: None, kind: Perform({effect})),
+            ], yields: []), target_bindings: {target_bindings})))"#
+    )
+}
+
+fn targeted_ability_effect_program_fixture(
+    card_id: &str,
+    effect: &str,
+    target_bindings: &str,
+    min: u32,
+    max: u32,
+) -> String {
+    format!(
+        r#"(id: "{card_id}", name: "Targeted Ability Program Fixture", face_id: "{card_id}",
+            types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [],
+                program: Some((body: (steps: [
+                    (id: "effect", bind: [], input: None, kind: Perform({effect})),
+                ], yields: []), target_bindings: {target_bindings})),
+                modal: None,
+                targeting: Some((groups: [(min: {min}, max: {max}, prompt: "Choose target", effect_indices: [])])),
+                may: false, intervening_if: None, triggers_only_once: false,
+                max_triggers_per_turn: None,
+            )])"#
+    )
+}
+
+#[test]
+fn spell_program_admits_fixed_creature_put_counters_on_required_target() {
+    let target_binding = r#"[(instruction_id: "effect", role: Target, target_group_index: 0)]"#;
+    for (card_id, counter, count, filter) in [
+        (
+            "spell_program_stun_counter_fixture",
+            "Stun",
+            "2",
+            "(kind: Creature, tapped: true)",
+        ),
+        (
+            "spell_program_charge_counter_fixture",
+            "Charge",
+            "3",
+            "(any_of: Some([(kind: Creature, controller: You), (kind: Creature, tapped: true)]))",
+        ),
+        (
+            "spell_program_zero_stun_counter_fixture",
+            "Stun",
+            "0",
+            "(kind: Creature)",
+        ),
+    ] {
+        let effect =
+            format!("PutCounters(counter: {counter}, count: {count}, subject: Chosen({filter}))");
+        let definition =
+            targeted_spell_effect_program_fixture(card_id, &effect, target_binding, 1, 1);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[])
+            .unwrap_or_else(|error| {
+                panic!(
+                    "fixed {counter} PutCounters on a required Creature target compiles: {error}"
+                )
+            });
+        let owner = crate::ProgramOwnerId::face(card_id, crate::CardFaceId::new(card_id).unwrap());
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .expect("the spell face owns its compiled Program");
+        let face = registry
+            .get(card_id)
+            .and_then(|definition| definition.face(0))
+            .expect("the targeted spell face is registered");
+        let schema =
+            crate::primitives::TargetSchema::compile_program(program, face.targeting.as_ref())
+                .expect("the compiled target schema retains the chosen counter binding");
+        assert_eq!(program.target_bindings.len(), 1);
+        assert_eq!(program.target_bindings[0].target_group_index, 0);
+        assert_eq!(schema.groups.len(), 1);
+        assert_eq!((schema.groups[0].min, schema.groups[0].max), (1, 1));
+        assert!(matches!(
+            &schema.groups[0].bindings[0].role,
+            crate::primitives::TargetRole::Filtered(filter)
+                if filter.all_terminal_filters_match(|leaf| leaf.kind == crate::primitives::TargetKind::Creature)
+        ));
+    }
+
+    let rejected = [
+        (
+            "mixed terminal target kinds",
+            "PutCounters(counter: Charge, count: 1, subject: Chosen((any_of: Some([(kind: Creature), (kind: AnyPermanent)]))))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "dynamic count",
+            "PutCounters(counter: Stun, count: EventCount, subject: Chosen((kind: Creature)))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "X count",
+            "PutCounters(counter: Stun, count: X, subject: Chosen((kind: Creature)))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "chosen target power count",
+            "PutCounters(counter: Stun, count: Count(ChosenTargetPower(group_index: 0, target_index: 0)), subject: Chosen((kind: Creature)))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "program input count",
+            "PutCounters(counter: Stun, count: Count(ProgramInputCount), subject: Chosen((kind: Creature)))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "wrong target role",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            r#"[(instruction_id: "effect", role: Subject, target_group_index: 0)]"#,
+            1,
+            1,
+        ),
+        (
+            "missing target binding",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            "[]",
+            1,
+            1,
+        ),
+        (
+            "optional target group",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            target_binding,
+            0,
+            1,
+        ),
+    ];
+    for (label, effect, bindings, min, max) in rejected {
+        let card_id = format!("spell_program_reject_{}_fixture", label.replace(' ', "_"));
+        let definition =
+            targeted_spell_effect_program_fixture(&card_id, effect, bindings, min, max);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[]).is_err(),
+            "unsupported PutCounters target profile must fail closed: {label}"
+        );
+    }
+}
+
+#[test]
+fn ability_program_admits_fixed_creature_put_counters_on_required_target() {
+    let target_binding = r#"[(instruction_id: "effect", role: Target, target_group_index: 0)]"#;
+    for (card_id, counter, count, filter) in [
+        (
+            "ability_program_stun_one_fixture",
+            "Stun",
+            "1",
+            "(kind: Creature)",
+        ),
+        (
+            "ability_program_stun_two_fixture",
+            "Stun",
+            "2",
+            "(kind: Creature, tapped: true)",
+        ),
+        (
+            "ability_program_charge_counter_fixture",
+            "Charge",
+            "3",
+            "(any_of: Some([(kind: Creature, controller: You), (kind: Creature, tapped: true)]))",
+        ),
+        (
+            "ability_program_zero_stun_counter_fixture",
+            "Stun",
+            "0",
+            "(kind: Creature)",
+        ),
+    ] {
+        let effect =
+            format!("PutCounters(counter: {counter}, count: {count}, subject: Chosen({filter}))");
+        let definition =
+            targeted_ability_effect_program_fixture(card_id, &effect, target_binding, 1, 1);
+        crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[]).unwrap_or_else(
+            |error| {
+                panic!(
+                    "fixed {counter} PutCounters on a required Creature target compiles: {error}"
+                )
+            },
+        );
+    }
+
+    for (label, effect, bindings, min, max) in [
+        (
+            "mixed terminal target kinds",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((any_of: Some([(kind: Creature), (kind: AnyPermanent)]))))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "dynamic count",
+            "PutCounters(counter: Stun, count: EventCount, subject: Chosen((kind: Creature)))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "optional target group",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            target_binding,
+            0,
+            1,
+        ),
+        (
+            "wrong target role",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            r#"[(instruction_id: "effect", role: Subject, target_group_index: 0)]"#,
+            1,
+            1,
+        ),
+        (
+            "missing target binding",
+            "PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature)))",
+            "[]",
+            1,
+            1,
+        ),
+    ] {
+        let card_id = format!("ability_program_reject_{}_fixture", label.replace(' ', "_"));
+        let definition =
+            targeted_ability_effect_program_fixture(&card_id, effect, bindings, min, max);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[]).is_err(),
+            "unsupported ability PutCounters target profile must fail closed: {label}"
+        );
+    }
+}
+
+#[test]
+fn spell_program_admits_valid_nonempty_chosen_creature_combat_restrictions() {
+    let target_binding = r#"[(instruction_id: "effect", role: Target, target_group_index: 0)]"#;
+    for (card_id, restriction, filter) in [
+        (
+            "spell_program_jailbreak_restriction_fixture",
+            "(cant_be_blocked: true)",
+            "(kind: Creature)",
+        ),
+        (
+            "spell_program_duel_tactics_restriction_fixture",
+            "(cant_block: true)",
+            "(any_of: Some([(kind: Creature, controller: You), (kind: Creature, tapped: true)]))",
+        ),
+    ] {
+        let effect =
+            format!("ApplyCombatRestriction(scope: Chosen({filter}), restriction: {restriction})");
+        let definition =
+            targeted_spell_effect_program_fixture(card_id, &effect, target_binding, 1, 1);
+        crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[]).unwrap_or_else(
+            |error| {
+                panic!("validated nonempty combat restriction on Creature target compiles: {error}")
+            },
+        );
+    }
+
+    for (label, effect, bindings, min, max) in [
+        (
+            "empty restriction",
+            "ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_attack: false))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "mixed terminal target kinds",
+            "ApplyCombatRestriction(scope: Chosen((any_of: Some([(kind: Creature), (kind: AnyPermanent)]))), restriction: (cant_block: true))",
+            target_binding,
+            1,
+            1,
+        ),
+        (
+            "optional target group",
+            "ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))",
+            target_binding,
+            0,
+            1,
+        ),
+        (
+            "wrong target role",
+            "ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))",
+            r#"[(instruction_id: "effect", role: Subject, target_group_index: 0)]"#,
+            1,
+            1,
+        ),
+    ] {
+        let card_id = format!("spell_program_reject_combat_{}_fixture", label.replace(' ', "_"));
+        let definition =
+            targeted_spell_effect_program_fixture(&card_id, effect, bindings, min, max);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[definition.as_str()], &[]).is_err(),
+            "unsupported combat-restriction target profile must fail closed: {label}"
+        );
+    }
+
+    let ability_restriction = targeted_ability_effect_program_fixture(
+        "ability_program_reject_chosen_combat_restriction_fixture",
+        "ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))",
+        target_binding,
+        1,
+        1,
+    );
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[ability_restriction.as_str()], &[]).is_err(),
+        "chosen combat restrictions remain spell-only"
+    );
+}
+
 #[test]
 fn spell_targeted_hand_discard_program_captures_target_group_result_for_card_type_count() {
     let verdict = r#"(id: "gerrards_verdict_result_fixture", name: "Gerrard's Verdict Result Fixture",
@@ -13605,6 +13937,34 @@ fn spell_targeted_hand_discard_program_captures_target_group_result_for_card_typ
             "unsupported targeted hand-discard profile must fail closed: {case}"
         );
     }
+
+    let opponent_verdict = verdict
+        .replace(
+            "gerrards_verdict_result_fixture",
+            "opponent_hand_discard_result_fixture",
+        )
+        .replace("(kind: AnyPlayer)", "(kind: OpponentPlayer)");
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&opponent_verdict], &[])
+        .expect("a private affected-player discard may target one opponent");
+    let owner = crate::ProgramOwnerId::face(
+        "opponent_hand_discard_result_fixture",
+        crate::CardFaceId::new("opponent_hand_discard_result_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the opponent-discard spell owns its compiled Program");
+    let face = registry
+        .get("opponent_hand_discard_result_fixture")
+        .and_then(|definition| definition.face(0))
+        .expect("the opponent-discard spell face is registered");
+    let schema =
+        crate::primitives::TargetSchema::compile_program(compiled, face.targeting.as_ref())
+            .expect("the schema retains the opponent target and private discard binding");
+    assert!(matches!(
+        schema.groups[0].bindings[0].role,
+        crate::primitives::TargetRole::Filtered(filter)
+            if filter.kind == crate::primitives::TargetKind::OpponentPlayer
+    ));
 }
 
 fn program_gain_life_result_fixture(
@@ -15698,7 +16058,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
             "None",
             "EffectsApplicable",
             "None",
-            "supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction",
+            "supports EffectsApplicable only for an ability branch containing one resultless positive fixed Source PutCounters instruction",
         ),
         (
             "Void game-condition requirement remains unsupported for Choose",
@@ -17799,6 +18159,24 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
             )
     ));
 
+    for (counter, count) in [("Charge", 2), ("Stun", 3)] {
+        let body = format!(
+            r#"(steps: [(id: "choose", kind: Choose(
+                choice: "endure", chooser: SourceController, optional: false,
+                branches: [(
+                    branch_id: "counters", presentation: Fallback, cost: None,
+                    requirement: EffectsApplicable,
+                    body: (steps: [(id: "counters", kind: Perform(PutCounters(
+                        counter: {counter}, count: {count}, subject: Source,
+                    )))], yields: []),
+                )], otherwise: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        ability_program(&body).unwrap_or_else(|error| {
+            panic!("EffectsApplicable admits valid fixed {counter} count {count}: {error}")
+        });
+    }
+
     for (label, invalid_body) in [
         (
             "extra leaf",
@@ -17825,10 +18203,6 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
         (
             "dynamic amount",
             r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)))], yields: [])"#,
-        ),
-        (
-            "unsupported EffectsApplicable counter kind",
-            r#"(steps: [(id: "counters", kind: Perform(PutCounters(counter: Charge, count: 1, subject: Source)))], yields: [])"#,
         ),
         (
             "wrong subject",
@@ -17873,7 +18247,7 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
         );
         let error = ability_program(&body).expect_err("the EffectsApplicable leaf shape is exact");
         assert!(
-            error.contains("supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction"),
+            error.contains("supports EffectsApplicable only for an ability branch containing one resultless positive fixed Source PutCounters instruction"),
             "{label}: {error}"
         );
     }

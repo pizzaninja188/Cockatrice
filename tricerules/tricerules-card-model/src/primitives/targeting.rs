@@ -16,6 +16,37 @@ static PROGRAM_OPPONENT_PLAYER_TARGET_FILTER: LazyLock<TargetFilter> =
         ..TargetFilter::default()
     });
 
+pub(crate) fn is_private_affected_player_discard_profile(effect: &SpellEffectKind) -> bool {
+    let SpellEffectKind::ChooseHandCards {
+        action,
+        count,
+        target,
+        chooser,
+        card_filter,
+        optional,
+        visibility,
+    } = effect
+    else {
+        return false;
+    };
+    let exact_player_target = matches!(
+        target.kind,
+        TargetKind::AnyPlayer | TargetKind::OpponentPlayer
+    ) && target
+        == &TargetFilter {
+            kind: target.kind,
+            ..TargetFilter::default()
+        };
+
+    *action == HandCardAction::Discard
+        && *count > 0
+        && exact_player_target
+        && *chooser == HandCardChooser::AffectedPlayer
+        && card_filter.is_none()
+        && !*optional
+        && *visibility == HandChoiceVisibility::PrivateLook
+}
+
 /// Authored target declaration for one spell, mode, activated ability, or triggered ability.
 /// Omit it to retain the legacy single required group containing every targeted effect.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -560,10 +591,6 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     .get(&binding.instruction_address)
                     .is_some_and(|effect| matches!(effect, SpellEffectKind::ChooseHandCards { .. }))
             }) {
-                let expected_target = TargetFilter {
-                    kind: TargetKind::AnyPlayer,
-                    ..TargetFilter::default()
-                };
                 let hand_discard_matches_group = group_program_bindings.len() == 1
                     && group.min == 1
                     && group.max == 1
@@ -571,25 +598,8 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     && group_program_bindings.iter().all(|binding| {
                         effects_by_address
                             .get(&binding.instruction_address)
-                            .is_some_and(|effect| match effect {
-                                SpellEffectKind::ChooseHandCards {
-                                    action,
-                                    count,
-                                    target,
-                                    chooser,
-                                    card_filter,
-                                    optional,
-                                    visibility,
-                                } => {
-                                    *action == HandCardAction::Discard
-                                        && *count > 0
-                                        && target == &expected_target
-                                        && *chooser == HandCardChooser::AffectedPlayer
-                                        && card_filter.is_none()
-                                        && !*optional
-                                        && *visibility == HandChoiceVisibility::PrivateLook
-                                }
-                                _ => false,
+                            .is_some_and(|effect| {
+                                is_private_affected_player_discard_profile(effect)
                             })
                     });
                 if !hand_discard_matches_group {

@@ -78,6 +78,15 @@ fn transfer_control(engine: &mut GameEngine, object_id: u32, to_player: usize) {
 }
 
 fn noncreature_endure_engine(seed: u64, card_id: &str, prohibit_counters: bool) -> GameEngine {
+    noncreature_endure_engine_with_counter(seed, card_id, prohibit_counters, "PlusOnePlusOne")
+}
+
+fn noncreature_endure_engine_with_counter(
+    seed: u64,
+    card_id: &str,
+    prohibit_counters: bool,
+    counter: &str,
+) -> GameEngine {
     let static_ability = if prohibit_counters {
         r#"static_abilities: [(ability_id: "static_01", presentation: Fallback,
             definition: ProhibitCounters(affected: Self_))],"#
@@ -95,7 +104,7 @@ fn noncreature_endure_engine(seed: u64, card_id: &str, prohibit_counters: bool) 
                         (branch_id: "counters", presentation: Fallback, cost: None,
                             requirement: EffectsApplicable,
                             body: (steps: [(id: "put_counter", kind: Perform(PutCounters(
-                                counter: PlusOnePlusOne, count: 1, subject: Source,
+                                counter: {counter}, count: 1, subject: Source,
                             )))], yields: [])),
                         (branch_id: "spirit", presentation: Fallback, cost: None,
                             requirement: Always,
@@ -346,6 +355,36 @@ fn endure_program_counter_path_applies_to_a_noncreature_source() {
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
         1
     );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn effects_applicable_source_counter_branch_applies_a_charge_counter() {
+    let card_id = "issue_142_charge_counter_endure_fixture";
+    let mut engine = noncreature_endure_engine_with_counter(142_063, card_id, false, "Charge");
+    let source = cast_noncreature_endure(&mut engine, card_id);
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the Charge counter branch is currently applicable")
+            .deciding_player,
+        0
+    );
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the fixed Charge counter branch");
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Charge),
+        1,
+        "the existing source counter effect applies the authored kind"
+    );
+    assert!(battlefield_token_oids(&engine, 0, "spirit_w_1_1").is_empty());
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
 }

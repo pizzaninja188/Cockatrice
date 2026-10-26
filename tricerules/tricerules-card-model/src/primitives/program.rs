@@ -18,15 +18,16 @@
 //! Widening these rules needs a separately typed context/result contract.
 
 use super::{
-    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CardResultFilter,
-    CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostReceiptCondition,
-    ChooseCardSource, CohortPartitionSelection, ConditionObjectRef, CountExpression, EffectContext,
-    EffectSubject, GameCondition, GraveyardDestination, LibraryBottomOrder, LifeAmount,
-    PermanentChoiceConstraint, PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm,
-    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration,
-    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
-    SpellEffectKind, TargetFilter, TargetGroupSchema, TargetKind, TargetSchema, TargetingDef,
-    TokenCopySource, ZoneCardFilter,
+    is_private_affected_player_discard_profile, Amount, BattlefieldQuantityCharacteristic,
+    CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
+    CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
+    ConditionObjectRef, CountExpression, EffectContext, EffectSubject, GameCondition,
+    GraveyardDestination, LibraryBottomOrder, LifeAmount, PermanentChoiceConstraint,
+    PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm, RelativePlayerSet,
+    ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
+    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
+    TargetFilter, TargetGroupSchema, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
+    ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -533,8 +534,8 @@ pub enum CompiledChooseRequirement {
     Always,
     GameCondition(GameCondition),
     CastCostReceipt(CastCostReceiptCondition),
-    /// The exact source object can receive one +1/+1 counter at this resolution point.
-    SourceCanReceivePlusOnePlusOneCounters,
+    /// The exact source object can receive counters at this resolution point.
+    SourceCanReceiveCounters,
     /// The event-captured TriggerObject remains a legal linked-Exile subject under the existing
     /// object-generation and zone rules.
     TriggerObjectCanBeLinkedExiled,
@@ -2352,9 +2353,8 @@ impl Compiler<'_> {
                                 subject: EffectSubject::Chosen(_),
                             }
                             | SpellEffectKind::PutCounters {
-                                counter: super::CounterKind::Stun,
-                                count: Amount::Fixed(1),
                                 subject: EffectSubject::Chosen(_),
+                                ..
                             }
                             | SpellEffectKind::Untap {
                                 subject: EffectSubject::Chosen(_),
@@ -2984,11 +2984,11 @@ impl Compiler<'_> {
                                     && otherwise.steps.is_empty()
                                     && otherwise.yields.is_empty();
                                 if self.context != EffectContext::Ability
-                                    || (!exact_source_plus_one_counter_body(&branch.body)
+                                    || (!exact_source_counter_body(&branch.body)
                                         && !exact_linked_exile_profile)
                                 {
                                     return Err(format!(
-                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless fixed positive Source +1/+1 PutCounters instruction or the exact optional Controller linked-Exile TriggerObject branch",
+                                        "Choose instruction '{}' supports EffectsApplicable only for an ability branch containing one resultless positive fixed Source PutCounters instruction or the exact optional Controller linked-Exile TriggerObject branch",
                                         instruction.id
                                     ));
                                 }
@@ -2998,7 +2998,7 @@ impl Compiler<'_> {
                                 if exact_linked_exile_profile {
                                     CompiledChooseRequirement::TriggerObjectCanBeLinkedExiled
                                 } else {
-                                    CompiledChooseRequirement::SourceCanReceivePlusOnePlusOneCounters
+                                    CompiledChooseRequirement::SourceCanReceiveCounters
                                 }
                             }
                         };
@@ -4752,29 +4752,12 @@ fn validate_and_result_types(
         SpellEffectKind::Destroy { .. } => Err(
             "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
         ),
-        SpellEffectKind::ChooseHandCards {
-            action,
-            count,
-            target,
-            chooser,
-            card_filter,
-            optional,
-            visibility,
-        } if context == EffectContext::Spell => {
-            let exact_target = TargetFilter {
-                kind: TargetKind::AnyPlayer,
-                ..TargetFilter::default()
-            };
-            if *action != super::HandCardAction::Discard
-                || *count == 0
-                || target != &exact_target
-                || *chooser != super::HandCardChooser::AffectedPlayer
-                || card_filter.is_some()
-                || *optional
-                || *visibility != super::HandChoiceVisibility::PrivateLook
-            {
+        SpellEffectKind::ChooseHandCards { count, target, .. }
+            if context == EffectContext::Spell =>
+        {
+            if !is_private_affected_player_discard_profile(effect) {
                 return Err(
-                    "ChooseHandCards in spell_program supports only a positive, unfiltered, nonoptional affected-player discard from one AnyPlayer target".into(),
+                    "ChooseHandCards in spell_program supports only a positive, unfiltered, nonoptional affected-player discard from one default AnyPlayer or OpponentPlayer target".into(),
                 );
             }
             let target_group_index = target_group_index.ok_or_else(|| {
@@ -5403,21 +5386,6 @@ fn validate_and_result_types(
             validate_program_target_filter(filter, "Tap target")?;
             Ok(Vec::new())
         }
-        SpellEffectKind::PutCounters {
-            counter: super::CounterKind::Stun,
-            count: Amount::Fixed(1),
-            subject: EffectSubject::Chosen(filter),
-        } if context == EffectContext::Ability
-            && filter.kind == TargetKind::Creature
-            && filter.any_of.is_none() =>
-        {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err("Stun PutCounters requires one required single-target group".into());
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Stun PutCounters target")?;
-            Ok(Vec::new())
-        }
         SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
             if context == EffectContext::Ability =>
         {
@@ -5456,10 +5424,20 @@ fn validate_and_result_types(
             }])
         }
         SpellEffectKind::PutCounters {
-            counter: super::CounterKind::PlusOnePlusOne,
-            count: Amount::Fixed(1),
+            count,
             subject: EffectSubject::Chosen(filter),
-        } if context == EffectContext::Spell && is_exact_creature_target_filter(filter) => {
+            ..
+        } if matches!(context, EffectContext::Spell | EffectContext::Ability)
+            && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
+        {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err("PutCounters requires one required single-target group".into());
+            }
+            if !matches!(count, Amount::Fixed(_)) {
+                return Err(
+                    "PutCounters in a resolution program supports only a fixed literal count".into(),
+                );
+            }
             effect.validate(context)?;
             validate_program_target_filter(filter, "PutCounters target")?;
             Ok(Vec::new())
@@ -5617,12 +5595,8 @@ fn validate_and_result_types(
             scope: super::CombatRestrictionScope::Chosen(filter),
             restriction,
         } if context == EffectContext::Spell
-            && is_exact_creature_target_filter(filter)
-            && restriction
-                == &(super::CombatRestriction {
-                    cant_be_blocked: true,
-                    ..Default::default()
-                }) =>
+            && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+            && !restriction.is_empty() =>
         {
             effect.validate(context)?;
             validate_program_target_filter(filter, "ApplyCombatRestriction target")?;
@@ -6145,7 +6119,7 @@ fn validate_program_draw_recipient(
     validate_program_recipient(recipient, context, "Draw recipient")
 }
 
-fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {
+fn exact_source_counter_body(body: &AuthoredBlock) -> bool {
     if !body.yields.is_empty() {
         return false;
     }
@@ -6161,7 +6135,7 @@ fn exact_source_plus_one_counter_body(body: &AuthoredBlock) -> bool {
     matches!(
         effect.as_ref(),
         SpellEffectKind::PutCounters {
-            counter: super::CounterKind::PlusOnePlusOne,
+            counter: _,
             count: Amount::Fixed(count),
             subject: EffectSubject::Source,
         } if *count > 0
