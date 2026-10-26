@@ -1,3 +1,4 @@
+use tricerules_cards::card_def::RawCardDefinition;
 use tricerules_cards::primitives::{
     CardTypeFilter, InstructionKind, PlayerRecipient, ProgramResultCondition, RelativePlayerSet,
     SpellEffectKind,
@@ -133,19 +134,34 @@ fn issue_287_recruit_named_count_requires_its_bound_discard_result() {
     // Mutate that same generated definition to preserve missing and incompatible producer checks.
     let source = include_str!("../data/generated/l/long_lake_nuisance.ron");
     let token = include_str!("../data/tokens/human_soldier_w_1_1.ron");
+    let definition: RawCardDefinition = ron::Options::default()
+        .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+        .from_str(source)
+        .expect("the generated Recruit definition parses");
     let registry_from = |card: &str| {
         tricerules_cards::registry::CardRegistry::from_chunks_and_tokens(&[card], &[token])
     };
     registry_from(source).expect("the unmodified generated Recruit compiles with its token");
 
-    let missing_producer = source.replace(
-        ",(id:\"discard_one\",bind:[\"discarded\"],kind:Perform(Discard(who:Controller,quantity:Exact(1))))",
-        "",
+    let mut missing_definition = definition.clone();
+    let missing_program = missing_definition
+        .triggered_abilities
+        .iter_mut()
+        .find(|ability| ability.ability_id.as_str() == "triggered_01")
+        .and_then(|ability| ability.program.as_mut())
+        .expect("the generated ETB program exists");
+    let producer_index = missing_program
+        .body
+        .steps
+        .iter()
+        .position(|instruction| instruction.id == "discard_one")
+        .expect("the generated ETB program has its named Discard producer");
+    assert_eq!(
+        missing_program.body.steps.remove(producer_index).id,
+        "discard_one"
     );
-    assert_ne!(
-        missing_producer, source,
-        "the producer removal must take effect"
-    );
+    let missing_producer =
+        ron::to_string(&missing_definition).expect("the mutated definition serializes as RON");
     let error = registry_from(&missing_producer)
         .expect_err("the named condition cannot read a missing Discard result");
     assert!(
@@ -157,14 +173,25 @@ fn issue_287_recruit_named_count_requires_its_bound_discard_result() {
         "expected an out-of-scope Discard result, got {error:?}"
     );
 
-    let incompatible_producer = source.replace(
-        "kind:Perform(Discard(who:Controller,quantity:Exact(1)))",
-        "kind:Perform(Mill(who:Controller,count:1))",
-    );
-    assert_ne!(
-        incompatible_producer, source,
-        "the incompatible producer replacement must take effect"
-    );
+    let mut incompatible_definition = definition;
+    let incompatible_program = incompatible_definition
+        .triggered_abilities
+        .iter_mut()
+        .find(|ability| ability.ability_id.as_str() == "triggered_01")
+        .and_then(|ability| ability.program.as_mut())
+        .expect("the generated ETB program exists");
+    let producer = incompatible_program
+        .body
+        .steps
+        .iter_mut()
+        .find(|instruction| instruction.id == "discard_one")
+        .expect("the generated ETB program has its named Discard producer");
+    producer.kind = InstructionKind::Perform(Box::new(SpellEffectKind::Mill {
+        count: Amount::Fixed(1),
+        who: PlayerRecipient::Controller,
+    }));
+    let incompatible_producer =
+        ron::to_string(&incompatible_definition).expect("the mutated definition serializes as RON");
     let error = registry_from(&incompatible_producer)
         .expect_err("a named Discard count cannot read a Mill result");
     assert!(
