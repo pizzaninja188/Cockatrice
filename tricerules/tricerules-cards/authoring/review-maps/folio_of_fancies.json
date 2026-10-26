@@ -11,7 +11,10 @@
     {"symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/0/costs/0"},
     {"symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/1"},
     {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/activated_abilities/0/effect/0"},
-    {"symbol": "SpellEffectKind::MillEachOpponentByHandSize", "typed_path": "/faces/0/activated_abilities/1/effect/0"}
+    {"symbol": "SpellEffectKind::Mill", "typed_path": "/faces/0/activated_abilities/1/effect/0"},
+    {"symbol": "Amount::Count", "typed_path": "/faces/0/activated_abilities/1/effect/0/Mill/count"},
+    {"symbol": "CountExpression::CardsInHandForRecipient", "typed_path": "/faces/0/activated_abilities/1/effect/0/Mill/count/Count"},
+    {"symbol": "PlayerRecipient::EachOpponent", "typed_path": "/faces/0/activated_abilities/1/effect/0/Mill/who"}
   ],
   "tokens": [],
   "semantic_fixtures": [

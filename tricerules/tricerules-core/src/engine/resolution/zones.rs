@@ -2385,36 +2385,50 @@ pub(super) fn mill(
     };
     let amount_context = AmountContext::for_stack_item(cx.top, cx.controller)
         .with_previous_effect_result(cx.previous_effect_result);
-    let count = cx.engine.resolve_amount(&count, amount_context);
-    let recipients = player_recipients(cx, who);
-    *cx.effect_result = mill_players(cx, &recipients, count)?.into();
-
+    let result = if amount_uses_recipient_hand_count(&count) {
+        let recipients = player_recipients(cx, who);
+        let recipient_counts = recipients
+            .iter()
+            .map(|&recipient| {
+                (
+                    recipient,
+                    cx.engine
+                        .resolve_amount(&count, amount_context.with_affected_player(recipient)),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut result = CardResultCohort::default();
+        for (recipient, amount) in recipient_counts {
+            result
+                .cards
+                .extend(mill_players(cx, &[recipient], amount)?.cards);
+        }
+        result
+    } else {
+        let amount = cx.engine.resolve_amount(&count, amount_context);
+        let recipients = player_recipients(cx, who);
+        mill_players(cx, &recipients, amount)?
+    };
+    *cx.effect_result = result.into();
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn mill_each_opponent_by_hand_size(
-    cx: &mut EffectCx<'_>,
-) -> Result<EffectOutcome, EngineError> {
-    // Each recipient's count is read independently as this instruction resolves; an earlier
-    // opponent's mill cannot cause the controller's hand size to stand in for a later opponent.
-    let recipients = cx
-        .engine
-        .state
-        .players
-        .iter()
-        .filter(|player| {
-            !player.has_lost && cx.engine.state.are_opponents(cx.controller, player.id)
-        })
-        .map(|player| (player.id, player.hand.len() as u32))
-        .collect::<Vec<_>>();
-    let mut result = CardResultCohort::default();
-    for (player, count) in recipients {
-        result
-            .cards
-            .extend(mill_players(cx, &[player], count)?.cards);
+fn amount_uses_recipient_hand_count(amount: &Amount) -> bool {
+    match amount {
+        Amount::Count(expression) => count_uses_recipient_hand_count(expression),
+        Amount::DivideRoundedDown { amount, .. } => amount_uses_recipient_hand_count(amount),
+        _ => false,
     }
-    *cx.effect_result = result.into();
-    Ok(EffectOutcome::Continue)
+}
+
+fn count_uses_recipient_hand_count(expression: &CountExpression) -> bool {
+    match expression {
+        CountExpression::CardsInHandForRecipient => true,
+        CountExpression::Affine { terms, .. } => terms
+            .iter()
+            .any(|term| count_uses_recipient_hand_count(&term.quantity)),
+        _ => false,
+    }
 }
 
 fn mill_players(

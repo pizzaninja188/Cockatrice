@@ -2061,6 +2061,14 @@ impl GameEngine {
                     .and_then(|item| item.trigger_context.affected_player),
             )
             .map_or(0, i64::from),
+            CountExpression::CardsInHandForRecipient => selected_hand_size(
+                &self.state,
+                ConditionPlayerSet::AffectedPlayer,
+                context.controller,
+                None,
+                context.affected_player,
+            )
+            .map_or(0, i64::from),
             CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldMaximum { .. }
             | CountExpression::BattlefieldPowerSum { .. }

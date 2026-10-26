@@ -22,7 +22,7 @@
       ability_id: "activated_02",
       presentation: OracleLines([3]),
       costs: [Mana("{2}{U}"), Tap],
-      effect: [MillEachOpponentByHandSize],
+      effect: [Mill(count: Count(CardsInHandForRecipient), who: EachOpponent)],
     ),
   ],
 )

@@ -1753,8 +1753,6 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
-    /// Folio of Fancies counts each opponent's own hand independently as this resolves.
-    MillEachOpponentByHandSize,
     /// CR 701.17: mill the players named by `who` without targeting them. Gorging Vulture and
     /// Tribune of Rot use the default `Controller`; player-relative trigger effects can reuse the
     /// remaining [`PlayerRecipient`] variants without pretending that "you" is a target.
@@ -3887,7 +3885,6 @@ impl SpellEffectKind {
             | SpellEffectKind::Discover { .. }
             | SpellEffectKind::Cascade { .. }
             | SpellEffectKind::Mill { .. }
-            | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }
             | SpellEffectKind::ThassaOracle
             | SpellEffectKind::BoompileFlipCoinAndDestroyNonlands
@@ -5090,7 +5087,6 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
             | SpellEffectKind::GainLife { amount, .. }
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
-            | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
             | SpellEffectKind::PutCountersAll { count: amount, .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
@@ -5107,6 +5103,7 @@ impl SpellEffectKind {
                     amount.validate_effect(context)?;
                 }
             }
+            SpellEffectKind::Mill { count, .. } => count.validate_recipient_mill(context)?,
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
             } => scale.validate_effect(context)?,

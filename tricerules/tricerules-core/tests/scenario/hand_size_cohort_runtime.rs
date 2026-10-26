@@ -4,8 +4,8 @@ use crate::helpers::ScenarioCommandExt;
 use super::helpers::*;
 use tricerules_cards::{
     primitives::{
-        AbilityCost, Amount, CastTriggerPlayer, ConditionPlayerSet, CounterKind, GameCondition,
-        PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
+        AbilityCost, Amount, CastTriggerPlayer, ConditionPlayerSet, CountExpression, CounterKind,
+        GameCondition, PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
     },
     ManaCost,
 };
@@ -13,6 +13,29 @@ use tricerules_core::{state::CopiableValues, TurnStep};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, RuledCommand,
 };
+
+fn set_codex_shredder_effect(engine: &mut GameEngine, source: u32, effect: SpellEffectKind) {
+    let mut face = tricerules_cards::registry::global()
+        .get("codex_shredder")
+        .expect("Codex Shredder is registered")
+        .primary_face()
+        .clone();
+    face.activated_abilities[0].costs = vec![AbilityCost::Tap];
+    face.activated_abilities[0].effect = vec![effect];
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .copiable_values = Some(CopiableValues {
+        prototyped: false,
+        source_card_id: "codex_shredder".into(),
+        source_face_index: 0,
+        display_name: face.name.clone(),
+        face,
+        room_faces: None,
+    });
+}
 
 #[test]
 fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
@@ -322,31 +345,27 @@ fn each_opponent_mills_its_own_hand_count_in_three_player_game() {
     .expect("new game");
     engine.state.turn_step = TurnStep::Main1;
     let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
-    let mut face = tricerules_cards::registry::global()
-        .get("codex_shredder")
-        .expect("Codex Shredder is registered")
-        .primary_face()
-        .clone();
-    face.activated_abilities[0].costs = vec![AbilityCost::Tap];
-    face.activated_abilities[0].effect = vec![SpellEffectKind::MillEachOpponentByHandSize];
-    engine
-        .state
-        .objects
-        .get_mut(&source)
-        .unwrap()
-        .copiable_values = Some(CopiableValues {
-        prototyped: false,
-        source_card_id: "codex_shredder".into(),
-        source_face_index: 0,
-        display_name: face.name.clone(),
-        face,
-        room_faces: None,
-    });
+    let count: CountExpression = serde_json::from_value(serde_json::json!({
+        "Affine": {
+            "constant": 0,
+            "terms": [
+                {"coefficient": 1, "quantity": "CardsInHandForRecipient"},
+                {"coefficient": 1, "quantity": {"GraveyardCards": {"owners": "All"}}}
+            ]
+        }
+    }))
+    .expect("shared mill count reads the recipient hand and public graveyard snapshot");
+    let effect = SpellEffectKind::Mill {
+        count: Amount::Count(count),
+        who: PlayerRecipient::EachOpponent,
+    };
+    set_codex_shredder_effect(&mut engine, source, effect);
     for (player, count) in [(1, 8), (2, 10)] {
         while engine.state.players[player].hand.len() < count {
             inject_card_into_hand(&mut engine, player, "forest");
         }
     }
+    engine.state.players[1].library.truncate(3);
     let library_before = [
         engine.state.players[0].library.len(),
         engine.state.players[1].library.len(),
@@ -360,9 +379,195 @@ fn each_opponent_mills_its_own_hand_count_in_three_player_game() {
             .expect("pass priority to resolve");
     }
     assert_eq!(engine.state.players[0].library.len(), library_before[0]);
-    assert_eq!(engine.state.players[1].library.len(), library_before[1] - 8);
+    assert_eq!(engine.state.players[1].library.len(), 0);
     assert_eq!(
         engine.state.players[2].library.len(),
-        library_before[2] - 10
+        library_before[2] - 10,
+        "P2's amount is computed before P1's short-library mill adds cards to all graveyards"
     );
+}
+
+#[test]
+fn recipient_bound_mill_keeps_trigger_affected_hand_distinct_in_affine_count() {
+    let decks = Some(vec![
+        deck_with("island", &[]),
+        deck_with("forest", &[]),
+        deck_with("plains", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_935,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
+    engine.state.turn_step = TurnStep::Main1;
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "iron_maiden");
+    let mut face = tricerules_cards::registry::global()
+        .get("iron_maiden")
+        .expect("Iron Maiden is registered")
+        .primary_face()
+        .clone();
+    let count: CountExpression = serde_json::from_value(serde_json::json!({
+        "Affine": {
+            "constant": 0,
+            "terms": [
+                {
+                    "coefficient": 1,
+                    "quantity": {"CardsInHand": {"players": "AffectedPlayer"}}
+                },
+                {"coefficient": 1, "quantity": "CardsInHandForRecipient"}
+            ]
+        }
+    }))
+    .expect("the trigger amount combines the original event player and each mill recipient");
+    face.triggered_abilities[0].effect = vec![SpellEffectKind::Mill {
+        count: Amount::Count(count),
+        who: PlayerRecipient::EachOpponent,
+    }];
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .copiable_values = Some(CopiableValues {
+        prototyped: false,
+        source_card_id: "iron_maiden".into(),
+        source_face_index: 0,
+        display_name: face.name.clone(),
+        face,
+        room_faces: None,
+    });
+    for (player, count) in [(1, 8), (2, 10)] {
+        while engine.state.players[player].hand.len() < count {
+            inject_card_into_hand(&mut engine, player, "forest");
+        }
+    }
+    for _ in 0..10 {
+        inject_library_card(&mut engine, 1, "forest");
+        inject_library_card(&mut engine, 2, "plains");
+    }
+
+    end_active_turn(&mut engine, 0);
+    assert_eq!(engine.state.active_player_id(), 1);
+    assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(
+        engine.state.stack[0].trigger_context.affected_player,
+        Some(1),
+        "Iron Maiden retains the upkeep player in its trigger context"
+    );
+    inject_card_into_hand(&mut engine, 1, "forest");
+    let library_before = [
+        engine.state.players[1].library.len(),
+        engine.state.players[2].library.len(),
+    ];
+    for _ in 0..3 {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(player, &pass())
+            .expect("pass priority to resolve");
+    }
+    assert_eq!(
+        engine.state.players[1].library.len(),
+        library_before[0] - 18
+    );
+    assert_eq!(
+        engine.state.players[2].library.len(),
+        library_before[1] - 19,
+        "the old event player stays P1 while the new count binds to each recipient"
+    );
+}
+
+#[test]
+fn ordinary_scalar_each_opponent_mill_reuses_one_amount_for_all_recipients() {
+    let decks = Some(vec![
+        deck_with("island", &[]),
+        deck_with("forest", &[]),
+        deck_with("plains", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_936,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
+    engine.state.turn_step = TurnStep::Main1;
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
+    set_codex_shredder_effect(
+        &mut engine,
+        source,
+        SpellEffectKind::Mill {
+            count: Amount::Fixed(3),
+            who: PlayerRecipient::EachOpponent,
+        },
+    );
+    let library_before = [
+        engine.state.players[1].library.len(),
+        engine.state.players[2].library.len(),
+    ];
+    apply_ability(&mut engine, 0, source, 0, vec![]).expect("activate scalar mill ability");
+    for _ in 0..3 {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(player, &pass())
+            .expect("pass priority to resolve");
+    }
+    assert_eq!(engine.state.players[1].library.len(), library_before[0] - 3);
+    assert_eq!(engine.state.players[2].library.len(), library_before[1] - 3);
+}
+
+#[test]
+fn recipient_bound_controller_mill_uses_the_controller_hand() {
+    let decks = Some(vec![
+        deck_with("island", &[]),
+        deck_with("forest", &[]),
+        deck_with("plains", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_937,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
+    engine.state.turn_step = TurnStep::Main1;
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
+    let count: CountExpression =
+        serde_json::from_value(serde_json::json!("CardsInHandForRecipient"))
+            .expect("recipient-bound hand count deserializes");
+    set_codex_shredder_effect(
+        &mut engine,
+        source,
+        SpellEffectKind::Mill {
+            count: Amount::Count(count),
+            who: PlayerRecipient::Controller,
+        },
+    );
+    let count = engine.state.players[0].hand.len() as u32;
+    let library_before = [
+        engine.state.players[0].library.len(),
+        engine.state.players[1].library.len(),
+    ];
+
+    apply_ability(&mut engine, 0, source, 0, vec![]).expect("activate controller mill");
+    for _ in 0..3 {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(player, &pass())
+            .expect("pass priority to resolve");
+    }
+
+    assert_eq!(
+        engine.state.players[0].library.len(),
+        library_before[0] - count as usize
+    );
+    assert_eq!(engine.state.players[1].library.len(), library_before[1]);
 }

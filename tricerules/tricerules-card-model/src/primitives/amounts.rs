@@ -34,6 +34,9 @@ pub enum CountExpression {
     /// A selected player's current hand count. Iron Maiden and Viseling read the upkeep
     /// player's live count as their damage resolves, without inspecting card identities.
     CardsInHand { players: ConditionPlayerSet },
+    /// Folio of Fancies binds a separate live hand count to each opponent receiving its Mill.
+    /// This stays distinct from trigger-captured `CardsInHand(AffectedPlayer)`.
+    CardsInHandForRecipient,
     /// Flow of Knowledge and Gold Rush count derived public permanent cohorts.
     BattlefieldPermanents { filter: BattlefieldPermanentFilter },
     /// Chupacabra Echo and Calamitous Cave-In count printed public-zone characteristics.
@@ -207,7 +210,7 @@ impl CountExpression {
         }
     }
     pub(crate) fn validate(&self) -> Result<(), String> {
-        self.validate_with_target_power(false)
+        self.validate_with_target_power(false, false)
     }
 
     fn chosen_target_power_references(&self, references: &mut Vec<(u32, u32)>) {
@@ -225,7 +228,11 @@ impl CountExpression {
         }
     }
 
-    fn validate_with_target_power(&self, allow_chosen_target_power: bool) -> Result<(), String> {
+    fn validate_with_target_power(
+        &self,
+        allow_chosen_target_power: bool,
+        allow_recipient_hand_count: bool,
+    ) -> Result<(), String> {
         match self {
             Self::CastCostPaymentCount { cost } => cost.validate(),
             Self::SourceCounterCount { counter } => counter.validate(),
@@ -246,6 +253,10 @@ impl CountExpression {
             }
             Self::CardsInHand { players } if players.identifies_one_player() => Ok(()),
             Self::CardsInHand { .. } => Err("CardsInHand requires a single player selector".into()),
+            Self::CardsInHandForRecipient if allow_recipient_hand_count => Ok(()),
+            Self::CardsInHandForRecipient => {
+                Err("CardsInHandForRecipient requires a recipient-bound Mill amount".into())
+            }
             Self::DeclaredAttackers { filter, .. } => filter.validate(),
             Self::Affine { terms, .. } => {
                 if terms.is_empty() {
@@ -268,8 +279,10 @@ impl CountExpression {
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
                     }
-                    term.quantity
-                        .validate_with_target_power(allow_chosen_target_power)?;
+                    term.quantity.validate_with_target_power(
+                        allow_chosen_target_power,
+                        allow_recipient_hand_count,
+                    )?;
                 }
                 Ok(())
             }
@@ -518,6 +531,13 @@ impl Amount {
         self.validate_effect_with_target_power(context, false)
     }
 
+    pub(super) fn validate_recipient_mill(&self, context: EffectContext) -> Result<(), String> {
+        if self.uses_affected_player_result() {
+            return Err("affected-player result count requires a player draw instruction".into());
+        }
+        self.validate_player_effect_with_target_power(context, false, true)
+    }
+
     pub(super) fn validate_targeted_put_counters(
         &self,
         context: EffectContext,
@@ -533,19 +553,20 @@ impl Amount {
         if self.uses_affected_player_result() {
             return Err("affected-player result count requires a player draw instruction".into());
         }
-        self.validate_player_effect_with_target_power(context, allow_chosen_target_power)
+        self.validate_player_effect_with_target_power(context, allow_chosen_target_power, false)
     }
 
     pub(super) fn validate_player_effect(&self, context: EffectContext) -> Result<(), String> {
-        self.validate_player_effect_with_target_power(context, false)
+        self.validate_player_effect_with_target_power(context, false, false)
     }
 
     fn validate_player_effect_with_target_power(
         &self,
         context: EffectContext,
         allow_chosen_target_power: bool,
+        allow_recipient_hand_count: bool,
     ) -> Result<(), String> {
-        self.validate_with_target_power(allow_chosen_target_power)?;
+        self.validate_with_target_power(allow_chosen_target_power, allow_recipient_hand_count)?;
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
         }
@@ -660,20 +681,26 @@ impl Amount {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        self.validate_with_target_power(false)
+        self.validate_with_target_power(false, false)
     }
 
-    fn validate_with_target_power(&self, allow_chosen_target_power: bool) -> Result<(), String> {
+    fn validate_with_target_power(
+        &self,
+        allow_chosen_target_power: bool,
+        allow_recipient_hand_count: bool,
+    ) -> Result<(), String> {
         match self {
             Amount::Conditional { condition, .. } => condition.validate_without_self_entry_spell(),
-            Amount::Count(expression) => {
-                expression.validate_with_target_power(allow_chosen_target_power)
-            }
+            Amount::Count(expression) => expression
+                .validate_with_target_power(allow_chosen_target_power, allow_recipient_hand_count),
             Amount::DivideRoundedDown { amount, divisor } => {
                 if *divisor == 0 {
                     return Err("DivideRoundedDown divisor must be positive".into());
                 }
-                amount.validate_with_target_power(allow_chosen_target_power)
+                amount.validate_with_target_power(
+                    allow_chosen_target_power,
+                    allow_recipient_hand_count,
+                )
             }
             Amount::Fixed(_) | Amount::X | Amount::CastCost(_) | Amount::EventCount => Ok(()),
         }
@@ -986,6 +1013,52 @@ pub enum LifeAmount {
 #[cfg(test)]
 mod hand_size_count_tests {
     use super::*;
+
+    #[test]
+    fn recipient_hand_count_is_limited_to_recipient_bound_mill() {
+        use crate::primitives::{PlayerRecipient, SpellEffectKind};
+
+        let amount: Amount = ron::from_str("Count(CardsInHandForRecipient)")
+            .expect("recipient-bound hand counts deserialize");
+        let nested: Amount = ron::from_str(
+            "DivideRoundedDown(amount: Count(Affine(constant: 0, terms: [(coefficient: 1, quantity: CardsInHandForRecipient)])), divisor: 2)",
+        )
+        .expect("the recipient count remains composable inside the existing amount forms");
+        let mill: SpellEffectKind =
+            ron::from_str("Mill(count: Count(CardsInHandForRecipient), who: EachOpponent)")
+                .expect("an each-opponent mill can bind the recipient count");
+        let controller_mill: SpellEffectKind =
+            ron::from_str("Mill(count: Count(CardsInHandForRecipient), who: Controller)")
+                .expect("a controller mill can bind its recipient count");
+        let nested_mill = SpellEffectKind::Mill {
+            count: nested.clone(),
+            who: PlayerRecipient::EachOpponent,
+        };
+        assert!(mill.validate(EffectContext::Ability).is_ok());
+        assert!(controller_mill.validate(EffectContext::Ability).is_ok());
+        assert!(nested_mill.validate(EffectContext::Ability).is_ok());
+
+        assert!(amount.validate_live().is_err());
+        assert!(nested.validate_live().is_err());
+        assert!(nested.validate_cost(true).is_err());
+        assert!(nested.validate_entry(true).is_err());
+        assert!(SpellEffectKind::Draw {
+            count: amount,
+            who: PlayerRecipient::EachOpponent,
+        }
+        .validate(EffectContext::Ability)
+        .is_err());
+
+        assert!(
+            SpellEffectKind::Mill {
+                count: Amount::Fixed(3),
+                who: PlayerRecipient::EachOpponent,
+            }
+            .validate(EffectContext::Ability)
+            .is_ok(),
+            "ordinary scalar mill remains valid"
+        );
+    }
 
     #[test]
     fn affected_player_results_reject_cost_entry_static_and_unscoped_effect_contexts() {
