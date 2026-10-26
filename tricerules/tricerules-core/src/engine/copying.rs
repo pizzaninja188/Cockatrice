@@ -108,14 +108,12 @@ pub(super) fn observed_token_copy_snapshot(
 impl GameEngine {
     pub(super) fn source_token_copy_snapshot(&self, item: &StackItem) -> Option<TokenCopySnapshot> {
         let source = item.source_permanent_id?;
-        if self.source_is_current_object(item) {
-            token_copy_snapshot_from(&self.state, self.registry, source)
-        } else {
-            self.state
-                .last_known_copy_by_generation
-                .get(&(source, item.source_zone_change))
-                .cloned()
-        }
+        token_copy_snapshot_for_incarnation(
+            &self.state,
+            self.registry,
+            source,
+            item.source_zone_change,
+        )
     }
 
     pub(super) fn trigger_object_token_copy_snapshot(
