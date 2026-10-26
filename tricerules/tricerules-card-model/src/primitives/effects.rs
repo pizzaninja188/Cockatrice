@@ -1814,10 +1814,11 @@ pub enum SpellEffectKind {
     /// Farewell selects artifacts/creatures/enchantments; Final Judgment selects creatures.
     ExileAll {
         kind: TargetFilter,
+        /// CR 610.3: when true, this cohort returns under its owners' control as this exact
+        /// source incarnation leaves the battlefield. This is an ability-only mode.
+        #[serde(default, skip_serializing_if = "is_false")]
+        until_source_leaves: bool,
     },
-    /// CR 610.3: Aligned Hedron Network exiles all current creatures with power 5 or greater,
-    /// then returns that exact cohort immediately after this source incarnation leaves.
-    ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves,
     /// CR 701.21: each affected controller sacrifices the matching simultaneous cohort.
     /// All Is Dust selects colored permanents; Living Death selects every creature.
     SacrificeAll {
@@ -3892,7 +3893,6 @@ impl SpellEffectKind {
             | SpellEffectKind::BoompileFlipCoinAndDestroyNonlands
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::ExileAll { .. }
-            | SpellEffectKind::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves
             | SpellEffectKind::SacrificeAll { .. }
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
@@ -4477,7 +4477,10 @@ impl SpellEffectKind {
         }
         if matches!(
             self,
-            Self::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves
+            Self::ExileAll {
+                until_source_leaves: true,
+                ..
+            }
         ) && context != EffectContext::Ability
         {
             return Err("source-linked mass exile requires a permanent ability source".into());
@@ -5655,7 +5658,7 @@ impl SpellEffectKind {
             // Mass effects select objects, not players, and never use AnyTarget (which includes
             // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
-            | SpellEffectKind::ExileAll { kind }
+            | SpellEffectKind::ExileAll { kind, .. }
             | SpellEffectKind::SacrificeAll { filter: kind, .. }
             | SpellEffectKind::ReturnAllToOwnersHand { kind }
             | SpellEffectKind::DamageAll { kind, .. }

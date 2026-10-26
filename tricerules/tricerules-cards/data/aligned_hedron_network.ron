@@ -9,6 +9,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves],
+    effect: [ExileAll(kind: (kind: Creature, power: Some(AtLeast(5))), until_source_leaves: true)],
   )],
 )

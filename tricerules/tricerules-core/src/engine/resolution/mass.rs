@@ -111,19 +111,49 @@ pub(super) fn exile_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ExileAll { kind } = effect else {
+    let SpellEffectKind::ExileAll {
+        kind,
+        until_source_leaves,
+    } = effect
+    else {
         return Err(EngineError::Illegal("mass exile dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
+    let watched_source = if until_source_leaves {
+        let Some(source_id) = cx.top.source_permanent_id else {
+            return Ok(EffectOutcome::Continue);
+        };
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(source) = engine.state.objects.get(&source_id) else {
+            return Ok(EffectOutcome::Continue);
+        };
+        if source.zone != Zone::Battlefield || source_generation != cx.top.source_zone_change {
+            return Ok(EffectOutcome::Continue);
+        }
+        Some(TriggerObjectRef {
+            object_id: source_id,
+            zone_change_generation: source_generation,
+            controller_at_event: source.controller,
+        })
+    } else {
+        None
+    };
     let zone_snapshot = engine.snapshot_zone_event();
     // Freeze every departure before committing any: a departing anthem/type source or
-    // attachment must not change another simultaneous victim's LKI (CR 400.7, 603.10).
+    // attachment must not change another simultaneous victim's LKI (CR 400.7, 603.10). The
+    // same snapshot also binds each optional return observer to the generation created here.
     let victims = battlefield_objects_matching(engine, &kind)
         .into_iter()
         .map(|oid| {
             let movement =
                 prepare_zone_move(&engine.state, engine.registry, oid, Zone::Exile, None)?
                     .ok_or(EngineError::Illegal("mass exile permanent missing"))?;
+            let expected_exiled_generation = movement.prior_generation + 1;
             let object = &engine.state.objects[&oid];
             Ok((
                 movement,
@@ -132,15 +162,43 @@ pub(super) fn exile_all(
                 object.controller,
                 object_display_name(&engine.state, engine.registry, oid),
                 engine.battlefield_leave_event(oid),
+                expected_exiled_generation,
             ))
         })
         .collect::<Result<Vec<_>, EngineError>>()?;
+
+    // Install the complete generation-bound return cohort before the first commit. This matters
+    // when the linked source is itself in the matching cohort, including an animated source that
+    // sorts before the other victims.
+    if let Some(watched) = watched_source {
+        for (_, object_id, owner, _, _, _, generation) in &victims {
+            engine
+                .state
+                .active_event_observers
+                .push(ActiveEventObserver {
+                    watched: Some(watched),
+                    matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+                    payload: EventObserverPayload::ReturnExiledObject {
+                        exiled: TriggerObjectRef {
+                            object_id: *object_id,
+                            zone_change_generation: *generation,
+                            controller_at_event: *owner,
+                        },
+                    },
+                });
+        }
+    }
+
     let mut leave_events = Vec::with_capacity(victims.len());
-    for (movement, oid, owner, controller, name, leave_event) in victims {
+    for (movement, oid, owner, controller, name, leave_event, generation) in victims {
         commit_zone_move(&mut engine.state, engine.registry, movement)?;
+        debug_assert_eq!(
+            engine.state.zone_change_generation.get(&oid).copied(),
+            Some(generation)
+        );
         cx.effect_result.produced_objects.push(TriggerObjectRef {
             object_id: oid,
-            zone_change_generation: engine.state.zone_change_generation[&oid],
+            zone_change_generation: generation,
             controller_at_event: controller,
         });
         cx.events
@@ -148,106 +206,6 @@ pub(super) fn exile_all(
         cx.events.push(permanent_moved_event(
             &engine.state,
             oid,
-            owner,
-            rv1::permanent_moved::Destination::Exile,
-        ));
-        leave_events.extend(leave_event);
-    }
-    engine.fire_zone_triggers(zone_snapshot, leave_events, cx.events);
-    Ok(EffectOutcome::Continue)
-}
-
-pub(super) fn exile_all_creatures_with_power_at_least_five_until_source_leaves(
-    cx: &mut EffectCx<'_>,
-) -> Result<EffectOutcome, EngineError> {
-    let source_id = match cx.top.source_permanent_id {
-        Some(source_id) => source_id,
-        None => return Ok(EffectOutcome::Continue),
-    };
-    let source_generation = cx
-        .engine
-        .state
-        .zone_change_generation
-        .get(&source_id)
-        .copied()
-        .unwrap_or(0);
-    let Some(source) = cx.engine.state.objects.get(&source_id) else {
-        return Ok(EffectOutcome::Continue);
-    };
-    if source.zone != Zone::Battlefield || source_generation != cx.top.source_zone_change {
-        return Ok(EffectOutcome::Continue);
-    }
-    let source_ref = TriggerObjectRef {
-        object_id: source_id,
-        zone_change_generation: source_generation,
-        controller_at_event: source.controller,
-    };
-    let filter = TargetFilter {
-        kind: TargetKind::Creature,
-        power: Some(PowerComparison::AtLeast(5)),
-        ..Default::default()
-    };
-    let engine = &mut *cx.engine;
-    let zone_snapshot = engine.snapshot_zone_event();
-    // Freeze all current derived characteristics and destination facts before moving any member.
-    let victims = battlefield_objects_matching(engine, &filter)
-        .into_iter()
-        .map(|object_id| {
-            let movement =
-                prepare_zone_move(&engine.state, engine.registry, object_id, Zone::Exile, None)?
-                    .ok_or(EngineError::Illegal("mass exile permanent missing"))?;
-            let object = &engine.state.objects[&object_id];
-            let expected_exiled_generation = movement.prior_generation + 1;
-            Ok((
-                movement,
-                object_id,
-                object.owner,
-                object.controller,
-                object_display_name(&engine.state, engine.registry, object_id),
-                engine.battlefield_leave_event(object_id),
-                expected_exiled_generation,
-            ))
-        })
-        .collect::<Result<Vec<_>, EngineError>>()?;
-
-    // commit_zone_move dispatches LeavesBattlefield observers inline. Register the complete
-    // generation-bound return cohort before a matching source can be committed (including when
-    // an animated Network is the first victim in battlefield order).
-    for (_, object_id, owner, _, _, _, generation) in &victims {
-        engine
-            .state
-            .active_event_observers
-            .push(ActiveEventObserver {
-                watched: Some(source_ref),
-                matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
-                payload: EventObserverPayload::ReturnExiledObject {
-                    exiled: TriggerObjectRef {
-                        object_id: *object_id,
-                        zone_change_generation: *generation,
-                        controller_at_event: *owner,
-                    },
-                },
-            });
-    }
-
-    let mut leave_events = Vec::new();
-    for (movement, object_id, owner, controller, name, leave_event, expected_generation) in victims
-    {
-        commit_zone_move(&mut engine.state, engine.registry, movement)?;
-        debug_assert_eq!(
-            engine.state.zone_change_generation.get(&object_id).copied(),
-            Some(expected_generation)
-        );
-        cx.effect_result.produced_objects.push(TriggerObjectRef {
-            object_id,
-            zone_change_generation: expected_generation,
-            controller_at_event: controller,
-        });
-        cx.events
-            .push(ev_log(format!("{} exiles {name}", cx.spell_label)));
-        cx.events.push(permanent_moved_event(
-            &engine.state,
-            object_id,
             owner,
             rv1::permanent_moved::Destination::Exile,
         ));

@@ -46,6 +46,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
                 kind,
                 ..Default::default()
             },
+            until_source_leaves: false,
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
     }
@@ -55,13 +56,15 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
             controller: TargetController::You,
             ..Default::default()
         },
+        until_source_leaves: false,
     };
     assert!(effect.validate(EffectContext::Spell).is_err());
     assert!(SpellEffectKind::ExileAll {
         kind: TargetFilter {
             kind: TargetKind::Creature,
             ..Default::default()
-        }
+        },
+        until_source_leaves: false,
     }
     .validate(EffectContext::Spell)
     .is_ok());

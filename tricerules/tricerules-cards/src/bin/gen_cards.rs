@@ -74,8 +74,8 @@ use recipes::{
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
-    CompiledProgram, EffectContext, GraveyardDestination, InstructionKind, LifeAmount,
-    PermanentEventFilter, ProgramTargetReference, ProgramTargetRole,
+    CompiledProgram, GraveyardDestination, InstructionKind, LifeAmount, PermanentEventFilter,
+    ProgramTargetReference, ProgramTargetRole,
 };
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
@@ -3957,6 +3957,35 @@ mod tests {
     }
 
     #[test]
+    fn generated_exile_all_keeps_legacy_default_and_roundtrips_linked_mode() {
+        let legacy = ron::from_str::<SpellEffectKind>(
+            "ExileAll(kind: (kind: AnyPermanent, permanent_types: [Artifact]))",
+        )
+        .expect("legacy ExileAll RON defaults to an unlinked effect");
+        assert!(legacy.validate(EffectContext::Spell).is_ok());
+        let legacy_rendered = render_generated_effect(&legacy);
+        assert!(!legacy_rendered.contains("until_source_leaves"));
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&legacy_rendered).unwrap(),
+            legacy
+        );
+
+        let linked = ron::from_str::<SpellEffectKind>(
+            "ExileAll(kind: (kind: Creature, power: Some(AtLeast(5))), until_source_leaves: true)",
+        )
+        .expect("the generator must load the new linked ExileAll form");
+        assert!(linked.validate(EffectContext::Ability).is_ok());
+        let rendered = render_generated_effect(&linked);
+        assert!(rendered.contains("until_source_leaves:true"));
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&rendered).unwrap(),
+            linked,
+            "the generated renderer must preserve the true source-link flag"
+        );
+        assert!(linked.validate(EffectContext::Spell).is_err());
+    }
+
+    #[test]
     fn presentation_refresh_rejects_combined_modes() {
         for extra in [
             "--check",
@@ -4056,13 +4085,14 @@ mod tests {
     use tricerules_cards::primitives::{
         BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardResultAction,
         CardResultSource, CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole,
-        CountExpression, CreatureScopeController, CreatureScopeFilter, EffectSubject,
-        EntersTappedAffected, EntryCost, GameCondition, GraveyardFilter, GraveyardOwner,
-        LibraryPlacement, ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter,
-        PlayerRecipient, PowerComparison, RelativePlayerSet, ResolutionCost, SearchDestination,
-        SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-        TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
+        CountExpression, CreatureScopeController, CreatureScopeFilter, EffectContext,
+        EffectSubject, EntersTappedAffected, EntryCost, GameCondition, GraveyardFilter,
+        GraveyardOwner, LibraryPlacement, ObjectContributionKind, ObjectPaymentConstraint,
+        PermanentTypeFilter, PlayerRecipient, PowerComparison, RelativePlayerSet, ResolutionCost,
+        SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+        SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
+        TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter,
+        TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
