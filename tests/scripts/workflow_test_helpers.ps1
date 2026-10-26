@@ -9,10 +9,11 @@ function Assert-Workflow {
 
 function New-WorkflowFixture {
     $root = Join-Path ([IO.Path]::GetTempPath()) ('cockatrice workflow ' + [guid]::NewGuid())
+    $fixturePowerShell = (Get-Process -Id $PID).Path
     foreach ($directory in @('scripts', 'tricerules', 'bin', 'nested directory', 'Cockatrice\Cockatrice')) {
         New-Item -ItemType Directory -Path (Join-Path $root $directory) -Force | Out-Null
     }
-    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1', 'rust-format-checks.ps1', 'check-rust-format.ps1')) {
+    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'card-author.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1', 'rust-format-checks.ps1', 'check-rust-format.ps1')) {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
@@ -70,7 +71,7 @@ if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::Re
     exit 7
 }
 if ($tool -eq 'cargo') {
-    if ($arguments -contains 'metadata') {
+    if ($arguments[0] -eq 'metadata') {
         Get-Content -LiteralPath (Join-Path $root 'format-metadata.json') -Raw
         exit 0
     }
@@ -86,6 +87,15 @@ if ($tool -eq 'cargo') {
             if ([IO.File]::ReadAllText($fingerprint) -ne 'canonical') { Write-Output 'fingerprint drift'; exit 9 }
         }
         elseif ($arguments -notcontains '--dry-run') { [IO.File]::WriteAllText($fingerprint, 'canonical') }
+    }
+    if ($joined -match '--bin card-author ') {
+        if ($arguments -contains 'metadata') {
+            if ($arguments -contains '--check') {
+                if ([IO.File]::ReadAllText((Join-Path $root 'fingerprint')) -ne 'canonical') { Write-Output 'fingerprint drift'; exit 9 }
+            }
+            elseif ($arguments -contains '--refresh') { [IO.File]::WriteAllText((Join-Path $root 'fingerprint'), 'canonical') }
+            else { throw 'Expected card-author metadata check or refresh' }
+        }
     }
     if ($joined -match '--bin gen-checklist ') {
         $target = $null
@@ -103,7 +113,7 @@ exit 0
     foreach ($tool in @('cargo', 'rustfmt', 'ctest', 'git', 'build')) {
         Set-Content -LiteralPath (Join-Path $root "bin\$tool.cmd") -Encoding Ascii -Value @(
             '@echo off',
-            "powershell.exe -NoProfile -File `"%~dp0tool.ps1`" $tool %*",
+            "`"$fixturePowerShell`" -NoProfile -File `"%~dp0tool.ps1`" $tool %*",
             'exit /b %errorlevel%'
         )
     }

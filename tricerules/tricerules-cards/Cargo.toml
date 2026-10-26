@@ -24,7 +24,7 @@ proptest.workspace = true
 # Implementation-tracking checklist generator (see src/bin/gen_checklist.rs).
 checklist = ["dep:roxmltree"]
 # Fail-closed exact-recipe card generator (see src/bin/gen_cards.rs).
-gencards = ["dep:serde_json", "dep:flate2", "dep:sha2"]
+gencards = ["authoring"]
 # Offline authoring tools; never enabled by the game server.
 authoring = ["dep:serde_json", "dep:flate2", "dep:sha2"]
 

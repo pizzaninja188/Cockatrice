@@ -13,6 +13,7 @@
 param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson, [string] $MapListFile)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+$windowsPowerShell = (Get-Process -Id $PID).Path
 if ($OracleBulk -and -not [IO.Path]::IsPathRooted($OracleBulk)) { $OracleBulk = Join-Path $repo $OracleBulk }
 Import-Module (Join-Path $PSScriptRoot 'card-evidence.psm1') -Force
 $maps = @(Get-ChildItem -LiteralPath (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps') -Filter '*.json')
@@ -51,13 +52,13 @@ function Invoke-EvidenceTool {
 }
 try {
     $groups = @{}
-    $arguments = @('-NoProfile', '-File', (Join-Path $repo 'scripts/gen-cards.ps1'),
-        '--review-existing', '--review-draft', (Join-Path $repo 'tricerules/tricerules-cards/data'),
-        '--review-map', (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps'),
-        '--review-out', (Join-Path $logs 'packets'))
+    $arguments = @('-NoProfile', '-File', (Join-Path $repo 'scripts/card-author.ps1'),
+        'review', '--existing', '--draft', (Join-Path $repo 'tricerules/tricerules-cards/data'),
+        '--map', (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps'),
+        '--out', (Join-Path $logs 'packets'))
     if ($OracleBulk) { $arguments += @('--input', $OracleBulk) }
     if ($Preparation) {
-        $arguments += '--review-preparation'
+        $arguments += '--preparation'
         if ($MapListJson -or $MapListFile) {
             $selected = Join-Path $logs 'selected-maps'
             New-Item -ItemType Directory -Path $selected | Out-Null
@@ -66,12 +67,11 @@ try {
                 if (Test-Path -LiteralPath $destination) { throw "Duplicate selected map: $($map.Name)" }
                 Copy-Item -LiteralPath $map.FullName -Destination $destination
             }
-            $mapIndex = [Array]::IndexOf($arguments, '--review-map')
+            $mapIndex = [Array]::IndexOf($arguments, '--map')
             $arguments[$mapIndex + 1] = $selected
         }
     }
-    $null = Invoke-EvidenceTool 'Review map batch' `
-        (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') $arguments
+    $null = Invoke-EvidenceTool 'Review map batch' $windowsPowerShell $arguments
     foreach ($map in $maps) {
         $definition = Get-Content -LiteralPath $map.FullName -Raw | ConvertFrom-Json
         if (@($definition.semantic_fixtures).Count -eq 0) { throw "No semantic fixtures in $($map.Name)" }

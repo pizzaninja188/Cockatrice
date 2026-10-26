@@ -2,7 +2,7 @@ param([string] $PowerShell = (Get-Process -Id $PID).Path)
 . (Join-Path $PSScriptRoot 'workflow_test_helpers.ps1')
 $fixture = New-WorkflowFixture
 try {
-    foreach ($name in @('check-card-evidence.ps1', 'card-evidence.psm1')) {
+    foreach ($name in @('check-card-evidence.ps1', 'card-evidence.psm1', 'card-author.ps1')) {
         Copy-Item -LiteralPath (Join-Path $sourceRepo "scripts/$name") -Destination (Join-Path $fixture "scripts/$name")
     }
     $maps = Join-Path $fixture 'tricerules/tricerules-cards/authoring/review-maps'
@@ -16,17 +16,22 @@ $root = Split-Path -Parent $PSScriptRoot
 @{ Tool = $Executable; Arguments = $ArgumentList } | ConvertTo-Json -Compress | Add-Content (Join-Path $root 'trace.jsonl')
 $lines = @()
 $code = 0
-if ((Test-Path (Join-Path $root 'unconfirmed')) -and $ArgumentList -contains '--review-map') {
-    $i = [Array]::IndexOf($ArgumentList, '--review-map')
-    if ($ArgumentList[$i + 1] -notlike '*.json' -and $ArgumentList -notcontains '--review-preparation') { $code = 17; $lines = @('unconfirmed review cannot pass final evidence') }
+if ((Test-Path (Join-Path $root 'unconfirmed')) -and $ArgumentList -contains '--map') {
+    $i = [Array]::IndexOf($ArgumentList, '--map')
+    if ($ArgumentList[$i + 1] -notlike '*.json' -and $ArgumentList -notcontains '--preparation') { $code = 17; $lines = @('unconfirmed review cannot pass final evidence') }
 }
 if ($Executable -eq 'cargo') {
-    if ($ArgumentList -notcontains '--no-run' -or $ArgumentList -notcontains '--message-format=json') { throw 'Expected one artifact build' }
-    for ($i = 0; $i -lt $ArgumentList.Count; $i++) {
-        if ($ArgumentList[$i] -ne '--test') { continue }
-        $name = $ArgumentList[$i + 1]
-        $lines += @{ reason = 'compiler-artifact'; target = @{ name = $name; kind = @('test') };
-            profile = @{ test = $true }; executable = "C:/fixture binaries/$name.exe" } | ConvertTo-Json -Compress
+    if ($ArgumentList -contains 'run') {
+        if ($ArgumentList -notcontains 'authoring' -or $ArgumentList -notcontains 'review') { throw 'Expected card-author review command' }
+        $lines = @('fixture card-author review')
+    } else {
+        if ($ArgumentList -notcontains '--no-run' -or $ArgumentList -notcontains '--message-format=json') { throw 'Expected one artifact build' }
+        for ($i = 0; $i -lt $ArgumentList.Count; $i++) {
+            if ($ArgumentList[$i] -ne '--test') { continue }
+            $name = $ArgumentList[$i + 1]
+            $lines += @{ reason = 'compiler-artifact'; target = @{ name = $name; kind = @('test') };
+                profile = @{ test = $true }; executable = "C:/fixture binaries/$name.exe" } | ConvertTo-Json -Compress
+        }
     }
 } elseif ($Executable -like 'C:/fixture binaries/*') {
     if (Test-Path (Join-Path $root 'binary-fails')) { $code = 19; $lines = @('binary listing failed') }
@@ -42,6 +47,11 @@ $log = Join-Path $LogDirectory ([guid]::NewGuid().ToString() + '.log')
     Assert-Workflow ($result.ExitCode -eq 0) "Evidence orchestration failed: $($result.Output)"
     $trace = @(Read-WorkflowTrace $fixture)
     Assert-Workflow (@($trace | Where-Object Tool -eq 'cargo').Count -eq 2) 'Expected two Cargo builds for three targets.'
+    $reviewCalls = @($trace | Where-Object {
+        $_.Arguments -contains 'review' -and @($_.Arguments | Where-Object { $_ -match '[\\/]card-author\.ps1$' }).Count -eq 1
+    })
+    Assert-Workflow ($reviewCalls.Count -eq 1) 'Review maps did not route through the card-author CLI.'
+    Assert-Workflow ($reviewCalls[0].Arguments -contains '--existing') 'Review did not invoke the existing authoring wrapper in inspect-only mode.'
     Assert-Workflow (@($trace | Where-Object Tool -like 'C:/fixture binaries/*').Count -eq 6) 'Missing normal or ignored binary listing.'
     foreach ($failure in @('ignored', 'binary-fails')) {
         Set-Content -LiteralPath (Join-Path $fixture $failure) -Value 'fixture'

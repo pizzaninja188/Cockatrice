@@ -1,8 +1,18 @@
 //! Read-only authoring audit. The typed authoring schema supplies nodes; external text never
-//! selects mechanics. Suggestions are advisory and are never applied by the generator.
+//! selects mechanics. Suggestions are advisory and are never applied by this tool.
 
-use super::*;
-use tricerules_cards::card_def::RawCardDefinition;
+use super::normalize_name;
+#[cfg(test)]
+use super::source::source_presentation_card;
+use super::source::{collect_ron_files, SourcePresentationCard};
+use crate::card_def::RawCardDefinition;
+#[cfg(test)]
+use crate::primitives::StaticAbilityDef;
+use crate::{ActivatedAbilityDef, TriggeredAbilityDef};
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
 
 type Exceptions = BTreeMap<String, String>;
 
@@ -166,7 +176,7 @@ fn report_node(
     )
 }
 
-pub(super) fn run(
+pub fn run(
     sources: &HashMap<String, SourcePresentationCard>,
     selected: Option<&str>,
 ) -> Result<(String, usize), String> {
@@ -188,7 +198,7 @@ pub(super) fn run(
         let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let token = path.starts_with(root.join("data/tokens"));
         let (id, name, faces) = if token {
-            let token: tricerules_cards::TokenDefinition = options
+            let token: crate::TokenDefinition = options
                 .from_str(&text)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
             let definition = token.to_card_def();
@@ -347,7 +357,7 @@ mod tests {
 
     #[test]
     fn validates_whole_mapping_and_descends_into_nested_choices() {
-        let ability: tricerules_cards::primitives::TriggeredAbilityDef = ron::from_str(
+        let ability: crate::primitives::TriggeredAbilityDef = ron::from_str(
             r#"(ability_id: "parent", presentation: OracleLines([1,3]),
                 trigger: WhenSelfEntersBattlefield,
                 program: Some((body: (steps: [

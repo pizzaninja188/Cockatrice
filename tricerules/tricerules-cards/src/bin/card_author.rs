@@ -42,7 +42,7 @@ fn new_file(path: &Path, text: &str) -> Result<(), String> {
 fn run() -> Result<Value, String> {
     let mut args = std::env::args().skip(1);
     let command = args.next().ok_or(
-        "commands: search, clone, inspect, prepare, validate-batch, queue-save, queue-check",
+        "commands: search, clone, inspect, prepare, validate-batch, queue-save, queue-check, metadata, presentation-audit, review",
     )?;
     let mut options: BTreeMap<String, Vec<String>> = BTreeMap::new();
     while let Some(flag) = args.next() {
@@ -55,19 +55,141 @@ fn run() -> Result<Value, String> {
             "queue-check" => &["entry"],
             "prepare" => &["names", "bulk", "corpus", "out", "limit"],
             "validate-batch" => &["batch"],
+            "metadata" => &[
+                "input",
+                "metadata",
+                "presentation-registry",
+                "check",
+                "refresh",
+            ],
+            "presentation-audit" => &["input", "metadata", "card", "check"],
+            "review" => &[
+                "input",
+                "metadata",
+                "draft",
+                "map",
+                "out",
+                "existing",
+                "preparation",
+            ],
             _ => return Err("unknown command".into()),
         };
         if !allowed.contains(&key) || (key != "depends" && options.contains_key(key)) {
             return Err(format!("unknown or duplicate option: {flag}"));
         }
-        options
-            .entry(key.into())
-            .or_default()
-            .push(args.next().ok_or("missing option value")?);
+        let switch = match command.as_str() {
+            "metadata" => matches!(key, "check" | "refresh"),
+            "presentation-audit" => key == "check",
+            "review" => matches!(key, "existing" | "preparation"),
+            _ => false,
+        };
+        let value = if switch {
+            "true".to_string()
+        } else {
+            args.next().ok_or("missing option value")?
+        };
+        options.entry(key.into()).or_default().push(value);
     }
     let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = package.parent().unwrap().parent().unwrap();
     let data = package.join("data");
+    if command == "metadata" {
+        let check = options.contains_key("check");
+        let refresh = options.contains_key("refresh");
+        if check == refresh {
+            return Err("metadata requires exactly one of --check or --refresh".into());
+        }
+        let bulk = options
+            .get("input")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| repo.join("oracle-cards.jsonl.gz"));
+        let metadata = options
+            .get("metadata")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| source::default_metadata_path(&bulk));
+        let registry_path = options
+            .get("presentation-registry")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| package.join("presentation/oracle_fingerprints.tsv"));
+        let provenance = source::load_provenance(&bulk, &metadata)?;
+        let registry = tricerules_cards::registry::from_embedded()
+            .map_err(|error| format!("failed to load embedded card registry: {error}"))?;
+        let sources = source::collect_presentation_sources(&bulk, &registry)?;
+        let expected = source::render_presentation_registry(&provenance, &registry, &sources);
+        if refresh {
+            let changed = source::refresh_presentation_registry(&registry_path, &expected)
+                .map_err(|error| format!("cannot refresh Oracle fingerprints: {error}"))?;
+            return Ok(
+                json!({"mode":"refresh","changed":changed,"path":registry_path,
+                "provenance":provenance}),
+            );
+        }
+        let (report, problems) = presentation_audit::run(&sources, None)?;
+        if problems != 0 {
+            return Err(format!("presentation audit failed\n{report}"));
+        }
+        source::check_presentation_registry(&registry_path, &expected)?;
+        return Ok(json!({"mode":"check","presentation_sources":sources.len(),
+            "path":registry_path,"provenance":provenance,
+            "meaning":"Verified source metadata, presentation mappings and fingerprints; no files changed"}));
+    }
+    if command == "presentation-audit" {
+        let bulk = options
+            .get("input")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| repo.join("oracle-cards.jsonl.gz"));
+        let metadata = options
+            .get("metadata")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| source::default_metadata_path(&bulk));
+        let provenance = source::load_provenance(&bulk, &metadata)?;
+        let registry = tricerules_cards::registry::from_embedded()
+            .map_err(|error| format!("failed to load embedded card registry: {error}"))?;
+        let sources = source::collect_presentation_sources(&bulk, &registry)?;
+        let (report, problems) =
+            presentation_audit::run(&sources, options.get("card").map(|v| v[0].as_str()))?;
+        if options.contains_key("check") && problems != 0 {
+            return Err(report);
+        }
+        return Ok(
+            json!({"report":report,"problems":problems,"provenance":provenance,
+            "semantic_approval":false}),
+        );
+    }
+    if command == "review" {
+        let bulk = options
+            .get("input")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| repo.join("oracle-cards.jsonl.gz"));
+        let metadata = options
+            .get("metadata")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| source::default_metadata_path(&bulk));
+        let provenance = source::load_provenance(&bulk, &metadata)?;
+        let mut cards = Vec::new();
+        source::for_each_gzipped_jsonl(&bulk, |card| {
+            cards.push(card);
+            true
+        })?;
+        let draft = Path::new(required(&options, "draft")?);
+        let map = Path::new(required(&options, "map")?);
+        let output = options.get("out").map(|v| Path::new(&v[0]));
+        let existing = options.contains_key("existing");
+        let packet = if options.contains_key("preparation") {
+            if !existing {
+                return Err("--preparation requires --existing".into());
+            }
+            review::run_preparation(cards, draft, map, output, &provenance, existing)?
+        } else {
+            review::run(cards, draft, map, output, &provenance, existing)?
+        };
+        if output.is_some() {
+            return Ok(
+                json!({"reviewed":map,"output":output,"meaning":"Review packet written; this does not establish semantic approval"}),
+            );
+        }
+        return serde_json::from_str(&packet).map_err(|error| error.to_string());
+    }
     if command == "inspect" {
         let draft = fs::read_to_string(required(&options, "draft")?).map_err(|e| e.to_string())?;
         if draft.contains("__mechanics_unresolved")

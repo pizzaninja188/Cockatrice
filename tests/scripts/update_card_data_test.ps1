@@ -5,16 +5,27 @@ try {
     $arguments = @('-OracleBulk', 'oracle-cards.jsonl.gz', '-CardsXml', 'cards.xml')
     $checklist = Join-Path $fixture 'tricerules\CARDS.md'
     $fingerprint = Join-Path $fixture 'fingerprint'
+    $ron = Join-Path $fixture 'tricerules\tricerules-cards\data\generated\a\fixture.ron'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $ron) -Force | Out-Null
+    [IO.File]::WriteAllText($ron, '(fixture: true)')
     $before = (Get-Item -LiteralPath $checklist).LastWriteTimeUtc
+    $beforeChecklistBytes = [IO.File]::ReadAllBytes($checklist)
+    $beforeFingerprintBytes = [IO.File]::ReadAllBytes($fingerprint)
+    $beforeRonBytes = [IO.File]::ReadAllBytes($ron)
     $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' $arguments (Join-Path $fixture 'nested directory')
     Assert-Workflow ($result.ExitCode -eq 0) "Canonical check failed: $($result.Output)"
     Assert-Workflow ((Get-Item -LiteralPath $checklist).LastWriteTimeUtc -eq $before) 'Check rewrote CARDS.md.'
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 2) 'Check did not run both generators.'
+    Assert-Workflow ($trace.Count -eq 3) 'Check did not run evidence, source metadata, generated RON, and checklist gates.'
     foreach ($call in $trace) {
         Assert-Workflow ($call.Arguments -contains '--check') 'Check invoked a mutating generator mode.'
         Assert-Workflow ($call.Cwd -eq $fixture) 'Source paths did not resolve from the checkout.'
     }
+    $authorCheck = @($trace | Where-Object { $_.Arguments -contains '--bin' -and $_.Arguments -contains 'card-author' })
+    Assert-Workflow ($authorCheck.Count -eq 1 -and $authorCheck[0].Arguments -contains 'metadata') 'CardData Check did not route source/presentation validation through card-author.'
+    Assert-Workflow ([BitConverter]::ToString($beforeChecklistBytes) -ceq [BitConverter]::ToString([IO.File]::ReadAllBytes($checklist))) 'Check changed CARDS.md bytes.'
+    Assert-Workflow ([BitConverter]::ToString($beforeFingerprintBytes) -ceq [BitConverter]::ToString([IO.File]::ReadAllBytes($fingerprint))) 'Check changed fingerprint bytes.'
+    Assert-Workflow ([BitConverter]::ToString($beforeRonBytes) -ceq [BitConverter]::ToString([IO.File]::ReadAllBytes($ron))) 'Check changed RON bytes.'
 
     [IO.File]::WriteAllText($checklist, 'stale checklist')
     $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' $arguments
@@ -33,7 +44,7 @@ try {
     Assert-Workflow ([IO.File]::ReadAllText($fingerprint) -eq 'canonical') 'Refresh did not refresh fingerprints.'
     $refreshCalls = @(Read-WorkflowTrace $fixture | Select-Object -Skip $refreshStart)
     Assert-Workflow ($refreshCalls.Count -eq 2) 'Refresh repeated final checks instead of preparing metadata once.'
-    Assert-Workflow ($refreshCalls[0].Arguments -contains '--refresh-presentation') 'Metadata-only refresh invoked recipe generation.'
+    Assert-Workflow ($refreshCalls[0].Arguments -contains 'card-author' -and $refreshCalls[0].Arguments -contains 'metadata' -and $refreshCalls[0].Arguments -contains '--refresh') 'Metadata-only refresh did not route fingerprint refresh through card-author.'
     $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' $arguments
     Assert-Workflow ($result.ExitCode -eq 0) "Check after Refresh failed: $($result.Output)"
 

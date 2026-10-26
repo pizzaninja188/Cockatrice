@@ -5,10 +5,43 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 pub mod batch;
+pub mod presentation_audit;
+pub mod review;
+pub mod source;
+
+pub use source::{bucket, hash_file};
+
+const SUPERTYPES: &[&str] = &["Basic", "Legendary", "Snow", "World", "Ongoing", "Host"];
+
+pub fn str_field<'a>(card: &'a Value, key: &str) -> &'a str {
+    card.get(key).and_then(Value::as_str).unwrap_or("")
+}
+
+pub fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+/// Splits an MTG type line into (supertypes, card types, subtypes).
+pub fn parse_type_line(type_line: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let (left, right) = match type_line.split_once('—') {
+        Some((left, right)) => (left, right),
+        None => (type_line, ""),
+    };
+    let mut supertypes = Vec::new();
+    let mut types = Vec::new();
+    for token in left.split_whitespace() {
+        if SUPERTYPES.contains(&token) {
+            supertypes.push(token.to_string());
+        } else {
+            types.push(token.to_string());
+        }
+    }
+    let subtypes = right.split_whitespace().map(str::to_string).collect();
+    (supertypes, types, subtypes)
+}
 
 pub fn ron_files(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
@@ -117,41 +150,15 @@ pub fn similarity(a: &BTreeSet<String>, b: &BTreeSet<String>) -> f64 {
     }
 }
 
-pub fn hash_file(path: &Path) -> Result<String, String> {
-    let mut file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0; 65536];
-    loop {
-        let size = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if size == 0 {
-            break;
-        }
-        hash.update(&buffer[..size]);
-    }
-    Ok(format!("{:x}", hash.finalize()))
-}
-
 pub fn oracle_cards(path: &Path) -> Result<Vec<Value>, String> {
-    let metadata: Value = serde_json::from_slice(
-        &fs::read(format!("{}.meta.json", path.display())).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    if metadata["type"] != "oracle_cards"
-        || metadata["sha256"].as_str() != Some(hash_file(path)?.as_str())
-    {
-        return Err("Oracle bulk metadata/type/SHA mismatch".into());
-    }
-    let input = flate2::read::GzDecoder::new(fs::File::open(path).map_err(|e| e.to_string())?);
-    BufReader::new(input)
-        .lines()
-        .filter_map(|line| match line {
-            Ok(s) if s.trim().is_empty() => None,
-            other => Some(other),
-        })
-        .map(|line| {
-            serde_json::from_str(&line.map_err(|e| e.to_string())?).map_err(|e| e.to_string())
-        })
-        .collect()
+    let metadata = source::default_metadata_path(path);
+    source::load_provenance(path, &metadata)?;
+    let mut cards = Vec::new();
+    source::for_each_gzipped_jsonl(path, |card| {
+        cards.push(card);
+        true
+    })?;
+    Ok(cards)
 }
 
 pub fn exact_source<'a>(cards: &'a [Value], name: &str) -> Result<&'a Value, String> {

@@ -38,7 +38,11 @@ class AuthoringWorkflow(unittest.TestCase):
             for card in (source, self.target):
                 out.write(json.dumps(card) + "\n")
         self.meta = Path(str(self.bulk) + ".meta.json")
-        self.meta.write_text(json.dumps({"type": "oracle_cards", "sha256": hashlib.sha256(self.bulk.read_bytes()).hexdigest()}))
+        self.meta.write_text(json.dumps({
+            "type": "oracle_cards", "id": "fixture-bulk", "updated_at": "2026-10-26",
+            "jsonl_download_uri": "https://example.invalid/oracle-cards.jsonl.gz",
+            "sha256": hashlib.sha256(self.bulk.read_bytes()).hexdigest(),
+        }))
 
     def tearDown(self):
         self.temp.cleanup()
@@ -78,9 +82,30 @@ class AuthoringWorkflow(unittest.TestCase):
         result = self.call("search", "--like", "divination", "--limit", "3")
         self.assertTrue(result["advisory_only"])
         self.assertTrue(all("path" in row and "features" in row for row in result["matches"]))
-        self.meta.write_text('{"type":"oracle_cards","sha256":"wrong"}')
+        self.meta.write_text(json.dumps({
+            "type": "oracle_cards", "id": "fixture-bulk", "updated_at": "2026-10-26",
+            "jsonl_download_uri": "https://example.invalid/oracle-cards.jsonl.gz", "sha256": "wrong"
+        }))
         error = self.call("search", "--name", "Authoring Trial", "--bulk", self.bulk, ok=False)
-        self.assertIn("SHA mismatch", error)
+        self.assertIn("SHA-256 mismatch", error)
+
+    def test_bulk_sidecar_requires_all_metadata_and_string_values(self):
+        valid = json.loads(self.meta.read_text())
+        for field in ("type", "id", "updated_at", "jsonl_download_uri", "sha256"):
+            invalid = dict(valid)
+            del invalid[field]
+            self.meta.write_text(json.dumps(invalid))
+            error = self.call("search", "--name", "Authoring Trial", "--bulk", self.bulk, ok=False)
+            self.assertTrue("cannot parse" in error or "bulk metadata" in error, (field, error))
+        invalid = dict(valid, updated_at=42)
+        self.meta.write_text(json.dumps(invalid))
+        error = self.call("search", "--name", "Authoring Trial", "--bulk", self.bulk, ok=False)
+        self.assertIn("cannot parse", error)
+        for field in ("id", "updated_at", "jsonl_download_uri"):
+            invalid = dict(valid, **{field: "  "})
+            self.meta.write_text(json.dumps(invalid))
+            error = self.call("search", "--name", "Authoring Trial", "--bulk", self.bulk, ok=False)
+            self.assertIn("bulk metadata is missing", error)
 
     def test_queue_survives_unrelated_changes_and_rejects_changed_evidence(self):
         dep = self.root / "rulings.txt"

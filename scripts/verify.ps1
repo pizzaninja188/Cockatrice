@@ -25,7 +25,7 @@ if ($Side -eq 'Cpp' -and $CardData) {
     exit 2
 }
 $repo = Split-Path -Parent $PSScriptRoot
-$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$windowsPowerShell = (Get-Process -Id $PID).Path
 $steps = [Collections.Generic.List[object]]::new()
 
 function Add-VerificationStep {

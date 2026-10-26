@@ -4,7 +4,7 @@
 .DESCRIPTION
     Check writes only logs and a temporary checklist under build. Refresh regenerates existing
     provenance-owned RON and fingerprints, validates the new checklist before replacing CARDS.md,
-    without repeating the final Check. MetadataOnly skips recipe generation for handwritten cards.
+    without repeating the final Check. MetadataOnly refreshes source fingerprints without recipe generation.
     Refresh is preparation, not verification. Neither mode downloads sources or includes new cards.
     Relative source paths are resolved from the repository root, independent of the caller's cwd.
 #>
@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$windowsPowerShell = (Get-Process -Id $PID).Path
 $runner = Join-Path $PSScriptRoot 'run-quiet-command.ps1'
 
 function Resolve-CardSource {
@@ -41,6 +41,10 @@ function Invoke-CardTool {
 
 function Test-CanonicalCardData {
     $code = Invoke-CardTool 'Direct-RON evidence check' 'check-card-evidence.ps1' @('-OracleBulk', $OracleBulk)
+    if ($code -ne 0) { return $code }
+    $code = Invoke-CardTool 'Source metadata and presentation check' 'card-author.ps1' @(
+        'metadata', '--input', $OracleBulk, '--check'
+    )
     if ($code -ne 0) { return $code }
     $code = Invoke-CardTool 'Generated card check' 'gen-cards.ps1' @('--input', $OracleBulk, '--check')
     if ($code -ne 0) { return $code }
@@ -71,7 +75,7 @@ try {
         if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; pass -CardsXml.' }
         $CardsXml = Join-Path $env:LOCALAPPDATA 'Cockatrice\Cockatrice\cards.xml'
     }
-    # Check all source presence before Refresh can write anything. gen-cards verifies the SHA.
+    # Check all source presence before Refresh can write anything. card-author verifies the SHA and metadata.
     $OracleBulk = Resolve-CardSource $OracleBulk
     $CardsXml = Resolve-CardSource $CardsXml
     $null = Resolve-CardSource "$OracleBulk.meta.json"
@@ -81,9 +85,13 @@ try {
     $checklist = Join-Path $repo 'tricerules\CARDS.md'
 
     if ($Mode -eq 'Refresh') {
-        $refreshArguments = @('--input', $OracleBulk)
-        if ($MetadataOnly) { $refreshArguments += '--refresh-presentation' }
-        $code = Invoke-CardTool 'Refresh card metadata' 'gen-cards.ps1' $refreshArguments
+        if ($MetadataOnly) {
+            $code = Invoke-CardTool 'Refresh card metadata' 'card-author.ps1' @(
+                'metadata', '--input', $OracleBulk, '--refresh'
+            )
+        } else {
+            $code = Invoke-CardTool 'Refresh generated card data' 'gen-cards.ps1' @('--input', $OracleBulk)
+        }
         if ($code -ne 0) { exit $code }
         $code = Invoke-CardTool 'Validate refreshed checklist' 'gen-card-checklist.ps1' @(
             '--cards-xml', $CardsXml, '--out', $candidate, '--check'

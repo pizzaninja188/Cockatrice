@@ -3,11 +3,12 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
+use crate::{external_oracle_lines, slugify, CardDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tricerules_cards::{external_oracle_lines, slugify, CardDefinition};
 
+use super::source::normalized_oracle_text_sha256;
 use super::{normalize_name, parse_type_line, str_field};
 
 const FORMAT_VERSION: u32 = 1;
@@ -368,11 +369,11 @@ fn validate_identity(definition: &CardDefinition, source: &Value) -> Result<(), 
             colors
                 .iter()
                 .map(|color| match color {
-                    tricerules_cards::Color::White => "White",
-                    tricerules_cards::Color::Blue => "Blue",
-                    tricerules_cards::Color::Black => "Black",
-                    tricerules_cards::Color::Red => "Red",
-                    tricerules_cards::Color::Green => "Green",
+                    crate::Color::White => "White",
+                    crate::Color::Blue => "Blue",
+                    crate::Color::Black => "Black",
+                    crate::Color::Red => "Red",
+                    crate::Color::Green => "Green",
                 })
                 .collect::<Vec<_>>()
         });
@@ -386,7 +387,7 @@ fn validate_identity(definition: &CardDefinition, source: &Value) -> Result<(), 
 }
 
 fn validate_collision(definition: &CardDefinition, inspect_existing: bool) -> Result<(), String> {
-    let embedded = tricerules_cards::registry::global();
+    let embedded = crate::registry::global();
     if let Some(existing) = embedded.get(&definition.id) {
         if !inspect_existing {
             return Err(format!(
@@ -648,7 +649,7 @@ fn collect_typed_variants(value: &Value, face_index: usize, attributes: &mut BTr
 
 fn nearby_definitions(definition: &CardDefinition) -> Vec<NearbyDefinition> {
     let wanted = structural_attributes(definition);
-    let mut nearby = tricerules_cards::registry::global()
+    let mut nearby = crate::registry::global()
         .definitions()
         .filter(|candidate| candidate.id != definition.id)
         .map(|candidate| {
@@ -673,11 +674,6 @@ fn nearby_definitions(definition: &CardDefinition) -> Vec<NearbyDefinition> {
     });
     nearby.truncate(8);
     nearby
-}
-
-fn normalized_oracle_text_sha256(text: &str) -> String {
-    let normalized = external_oracle_lines(text).join("\n");
-    format!("{:x}", Sha256::digest(normalized.as_bytes()))
 }
 
 fn build_packet(
@@ -714,7 +710,7 @@ fn build_packet_from_sources(
     let review: ReviewMap = serde_json::from_str(map)
         .map_err(|error| format!("cannot parse review map JSON: {error}"))?;
     let (oracle_id, source) = select_source(cards, &review)?;
-    let draft_registry = tricerules_cards::registry::from_authoring_draft(draft)
+    let draft_registry = crate::registry::from_authoring_draft(draft)
         .map_err(|error| format!("draft failed registry validation: {error}"))?;
     let definitions = draft_registry.definitions().collect::<Vec<_>>();
     let [definition] = definitions.as_slice() else {
@@ -853,7 +849,7 @@ fn write_new(path: &Path, contents: &[u8], embedded_data: &Path) -> Result<(), S
         .map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
 
-pub(super) fn run(
+pub fn run(
     cards: Vec<Value>,
     draft_path: &Path,
     map_path: &Path,
@@ -872,7 +868,7 @@ pub(super) fn run(
     )
 }
 
-pub(super) fn run_preparation(
+pub fn run_preparation(
     cards: Vec<Value>,
     draft_path: &Path,
     map_path: &Path,
@@ -1313,7 +1309,7 @@ mod tests {
         let multiface_draft = drafts.join("multiface").join(format!("{stem}.ron"));
         let generated_draft = drafts
             .join("generated")
-            .join(super::super::bucket(stem).to_string())
+            .join(crate::authoring::bucket(stem).to_string())
             .join(format!("{stem}.ron"));
         fs::create_dir_all(generated_draft.parent().unwrap()).unwrap();
         fs::write(&generated_draft, draft("Larval Scoutlander", 2)).unwrap();
@@ -1367,7 +1363,7 @@ mod tests {
         let mut resolutions = Vec::new();
 
         for (stem, expected_bucket) in cases {
-            assert_eq!(super::super::bucket(stem), expected_bucket);
+            assert_eq!(crate::authoring::bucket(stem), expected_bucket);
             let generated_draft = drafts
                 .join("generated")
                 .join(expected_bucket.to_string())
