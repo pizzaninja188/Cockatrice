@@ -1223,12 +1223,35 @@ pub(in crate::engine) fn card_result_characteristic_sum(
         let value = match characteristic {
             BattlefieldQuantityCharacteristic::Power
             | BattlefieldQuantityCharacteristic::Toughness => {
-                let (power, toughness) = engine
-                    .object_power_toughness(entry.object_id, engine.card_result_generation(entry));
-                match characteristic {
-                    BattlefieldQuantityCharacteristic::Power => power,
-                    BattlefieldQuantityCharacteristic::Toughness => toughness,
-                    BattlefieldQuantityCharacteristic::ManaValue => unreachable!(),
+                if filter.action == CardResultAction::Exile
+                    && characteristic == BattlefieldQuantityCharacteristic::Power
+                {
+                    match committed_movement_evidence(engine, entry) {
+                        Ok(CommittedMovementEvidence::Public {
+                            input_zone: Zone::Battlefield,
+                            input_generation,
+                            actual_output_zone: Zone::Exile,
+                            ..
+                        }) => engine
+                            .state
+                            .last_known_pt_by_generation
+                            .get(&(entry.object_id, input_generation))
+                            .and_then(|(power, _)| *power)
+                            .unwrap_or(0),
+                        // The fallible Program input projection rejects unsupported or
+                        // incomplete Exile receipts before this amount evaluator runs.
+                        _ => 0,
+                    }
+                } else {
+                    let (power, toughness) = engine.object_power_toughness(
+                        entry.object_id,
+                        engine.card_result_generation(entry),
+                    );
+                    match characteristic {
+                        BattlefieldQuantityCharacteristic::Power => power,
+                        BattlefieldQuantityCharacteristic::Toughness => toughness,
+                        BattlefieldQuantityCharacteristic::ManaValue => unreachable!(),
+                    }
                 }
             }
             BattlefieldQuantityCharacteristic::ManaValue => {
@@ -1256,6 +1279,7 @@ enum CommittedMovementEvidence {
     Hidden,
     Public {
         input_zone: Zone,
+        input_generation: u64,
         actual_output_zone: Zone,
         owner: PlayerId,
         outside_stack_mana_value: Option<u32>,
@@ -1276,7 +1300,7 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
     else {
         return Ok(());
     };
-    let (action, players, producer_who) = match result_type {
+    let (action, players, producer_who, target_group_index) = match result_type {
         ResultType::CardResultCohort { action, who, .. } => (
             *action,
             if *who == PlayerRecipient::Controller {
@@ -1285,10 +1309,18 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
                 RelativePlayerSet::All
             },
             Some(*who),
+            None,
         ),
-        ResultType::TargetCardResultCohort { action, .. } => {
-            (*action, RelativePlayerSet::All, None)
-        }
+        ResultType::TargetCardResultCohort {
+            action,
+            target_group_index,
+            ..
+        } => (
+            *action,
+            RelativePlayerSet::All,
+            None,
+            Some(*target_group_index),
+        ),
         _ => {
             return Err(EngineError::ProgramInvariant(
                 "card-result characteristic sum input has the wrong compiled result type",
@@ -1299,6 +1331,25 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
         return Err(EngineError::ProgramInvariant(
             "card-result characteristic sum input type disagrees with its declared filter",
         ));
+    }
+    if filter.action == CardResultAction::Exile
+        && characteristic == BattlefieldQuantityCharacteristic::Power
+    {
+        let recipient_group = match effect {
+            SpellEffectKind::GainLife {
+                who: PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            } => Some(*group_index),
+            _ => None,
+        };
+        if target_group_index.is_none()
+            || target_group_index != recipient_group
+            || filter.card_type.is_some()
+        {
+            return Err(EngineError::ProgramInvariant(
+                "Exile Power sum requires its exact unfiltered target-controller receipt",
+            ));
+        }
     }
     let ProgramValue::CardResultCohort(cohort) = value else {
         return Err(EngineError::ProgramInvariant(
@@ -1333,6 +1384,39 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
             continue;
         }
         if characteristic != BattlefieldQuantityCharacteristic::ManaValue {
+            if filter.action == CardResultAction::Exile
+                && characteristic == BattlefieldQuantityCharacteristic::Power
+            {
+                match committed_movement_evidence(engine, entry)? {
+                    CommittedMovementEvidence::Missing | CommittedMovementEvidence::Hidden => {
+                        return Err(EngineError::ProgramInvariant(
+                            "Exile Power sum entry has no public committed movement receipt",
+                        ));
+                    }
+                    CommittedMovementEvidence::Public {
+                        input_zone: Zone::Battlefield,
+                        input_generation,
+                        actual_output_zone: Zone::Exile,
+                        ..
+                    } => {
+                        if engine
+                            .state
+                            .last_known_pt_by_generation
+                            .get(&(entry.object_id, input_generation))
+                            .is_none_or(|(power, _)| power.is_none())
+                        {
+                            return Err(EngineError::ProgramInvariant(
+                                "Exile Power sum is missing its exact input-generation power snapshot",
+                            ));
+                        }
+                    }
+                    CommittedMovementEvidence::Public { .. } => {
+                        return Err(EngineError::ProgramInvariant(
+                            "Exile Power sum encountered an unsupported committed movement",
+                        ));
+                    }
+                }
+            }
             continue;
         }
         match committed_movement_evidence(engine, entry)? {
@@ -1347,6 +1431,7 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
                 actual_output_zone: Zone::Graveyard,
                 owner,
                 outside_stack_mana_value: Some(_),
+                ..
             } if filter.action == CardResultAction::Mill && owner != entry.affected_player => {
                 return Err(EngineError::ProgramInvariant(
                     "Mill movement owner disagrees with its affected library player",
@@ -1357,6 +1442,7 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
                 actual_output_zone: Zone::Graveyard,
                 owner,
                 outside_stack_mana_value: None,
+                ..
             } => {
                 if filter.action == CardResultAction::Mill && owner != entry.affected_player {
                     return Err(EngineError::ProgramInvariant(
@@ -1438,6 +1524,7 @@ fn committed_movement_evidence(
             }
             Ok(CommittedMovementEvidence::Public {
                 input_zone,
+                input_generation,
                 actual_output_zone,
                 owner,
                 outside_stack_mana_value,
@@ -2488,6 +2575,224 @@ mod result_count_tests {
             ),
             3,
             "the sum reads the receipt snapshot even after its object has left the live registry"
+        );
+    }
+
+    #[test]
+    fn exile_power_sum_requires_and_reads_the_exact_input_generation_snapshot() {
+        let mut engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            122_011,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source_id = *engine
+            .state
+            .objects
+            .keys()
+            .next()
+            .expect("default decks contain a source object");
+        let top = engine.observer_return_item(source_id, 10);
+        let effect = SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Exile,
+                    players: RelativePlayerSet::All,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::Power,
+            }),
+            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+        };
+        let result_type = ResultType::TargetCardResultCohort {
+            action: CardResultAction::Exile,
+            cardinality: tricerules_card_model::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+            target_group_index: 0,
+        };
+        let receipt = CardResultEntry {
+            action: CardResultAction::Exile,
+            affected_player: 20,
+            object_id: 900,
+            zone_change_generation: 2,
+            matched_card_types: vec![CardTypeFilter::Creature],
+            provenance: crate::state::CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Battlefield,
+                input_generation: 1,
+                owner: 20,
+                actual_output_zone: Zone::Exile,
+                output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: None,
+            },
+        };
+        let value = cohort_value(vec![receipt.clone()]);
+        let previous_result: crate::state::EffectResult = CardResultCohort {
+            cards: vec![receipt],
+            program_discard_result: None,
+        }
+        .into();
+        engine
+            .state
+            .last_known_pt_by_generation
+            .insert((900, 1), (Some(4), Some(5)));
+        engine
+            .state
+            .last_known_pt_by_generation
+            .insert((900, 2), (Some(8), Some(9)));
+        engine
+            .state
+            .last_known_pt_by_generation
+            .insert((900, 5), (Some(11), Some(12)));
+        engine.state.zone_change_generation.insert(900, 5);
+
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &effect,
+            &result_type,
+            &value,
+        )
+        .is_ok());
+        let mut filtered_effect = effect.clone();
+        let SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum { filter, .. }),
+            ..
+        } = &mut filtered_effect
+        else {
+            panic!("the tested Swords effect has its Exile Power sum in GainLife");
+        };
+        filter.card_type = Some(CardTypeFilter::Creature);
+        assert!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &filtered_effect,
+                &result_type,
+                &value,
+            )
+            .is_err(),
+            "runtime projection rejects a redundant result card-type filter"
+        );
+        let (filter, characteristic) = effect
+            .previous_effect_card_result_characteristic_sum()
+            .expect("test effect has an Exile Power sum");
+        assert_eq!(
+            card_result_characteristic_sum(&engine, &top, &previous_result, filter, characteristic),
+            4,
+            "the sum uses LKI for the movement input generation"
+        );
+
+        engine.state.last_known_pt_by_generation.remove(&(900, 1));
+        assert!(matches!(
+            validate_program_card_result_characteristic_sum_input(
+                &engine,
+                &top,
+                &effect,
+                &result_type,
+                &value,
+            ),
+            Err(EngineError::ProgramInvariant(_))
+        ));
+    }
+
+    #[test]
+    fn exile_power_sum_keeps_negative_lki_signed_until_amount_clamp() {
+        let mut engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            122_012,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source_id = *engine
+            .state
+            .objects
+            .keys()
+            .next()
+            .expect("default decks contain a source object");
+        let top = engine.observer_return_item(source_id, 10);
+        let effect = SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Exile,
+                    players: RelativePlayerSet::All,
+                    card_type: None,
+                },
+                characteristic: BattlefieldQuantityCharacteristic::Power,
+            }),
+            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+        };
+        let result_type = ResultType::TargetCardResultCohort {
+            action: CardResultAction::Exile,
+            cardinality: tricerules_card_model::primitives::Cardinality {
+                min: 0,
+                max: Some(1),
+            },
+            target_group_index: 0,
+        };
+        let receipt = CardResultEntry {
+            action: CardResultAction::Exile,
+            affected_player: 20,
+            object_id: 901,
+            zone_change_generation: 2,
+            matched_card_types: vec![CardTypeFilter::Creature],
+            provenance: crate::state::CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Battlefield,
+                input_generation: 1,
+                owner: 20,
+                actual_output_zone: Zone::Exile,
+                output_visibility: crate::state::CardResultOutputVisibility::FaceUpPublic,
+                outside_stack_mana_value: None,
+            },
+        };
+        let value = cohort_value(vec![receipt.clone()]);
+        let previous_result: crate::state::EffectResult = CardResultCohort {
+            cards: vec![receipt],
+            program_discard_result: None,
+        }
+        .into();
+        engine
+            .state
+            .last_known_pt_by_generation
+            .insert((901, 1), (Some(-1), Some(4)));
+
+        assert!(validate_program_card_result_characteristic_sum_input(
+            &engine,
+            &top,
+            &effect,
+            &result_type,
+            &value,
+        )
+        .is_ok());
+        let (filter, characteristic) = effect
+            .previous_effect_card_result_characteristic_sum()
+            .expect("test effect has an Exile Power sum");
+        assert_eq!(
+            card_result_characteristic_sum(&engine, &top, &previous_result, filter, characteristic,),
+            -1,
+            "signed power remains negative in the typed LKI sum"
+        );
+        let amount = Amount::Count(CountExpression::CardResultCharacteristicSum {
+            filter: filter.clone(),
+            characteristic,
+        });
+        assert_eq!(
+            engine.resolve_amount(
+                &amount,
+                AmountContext::for_stack_item(&top, top.controller)
+                    .with_previous_effect_result(&previous_result),
+            ),
+            0,
+            "CR 107.1b clamps a negative Amount to zero before life gain"
         );
     }
 }

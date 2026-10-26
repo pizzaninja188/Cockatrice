@@ -103,6 +103,7 @@ fn issue_452_direct_ron_registers_both_reviewed_handwritten_cards() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ],
         "printed order is pump, draw, life"

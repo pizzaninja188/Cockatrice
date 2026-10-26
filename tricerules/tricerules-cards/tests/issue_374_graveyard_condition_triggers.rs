@@ -226,6 +226,7 @@ fn issue_374_trigger_payloads_are_exact() {
         InstructionKind::Perform(effect)
             if matches!(effect.as_ref(), SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                ..
             })
     ));
     assert!(no.steps.is_empty(), "without an Elf card the trigger ends");
@@ -324,6 +325,7 @@ fn issue_374_trigger_payloads_are_exact() {
         dies.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
 }

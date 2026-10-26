@@ -196,7 +196,8 @@ fn issue_misc6_batch_maps_definitions() {
         rites.effect,
         [
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1)
+                amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::Draw {
                 who: tricerules_cards::primitives::PlayerRecipient::Controller,

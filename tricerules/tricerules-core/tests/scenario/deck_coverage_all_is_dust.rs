@@ -453,6 +453,7 @@ fn all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order()
         },
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(3),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         },
     ];
     engine
@@ -670,6 +671,7 @@ fn all_is_dust_immediate_aura_return_preserves_following_effect_tail() {
         },
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(3),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         },
     ];
     engine

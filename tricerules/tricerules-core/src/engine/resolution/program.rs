@@ -3148,6 +3148,63 @@ mod countered_ability_source_tests {
         }
     }
 
+    #[test]
+    fn empty_dual_output_target_exile_captures_nullable_object_and_empty_typed_cohort() {
+        let cardinality = Cardinality {
+            min: 0,
+            max: Some(1),
+        };
+        let compiled = CompiledProgram {
+            owner: ability_owner(),
+            context: EffectContext::Ability,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![
+                CompiledSlot {
+                    id: ResultSlotId(0),
+                    name: "exiled".into(),
+                    result_type: ResultType::ExiledObject { cardinality },
+                },
+                CompiledSlot {
+                    id: ResultSlotId(1),
+                    name: "receipt".into(),
+                    result_type: ResultType::TargetCardResultCohort {
+                        action: tricerules_card_model::primitives::CardResultAction::Exile,
+                        cardinality,
+                        target_group_index: 0,
+                    },
+                },
+            ],
+        };
+        let mut run = run_with_slot(None);
+        run.slots.push(None);
+        let result = EffectResult::default();
+
+        capture_program_outputs(
+            &compiled,
+            &mut run,
+            &[ResultSlotId(0), ResultSlotId(1)],
+            &result,
+        )
+        .expect("an optional target Exile can complete with no moved object");
+
+        assert!(matches!(
+            run.slots[0],
+            Some(ProgramValue::ExiledObject(None))
+        ));
+        assert!(matches!(
+            &run.slots[1],
+            Some(ProgramValue::CardResultCohort(cohort))
+                if cohort.cards.is_empty() && cohort.program_discard_result.is_none()
+        ));
+    }
+
     fn fixture_engine_and_top() -> (GameEngine, StackItem) {
         let mut engine = GameEngine::new_with_default_decks(
             tricerules_cards::registry::global(),

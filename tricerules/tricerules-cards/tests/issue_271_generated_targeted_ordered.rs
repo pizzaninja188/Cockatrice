@@ -70,7 +70,7 @@ fn issue_271_registers_exactly_the_reviewed_eleven_card_shapes() {
             ability.presentation,
             AbilityPresentation::OracleLines(vec![if id == "prayer_of_binding" { 2 } else { 1 }])
         );
-        let [SpellEffectKind::ExileUntilSourceLeaves { target }, SpellEffectKind::GainLife { amount }] =
+        let [SpellEffectKind::ExileUntilSourceLeaves { target }, SpellEffectKind::GainLife { amount, .. }] =
             ability.effect.as_slice()
         else {
             panic!("{id} must exile then gain life");

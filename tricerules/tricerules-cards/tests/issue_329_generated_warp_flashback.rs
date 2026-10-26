@@ -78,6 +78,7 @@ fn issue_329_germinating_wurm_keeps_its_etb_gain_life() {
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert!(ability.targeting.is_none());

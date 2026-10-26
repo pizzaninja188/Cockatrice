@@ -1542,6 +1542,8 @@ pub enum SpellEffectKind {
     },
     GainLife {
         amount: Amount,
+        #[serde(default, skip_serializing_if = "PlayerRecipient::is_controller")]
+        who: PlayerRecipient,
     },
     /// CR 119.3: the players named by `who` lose life. **Untargeted** — neither "you" nor
     /// "each opponent" uses the word "target" (CR 115.1), so this is deliberately absent from
@@ -1586,7 +1588,6 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         alternative_cost: ManaCost,
     },
-    ExileTargetGainLifeEqualToPower,
     /// Exile the top card of the named player's library and let that player play the exact
     /// resulting object until the end of their next turn. Clockwork Percussionist and Impossible
     /// Inferno share this primitive; the engine owns physical identity, duration, and legality.
@@ -2882,6 +2883,12 @@ pub enum PlayerRecipient {
     EachPlayer,
 }
 
+impl PlayerRecipient {
+    fn is_controller(&self) -> bool {
+        *self == Self::Controller
+    }
+}
+
 /// The fixed target contract of Earthbend (Badgermole and Dai Li Indoctrination).
 pub fn earthbend_target_filter() -> &'static TargetFilter {
     static FILTER: std::sync::LazyLock<TargetFilter> = std::sync::LazyLock::new(|| TargetFilter {
@@ -2985,7 +2992,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-            | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::GainLife { amount, .. }
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
@@ -3258,6 +3265,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::LoseLife {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
+            } | SpellEffectKind::GainLife {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
             } | SpellEffectKind::DamagePlayer {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
@@ -3314,6 +3324,10 @@ impl SpellEffectKind {
                 who: PlayerRecipient::DefendingPlayer
                     | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
                 ..
+            } | SpellEffectKind::GainLife {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
             } | SpellEffectKind::DamagePlayer {
                 who: PlayerRecipient::DefendingPlayer
                     | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
@@ -3364,6 +3378,7 @@ impl SpellEffectKind {
                     ..
                 }
                 | Self::LoseLife { who: Attacker, .. }
+                | Self::GainLife { who: Attacker, .. }
                 | Self::ExileTopWithPlayPermission {
                     player: Attacker,
                     ..
@@ -3487,6 +3502,9 @@ impl SpellEffectKind {
                 } | Self::LoseLife {
                     who: PlayerRecipient::ProgramInputPlayer,
                     ..
+                } | Self::GainLife {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
                 } | Self::Mill {
                     who: PlayerRecipient::ProgramInputPlayer,
                     ..
@@ -3504,6 +3522,20 @@ impl SpellEffectKind {
                     ..
                 } | Self::ShuffleLibrary {
                     who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                }
+            )
+        })
+    }
+
+    /// ControllerOfTargetGroup is admitted for GainLife only by the typed Swords Program
+    /// contract. A legacy effect list has no compiler-owned target-group receipt to bind.
+    fn contains_flat_gain_life_target_group_recipient(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| {
+            matches!(
+                effect,
+                Self::GainLife {
+                    who: PlayerRecipient::ControllerOfTargetGroup { .. },
                     ..
                 }
             )
@@ -3769,9 +3801,6 @@ impl SpellEffectKind {
             }
             SpellEffectKind::CopyTargetArtifactWithManaValueX { target } => {
                 vec![TargetRole::Filtered(target)]
-            }
-            SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-                vec![TargetRole::CreaturePermanent]
             }
             SpellEffectKind::CounterTargetSpell { spell_filter, .. }
             | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
@@ -4067,7 +4096,7 @@ impl SpellEffectKind {
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
             | Self::TargetPlayerDraws { count: amount, .. }
-            | Self::GainLife { amount }
+            | Self::GainLife { amount, .. }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
@@ -4161,6 +4190,15 @@ impl SpellEffectKind {
             .any(SpellEffectKind::contains_program_input_player)
         {
             return Err("ProgramInputPlayer requires an explicit typed Program input".into());
+        }
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_flat_gain_life_target_group_recipient)
+        {
+            return Err(
+                "GainLife ControllerOfTargetGroup requires its validated typed spell Program"
+                    .into(),
+            );
         }
         if effects
             .iter()
@@ -5051,7 +5089,7 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-            | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::GainLife { amount, .. }
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
@@ -6385,7 +6423,7 @@ impl SpellEffectKind {
             | Self::DamagePlayer { amount, .. }
             | Self::TargetPlayerDraws { count: amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
-            | Self::GainLife { amount }
+            | Self::GainLife { amount, .. }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
@@ -6475,7 +6513,7 @@ impl SpellEffectKind {
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
             | Self::TargetPlayerDraws { count: amount, .. }
-            | Self::GainLife { amount }
+            | Self::GainLife { amount, .. }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
@@ -6526,7 +6564,7 @@ impl SpellEffectKind {
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
             | Self::TargetPlayerDraws { count: amount, .. }
-            | Self::GainLife { amount }
+            | Self::GainLife { amount, .. }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }

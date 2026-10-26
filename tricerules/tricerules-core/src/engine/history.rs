@@ -3116,7 +3116,7 @@ mod tests {
             &[],
         )
         .expect("mana-value maximum vocabulary");
-        let SpellEffectKind::GainLife { amount } =
+        let SpellEffectKind::GainLife { amount, .. } =
             &registry.get("test").unwrap().primary_face().spell_effect[0]
         else {
             panic!("quantity fixture");

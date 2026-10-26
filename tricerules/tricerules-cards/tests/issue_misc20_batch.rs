@@ -183,7 +183,8 @@ fn issue_misc20_batch_maps_definitions() {
     assert!(matches!(
         &blazer.triggered_abilities[0].effect[0],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
+            amount: Amount::Fixed(2),
+            ..
         }
     ));
     assert!(matches!(

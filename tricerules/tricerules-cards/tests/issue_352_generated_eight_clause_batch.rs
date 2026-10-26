@@ -175,6 +175,7 @@ fn issue_352_moonrise_cleric_keeps_flying_and_gains_one_on_attack() {
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
 }

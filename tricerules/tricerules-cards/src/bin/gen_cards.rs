@@ -810,6 +810,7 @@ fn mode_has_only_independent_controller_effects(mode: &ModeDef) -> bool {
             count: Amount::Fixed(count),
         } => (1..=4).contains(count),
         SpellEffectKind::GainLife {
+            who: PlayerRecipient::Controller,
             amount: Amount::Fixed(amount),
         } => (2..=6).contains(amount),
         SpellEffectKind::CreateTokens {
@@ -2242,6 +2243,7 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             count: Amount::Fixed(count),
         } => format!("Draw(count: {count})"),
         SpellEffectKind::GainLife {
+            who: PlayerRecipient::Controller,
             amount: Amount::Fixed(amount),
         } => format!("GainLife(amount: {amount})"),
         SpellEffectKind::Destroy { subject }
@@ -3935,6 +3937,26 @@ mod tests {
     type MutationCase = (&'static str, fn(&mut Value));
 
     #[test]
+    fn generated_gain_life_rendering_preserves_nondefault_recipient() {
+        let controller = SpellEffectKind::GainLife {
+            who: PlayerRecipient::Controller,
+            amount: Amount::Fixed(4),
+        };
+        assert_eq!(render_generated_effect(&controller), "GainLife(amount: 4)");
+
+        let each_opponent = SpellEffectKind::GainLife {
+            who: PlayerRecipient::EachOpponent,
+            amount: Amount::Fixed(4),
+        };
+        let rendered = render_generated_effect(&each_opponent);
+        assert_ne!(rendered, "GainLife(amount: 4)");
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&rendered).unwrap(),
+            each_opponent
+        );
+    }
+
+    #[test]
     fn presentation_refresh_rejects_combined_modes() {
         for extra in [
             "--check",
@@ -4541,6 +4563,7 @@ mod tests {
                     None,
                 ),
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(4),
                 },
             ),
@@ -9099,6 +9122,7 @@ mod tests {
                     who: PlayerRecipient::EachOpponent,
                 },
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 },
             ]
@@ -9142,6 +9166,7 @@ mod tests {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             }]
         );
@@ -14303,6 +14328,7 @@ mod tests {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             }]
         );
@@ -14607,6 +14633,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 }]
             );
@@ -15294,6 +15321,7 @@ mod tests {
             &gain_life.kind,
             InstructionKind::Perform(effect)
                 if matches!(effect.as_ref(), SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 })
         ));
@@ -15407,6 +15435,7 @@ mod tests {
         assert_eq!(
             dies.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             }]
         );
@@ -15658,6 +15687,7 @@ mod tests {
                     count: Amount::Fixed(2),
                 }],
                 vec![SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(4),
                 }],
             ]
@@ -15823,6 +15853,21 @@ mod tests {
             &wrong_recipient
         ));
 
+        let wrong_gain_life_recipient = ModeDef {
+            program: None,
+            mode_id: ModeId::new("mode_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![2]),
+            linked_cast_cost: None,
+            effects: vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::EachOpponent,
+                amount: Amount::Fixed(4),
+            }],
+            targeting: None,
+        };
+        assert!(!mode_has_only_independent_controller_effects(
+            &wrong_gain_life_recipient
+        ));
+
         let source_dependent = ModeDef {
             program: None,
             mode_id: ModeId::new("mode_01").unwrap(),
@@ -15873,6 +15918,7 @@ mod tests {
         }];
         modes[0].targeting = None;
         modes[1].effects = vec![SpellEffectKind::GainLife {
+            who: PlayerRecipient::Controller,
             amount: Amount::Fixed(4),
         }];
         modes[1].targeting = None;

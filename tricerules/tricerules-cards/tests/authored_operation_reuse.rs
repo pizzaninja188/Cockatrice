@@ -30,7 +30,7 @@ fn replace_bound_count(
         panic!("{instruction_id} is an authored Perform instruction");
     };
     let amount = match effect.as_mut() {
-        SpellEffectKind::GainLife { amount } => amount,
+        SpellEffectKind::GainLife { amount, .. } => amount,
         SpellEffectKind::Draw { count, .. } => count,
         _ => panic!("{instruction_id} consumes the bound result count"),
     };
@@ -551,6 +551,7 @@ fn authored_osseous_exhale_uses_owned_behold_receipt_program() {
         gain_life,
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         },
     );
 }
@@ -642,6 +643,7 @@ fn authored_gorging_vulture_uses_typed_mill_result_gain_life_program() {
                     card_type: Some(CardTypeFilter::Creature),
                 },
             }),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         },
     );
 }
@@ -676,6 +678,7 @@ fn authored_bound_result_counts_lower_to_existing_expressions() {
                     },
                 }],
             }),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
 
@@ -1576,6 +1579,7 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
             gain_life,
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         );
     }

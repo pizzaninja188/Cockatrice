@@ -418,7 +418,7 @@ fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
             },
             SpellEffectKind::ConditionalCastCost { effect, .. }
         ] if target.max_mana_value == Some(2)
-            && matches!(effect.as_ref(), SpellEffectKind::GainLife { amount: Amount::Fixed(2) })
+            && matches!(effect.as_ref(), SpellEffectKind::GainLife { amount: Amount::Fixed(2) , ..})
     ));
 
     let sheriff = registry.get("shoot_the_sheriff").unwrap().primary_face();

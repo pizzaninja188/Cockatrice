@@ -401,6 +401,7 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
         trigger("dawning_angel").effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(4),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert_eq!(
@@ -486,6 +487,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         trigger("highland_game").effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
 }

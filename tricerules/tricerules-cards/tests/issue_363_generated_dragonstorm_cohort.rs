@@ -110,6 +110,7 @@ fn issue_363_corroding_dragonstorm_drains_each_opponent_then_surveils() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::LibraryPartition {
                 count: 2,

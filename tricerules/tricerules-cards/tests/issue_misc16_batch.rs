@@ -283,7 +283,8 @@ fn issue_misc16_batch_maps_definitions() {
                 who: PlayerRecipient::EachOpponent,
             },
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3)
+                amount: Amount::Fixed(3),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

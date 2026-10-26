@@ -1959,7 +1959,8 @@ mod tests {
         assert_eq!(
             reg.get("angels_mercy").unwrap().primary_face().spell_effect,
             vec![SpellEffectKind::GainLife {
-                amount: Amount::Fixed(7)
+                amount: Amount::Fixed(7),
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             }]
         );
         assert_eq!(
@@ -3261,6 +3262,7 @@ mod tests {
                         && ability.effect
                             == [SpellEffectKind::GainLife {
                                 amount: Amount::Fixed(1),
+                                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                             }]
                 }),
                 "{id}"
@@ -3626,6 +3628,7 @@ mod tests {
                 && ability.effect
                     == [SpellEffectKind::GainLife {
                         amount: controlled_creatures.clone(),
+                        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     }]
         }));
     }

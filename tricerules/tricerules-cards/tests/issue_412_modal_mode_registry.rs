@@ -415,6 +415,7 @@ fn issue_412_etb_modal_creatures_expose_the_triggered_mode_structure() {
         [
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::LibraryPartition {
                 count: 3,

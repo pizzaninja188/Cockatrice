@@ -174,7 +174,8 @@ fn issue_removal_batch_maps_definitions() {
     assert_eq!(
         *gain,
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
+            amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
     assert_eq!(
@@ -201,7 +202,8 @@ fn issue_removal_batch_maps_definitions() {
     assert_eq!(
         *gain,
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1)
+            amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
     assert_eq!(

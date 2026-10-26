@@ -189,6 +189,7 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                 } => format!("The affected player draws {count} cards."),
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(amount),
+                    who: PlayerRecipient::Controller,
                 } => format!("You gain {amount} life."),
                 SpellEffectKind::DamageTarget {
                     amount: Amount::Fixed(amount),

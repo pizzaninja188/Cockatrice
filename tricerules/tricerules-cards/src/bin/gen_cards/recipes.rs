@@ -378,6 +378,7 @@ fn controller_draw_effect(count: u32) -> SpellEffectKind {
 
 fn fixed_life_gain_effect(amount: u32) -> SpellEffectKind {
     SpellEffectKind::GainLife {
+        who: PlayerRecipient::Controller,
         amount: Amount::Fixed(amount),
     }
 }
@@ -1225,6 +1226,7 @@ fn match_spell_destroy_creature_then_gain_two(
                 subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
             },
             SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             },
         ])
@@ -1286,6 +1288,7 @@ fn match_spell_pump_creature_minus_p_minus_t_gain_two(
                 subject: chosen_creature(TargetController::Any),
             },
             SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             },
         ],
@@ -3744,6 +3747,7 @@ fn match_modal_draw_fixed(text: &str, _: &RecipeContext) -> Option<RecipeEmissio
 fn match_modal_gain_life_fixed(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     let effect = gain_life_effect(text)?;
     let SpellEffectKind::GainLife {
+        who: PlayerRecipient::Controller,
         amount: Amount::Fixed(amount),
     } = effect
     else {
@@ -3778,6 +3782,7 @@ fn match_modal_gain_life_three_surveil_three(
         modal_mode(
             vec![
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(3),
                 },
                 SpellEffectKind::LibraryPartition {
@@ -5398,6 +5403,7 @@ fn match_land_etb_gain_one(text: &str, context: &RecipeContext) -> Option<Recipe
         triggered_ability(
             context,
             SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             },
         )
@@ -8600,6 +8606,7 @@ fn match_enchantment_etb_optional_linked_exile_gain_two(
                         target: target.clone(),
                     },
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(2),
                     },
                 ],
@@ -9063,6 +9070,7 @@ fn match_self_attacks_gain_two(text: &str, context: &RecipeContext) -> Option<Re
                     minimum_other_attackers: 0,
                 },
                 vec![SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 }],
             )
@@ -9321,6 +9329,7 @@ fn match_etb_drain_two(text: &str, context: &RecipeContext) -> Option<RecipeEmis
                         who: PlayerRecipient::EachOpponent,
                     },
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(2),
                     },
                 ],
@@ -9346,6 +9355,7 @@ fn match_other_controlled_creature_enters_gain_one(
                 creature_filter: None,
             },
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             }],
         )
@@ -9849,6 +9859,7 @@ fn match_artifact_pay_two_tap_sacrifice_gain_three(
                     AbilityCost::SacrificeSelf,
                 ],
                 vec![SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(3),
                 }],
                 None,
@@ -9872,6 +9883,7 @@ fn match_artifact_pay_two_tap_sacrifice_gain_three_draw_one(
                 ],
                 vec![
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(3),
                     },
                     SpellEffectKind::Draw {
@@ -11465,6 +11477,7 @@ fn match_landfall_gain_life_one(text: &str, context: &RecipeContext) -> Option<R
                 creature_filter: None,
             },
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             }],
         )
@@ -11644,6 +11657,7 @@ fn match_self_dies_gain_life_two(text: &str, context: &RecipeContext) -> Option<
             context,
             TriggerCondition::WhenSelfDies,
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             }],
         )
@@ -11671,6 +11685,7 @@ fn match_self_or_other_creature_enters_gain_life_one(
                     creature_filter: None,
                 },
                 vec![SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 }],
             )
@@ -11711,6 +11726,7 @@ fn match_land_enters_gain_life_two(text: &str, context: &RecipeContext) -> Optio
         triggered_ability(
             context,
             SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             },
         )
@@ -12072,6 +12088,7 @@ fn match_etb_gain_life_one_draw_one(text: &str, context: &RecipeContext) -> Opti
             TriggerCondition::WhenSelfEntersBattlefield,
             vec![
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 },
                 SpellEffectKind::Draw {
@@ -12834,6 +12851,7 @@ fn match_self_attacks_defending_player_lose_one_gain_one(
                         who: PlayerRecipient::DefendingPlayer,
                     },
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(1),
                     },
                 ],
@@ -13169,6 +13187,7 @@ fn match_self_attacks_gain_one(text: &str, context: &RecipeContext) -> Option<Re
                 minimum_other_attackers: 0,
             },
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             }],
         )
@@ -13467,6 +13486,7 @@ fn match_triggered_self_or_creature_or_artifact_dies_drain(
                         },
                     },
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(1),
                     },
                 ],
@@ -13540,6 +13560,7 @@ fn match_etb_enchantment_drain_two_surveil_two(
                     who: PlayerRecipient::EachOpponent,
                 },
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 },
                 SpellEffectKind::LibraryPartition {
@@ -13695,6 +13716,7 @@ fn match_creature_sacrifice_self_gain_three(
                 AbilityCost::SacrificeSelf,
             ],
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(3),
             }],
             None,
@@ -15709,6 +15731,7 @@ fn match_etb_gain_three_life(text: &str, context: &RecipeContext) -> Option<Reci
     Some(triggered_ability(
         context,
         SpellEffectKind::GainLife {
+            who: PlayerRecipient::Controller,
             amount: Amount::Fixed(3),
         },
     ))
@@ -17313,6 +17336,7 @@ fn match_triggered_dies_lesson_card_graveyard_gain_two(
                 context,
                 TriggerCondition::WhenSelfDies,
                 vec![SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 }],
             ) else {
@@ -30452,6 +30476,7 @@ mod tests {
         assert_eq!(
             gain.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1)
             }]
         );
@@ -31389,6 +31414,7 @@ mod tests {
         assert_eq!(
             abilities[4].effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             }]
         );
@@ -32347,6 +32373,7 @@ mod tests {
             gain_then_draw.effect,
             [
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(3),
                 },
                 SpellEffectKind::Draw {
@@ -37640,6 +37667,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 }]
             );
@@ -38170,6 +38198,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 }]
             );
@@ -38228,6 +38257,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 }]
             );
@@ -38291,6 +38321,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 }]
             );
@@ -39136,6 +39167,7 @@ mod tests {
             ability.effect,
             [
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 },
                 SpellEffectKind::Draw {
@@ -40681,6 +40713,7 @@ mod tests {
                     who: PlayerRecipient::DefendingPlayer,
                 },
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 },
             ]
@@ -41470,6 +41503,7 @@ mod tests {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(1),
             }]
         );
@@ -41900,6 +41934,7 @@ mod tests {
                     },
                 },
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(1),
                 },
             ]
@@ -42107,6 +42142,7 @@ mod tests {
                     who: PlayerRecipient::EachOpponent,
                 },
                 SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(2),
                 },
                 SpellEffectKind::LibraryPartition {
@@ -43753,6 +43789,7 @@ mod tests {
         assert_eq!(
             gain_life.effect,
             [SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(3),
             }]
         );
@@ -45872,6 +45909,7 @@ mod tests {
         assert_eq!(
             walltop.effect,
             vec![SpellEffectKind::GainLife {
+                who: PlayerRecipient::Controller,
                 amount: Amount::Fixed(2),
             }]
         );
@@ -46517,6 +46555,7 @@ mod tests {
             ModalModeEmission {
                 effects: vec![
                     SpellEffectKind::GainLife {
+                        who: PlayerRecipient::Controller,
                         amount: Amount::Fixed(3),
                     },
                     SpellEffectKind::LibraryPartition {
@@ -48046,6 +48085,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::GainLife {
+                    who: PlayerRecipient::Controller,
                     amount: Amount::Fixed(3),
                 }]
             );
@@ -53153,6 +53193,7 @@ mod tests {
                             subject: chosen_creature(TargetController::Any),
                         },
                         SpellEffectKind::GainLife {
+                            who: PlayerRecipient::Controller,
                             amount: Amount::Fixed(2),
                         },
                     ],

@@ -199,6 +199,7 @@ fn issue_458_pump_life_spells_apply_the_ordered_effects_to_one_mandatory_target(
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+                    who: tricerules_cards::primitives::PlayerRecipient::Controller,
                 },
             ],
             "{} prints the pump and then the life gain",

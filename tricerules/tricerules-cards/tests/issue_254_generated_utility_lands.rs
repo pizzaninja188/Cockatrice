@@ -56,7 +56,8 @@ fn issue_254_registers_all_forty_eight_lands_with_exact_etb_effects() {
         assert_eq!(
             assert_etb(id, 2).effect,
             [SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1)
+                amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             }],
             "{id}"
         );

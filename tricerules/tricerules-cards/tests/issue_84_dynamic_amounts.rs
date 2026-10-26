@@ -86,6 +86,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                         exclude_source: false,
                     },
                 }),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

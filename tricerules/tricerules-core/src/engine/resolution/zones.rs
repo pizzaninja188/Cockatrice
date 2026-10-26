@@ -935,6 +935,7 @@ pub(super) fn exile(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let result_group = tid.and_then(|object_id| target_exile_result_group(cx, object_id));
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
@@ -943,6 +944,7 @@ pub(super) fn exile(
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let controller = engine.state.objects.get(&tid).map(|o| o.controller);
+        let input_zone = engine.state.objects.get(&tid).map(|object| object.zone);
         let previous_generation = engine
             .state
             .zone_change_generation
@@ -982,6 +984,38 @@ pub(super) fn exile(
             .get(&tid)
             .copied()
             .unwrap_or(previous_generation);
+        if let (Some(group_index), Some(affected_player), Some(input_zone)) =
+            (result_group, controller, input_zone)
+        {
+            if input_zone == Zone::Battlefield
+                && new_generation > previous_generation
+                && engine
+                    .state
+                    .objects
+                    .get(&tid)
+                    .is_some_and(|object| object.zone == Zone::Exile)
+            {
+                // Only a direct chosen Exile that declared this exact typed target cohort
+                // publishes the second output. Linked Exile and legacy ExiledObject-only
+                // consumers retain their existing receipt shapes.
+                debug_assert!(cx
+                    .targets
+                    .iter()
+                    .zip(cx.target_group_indices)
+                    .any(|(&target, &group)| target == tid && group == group_index));
+                cx.effect_result
+                    .cards
+                    .push(payment::committed_card_result_entry(
+                        &engine.state,
+                        engine.registry,
+                        CardResultAction::Exile,
+                        affected_player,
+                        tid,
+                        input_zone,
+                        previous_generation,
+                    )?);
+            }
+        }
         if let Some(key) = linked_key {
             if new_generation > previous_generation
                 && engine
@@ -1020,6 +1054,31 @@ pub(super) fn exile(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+fn target_exile_result_group(cx: &EffectCx<'_>, object_id: ObjectId) -> Option<u32> {
+    let program = cx.program_state.as_ref()?;
+    let in_flight = program.in_flight.as_ref()?;
+    let compiled = cx
+        .engine
+        .registry
+        .compiled_program_for_owner(&program.owner)?;
+    in_flight
+        .iter()
+        .find_map(|slot_id| match &compiled.slot(*slot_id)?.result_type {
+            ResultType::TargetCardResultCohort {
+                action: CardResultAction::Exile,
+                target_group_index,
+                ..
+            } => Some(*target_group_index),
+            _ => None,
+        })
+        .filter(|group_index| {
+            cx.targets
+                .iter()
+                .zip(cx.target_group_indices)
+                .any(|(&target, &group)| target == object_id && group == *group_index)
+        })
 }
 
 pub(super) fn exile_with_owner_cast_permission(
@@ -1135,46 +1194,6 @@ pub(super) fn exile_if_would_die_this_turn(
     {
         cx.engine.state.death_replacement_effects.push(replacement);
     }
-    Ok(EffectOutcome::Continue)
-}
-
-pub(super) fn exile_target_gain_life_equal_to_power(
-    cx: &mut EffectCx<'_>,
-    _effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let targets = cx.targets;
-    let controller = cx.controller;
-    let spell_label = cx.spell_label;
-
-    if let Some(&tid) = targets.first() {
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        // CR 608: read effective power at resolution before the object leaves.
-        let power = engine.effective_power(tid).unwrap_or(0);
-        let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        let target_controller = engine.controller_of(tid);
-        let target_controller = target_controller.unwrap_or(controller);
-        let zone_snapshot = engine.snapshot_zone_event();
-        let leave_event = engine.battlefield_leave_event(tid);
-        move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
-        engine.fire_zone_triggers(
-            zone_snapshot,
-            leave_event.into_iter().collect::<Vec<_>>(),
-            events,
-        );
-        events.push(ev_log(format!("{spell_label} exiles {tgt}")));
-        if let Some(owner_id) = owner {
-            events.push(permanent_moved_event(
-                &engine.state,
-                tid,
-                owner_id,
-                rv1::permanent_moved::Destination::Exile,
-            ));
-        }
-        super::life::apply_life_gain(engine, events, target_controller, power, spell_label)?;
-    }
-
     Ok(EffectOutcome::Continue)
 }
 

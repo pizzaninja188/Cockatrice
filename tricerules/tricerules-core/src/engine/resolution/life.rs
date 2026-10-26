@@ -87,9 +87,10 @@ pub(super) fn gain_life(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::GainLife { amount } = effect else {
+    let SpellEffectKind::GainLife { amount, who } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let recipients = player_recipients(cx, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
@@ -101,7 +102,9 @@ pub(super) fn gain_life(
         AmountContext::for_stack_item(top, controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    apply_life_gain(engine, events, controller, amount, spell_label)?;
+    for recipient in recipients {
+        apply_life_gain(engine, events, recipient, amount, spell_label)?;
+    }
 
     Ok(EffectOutcome::Continue)
 }

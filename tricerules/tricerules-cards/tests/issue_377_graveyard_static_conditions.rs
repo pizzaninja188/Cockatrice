@@ -302,6 +302,7 @@ fn issue_377_control_clause_payloads_are_exact() {
         lion_turtle.primary_face().triggered_abilities[0].effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(3),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
 

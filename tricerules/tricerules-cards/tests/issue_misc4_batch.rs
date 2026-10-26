@@ -101,7 +101,8 @@ fn issue_misc4_batch_maps_definitions() {
     assert_eq!(
         neonate_ability.effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1)
+            amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
 

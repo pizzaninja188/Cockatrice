@@ -143,6 +143,7 @@ fn soul_shackled_zombie_loses_life_only_when_a_creature_was_exiled() {
         CompiledInstructionKind::Perform(effect)
             if **effect == SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             }
     ));
     assert!(no.steps.is_empty() && no.yields.is_empty());

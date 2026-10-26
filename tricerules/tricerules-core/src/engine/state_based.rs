@@ -1791,6 +1791,8 @@ mod sba_tests {
             trigger: tricerules_card_model::TriggerCondition::WhenSelfDies,
             effect: vec![tricerules_card_model::SpellEffectKind::GainLife {
                 amount: tricerules_card_model::Amount::Fixed(1),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             }],
             program: None,
             modal: None,

@@ -3470,6 +3470,8 @@ mod tests {
                 0,
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(1),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             );
         engine
@@ -4262,6 +4264,8 @@ mod tests {
         let mut ability = limited_dies_ability(&engine);
         ability.effect = vec![SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+
+            who: tricerules_card_model::primitives::PlayerRecipient::Controller,
         }];
         ability.targeting = None;
         ability.may = false;
@@ -4394,6 +4398,8 @@ mod tests {
         let mut ability = limited_dies_ability(&engine);
         ability.effect = vec![SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+
+            who: tricerules_card_model::primitives::PlayerRecipient::Controller,
         }];
         ability.targeting = None;
         ability.may = false;

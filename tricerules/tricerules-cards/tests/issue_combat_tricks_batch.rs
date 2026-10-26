@@ -104,6 +104,7 @@ fn issue_combat_tricks_batch_maps_definitions() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             "Choose target creature",
             &[0u32][..],

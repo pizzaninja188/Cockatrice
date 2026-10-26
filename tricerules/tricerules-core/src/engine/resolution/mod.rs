@@ -5999,6 +5999,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -6165,6 +6167,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ]
         .into_iter()
@@ -6541,6 +6545,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.trigger_context.linked_exile_occurrence =
@@ -6709,6 +6715,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -7012,6 +7020,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -7315,6 +7325,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -8612,6 +8624,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         later_item.triggered_ability = Some(hideaway);
@@ -8794,6 +8808,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -9025,6 +9041,8 @@ mod attached_subject_tests {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             },
         ];
         item.triggered_ability = Some(ability);
@@ -9123,6 +9141,8 @@ mod attached_subject_tests {
                     },
                     SpellEffectKind::GainLife {
                         amount: Amount::Fixed(2),
+
+                        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     },
                 ],
             );
@@ -10226,6 +10246,8 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         );
@@ -10291,6 +10313,8 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(u32::MAX),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         ));
@@ -10324,6 +10348,8 @@ mod attached_subject_tests {
             .unwrap()
             .effect[1] = SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+
+            who: tricerules_card_model::primitives::PlayerRecipient::Controller,
         };
         let hand = engine.state.players[0].hand.len();
         engine.apply_scenario_command(1, &pass).unwrap();
@@ -10406,6 +10432,8 @@ mod attached_subject_tests {
                 SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary,
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ]
             .into_iter()
@@ -10553,6 +10581,8 @@ mod attached_subject_tests {
                 SpellEffectKind::Proliferate,
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         );
@@ -10901,6 +10931,8 @@ mod attached_subject_tests {
                     },
                     SpellEffectKind::GainLife {
                         amount: Amount::Fixed(2),
+
+                        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     },
                 ],
             );
@@ -11163,6 +11195,8 @@ mod attached_subject_tests {
                     },
                     SpellEffectKind::GainLife {
                         amount: Amount::Fixed(2),
+
+                        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     },
                 ],
             );
@@ -11805,6 +11839,8 @@ mod attached_subject_tests {
                     effect,
                     SpellEffectKind::GainLife {
                         amount: Amount::Fixed(1),
+
+                        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     },
                 ],
             );
@@ -12038,6 +12074,8 @@ mod attached_subject_tests {
             (
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(3),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
                 vec![],
                 0,
@@ -12459,6 +12497,8 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         );
@@ -12606,7 +12646,8 @@ mod attached_subject_tests {
                         presentation: tricerules_card_model::AbilityPresentation::Fallback,
                         effect: vec![SpellEffectKind::GainLife {
                             amount: Amount::Fixed(1),
-                        }],
+
+                             who: tricerules_card_model::primitives::PlayerRecipient::Controller,}],
                         targeting: None,
                         intervening_if: None,
                     }),
@@ -12704,6 +12745,8 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(3),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         );
@@ -12759,6 +12802,8 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(3),
+
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 },
             ],
         );

@@ -61,7 +61,7 @@ fn issue_490_registers_beza_as_a_complete_standard_identity() {
                     }
                 );
             }
-            (SpellEffectKind::GainLife { amount }, "life") => assert_eq!(
+            (SpellEffectKind::GainLife { amount, .. }, "life") => assert_eq!(
                 amount,
                 &Amount::Conditional {
                     condition,

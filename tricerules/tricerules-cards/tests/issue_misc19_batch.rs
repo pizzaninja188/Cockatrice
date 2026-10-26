@@ -175,7 +175,8 @@ fn issue_misc19_batch_maps_definitions() {
     assert!(matches!(
         &current.spell_effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
+            amount: Amount::Fixed(2),
+            ..
         }
     ));
 
@@ -199,7 +200,8 @@ fn issue_misc19_batch_maps_definitions() {
     assert!(matches!(
         &emerge.spell_effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(3)
+            amount: Amount::Fixed(3),
+            ..
         }
     ));
 

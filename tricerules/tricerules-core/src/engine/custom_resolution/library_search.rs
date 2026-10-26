@@ -3336,6 +3336,8 @@ mod tests {
             // Search instruction is already parked; the saved tail must run once on completion.
             ability.effect.push(SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
+
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
             });
             item.activated_ability = Some(ability);
             let mut events = Vec::new();

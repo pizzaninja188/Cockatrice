@@ -279,6 +279,7 @@ fn issue_372_exdeath_payload_and_presentation_are_exact() {
         etb.effect,
         [SpellEffectKind::GainLife {
             amount: tricerules_cards::Amount::Fixed(3),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert_eq!(transform.ability_id.as_str(), "triggered_02");

@@ -328,10 +328,17 @@ intervene.
 `Affine(constant: 0, ...)`. Its typed producer must have a finite result maximum, and the
 coefficient times that maximum must fit in `u32`. `card_type` filters are currently permitted only
 for Mill cohorts, target Discard cohorts, privacy-aware `DiscardResult` counts, linked Exile choices
-returned to an owner's graveyard, and the ability-owned face-up graveyard-to-Exile path. Hidden or
+returned to an owner's graveyard, the ability-owned face-up graveyard-to-Exile path, and the exact
+chosen-Creature Exile Power profile described below. Hidden or
 replacement-sensitive `Destroy` and `Sacrifice` cohorts cannot be filtered; `GainLife` also rejects
 `CastPaymentCohort` because its hidden cast-cost discards cannot be safely typed. Gerrard's Verdict
 counts only Land cards in its bound target Discard cohort (CR 608.2c, 701.9a–c).
+
+`GainLife.who` defaults to `Controller`, preserving the legacy authored form. In a spell Program,
+`ControllerOfTargetGroup(group_index: g)` may name the controller of a singleton group bound to any
+one object-target role. It resolves that target's controller from the exact target incarnation's
+last-known information if the object leaves or changes generation before the recipient is used
+(CR 608.2h). This recipient does not add a target role or restrict the bound role to Creature.
 
 The same authoring marker supports ordered Discard→Draw effects, but Draw must remain unfiltered and
 match the bound `DiscardResult` producer and recipient: `Total` pairs a Controller discard with a
@@ -768,6 +775,21 @@ terminal filter leaf must be `Creature` or `AnyPermanent`, including every branc
 authored target group at any index. That group may be optional or required (`min: 0` or `1`) and
 must be singleton (`max: 1`). The result keeps its exact object ID, zone-change generation, and
 controller snapshot, with cardinality 0..1.
+
+The same direct `Chosen` Exile may bind two outputs when it needs both the `ExiledObject` and a
+typed `TargetCardResultCohort(action: Exile, target_group_index: g)` for its bound target group;
+the object result is first and the typed cohort second. The typed cohort has cardinality 0..1 and
+is empty when an optional target is declined. Existing one-output Exiles retain their original
+result shape. Swords to Plowshares uses this second output as the explicitly named `GainLife.input`
+for `CardResultCharacteristicSum(filter: (source: PreviousEffect, action: Exile, players: All,
+card_type: None), characteristic: Power)`, with
+`who: ControllerOfTargetGroup(group_index: g)` for the same Creature target group, which must be
+required and singleton (`min: 1, max: 1`). The chosen Creature producer guarantees the card type,
+so no result card-type filter is used. This exact profile reads Power from the moved object's
+last-known characteristics at its Exile input generation. Missing expected movement provenance,
+snapshot, or Power is a `ProgramInvariant`; the
+consumer does not substitute current Exile-zone Power or zero. `GainLife` clamps a negative signed
+Power amount to zero, producing no life-gain event (CR 119.3).
 
 A `CreateDelayedTrigger` may consume that result only through an explicit input naming the exact
 slot and `subject: Some(PreviousEffectObject)`, with no `affected_player` and an

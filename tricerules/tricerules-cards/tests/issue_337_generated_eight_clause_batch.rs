@@ -131,6 +131,7 @@ fn issue_337_inspiring_overseer_gains_one_then_draws_with_flying() {
         [
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,

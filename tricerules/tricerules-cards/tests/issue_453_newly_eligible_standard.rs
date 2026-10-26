@@ -510,7 +510,8 @@ fn issue_453_lands_keep_entry_replacements_and_mana_abilities() {
     assert_eq!(
         gain.effect,
         [SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1)
+            amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     let [tap] = caves.activated_abilities.as_slice() else {
@@ -754,7 +755,8 @@ fn issue_453_etb_triggers_keep_exact_shapes() {
                 },
             },
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1)
+                amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

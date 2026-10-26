@@ -185,7 +185,8 @@ fn issue_misc11_batch_maps_definitions() {
         matches!(
             &spatula.triggered_abilities[0].effect[0],
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(2)
+                amount: Amount::Fixed(2),
+                ..
             }
         ),
         "{:?}",
@@ -312,7 +313,8 @@ fn issue_misc11_batch_maps_definitions() {
         matches!(
             &sac.effect[0],
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3)
+                amount: Amount::Fixed(3),
+                ..
             }
         ),
         "{:?}",

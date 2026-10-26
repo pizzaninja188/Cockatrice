@@ -280,7 +280,8 @@ fn issue_misc10_batch_maps_definitions() {
         sami.spell_effect,
         [
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(2)
+                amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::CreateTokens {
                 token: "lander".into(),

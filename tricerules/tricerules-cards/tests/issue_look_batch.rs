@@ -230,7 +230,8 @@ fn issue_look_batch_maps_definitions() {
         trigger.effect,
         [
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1)
+                amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
             SpellEffectKind::Draw {
                 who: tricerules_cards::primitives::PlayerRecipient::Controller,

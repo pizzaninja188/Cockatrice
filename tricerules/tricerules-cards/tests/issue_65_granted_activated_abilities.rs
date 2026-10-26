@@ -49,6 +49,7 @@ fn gift_of_paradise_grants_the_exact_land_mana_ability() {
             && ability.effect
                 == [SpellEffectKind::GainLife {
                     amount: Amount::Fixed(3),
+                    who: tricerules_cards::primitives::PlayerRecipient::Controller,
                 }]
     }));
 

@@ -2372,7 +2372,10 @@ mod tests {
             })),
             divisor: 2,
         };
-        let effect = SpellEffectKind::GainLife { amount };
+        let effect = SpellEffectKind::GainLife {
+            amount,
+            who: super::PlayerRecipient::Controller,
+        };
         assert!(effect
             .validate(crate::primitives::EffectContext::Ability)
             .is_err());
@@ -2722,7 +2725,10 @@ mod tests {
             amount: crate::primitives::Amount::Fixed(1),
             target: TargetFilter::default_creature(),
         };
-        let creature = SpellEffectKind::ExileTargetGainLifeEqualToPower;
+        let creature = SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            linked_exile_id: None,
+        };
         let stack = SpellEffectKind::CounterTargetSpell {
             spell_filter: StackSpellFilter {
                 card_type: Some(CardTypeFilter::Creature),
@@ -2741,7 +2747,10 @@ mod tests {
             permanent.target_roles().as_slice(),
             [TargetRole::Filtered(_)]
         ));
-        assert_eq!(creature.target_roles(), [TargetRole::CreaturePermanent]);
+        assert!(matches!(
+            creature.target_roles().as_slice(),
+            [TargetRole::Filtered(filter)] if *filter == &TargetFilter::default_creature()
+        ));
         assert!(matches!(
             stack.target_roles().as_slice(),
             [TargetRole::StackSpell(StackSpellFilter {

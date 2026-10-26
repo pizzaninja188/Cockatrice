@@ -99,7 +99,8 @@ fn issue_dmg2_batch_maps_definitions() {
                 target: any_target_filter(),
             },
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3)
+                amount: Amount::Fixed(3),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );
@@ -119,7 +120,8 @@ fn issue_dmg2_batch_maps_definitions() {
     assert_eq!(
         winter.spell_effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
+            amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
 
@@ -136,7 +138,8 @@ fn issue_dmg2_batch_maps_definitions() {
     assert_eq!(
         riposte.spell_effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(2)
+            amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
 
@@ -198,7 +201,8 @@ fn issue_dmg2_batch_maps_definitions() {
     assert_eq!(
         trigger.effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1)
+            amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
     assert_eq!(

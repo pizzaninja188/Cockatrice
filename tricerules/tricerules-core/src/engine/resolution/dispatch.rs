@@ -217,9 +217,6 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ExileWithOwnerCastPermission { .. } => {
             zones::exile_with_owner_cast_permission(cx, effect)?
         }
-        effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-            zones::exile_target_gain_life_equal_to_power(cx, effect)?
-        }
         effect @ SpellEffectKind::ExileTopWithPlayPermission { .. } => {
             zones::exile_top_with_play_permission(cx, effect)?
         }

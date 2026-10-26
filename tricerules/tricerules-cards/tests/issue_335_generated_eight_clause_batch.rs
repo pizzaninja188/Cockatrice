@@ -115,6 +115,7 @@ fn issue_335_grasping_longneck_gains_two_life_when_it_dies() {
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert!(ability.targeting.is_none());
@@ -164,6 +165,7 @@ fn issue_335_bogwater_lumaret_gains_one_life_for_inclusive_creature_entries() {
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert!(ability.targeting.is_none());
@@ -224,6 +226,7 @@ fn issue_335_adventurers_inn_gains_two_life_on_its_own_entry() {
         trigger.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(2),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert!(trigger.targeting.is_none());

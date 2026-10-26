@@ -335,7 +335,10 @@ fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
         .clone();
     face.activated_abilities[0].effect = vec![
         SpellEffectKind::Populate,
-        SpellEffectKind::GainLife { amount: 3.into() },
+        SpellEffectKind::GainLife {
+            amount: 3.into(),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
+        },
     ];
     face.static_abilities = tricerules_cards::registry::global()
         .get("clone")

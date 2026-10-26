@@ -782,29 +782,49 @@ fn eyeblights_ending_destroys_target_creature() {
 #[test]
 fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
     let decks = Some(vec![
-        vec![
-            "plains".into(),
-            "swords_to_plowshares".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-        ],
+        vec!["plains".into(); 30],
         forest_only_deck(),
+        island_only_deck(),
     ]);
     let mut e = GameEngine::new(
         tricerules_cards::registry::global(),
         2608,
-        &[0, 1],
+        &[0, 1, 2],
         20,
         decks,
         true,
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    let bear_power = e.state.objects.get(&bear).unwrap().power.unwrap();
+    // Keep caster, owner, and controller distinct. Swords checks the controller at resolution,
+    // and reads the exact battlefield generation that it exiles through the copy and counter
+    // layers.
+    let bear = inject_creature_under_foreign_control(&mut e, 1, 2, "grizzly_bears");
+    let copied_face = tricerules_cards::registry::global()
+        .get("colossal_dreadmaw")
+        .expect("copied creature face")
+        .primary_face()
+        .clone();
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
+        source_card_id: "colossal_dreadmaw".into(),
+        source_face_index: 0,
+        display_name: copied_face.name.clone(),
+        face: copied_face,
+        room_faces: None,
+    });
+    e.state.objects.get_mut(&bear).expect("bear").add_counters(
+        tricerules_cards::CounterKind::PlusOnePlusOne,
+        2,
+        e.state.command_index,
+    );
+    let bear_power = e.effective_power(bear).expect("bear power");
+    assert_eq!(e.state.objects[&bear].owner, 1);
+    assert_eq!(e.state.objects[&bear].controller, 2);
     give_mana(
         &mut e,
         0,
@@ -813,8 +833,9 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
             ..Default::default()
         },
     );
+    inject_card_into_hand(&mut e, 0, 0, "swords_to_plowshares");
     let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
-    let p1_life_before = e.state.players[1].life;
+    let p2_life_before = e.state.players[2].life;
     e.apply_scenario_command(
         0,
         &cast_spell(
@@ -829,19 +850,222 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
         ),
     )
     .expect("cast swords");
-    e.apply_scenario_command(0, &pass()).expect("p0 pass");
-    e.apply_scenario_command(1, &pass()).expect("p1 pass");
+    pass_priority_round(&mut e);
 
     assert_eq!(
         e.state.objects.get(&bear).expect("bear").zone,
         tricerules_core::Zone::Exile
     );
-    // Lifegain accrues to the creature's controller (P1), per Swords' Oracle text.
+    assert_eq!(e.state.objects[&bear].owner, 1);
+    // The copied 6/6 with two +1/+1 counters has power 8. Lifegain accrues to P2, the
+    // creature's controller, not P1 its owner or P0 the caster.
+    assert_eq!(bear_power, 8);
     assert_eq!(
-        e.state.players[1].life,
-        p1_life_before + bear_power as i32,
+        e.state.players[2].life,
+        p2_life_before + bear_power as i32,
         "controller of exiled creature gains life equal to its power"
     );
+}
+
+#[test]
+fn swords_zero_and_negative_power_give_no_life_and_emit_no_life_event() {
+    for (seed, minus_one_counters) in [(2610, 0), (2611, 1)] {
+        let decks = Some(vec![
+            vec![
+                "plains".into(),
+                "swords_to_plowshares".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+            ],
+            forest_only_deck(),
+        ]);
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
+        advance_to_main1_from_game_start(&mut e);
+        let target = inject_creature_with_stats(&mut e, 1, "grizzly_bears", 0, 5);
+        if minus_one_counters != 0 {
+            let command_index = e.state.command_index;
+            e.state
+                .objects
+                .get_mut(&target)
+                .expect("fixture creature")
+                .add_counters(
+                    tricerules_cards::CounterKind::MinusOneMinusOne,
+                    minus_one_counters,
+                    command_index,
+                );
+        }
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                w: 1,
+                ..Default::default()
+            },
+        );
+        let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+        let life_before = e.state.players[1].life;
+        e.apply_scenario_command(
+            0,
+            &cast_spell(
+                idx,
+                vec![TargetRef {
+                    expected_zone_change_generation: None,
+                    object_id: target,
+                    damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
+                }],
+            ),
+        )
+        .expect("cast Swords at the zero/negative-power creature");
+        e.apply_scenario_command(0, &pass()).expect("P0 pass");
+        let batch = e
+            .apply_scenario_command(1, &pass())
+            .expect("P1 resolves Swords");
+
+        assert_eq!(e.state.objects[&target].zone, tricerules_core::Zone::Exile);
+        assert_eq!(e.state.players[1].life, life_before);
+        assert_eq!(e.state.turn_history.current.player(1).life_gained, 0);
+        assert!(batch
+            .events
+            .iter()
+            .all(|event| !matches!(event.ev, Some(Ev::LifeChanged(_)))));
+    }
+}
+
+#[test]
+fn swords_life_gain_precedes_the_post_resolution_commander_choice() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
+    let decks = Some(vec![
+        tricerules_core::EngineDeck {
+            mainboard: vec!["plains".into(); 30],
+            commanders: Vec::new(),
+        },
+        tricerules_core::EngineDeck {
+            mainboard: vec!["forest".into(); 30],
+            commanders: vec!["kami_of_the_crescent_moon".into()],
+        },
+    ]);
+    let mut e = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        2612,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("commander target engine");
+    advance_to_main1_from_game_start(&mut e);
+    e.enable_dev_commands();
+    let commander = e.state.players[1].command_zone[0];
+    e.apply_scenario_command(
+        1,
+        &RuledCommand {
+            cmd: Some(Cmd::DevCommand(DevCommand {
+                target_player_id: 1,
+                dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                    card_name: "Kami of the Crescent Moon".into(),
+                    zone: DevZone::Battlefield as i32,
+                    ready: false,
+                })),
+            })),
+        },
+    )
+    .expect("move declared commander to battlefield for the scenario");
+    let power = e.effective_power(commander).expect("commander power");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    inject_card_into_hand(&mut e, 0, 0, "swords_to_plowshares");
+    let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+    let life_before = e.state.players[1].life;
+    e.apply_scenario_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                expected_zone_change_generation: None,
+                object_id: commander,
+                damage_amount: 0,
+                group_index: 0,
+                kind: 0,
+            }],
+        ),
+    )
+    .expect("cast Swords at the declared commander");
+    e.apply_scenario_command(0, &pass()).expect("P0 pass");
+    let resolution = e
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Swords before commander state-based action");
+
+    assert_eq!(
+        e.state.objects[&commander].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(e.state.players[1].life, life_before + power as i32);
+    assert_eq!(
+        e.state.turn_history.current.player(1).life_gained,
+        u64::from(power)
+    );
+    let life_events = resolution
+        .events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| matches!(&event.ev, Some(Ev::LifeChanged(change)) if change.player_id == 1))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    assert_eq!(life_events.len(), 1, "Swords gains life exactly once");
+    let commander_choice_index = resolution
+        .events
+        .iter()
+        .position(|event| {
+            matches!(&event.ev,
+            Some(Ev::ResolutionChoiceRequired(choice))
+                if choice.deciding_player_id == 1
+                    && choice.choice_kind == ChoiceKind::ResolutionBranch as i32)
+        })
+        .expect("post-resolution commander-zone choice");
+    assert!(
+        life_events[0] < commander_choice_index,
+        "the spell's life gain completes before the commander SBA prompt"
+    );
+
+    let move_commander = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            decision: ResolutionChoiceDecision::SelectBranch as i32,
+            selected_branch_index: 0,
+            ..Default::default()
+        })),
+    };
+    let command_batch = e
+        .apply_scenario_command(1, &move_commander)
+        .expect("owner chooses the command zone");
+    assert_eq!(
+        e.state.objects[&commander].zone,
+        tricerules_core::Zone::Command
+    );
+    assert_eq!(e.state.players[1].life, life_before + power as i32);
+    assert!(command_batch
+        .events
+        .iter()
+        .all(|event| !matches!(event.ev, Some(Ev::LifeChanged(_)))));
 }
 
 #[test]

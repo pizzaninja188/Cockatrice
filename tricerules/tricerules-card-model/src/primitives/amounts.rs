@@ -1111,6 +1111,7 @@ mod hand_size_count_tests {
             mill.clone(),
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: super::PlayerRecipient::Controller,
             },
             damage.clone(),
         ])

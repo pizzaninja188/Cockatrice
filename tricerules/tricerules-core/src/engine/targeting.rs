@@ -1658,19 +1658,6 @@ fn validate_effect_targets(
                 }
             }
         },
-        SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal("requires exactly one creature target"));
-            }
-            if !destroy_spell_target_legal(engine, targets[0].object_id) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-            if !object_targetable_by(engine, targets[0].object_id, caster, source) {
-                return Err(EngineError::Illegal("target cannot be targeted by this source"));
-            }
-        }
         SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::Chosen(target),
         } => {
@@ -2549,18 +2536,6 @@ fn spell_target_legality_error_with_context(
             return Err(EngineError::Illegal(
                 "source-bound effects are only valid on activated or triggered abilities",
             ));
-        }
-        SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-            if !destroy_spell_target_legal(engine, tid) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-            if !object_targetable_by(engine, tid, caster, source) {
-                return Err(EngineError::Illegal(
-                    "target cannot be targeted by this source",
-                ));
-            }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }

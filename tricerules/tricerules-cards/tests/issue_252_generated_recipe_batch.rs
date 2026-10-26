@@ -90,6 +90,7 @@ fn issue_252_registers_all_nineteen_generated_cards_with_typed_abilities() {
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
+                    who: tricerules_cards::primitives::PlayerRecipient::Controller,
                 },
             ]
         );
@@ -128,6 +129,7 @@ fn issue_252_registers_all_nineteen_generated_cards_with_typed_abilities() {
             ability.effect,
             [SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             }]
         );
     }

@@ -314,6 +314,7 @@ fn issue_338_direct_ron_batch_maps_definitions() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

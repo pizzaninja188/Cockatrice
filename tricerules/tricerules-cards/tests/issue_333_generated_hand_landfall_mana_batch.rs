@@ -150,6 +150,7 @@ fn issue_333_eumidian_terrabotanist_gains_one_life_on_a_controlled_land_entry() 
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
     assert!(ability.targeting.is_none());

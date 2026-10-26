@@ -60,7 +60,8 @@ fn issue_etb_batch_maps_definitions() {
                 who: PlayerRecipient::Controller,
             },
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(3)
+                amount: Amount::Fixed(3),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );
@@ -83,7 +84,8 @@ fn issue_etb_batch_maps_definitions() {
                 subject: creature(),
             },
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(1)
+                amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );
@@ -303,7 +305,8 @@ fn issue_etb_batch_maps_definitions() {
         InstructionKind::Perform(effect) => assert_eq!(
             **effect,
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(2)
+                amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             }
         ),
         other => panic!("Hero gains two life inside the true body, got {other:?}"),

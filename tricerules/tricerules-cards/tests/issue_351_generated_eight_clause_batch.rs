@@ -133,6 +133,7 @@ fn issue_351_agate_blade_assassin_drains_the_defender() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

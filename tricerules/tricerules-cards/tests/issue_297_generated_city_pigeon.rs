@@ -109,6 +109,7 @@ fn issue_297_reuses_the_predefined_food_token_contract() {
         ability.effect,
         [SpellEffectKind::GainLife {
             amount: Amount::Fixed(3),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }]
     );
 }

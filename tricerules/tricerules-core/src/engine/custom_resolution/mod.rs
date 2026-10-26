@@ -55,6 +55,8 @@ fn synthetic_mill_receipt_gain_life_tail() -> tricerules_card_model::primitives:
                 card_type: None,
             },
         }),
+
+        who: tricerules_card_model::primitives::PlayerRecipient::Controller,
     }
 }
 

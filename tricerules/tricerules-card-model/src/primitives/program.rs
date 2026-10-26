@@ -16,14 +16,15 @@
 //! Widening these rules needs a separately typed context/result contract.
 
 use super::{
-    Amount, CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
-    CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
-    ConditionObjectRef, CountExpression, EffectContext, EffectSubject, GameCondition,
-    GraveyardDestination, LibraryBottomOrder, LifeAmount, PermanentChoiceConstraint,
-    PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm, RelativePlayerSet,
-    ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
-    SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
-    TargetFilter, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
+    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CardResultFilter,
+    CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostReceiptCondition,
+    ChooseCardSource, CohortPartitionSelection, ConditionObjectRef, CountExpression, EffectContext,
+    EffectSubject, GameCondition, GraveyardDestination, LibraryBottomOrder, LifeAmount,
+    PermanentChoiceConstraint, PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm,
+    RelativePlayerSet, ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration,
+    SearchDestination, SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection,
+    SpellEffectKind, TargetFilter, TargetGroupSchema, TargetKind, TargetSchema, TargetingDef,
+    TokenCopySource, ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -1464,6 +1465,12 @@ fn validate_target_card_result_groups(
             CardResultAction::Discard | CardResultAction::Destroy
                 if group.min == 1 && group.max == 1 => {}
             CardResultAction::Exile
+                if program.context == EffectContext::Spell
+                    && matches!(group.min, 0 | 1)
+                    && group.max == 1
+                    && group.bindings.len() == 1
+                    && matches!(group.bindings[0].role, super::TargetRole::Filtered(_)) => {}
+            CardResultAction::Exile
                 if program.context == EffectContext::Ability
                     && schema.groups.len() == 1
                     && group.chooser == super::TargetChooser::Controller
@@ -1819,12 +1826,48 @@ fn find_effect_by_address(block: &CompiledBlock, address: u32) -> Option<&SpellE
     None
 }
 
+fn find_instruction_by_address(
+    block: &CompiledBlock,
+    address: u32,
+) -> Option<&CompiledInstruction> {
+    for instruction in &block.steps {
+        if instruction.instruction_address == address {
+            return Some(instruction);
+        }
+        let nested = match &instruction.kind {
+            CompiledInstructionKind::If { yes, no, .. } => {
+                find_instruction_by_address(yes, address)
+                    .or_else(|| find_instruction_by_address(no, address))
+            }
+            CompiledInstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => branches
+                .iter()
+                .find_map(|branch| find_instruction_by_address(&branch.body, address))
+                .or_else(|| find_instruction_by_address(otherwise, address)),
+            CompiledInstructionKind::Perform(_) | CompiledInstructionKind::ImportCastPayment => {
+                None
+            }
+        };
+        if nested.is_some() {
+            return nested;
+        }
+    }
+    None
+}
+
 fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInput>) {
     for instruction in &block.steps {
         match &instruction.kind {
             CompiledInstructionKind::ImportCastPayment => {}
             CompiledInstructionKind::Perform(effect) => {
                 if let SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
+                | SpellEffectKind::GainLife {
                     who: PlayerRecipient::ControllerOfTargetGroup { group_index },
                     ..
                 } = effect.as_ref()
@@ -1853,6 +1896,30 @@ fn collect_group_inputs(block: &CompiledBlock, inputs: &mut Vec<ProgramGroupInpu
     }
 }
 
+fn single_object_target_group_binding(
+    program: &CompiledProgram,
+    group: &TargetGroupSchema<'_, '_>,
+    group_index: u32,
+) -> Option<u32> {
+    if !matches!((group.min, group.max), (0 | 1, 1)) || group.bindings.len() != 1 {
+        return None;
+    }
+    let binding = group.bindings[0];
+    if !binding.role.targets_an_object() {
+        return None;
+    }
+    let target_address = u32::try_from(binding.effect_index).ok()?;
+    program
+        .target_bindings
+        .iter()
+        .any(|target_binding| {
+            target_binding.instruction_address == target_address
+                && target_binding.target_group_index == group_index
+                && target_binding.role_index as usize == binding.role_index
+        })
+        .then_some(target_address)
+}
+
 fn compile_group_inputs(
     program: &CompiledProgram,
     context: EffectContext,
@@ -1861,43 +1928,130 @@ fn compile_group_inputs(
     let mut inputs = Vec::new();
     collect_group_inputs(&program.body, &mut inputs);
     for input in &inputs {
-        if context != EffectContext::Spell {
-            return Err(
-                "DamagePlayer ControllerOfTargetGroup in spell_program requires a spell owner"
-                    .into(),
-            );
-        }
         let group = schema
             .groups
             .get(input.group_index as usize)
             .ok_or_else(|| {
-                "DamagePlayer recipient references an unknown target group".to_string()
+                "ControllerOfTargetGroup recipient references an unknown target group".to_string()
             })?;
-        if group.min != 1 || group.max != 1 || group.bindings.len() != 1 {
-            return Err(
-                "DamagePlayer ControllerOfTargetGroup requires one target in a singleton group bound to its DamageTarget role".into(),
-            );
-        }
-        let binding = group.bindings[0];
-        let target_address = u32::try_from(binding.effect_index)
-            .map_err(|_| "target instruction address exceeds u32".to_string())?;
-        let owns_target_role = program.target_bindings.iter().any(|target_binding| {
-            target_binding.instruction_address == target_address
-                && target_binding.target_group_index == input.group_index
-                && target_binding.role_index as usize == binding.role_index
-        });
-        let genuine_creature_damage_target = owns_target_role
-            && matches!(
-                (binding.role, find_effect_by_address(&program.body, target_address)),
-                (
-                    super::TargetRole::Filtered(filter),
-                    Some(SpellEffectKind::DamageTarget { target, .. })
-                ) if filter.kind == TargetKind::Creature && target.kind == TargetKind::Creature
-            );
-        if !genuine_creature_damage_target {
-            return Err(
-                "DamagePlayer ControllerOfTargetGroup requires the singleton group to bind a Creature DamageTarget role".into(),
-            );
+        let effect =
+            find_effect_by_address(&program.body, input.instruction_address).ok_or_else(|| {
+                "ControllerOfTargetGroup recipient instruction is unavailable".to_string()
+            })?;
+        match effect {
+            SpellEffectKind::DamagePlayer { .. } => {
+                if context != EffectContext::Spell {
+                    return Err(
+                        "DamagePlayer ControllerOfTargetGroup in spell_program requires a spell owner"
+                            .into(),
+                    );
+                }
+                if group.min != 1 || group.max != 1 || group.bindings.len() != 1 {
+                    return Err(
+                        "DamagePlayer ControllerOfTargetGroup requires one target in a singleton group bound to its DamageTarget role".into(),
+                    );
+                }
+                let binding = group.bindings[0];
+                let target_address = u32::try_from(binding.effect_index)
+                    .map_err(|_| "target instruction address exceeds u32".to_string())?;
+                let owns_target_role = program.target_bindings.iter().any(|target_binding| {
+                    target_binding.instruction_address == target_address
+                        && target_binding.target_group_index == input.group_index
+                        && target_binding.role_index as usize == binding.role_index
+                });
+                let genuine_creature_damage_target = owns_target_role
+                    && matches!(
+                        (binding.role, find_effect_by_address(&program.body, target_address)),
+                        (
+                            super::TargetRole::Filtered(filter),
+                            Some(SpellEffectKind::DamageTarget { target, .. })
+                        ) if filter.kind == TargetKind::Creature && target.kind == TargetKind::Creature
+                    );
+                if !genuine_creature_damage_target {
+                    return Err(
+                        "DamagePlayer ControllerOfTargetGroup requires the singleton group to bind a Creature DamageTarget role".into(),
+                    );
+                }
+            }
+            SpellEffectKind::GainLife { amount, .. } => {
+                let invalid = || {
+                    "GainLife ControllerOfTargetGroup requires a singleton group bound to one object-target role".to_string()
+                };
+                let Some(target_address) =
+                    single_object_target_group_binding(program, group, input.group_index)
+                else {
+                    return Err(invalid());
+                };
+                let exile_power_sum = amount.card_result_characteristic_sum().is_some_and(
+                    |(filter, characteristic)| {
+                        filter.action == CardResultAction::Exile
+                            && characteristic == BattlefieldQuantityCharacteristic::Power
+                    },
+                );
+                if exile_power_sum {
+                    if group.min != 1 || group.max != 1 {
+                        return Err(
+                            "Exile Power sum requires a mandatory singleton target group".into(),
+                        );
+                    }
+                    let exact_swords_filter = matches!(
+                        amount,
+                        Amount::Count(CountExpression::CardResultCharacteristicSum {
+                            filter: CardResultFilter {
+                                source: CardResultSource::PreviousEffect,
+                                action: CardResultAction::Exile,
+                                players: RelativePlayerSet::All,
+                                card_type: None,
+                            },
+                            characteristic: BattlefieldQuantityCharacteristic::Power,
+                        })
+                    );
+                    let binding = group.bindings[0];
+                    let matching_creature_exile = matches!(
+                        (binding.role, find_effect_by_address(&program.body, target_address)),
+                        (
+                            super::TargetRole::Filtered(filter),
+                            Some(SpellEffectKind::Exile {
+                                subject: EffectSubject::Chosen(exile_filter),
+                                linked_exile_id: None,
+                            })
+                        ) if is_exact_creature_target_filter(filter)
+                            && is_exact_creature_target_filter(exile_filter)
+                    );
+                    let Some(instruction) =
+                        find_instruction_by_address(&program.body, input.instruction_address)
+                    else {
+                        return Err(
+                            "Swords Exile Power requires its matching typed Exile input".into()
+                        );
+                    };
+                    let typed_exile_input = instruction.input.is_some_and(|slot_id| {
+                        matches!(
+                            program.slots.get(slot_id.0 as usize).map(|slot| &slot.result_type),
+                            Some(ResultType::TargetCardResultCohort {
+                                action: CardResultAction::Exile,
+                                target_group_index,
+                                ..
+                            }) if *target_group_index == input.group_index
+                        )
+                    });
+                    if context != EffectContext::Spell
+                        || !exact_swords_filter
+                        || !matching_creature_exile
+                        || !typed_exile_input
+                    {
+                        return Err(
+                            "Exile Power sum requires the Swords Creature Exile receipt and its matching target-group controller".into(),
+                        );
+                    }
+                }
+            }
+            _ => {
+                return Err(
+                    "ControllerOfTargetGroup is supported only by validated spell recipients"
+                        .into(),
+                );
+            }
         }
     }
     Ok(inputs)
@@ -1967,6 +2121,18 @@ impl Compiler<'_> {
                     ));
                 }
                 InstructionKind::Perform(effect) => {
+                    if let SpellEffectKind::GainLife { who, .. } = effect.as_ref() {
+                        // Preserve the established ability-context recipient while keeping the
+                        // new target-group recipient closed to the separately validated Swords
+                        // profile. ProgramInputPlayer is rejected by the shared typed-input gate
+                        // below because GainLife is not an admitted explicit-player consumer.
+                        if *who != PlayerRecipient::Controller
+                            && !matches!(who, PlayerRecipient::ControllerOfTargetGroup { .. })
+                            && *who != PlayerRecipient::ProgramInputPlayer
+                        {
+                            validate_program_recipient(*who, self.context, "GainLife recipient")?;
+                        }
+                    }
                     let supported_program_input_consumer = matches!(
                         effect.as_ref(),
                         SpellEffectKind::CreateTokens {
@@ -2279,6 +2445,7 @@ impl Compiler<'_> {
                             self.context,
                             target_group_index,
                             target_group_max,
+                            instruction.bind.len(),
                             self,
                         )?
                     };
@@ -3334,6 +3501,7 @@ fn lower_bound_card_result_count(
     let expression = match effect {
         SpellEffectKind::GainLife {
             amount: Amount::Count(expression),
+            ..
         }
         | SpellEffectKind::Draw {
             count: Amount::Count(expression),
@@ -3453,10 +3621,10 @@ fn validate_program_gain_life_result_count_input(
     input: Option<ResultSlotId>,
     slots: &[CompiledSlot],
 ) -> Result<(), String> {
-    let EffectOp::GainLife { amount } = effect else {
+    let EffectOp::GainLife { amount, .. } = effect else {
         return Ok(());
     };
-    if amount.card_result_filter().is_none() {
+    if amount.card_result_filter().is_none() || amount.card_result_characteristic_sum().is_some() {
         return Ok(());
     }
     let Some((filter, coefficient)) = program_gain_life_result_count_profile(amount) else {
@@ -3543,6 +3711,45 @@ fn validate_program_card_result_characteristic_sum_input(
             "CardResultCharacteristicSum filter must match its explicitly bound result cohort"
                 .into(),
         );
+    }
+    if filter.action == CardResultAction::Exile
+        && effect
+            .result_consuming_amount()
+            .and_then(Amount::card_result_characteristic_sum)
+            .is_some_and(|(_, characteristic)| {
+                characteristic == BattlefieldQuantityCharacteristic::Power
+            })
+    {
+        let recipient_group = match effect {
+            EffectOp::GainLife {
+                who: PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            } => Some(*group_index),
+            _ => None,
+        };
+        if filter
+            != &(CardResultFilter {
+                source: CardResultSource::PreviousEffect,
+                action: CardResultAction::Exile,
+                players: RelativePlayerSet::All,
+                card_type: None,
+            })
+            || !matches!(
+                (&slot.result_type, recipient_group),
+                (
+                    ResultType::TargetCardResultCohort {
+                        action: CardResultAction::Exile,
+                        target_group_index,
+                        ..
+                    },
+                    Some(group_index)
+                ) if *target_group_index == group_index
+            )
+        {
+            return Err(
+                "Exile Power sum requires the Swords Creature Exile receipt and its matching target-group controller".into(),
+            );
+        }
     }
     Ok(())
 }
@@ -3761,14 +3968,14 @@ fn compile_input(
             source: ChooseCardSource::CardResultCohort { .. },
             ..
         } => Some("CardResultCohort"),
-        EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
-            Some("CardResultCohort")
-        }
-        EffectOp::GainLife { amount } if amount.uses_bound_card_result_count() => {
-            Some("bound card-result cohort")
-        }
         effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
             Some("CardResultCohort")
+        }
+        EffectOp::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
+            Some("CardResultCohort")
+        }
+        EffectOp::GainLife { amount, .. } if amount.uses_bound_card_result_count() => {
+            Some("bound card-result cohort")
         }
         EffectOp::DamagePlayer {
             amount: Amount::Count(CountExpression::ProgramInputCount),
@@ -3834,28 +4041,6 @@ fn compile_input(
                         ..
                     }
                 ),
-                EffectOp::GainLife { amount } if amount.card_result_filter().is_some() => {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort {
-                            action: CardResultAction::Mill,
-                            ..
-                        } | ResultType::TargetCardResultCohort {
-                            action: CardResultAction::Discard,
-                            ..
-                        }
-                    )
-                }
-                EffectOp::GainLife { amount } if amount.uses_bound_card_result_count() => {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort { .. }
-                            | ResultType::TargetCardResultCohort { .. }
-                            | ResultType::LinkedExileCardResultCohort { .. }
-                            | ResultType::CastPaymentCohort { .. }
-                            | ResultType::DiscardResult { .. }
-                    )
-                }
                 effect
                     if previous_effect_card_result_characteristic_sum_filter(effect).is_some() =>
                 {
@@ -3868,6 +4053,28 @@ fn compile_input(
                         }
                         _ => false,
                     }
+                }
+                EffectOp::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort {
+                            action: CardResultAction::Mill,
+                            ..
+                        } | ResultType::TargetCardResultCohort {
+                            action: CardResultAction::Discard,
+                            ..
+                        }
+                    )
+                }
+                EffectOp::GainLife { amount, .. } if amount.uses_bound_card_result_count() => {
+                    matches!(
+                        actual.result_type,
+                        ResultType::CardResultCohort { .. }
+                            | ResultType::TargetCardResultCohort { .. }
+                            | ResultType::LinkedExileCardResultCohort { .. }
+                            | ResultType::CastPaymentCohort { .. }
+                            | ResultType::DiscardResult { .. }
+                    )
                 }
                 EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
                     matches!(actual.result_type, ResultType::DiscardResult { .. })
@@ -4375,6 +4582,7 @@ fn validate_and_result_types(
     context: EffectContext,
     target_group_index: Option<u32>,
     target_group_max: Option<u32>,
+    result_bind_count: usize,
     compiler: &Compiler<'_>,
 ) -> Result<Vec<ResultType>, String> {
     match effect {
@@ -4688,7 +4896,13 @@ fn validate_and_result_types(
             }
             Ok(Vec::new())
         }
-        SpellEffectKind::GainLife { amount } if amount.card_result_filter().is_some() => {
+        SpellEffectKind::GainLife { amount, .. }
+            if amount.card_result_characteristic_sum().is_some() =>
+        {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
             if program_gain_life_result_count_profile(amount).is_none() {
                 return Err(
                     "Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into(),
@@ -4702,7 +4916,7 @@ fn validate_and_result_types(
             }
             Ok(Vec::new())
         }
-        SpellEffectKind::GainLife { amount } => {
+        SpellEffectKind::GainLife { amount, .. } => {
             effect.validate(context)?;
             validate_program_amount(amount)?;
             validate_fixed_program_amount("GainLife amount", amount)?;
@@ -5299,12 +5513,28 @@ fn validate_and_result_types(
             }
             effect.validate(context)?;
             validate_program_target_filter(filter, "Exile target")?;
-            Ok(vec![ResultType::ExiledObject {
+            let exiled_object = ResultType::ExiledObject {
                 cardinality: Cardinality {
                     min: 0,
                     max: Some(1),
                 },
-            }])
+            };
+            if result_bind_count == 2 {
+                Ok(vec![
+                    exiled_object,
+                    ResultType::TargetCardResultCohort {
+                        action: CardResultAction::Exile,
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                        target_group_index: target_group_index
+                            .expect("validated chosen Exile has a target group"),
+                    },
+                ])
+            } else {
+                Ok(vec![exiled_object])
+            }
         }
         SpellEffectKind::Exile {
             subject: EffectSubject::TriggerObject,
@@ -6740,5 +6970,467 @@ mod scalar_program_input_tests {
         assert!(nested
             .unwrap_err()
             .contains("supported only by direct typed Count Program inputs"));
+    }
+}
+
+#[cfg(test)]
+mod target_exile_result_tests {
+    use super::*;
+
+    fn swords_power_sum_fixture(
+        min: u32,
+        card_type: Option<CardTypeFilter>,
+    ) -> (ProgramOwnerId, CardProgram, TargetingDef) {
+        let owner = ProgramOwnerId::face(
+            "swords_target_result_fixture",
+            crate::CardFaceId::new("swords_target_result_fixture").expect("valid face id"),
+        );
+        let program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![
+                    Instruction {
+                        id: "exile".into(),
+                        bind: vec!["exiled".into(), "receipt".into()],
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
+                            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                                kind: TargetKind::Creature,
+                                ..TargetFilter::default()
+                            })),
+                            linked_exile_id: None,
+                        })),
+                    },
+                    Instruction {
+                        id: "gain_life".into(),
+                        bind: Vec::new(),
+                        input: Some("receipt".into()),
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::GainLife {
+                            amount: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                                filter: CardResultFilter {
+                                    source: CardResultSource::PreviousEffect,
+                                    action: CardResultAction::Exile,
+                                    players: RelativePlayerSet::All,
+                                    card_type,
+                                },
+                                characteristic: BattlefieldQuantityCharacteristic::Power,
+                            }),
+                            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+                        })),
+                    },
+                ],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "exile".into(),
+                role: ProgramTargetRole::Subject,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min,
+                max: 1,
+                prompt: "Choose target creature".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        (owner, program, targeting)
+    }
+
+    fn compile_gain_life_target_group(
+        filter: TargetFilter,
+        min: u32,
+        max: u32,
+        recipient_group: u32,
+    ) -> Result<CompiledProgram, String> {
+        let owner = ProgramOwnerId::face(
+            "gain_life_target_group_fixture",
+            crate::CardFaceId::new("gain_life_target_group_fixture").expect("valid face id"),
+        );
+        let program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![
+                    Instruction {
+                        id: "damage_target".into(),
+                        bind: Vec::new(),
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::DamageTarget {
+                            amount: Amount::Fixed(1),
+                            target: filter,
+                        })),
+                    },
+                    Instruction {
+                        id: "gain_life".into(),
+                        bind: Vec::new(),
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(1),
+                            who: PlayerRecipient::ControllerOfTargetGroup {
+                                group_index: recipient_group,
+                            },
+                        })),
+                    },
+                ],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "damage_target".into(),
+                role: ProgramTargetRole::Target,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min,
+                max,
+                prompt: "Choose a target".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+    }
+
+    #[test]
+    fn gain_life_accepts_a_target_groups_controller_recipient() {
+        let effect = ron::from_str::<SpellEffectKind>(
+            "GainLife(amount: 1, who: ControllerOfTargetGroup(group_index: 0))",
+        )
+        .expect("GainLife can name the controller of one authored target group");
+        let serialized = ron::to_string(&effect).expect("effect serializes");
+        assert!(
+            serialized.contains("ControllerOfTargetGroup"),
+            "the recipient survives the typed round trip: {serialized}"
+        );
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&serialized).unwrap(),
+            effect
+        );
+    }
+
+    #[test]
+    fn default_gain_life_recipient_preserves_the_legacy_ron_shape() {
+        let legacy = ron::from_str::<SpellEffectKind>("GainLife(amount: 1)")
+            .expect("old card data omits the default recipient");
+        assert_eq!(
+            legacy,
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }
+        );
+        let serialized = ron::to_string(&legacy).expect("legacy GainLife serializes");
+        assert!(
+            !serialized.contains("who"),
+            "the default recipient stays omitted from authored RON: {serialized}"
+        );
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&serialized).unwrap(),
+            legacy,
+            "the serialized effect remains readable by the old field shape"
+        );
+    }
+
+    #[test]
+    fn spell_exile_can_bind_existing_object_and_target_card_result_outputs() {
+        let owner = ProgramOwnerId::face(
+            "exile_result_fixture",
+            crate::CardFaceId::new("exile_result_fixture_face").expect("valid face id"),
+        );
+        let program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![Instruction {
+                    id: "exile".into(),
+                    bind: vec!["exiled".into(), "receipt".into()],
+                    input: None,
+                    kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: super::super::TargetKind::AnyPermanent,
+                            ..TargetFilter::default()
+                        })),
+                        linked_exile_id: None,
+                    })),
+                }],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "exile".into(),
+                role: ProgramTargetRole::Subject,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target permanent".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+
+        let compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("chosen permanent Exile can publish both existing typed result forms");
+
+        assert!(matches!(
+            compiled.slots[0].result_type,
+            ResultType::ExiledObject {
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1)
+                }
+            }
+        ));
+        assert!(matches!(
+            compiled.slots[1].result_type,
+            ResultType::TargetCardResultCohort {
+                action: CardResultAction::Exile,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: Some(1)
+                },
+                target_group_index: 0,
+            }
+        ));
+    }
+
+    #[test]
+    fn swords_gain_life_can_consume_its_targeted_exile_power_and_controller() {
+        let (owner, program, targeting) = swords_power_sum_fixture(1, None);
+
+        let compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("the Exile receipt powers life gain for the selected creature's controller");
+        assert_eq!(
+            compiled.group_inputs,
+            [ProgramGroupInput {
+                instruction_address: 1,
+                group_index: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn swords_power_sum_rejects_optional_group_and_redundant_creature_filter() {
+        for (min, card_type, description) in [
+            (0, Some(CardTypeFilter::Creature), "optional target group"),
+            (1, Some(CardTypeFilter::Creature), "card-type result filter"),
+        ] {
+            let (owner, program, targeting) = swords_power_sum_fixture(min, card_type);
+            assert!(
+                CompiledProgram::compile_with_targeting(
+                    owner,
+                    EffectContext::Spell,
+                    &program,
+                    Some(&targeting),
+                )
+                .is_err(),
+                "the Swords consumer must reject a {description}"
+            );
+        }
+    }
+
+    #[test]
+    fn target_exile_dual_output_rejects_bad_arity_group_action_and_role() {
+        let (owner, mut bad_arity, targeting) = swords_power_sum_fixture(1, None);
+        bad_arity.body.steps[0].bind.push("unexpected".into());
+        assert!(CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &bad_arity,
+            Some(&targeting),
+        )
+        .is_err());
+
+        let (owner, mut bad_group, mut targeting) = swords_power_sum_fixture(1, None);
+        bad_group.body.steps.insert(
+            0,
+            Instruction {
+                id: "destroy_other_target".into(),
+                bind: vec!["destroyed".into()],
+                input: None,
+                kind: InstructionKind::Perform(Box::new(SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![super::super::PermanentTypeFilter::Artifact],
+                        ..TargetFilter::default()
+                    })),
+                })),
+            },
+        );
+        bad_group.target_bindings[0].target_group_index = 1;
+        bad_group.target_bindings.push(ProgramTargetReference {
+            instruction_id: "destroy_other_target".into(),
+            role: ProgramTargetRole::Subject,
+            target_group_index: 0,
+        });
+        targeting.groups.push(targeting.groups[0].clone());
+        assert!(CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &bad_group,
+            Some(&targeting),
+        )
+        .is_err());
+
+        let (owner, mut bad_action, targeting) = swords_power_sum_fixture(1, None);
+        let SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardResultCharacteristicSum { filter, .. }),
+            ..
+        } = (match &mut bad_action.body.steps[1].kind {
+            InstructionKind::Perform(effect) => effect.as_mut(),
+            _ => unreachable!(),
+        })
+        else {
+            unreachable!();
+        };
+        filter.action = CardResultAction::Discard;
+        assert!(CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &bad_action,
+            Some(&targeting),
+        )
+        .is_err());
+
+        let (owner, mut bad_role, targeting) = swords_power_sum_fixture(1, None);
+        bad_role.target_bindings[0].role = ProgramTargetRole::Target;
+        assert!(CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &bad_role,
+            Some(&targeting),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn gain_life_target_group_rejects_unknown_player_and_multitarget_groups() {
+        assert!(compile_gain_life_target_group(
+            TargetFilter {
+                kind: TargetKind::Creature,
+                ..TargetFilter::default()
+            },
+            1,
+            1,
+            1,
+        )
+        .is_err());
+        assert!(compile_gain_life_target_group(
+            TargetFilter {
+                kind: TargetKind::AnyPlayer,
+                ..TargetFilter::default()
+            },
+            1,
+            1,
+            0,
+        )
+        .is_err());
+        assert!(compile_gain_life_target_group(
+            TargetFilter {
+                kind: TargetKind::Creature,
+                ..TargetFilter::default()
+            },
+            1,
+            2,
+            0,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn gain_life_target_group_controller_remains_generic_for_object_targets() {
+        let owner = ProgramOwnerId::face(
+            "generic_target_controller_fixture",
+            crate::CardFaceId::new("generic_target_controller_fixture").expect("valid face id"),
+        );
+        let program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![
+                    Instruction {
+                        id: "destroy_artifact".into(),
+                        bind: vec!["destroyed".into()],
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::Destroy {
+                            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                                kind: TargetKind::AnyPermanent,
+                                permanent_types: vec![super::super::PermanentTypeFilter::Artifact],
+                                ..TargetFilter::default()
+                            })),
+                        })),
+                    },
+                    Instruction {
+                        id: "gain_life".into(),
+                        bind: Vec::new(),
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(1),
+                            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+                        })),
+                    },
+                ],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "destroy_artifact".into(),
+                role: ProgramTargetRole::Subject,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target artifact".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+
+        let compiled = CompiledProgram::compile_with_targeting(
+            owner,
+            EffectContext::Spell,
+            &program,
+            Some(&targeting),
+        )
+        .expect("target-group controller is reusable for a singleton object-target role");
+        assert_eq!(
+            compiled.group_inputs,
+            [ProgramGroupInput {
+                instruction_address: 1,
+                group_index: 0,
+            }]
+        );
     }
 }

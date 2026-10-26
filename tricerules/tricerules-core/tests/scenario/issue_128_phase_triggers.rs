@@ -466,6 +466,7 @@ fn issue_164_intervening_if_and_real_turn_rollover_preserve_trigger_caps() {
         .clone();
     ability.effect = vec![SpellEffectKind::GainLife {
         amount: Amount::Fixed(1),
+        who: tricerules_cards::primitives::PlayerRecipient::Controller,
     }];
     ability.intervening_if = Some(GameCondition::ObjectTapped {
         object: ConditionObjectRef::Source,

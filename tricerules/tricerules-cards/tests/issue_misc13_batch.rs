@@ -238,7 +238,8 @@ fn issue_misc13_batch_maps_definitions() {
         matches!(
             &pterafractyl.triggered_abilities[0].effect[0],
             SpellEffectKind::GainLife {
-                amount: Amount::Fixed(2)
+                amount: Amount::Fixed(2),
+                ..
             }
         ),
         "{:?}",

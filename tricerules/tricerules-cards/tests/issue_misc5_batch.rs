@@ -132,7 +132,8 @@ fn issue_misc5_batch_maps_definitions() {
     assert_eq!(
         acolyte_ability.effect[1],
         SpellEffectKind::GainLife {
-            amount: Amount::Fixed(1)
+            amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         }
     );
 

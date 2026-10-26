@@ -275,6 +275,7 @@ fn issue_358_susurian_voidborn_drains_when_self_creature_or_artifact_dies() {
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             },
         ]
     );

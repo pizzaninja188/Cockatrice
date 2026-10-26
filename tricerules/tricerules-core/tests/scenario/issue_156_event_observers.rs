@@ -221,6 +221,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
         },
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
         },
     ];
     ability.targeting = tricerules_cards::registry::global()

@@ -79,6 +79,7 @@ fn issue_263_registers_all_fourteen_generated_cards_with_exact_typed_triggers() 
             ability.effect,
             [SpellEffectKind::GainLife {
                 amount: Amount::Fixed(2),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
             }]
         );
     }

@@ -3560,7 +3560,8 @@ fn issue_165_quantities_reject_unsupported_shapes_and_source_contexts() {
     }
     let amount = super::Amount::Count(super::CountExpression::SourcePower);
     assert!(super::SpellEffectKind::GainLife {
-        amount: amount.clone()
+        amount: amount.clone(),
+        who: super::PlayerRecipient::Controller,
     }
     .validate(super::EffectContext::Spell)
     .is_err());
@@ -3595,7 +3596,8 @@ fn pentad_prism_cast_colors_are_intrinsic_entry_only_and_cannot_escape_through_w
         assert!(amount.validate_cost(false).is_err());
         for context in [super::EffectContext::Spell, super::EffectContext::Ability] {
             assert!(super::SpellEffectKind::GainLife {
-                amount: amount.clone()
+                amount: amount.clone(),
+                who: super::PlayerRecipient::Controller,
             }
             .validate(context)
             .is_err());
@@ -5099,6 +5101,53 @@ fn program_input_player_is_rejected_from_legacy_effect_lists() {
     let error = super::SpellEffectKind::validate_list(&[delayed])
         .expect_err("primitive lists cannot consume typed Program inputs");
     assert!(error.contains("ProgramInputPlayer requires an explicit typed Program input"));
+
+    let gain_life = super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::ProgramInputPlayer,
+    };
+    assert!(super::SpellEffectKind::validate_list(&[gain_life])
+        .unwrap_err()
+        .contains("ProgramInputPlayer requires an explicit typed Program input"));
+}
+
+#[test]
+fn gain_life_target_group_recipient_requires_its_validated_program() {
+    let effect = super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+    };
+    assert!(super::SpellEffectKind::validate_list(&[effect])
+        .unwrap_err()
+        .contains("GainLife ControllerOfTargetGroup requires its validated typed spell Program"));
+}
+
+#[test]
+fn gain_life_recipient_reuses_trigger_context_validation_hooks() {
+    let trigger_object = super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::TriggerObjectController,
+    };
+    assert!(trigger_object.uses_trigger_object_reference());
+    assert!(trigger_object
+        .validate(super::EffectContext::Spell)
+        .unwrap_err()
+        .contains("trigger object"));
+
+    let attacker = super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::TriggeringAttackingPlayer,
+    };
+    assert!(attacker
+        .validate(super::EffectContext::Ability)
+        .unwrap_err()
+        .contains("TriggeringAttackingPlayer is supported only by Draw effects"));
+
+    let defender = super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::DefendingPlayer,
+    };
+    assert!(defender.uses_defending_player_reference());
 }
 
 #[test]
@@ -5340,6 +5389,7 @@ fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
     let mut extra_effect = ability;
     extra_effect.effect.push(SpellEffectKind::GainLife {
         amount: Amount::Fixed(1),
+        who: PlayerRecipient::Controller,
     });
     assert!(extra_effect.validate_shape().is_err());
 }
@@ -5496,6 +5546,7 @@ fn damage_mana_ability_classifier_accepts_only_the_bounded_untargeted_shape() {
     let mut extra_effect = ability;
     extra_effect.effect.push(super::SpellEffectKind::GainLife {
         amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::Controller,
     });
     assert!(
         extra_effect.mana_options().is_none(),
@@ -5608,6 +5659,7 @@ fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
             source_counter_scaled_mana_effect(),
             SpellEffectKind::GainLife {
                 amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
             },
         ],
         program: None,
@@ -12595,6 +12647,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
                 crate::primitives::InstructionKind::Perform(effect)
                     if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
                         amount: crate::primitives::Amount::Fixed(1),
+                        ..
                     }))
     ));
     let compiled_child_program = match &parent_compiled.body.steps[1].kind {
@@ -12623,6 +12676,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
                 crate::primitives::InstructionKind::Perform(effect)
                     if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
                         amount: crate::primitives::Amount::Fixed(1),
+                        ..
                     }))
     ));
     let child_error = crate::primitives::CompiledProgram::compile_with_targeting(
@@ -12710,6 +12764,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
                 crate::primitives::InstructionKind::Perform(effect)
                     if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::GainLife {
                         amount: crate::primitives::Amount::Fixed(1),
+                        ..
                     }))
     ));
 }
@@ -14687,6 +14742,7 @@ fn bound_card_result_count_lowers_to_existing_mill_count() {
                     },
                 }
             ),
+            who: crate::primitives::PlayerRecipient::Controller,
         }
     );
 }
@@ -14832,6 +14888,7 @@ fn bound_card_result_count_lowers_typed_cohort_families() {
                     card_type: None,
                 },
             }),
+            who: PlayerRecipient::Controller,
         }
     );
 
@@ -14862,6 +14919,7 @@ fn bound_card_result_count_lowers_typed_cohort_families() {
                     card_type: Some(CardTypeFilter::Creature),
                 },
             }),
+            who: PlayerRecipient::Controller,
         }
     );
 
@@ -14916,6 +14974,7 @@ fn bound_card_result_count_lowers_typed_cohort_families() {
                     card_type: Some(CardTypeFilter::Creature),
                 },
             }),
+            who: PlayerRecipient::Controller,
         }
     );
 
@@ -14970,6 +15029,7 @@ fn bound_card_result_count_lowers_typed_cohort_families() {
                     card_type: Some(CardTypeFilter::Creature),
                 },
             }),
+            who: PlayerRecipient::Controller,
         }
     );
 }
