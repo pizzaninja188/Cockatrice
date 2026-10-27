@@ -852,8 +852,10 @@ continuation are now removed; all 45 owners from the original census use authore
 `custom::GiftsUngiven` implementation and generated custom-effect registry are removed. Gifts now
 uses a typed retained search, explicit reveal, target-bound partition, movement and shuffle; scenarios cover the
 0–4 cohort matrix, target delegation, source/controller departure, commander replacement, and
-precommit graveyard order. This composable execution migration does not change Gifts' whole-card
-admission status; whole-card review remains deferred. Keep `custom_resolution/*` where it implements
+precommit graveyard order. The subsequent Gifts whole-card review maps the complete definition to
+these actual-card scenarios, including cast-time opponent targeting and illegal-target resolution;
+see its [review map](../tricerules/tricerules-cards/authoring/review-maps/gifts_ungiven.json).
+Keep `custom_resolution/*` where it implements
 shared mechanic transactions, copy legality or entry/APNAP work; its directory name does not make every
 contained mechanism card-specific.
 Wash Out uses the shared owner-hand return continuation for matching mass returns and individual

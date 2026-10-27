@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "58aec411-167d-4709-8560-793eaaed62c5",
+  "spans": [
+    {
+      "face_id": "gifts_ungiven",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/targeting",
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform",
+        "/faces/0/spell_program/body/steps/2/kind/Perform",
+        "/faces/0/spell_program/body/steps/3/kind/Perform",
+        "/faces/0/spell_program/body/steps/4/kind/Perform",
+        "/faces/0/spell_program/target_bindings"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario custom_resolution::gifts_ungiven_cast_requires_one_opponent_target_without_consuming_rejected_casts",
+      "covers": "actual Gifts rejects self, nonexistent and missing targets without consuming the card, mana or deterministic state; a live opponent is accepted"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_ungiven_opponent_chooses_the_split",
+      "covers": "private controller search, exact public revealed cohort, opponent's two-card choice, chosen-to-graveyard and remainder-to-hand identities, immutable illegal answers, commander hand replacement, precommit graveyard ordering and exactly-once shuffle after movement"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_ungiven_search_and_partition_cover_zero_through_four_cards",
+      "covers": "up to four cards including zero, forced graveyard selection of the entire one/two-card cohort, three/four-card remainder to hand, owner graveyard order and exactly-once shuffle for every cohort size"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_ungiven_rejects_same_name_in_search",
+      "covers": "different-names search rejects two physical cards sharing a name"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_different_names_search_rejects_duplicate_split_and_room_physical_copies",
+      "covers": "different names reject physical Split and Room copies with overlapping face-name sets"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_split_rejects_stale_selected_generation_without_mutating_the_prompt",
+      "covers": "selected cohort exact incarnation cannot be rebound after a zone change"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_split_rejects_stale_unselected_complement_without_mutating_the_prompt",
+      "covers": "unselected hand-bound complement retains exact incarnation and rejects stale identity without mutation"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_target_departing_during_search_chooses_a_live_partition_delegate",
+      "covers": "CR 800.4g live opponent delegation if the target leaves during the retained search"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_target_departing_during_partition_chooses_a_live_delegate_without_revealing_again",
+      "covers": "target departure during the partition resumes with a live delegate and preserves the one reveal receipt"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_source_owner_departure_preserves_surviving_controller_library_cohort",
+      "covers": "a surviving controller's library cohort continues when the separately owned spell's owner leaves"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_source_owner_departure_during_precommit_keeps_controller_cohort_and_does_not_resurrect_spell",
+      "covers": "owner departure at precommit retains surviving controller's cohort without resurrecting the departed spell"
+    },
+    {
+      "test": "scenario custom_resolution::gifts_controller_departure_during_precommit_exiles_survivor_owned_spell_once_and_prunes_cohort",
+      "covers": "controller departure prunes the departed library cohort and exiles a survivor-owned spell once"
+    },
+    {
+      "test": "scenario issue_208_library_search::gifts_search_trigger_waits_until_the_whole_spell_finishes",
+      "covers": "search triggers are staged until partition, graveyard order and the full spell finish"
+    },
+    {
+      "test": "scenario issue_208_library_search::gifts_empty_library_search_has_no_cohort_prompt_and_stages_one_trigger_before_shuffle_tail",
+      "covers": "empty library still counts as one search, needs no empty cohort prompts and shuffles once"
+    },
+    {
+      "test": "scenario issue_208_library_search::gifts_target_that_leaves_before_resolution_does_not_search_or_trigger_wan",
+      "covers": "illegal sole target at resolution prevents every instruction, reveal, search trigger and shuffle"
+    },
+    {
+      "test": "scenario issue_208_library_search::gifts_controller_departing_during_retained_search_fires_one_search_trigger_then_empty_completes",
+      "covers": "controller departure during a search empties the cohort while retaining the exactly-once search observation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

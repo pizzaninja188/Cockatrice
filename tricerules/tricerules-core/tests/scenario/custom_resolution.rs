@@ -5800,6 +5800,57 @@ fn gifts_split_rejects_stale_unselected_complement_without_mutating_the_prompt()
 }
 
 #[test]
+fn gifts_ungiven_cast_requires_one_opponent_target_without_consuming_rejected_casts() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        701_023,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["gifts_ungiven"]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .expect("new Gifts cast admission scenario");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_card_in_hand(&mut engine, 0, "gifts_ungiven");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gifts = hand_index_for_card(&engine, 0, "gifts_ungiven");
+    for (target, label) in [
+        (target_player(0), "Gifts cannot target its controller"),
+        (
+            target_player(99),
+            "Gifts cannot target a nonexistent player",
+        ),
+        (
+            Vec::new(),
+            "Gifts requires its opponent target even before searching",
+        ),
+    ] {
+        assert_rejected_gifts_answer_is_immutable(
+            &mut engine,
+            0,
+            &cast_spell(gifts, target),
+            label,
+        );
+    }
+    engine
+        .apply_scenario_command(0, &cast_spell(gifts, target_player(1)))
+        .expect("the unchanged card and mana can cast Gifts targeting an opponent");
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].card_id, "gifts_ungiven");
+}
+
+#[test]
 fn gifts_ungiven_opponent_chooses_the_split() {
     use tricerules_core::Zone;
     // Minimal deck: inject specific distinct-name cards after setup so shuffle order
