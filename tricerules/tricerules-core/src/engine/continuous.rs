@@ -868,6 +868,7 @@ impl GameEngine {
                 | StaticAbilityDef::SpellCannotBeCountered
                 | StaticAbilityDef::GrantSpellKeyword { .. }
                 | StaticAbilityDef::ControllerSpellsCannotBeCountered { .. }
+                | StaticAbilityDef::SpellsAndAbilitiesCannotBeCountered
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
                 | StaticAbilityDef::ProhibitLifeGain { .. }

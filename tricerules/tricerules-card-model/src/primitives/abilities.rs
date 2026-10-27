@@ -2491,6 +2491,10 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         spell_filter: StackSpellFilter,
     },
+    /// Spider-Punk's global clause protects spells and activated/triggered abilities from
+    /// countering (CR 101.2, 701.6), including Counterspell and Tidebinder's distinct mechanics.
+    /// Checked at the counter attempt; protected stack objects remain legal targets.
+    SpellsAndAbilitiesCannotBeCountered,
     /// CR 702.195: continuously watches this permanent's controller and irreversibly grants the
     /// enduring-story designation when three qualifying permanents are controlled.
     Storied,

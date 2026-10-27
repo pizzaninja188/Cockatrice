@@ -107,9 +107,19 @@ CR 608.2b-c, 611.2b, and 400.7. Prepared-state layer-4 fixtures cover eligible-t
 ineligible-to-eligible source-type changes after target selection and before counter resolution,
 without changing the ObjectId or zone generation. A separate test replays the accepted serialized Tidebinder command tail
 from two identical prepared fixture states and compares every event batch and final diagnostic
-snapshot; it is not a full legal-session replay claim. Source-less ability results and
-ability-counter-prevention cases remain deferred. No protobuf, relay, or client surface changed, so
-native UI acceptance is N/A.
+snapshot; it is not a full legal-session replay claim. An explicit prepared `source_permanent_id: None`
+stack-item fixture now covers successful countering with an empty source receipt and no ability loss;
+it does not claim a legal source-less producer (CR 113.7 and 603.7d-g preserve delayed-trigger sources).
+The same suite exercises the real Tidebinder Program against an isolated fixture for Spider-Punk's
+global counter-prohibition clause, using `SpellsAndAbilitiesCannotBeCountered`. This static checks live
+effective battlefield abilities at the shared counter attempt, preserves legal targeting, and covers
+both players' spells and abilities, source departure, face-down status, ability removal, basic-land
+rules-text removal, copied faces, declined Ward payment, and deterministic prepared-command replay.
+Failed counters produce no source receipt or ability loss, and the protected ability later resolves.
+This implements only Spider-Punk's prohibition clause; Spider-Punk remains unregistered and is not
+claimed as a supported complete card. The [official Spider-Punk release-note ruling](https://magic.wizards.com/en/news/feature/spider-man-release-notes)
+and CR 101.2 and 701.6 govern prevention of countering. No protobuf, relay, or client surface changed, so native UI
+acceptance is N/A.
 
 The bounded 2026-10-14 Divert Disaster increment adds an optional `CounterPaymentOutcome` output
 for fixed-cost `CounterTargetSpell` leaves and a typed `IfResult` condition. Its total outcomes are

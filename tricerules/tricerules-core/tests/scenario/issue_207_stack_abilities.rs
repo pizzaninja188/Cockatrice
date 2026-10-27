@@ -85,6 +85,434 @@ fn choose_no_trigger_targets() -> RuledCommand {
     }
 }
 
+// Only Spider-Punk's counter-prohibition clause is modeled here. This isolated fixture does
+// not register Spider-Punk, implement its other clauses, or establish complete-card support.
+fn counter_prohibition_registry() -> &'static tricerules_card_model::CardRegistry {
+    static REGISTRY: std::sync::OnceLock<tricerules_card_model::CardRegistry> =
+        std::sync::OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                r#"(id: "counter_prohibition_fixture", name: "Counter Prohibition Fixture",
+                    face_id: "counter_prohibition_fixture", types: ["Creature"],
+                    power: 2, toughness: 2,
+                    static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                        definition: SpellsAndAbilitiesCannotBeCountered)])"#,
+                include_str!("../../../tricerules-cards/data/tishanas_tidebinder.ron"),
+                include_str!("../../../tricerules-cards/data/teferi,_temporal_pilgrim.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/counterspell.ron"),
+                include_str!("../../../tricerules-cards/data/unsummon.ron"),
+                include_str!("../../../tricerules-cards/data/multiface/dirgur_island_dragon_skimming_strike.ron"),
+            ],
+            &[include_str!("../../../tricerules-cards/data/tokens/spirit_u_2_2_vigilance_draw_counter.ron")],
+        )
+        .expect("isolated global counter-prohibition clause is admitted")
+    })
+}
+
+#[test]
+fn issue_207_global_counter_prohibition_fixture_is_admitted() {
+    assert!(counter_prohibition_registry()
+        .get("counter_prohibition_fixture")
+        .is_some());
+    assert!(tricerules_cards::registry::global()
+        .get("spider_punk")
+        .is_none());
+}
+
+fn counter_prohibition_engine(seed: u64) -> GameEngine {
+    let deck = vec!["island".to_string(); 24];
+    let mut engine = GameEngine::new(
+        counter_prohibition_registry(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn prepared_protected_tidebinder(
+    seed: u64,
+    ability_controller: usize,
+    protection_controller: usize,
+) -> (GameEngine, u32, u32, u32, u32) {
+    let mut engine = counter_prohibition_engine(seed);
+    let protection = inject_permanent_on_battlefield(
+        &mut engine,
+        protection_controller,
+        "counter_prohibition_fixture",
+    );
+    let teferi = inject_permanent_on_battlefield(
+        &mut engine,
+        ability_controller,
+        "teferi,_temporal_pilgrim",
+    );
+    engine
+        .state
+        .objects
+        .get_mut(&teferi)
+        .unwrap()
+        .set_counter(CounterKind::Loyalty, 4);
+    let tidebinder = inject_card_into_hand(&mut engine, 0, "tishanas_tidebinder");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 3,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    // Prepared main-phase fixture for the selected controller's sorcery-speed loyalty action.
+    engine.state.active_player_idx = ability_controller;
+    engine.state.priority_idx = ability_controller;
+    engine
+        .apply_scenario_command(
+            ability_controller as i32,
+            &activate_ability_for(&engine, teferi, 0, Vec::new()),
+        )
+        .unwrap();
+    let ability = engine.state.stack.last().unwrap().id;
+    if ability_controller == 1 {
+        engine.apply_scenario_command(1, &pass()).unwrap();
+    }
+    let slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .unwrap();
+    pass_both_players(&mut engine);
+    (engine, teferi, ability, tidebinder, protection)
+}
+
+fn assert_no_tidebinder_removal(engine: &GameEngine, tidebinder: u32) {
+    assert!(!engine
+        .state
+        .continuous_effects
+        .iter()
+        .any(|effect| effect.source_id == Some(tidebinder)
+            && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities));
+}
+
+#[test]
+fn issue_207_global_prohibition_preserves_both_players_abilities_and_empty_tidebinder_result() {
+    for actor in [0, 1] {
+        for protector in [0, 1] {
+            let (mut engine, teferi, ability, tidebinder, _) = prepared_protected_tidebinder(
+                207_100 + actor as u64 * 2 + protector as u64,
+                actor,
+                protector,
+            );
+            let library = engine.state.players[actor].library.len();
+            engine
+                .apply_scenario_command(0, &choose_trigger_target(ability, TargetRefKind::Stack))
+                .expect("counter protection does not prevent legal targeting");
+            let batch = pass_both_players_with_batch(&mut engine);
+            assert!(!batch.events.iter().any(|event| matches!(&event.ev,
+                Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability)));
+            assert!(engine.state.stack.iter().any(|item| item.id == ability));
+            assert_no_tidebinder_removal(&engine, tidebinder);
+            assert!(!zone_view_ability_flags(&mut engine, actor, teferi).is_empty());
+            pass_both_players(&mut engine);
+            assert_eq!(engine.state.players[actor].library.len(), library - 1);
+        }
+    }
+}
+
+#[test]
+fn issue_207_global_prohibition_uses_live_effective_source_at_counter_resolution() {
+    for loss in [
+        "left",
+        "face_down",
+        "abilities_removed",
+        "copied_away",
+        "basic_land",
+    ] {
+        let (mut engine, teferi, ability, tidebinder, protection) =
+            prepared_protected_tidebinder(207_110, 0, 1);
+        engine
+            .apply_scenario_command(0, &choose_trigger_target(ability, TargetRefKind::Stack))
+            .unwrap();
+        match loss {
+            "left" => {
+                engine.state.players[1]
+                    .battlefield
+                    .retain(|&id| id != protection);
+                engine.state.players[1].graveyard.push(protection);
+                engine.state.objects.get_mut(&protection).unwrap().zone =
+                    tricerules_core::Zone::Graveyard;
+                *engine
+                    .state
+                    .zone_change_generation
+                    .entry(protection)
+                    .or_default() += 1;
+            }
+            "face_down" => engine.state.objects.get_mut(&protection).unwrap().face_down = true,
+            "abilities_removed" => engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(protection),
+                kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index + 1,
+            }),
+            "copied_away" => {
+                let face = counter_prohibition_registry()
+                    .get("grizzly_bears")
+                    .unwrap()
+                    .primary_face()
+                    .clone();
+                engine
+                    .state
+                    .objects
+                    .get_mut(&protection)
+                    .unwrap()
+                    .copiable_values = Some(tricerules_core::state::CopiableValues {
+                    source_card_id: "grizzly_bears".into(),
+                    source_face_index: 0,
+                    face,
+                    prototyped: false,
+                    room_faces: None,
+                    display_name: "Grizzly Bears".into(),
+                });
+            }
+            "basic_land" => engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(protection),
+                kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![tricerules_cards::primitives::BasicLandType::Forest],
+                }),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index + 1,
+            }),
+            _ => unreachable!(),
+        }
+        let batch = pass_both_players_with_batch(&mut engine);
+        assert!(
+            batch.events.iter().any(|event| matches!(&event.ev,
+            Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability)),
+            "{loss}"
+        );
+        assert!(
+            !engine.state.stack.iter().any(|item| item.id == ability),
+            "{loss}"
+        );
+        assert!(
+            engine
+                .state
+                .continuous_effects
+                .iter()
+                .any(|effect| effect.source_id == Some(tidebinder)
+                    && effect.affected == AffectedScope::Single(teferi)
+                    && effect.kind == ContinuousEffectKind::Layer6RemoveAllAbilities),
+            "{loss}"
+        );
+    }
+}
+
+#[test]
+fn issue_207_global_prohibition_uses_copied_static_clause() {
+    let (mut engine, _, ability, tidebinder, protection) =
+        prepared_protected_tidebinder(207_111, 0, 1);
+    let values = tricerules_core::state::CopiableValues {
+        source_card_id: "counter_prohibition_fixture".into(),
+        source_face_index: 0,
+        face: counter_prohibition_registry()
+            .get("counter_prohibition_fixture")
+            .unwrap()
+            .primary_face()
+            .clone(),
+        prototyped: false,
+        room_faces: None,
+        display_name: "Counter Prohibition Fixture".into(),
+    };
+    // Printed identity lacks protection; only the prepared copy's effective face has it.
+    let object = engine.state.objects.get_mut(&protection).unwrap();
+    object.card_id = "grizzly_bears".into();
+    object.copiable_values = Some(values);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability, TargetRefKind::Stack))
+        .unwrap();
+    let batch = pass_both_players_with_batch(&mut engine);
+    assert!(!batch.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability)));
+    assert!(engine.state.stack.iter().any(|item| item.id == ability));
+    assert_no_tidebinder_removal(&engine, tidebinder);
+}
+
+#[test]
+fn issue_207_tidebinder_prepared_source_absence_counters_without_ability_loss() {
+    let (mut engine, teferi, ability) = setup_tidebinder_over_teferi(207_112, 1);
+    let library = engine.state.players[0].library.len();
+    // Defensive engine-result fixture only. CR113.7/603.7d-g do not make delayed triggers
+    // source-less; no supported legal producer or complete-session replay is claimed here.
+    engine
+        .state
+        .stack
+        .iter_mut()
+        .find(|item| item.id == ability)
+        .unwrap()
+        .source_permanent_id = None;
+    let slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
+    let tidebinder = engine.state.players[0].hand[slot];
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &choose_trigger_target(ability, TargetRefKind::Stack))
+        .unwrap();
+    let batch = pass_both_players_with_batch(&mut engine);
+    assert!(batch.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == ability)));
+    assert!(!engine.state.stack.iter().any(|item| item.id == ability));
+    assert_no_tidebinder_removal(&engine, tidebinder);
+    assert!(!zone_view_ability_flags(&mut engine, 0, teferi).is_empty());
+    assert_eq!(engine.state.players[0].library.len(), library);
+}
+
+#[test]
+fn issue_207_global_prohibition_protects_both_players_spells_without_blocking_resolution() {
+    for actor in [0, 1] {
+        for protector in [0, 1] {
+            let mut engine =
+                counter_prohibition_engine(207_120 + actor as u64 * 2 + protector as u64);
+            inject_permanent_on_battlefield(&mut engine, protector, "counter_prohibition_fixture");
+            let bears = inject_card_into_hand(&mut engine, actor, "grizzly_bears");
+            inject_card_into_hand(&mut engine, 1 - actor, "counterspell");
+            for player in [0, 1] {
+                give_mana(
+                    &mut engine,
+                    player,
+                    ManaGift {
+                        u: 3,
+                        g: 1,
+                        c: 2,
+                        ..Default::default()
+                    },
+                );
+            }
+            engine.state.active_player_idx = actor;
+            engine.state.priority_idx = actor;
+            let slot = hand_index_for_card(&engine, actor, "grizzly_bears");
+            engine
+                .apply_scenario_command(actor as i32, &cast_spell(slot, Vec::new()))
+                .unwrap();
+            engine
+                .apply_scenario_command(actor as i32, &pass())
+                .unwrap();
+            let slot = hand_index_for_card(&engine, 1 - actor, "counterspell");
+            engine
+                .apply_scenario_command(
+                    (1 - actor) as i32,
+                    &cast_spell(
+                        slot,
+                        vec![TargetRef {
+                            object_id: bears,
+                            kind: TargetRefKind::Stack as i32,
+                            ..Default::default()
+                        }],
+                    ),
+                )
+                .expect("protected spell remains a legal Counterspell target");
+            let batch = pass_both_players_with_batch(&mut engine);
+            assert!(!batch.events.iter().any(|event| matches!(&event.ev,
+                Some(Ev::StackObjectCountered(countered)) if countered.object_id == bears)));
+            assert!(engine.state.stack.iter().any(|item| item.id == bears));
+            pass_both_players(&mut engine);
+            assert_eq!(
+                engine.state.objects[&bears].zone,
+                tricerules_core::Zone::Battlefield
+            );
+        }
+    }
+}
+
+#[test]
+fn issue_207_global_prohibition_stops_declined_ward_counter_in_shared_continuation() {
+    let mut engine = counter_prohibition_engine(207_130);
+    inject_permanent_on_battlefield(&mut engine, 1, "counter_prohibition_fixture");
+    let dragon =
+        inject_permanent_on_battlefield(&mut engine, 1, "dirgur_island_dragon_skimming_strike");
+    let unsummon = inject_card_into_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "unsummon");
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, target_object(dragon)))
+        .unwrap();
+    pass_both_players(&mut engine);
+    assert!(
+        engine.state.pending_resolution.is_some(),
+        "protection does not bypass the Ward payment offer"
+    );
+    let batch = engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_decision(
+                tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
+            ),
+        )
+        .unwrap();
+    assert!(!batch.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == unsummon)));
+    assert!(engine.state.stack.iter().any(|item| item.id == unsummon));
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&dragon].zone,
+        tricerules_core::Zone::Hand
+    );
+}
+
+#[test]
+fn issue_207_prepared_protected_tidebinder_command_tail_replays_deterministically() {
+    let (mut original, _, ability, tidebinder, _) = prepared_protected_tidebinder(207_140, 1, 0);
+    let (mut replay, _, replay_ability, _, _) = prepared_protected_tidebinder(207_140, 1, 0);
+    assert_eq!(ability, replay_ability);
+    let mut commands = Vec::new();
+    let mut batches = Vec::new();
+    record_tidebinder_command(
+        &mut original,
+        &mut commands,
+        &mut batches,
+        0,
+        choose_trigger_target(ability, TargetRefKind::Stack),
+    );
+    for _ in 0..2 {
+        let actor = original.state.priority_player_id();
+        record_tidebinder_command(&mut original, &mut commands, &mut batches, actor, pass());
+    }
+    assert!(original.state.stack.iter().any(|item| item.id == ability));
+    assert_no_tidebinder_removal(&original, tidebinder);
+    let replayed = commands
+        .iter()
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(batches, replayed);
+    assert_eq!(
+        original.diagnostic_snapshot().unwrap(),
+        replay.diagnostic_snapshot().unwrap()
+    );
+}
+
 fn setup_tidebinder_over_hellhound(seed: u64) -> (GameEngine, u32, u32, u32) {
     let decks = Some(vec![
         deck_with(

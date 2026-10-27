@@ -606,7 +606,23 @@ pub(crate) fn counter_stack_object(
                     matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
                 })
             })
-        || controller_static_protects_spell(engine, &target);
+        || controller_static_protects_spell(engine, &target)
+        || engine
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter())
+            .any(|&source| {
+                engine
+                    .active_static_ability_definitions(source)
+                    .into_iter()
+                    .any(|definition| {
+                        matches!(
+                            definition,
+                            StaticAbilityDef::SpellsAndAbilitiesCannotBeCountered
+                        )
+                    })
+            });
     if cannot_be_countered {
         events.push(ev_log(format!(
             "{counter_label} cannot counter {target_name}"
