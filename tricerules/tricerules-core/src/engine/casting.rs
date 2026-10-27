@@ -1064,7 +1064,7 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal("bad face index"))?;
                 if face.is_land
                     || !definition.face_available_from_hand(face_index)
-                    || !self.may_cast_library_top_face(player, definition, face_index)
+                    || !self.may_cast_library_top_face(player, *source_oid, definition, face_index)
                 {
                     return Err(EngineError::Illegal(
                         "selected face has no active cast-from-library permission",
@@ -1090,7 +1090,7 @@ impl GameEngine {
                 "missing or stale public cast generation",
             ));
         }
-        let target_source = TargetSourceIdentity::spell_face(self, oid, face_index);
+        let target_source = TargetSourceIdentity::spell_face(self, oid, face_index, player);
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
@@ -1600,9 +1600,14 @@ impl GameEngine {
         let face_index = command.face_index as usize;
         let payment_plan = if let Some(selection) = &command.payment {
             let life = self.validate_explicit_payment(player, oid, convoke, &payment, selection)?;
-            payment.finish_explicit(&self.state, selection, life)?
+            payment.finish_explicit_with_any_color(
+                &self.state,
+                selection,
+                life,
+                self.may_spend_mana_as_any_color(player),
+            )?
         } else {
-            payment.finish(&self.state)?
+            payment.finish_with_any_color(&self.state, self.may_spend_mana_as_any_color(player))?
         };
 
         let trefs: Vec<ObjectId> = public_targets
@@ -2582,7 +2587,8 @@ impl GameEngine {
                 }
             }
         }
-        let plan = self.prepare_cost_transaction_commit(pending.plan.clone())?;
+        let (plan, permission) =
+            self.prepare_cost_transaction_commit_with_permission(pending.plan.clone())?;
         let signatures = plan
             .counter_placement_costs()
             .iter()
@@ -2598,6 +2604,16 @@ impl GameEngine {
             return Err(EngineError::Illegal(
                 "counter cost debits changed during replacement order",
             ));
+        }
+        if permission == super::payment::transaction::CostPermissionStatus::MissingAnyColor {
+            // The answer itself was valid, but its exact retained debit lost the live permission.
+            // Complete the cancellation as a logged action only after all other checks succeed.
+            self.validate_resolved_cost_counter_placements(&plan, &placements)?;
+            self.complete_activation_cost_state(replay);
+            return Ok(finish_with_events(self, vec![ev_log(format!(
+                "P{}'s activation was cancelled because the selected mana can no longer pay its cost.",
+                replay.actor,
+            ))]));
         }
         let payment = self.commit_cost_transaction_with_counter_placements(plan, placements)?;
         self.complete_activation_cost_state(replay);

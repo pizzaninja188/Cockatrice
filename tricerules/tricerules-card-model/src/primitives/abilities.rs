@@ -2860,6 +2860,12 @@ pub enum StaticAbilityDef {
         filter: TargetFilter,
         addition: TypeLineAddition,
     },
+    /// CR 105.2 / 613.1e: Mycosynth Lattice makes cards in the game, spells, and permanents
+    /// colorless. This exact unconditional scope is separate from its type and spending abilities.
+    AllCardsSpellsAndPermanentsAreColorless,
+    /// CR 609.4b: Mycosynth Lattice lets every player spend mana as though it were mana of
+    /// any color. This does not change the actual mana, true colorless costs, or restrictions.
+    AllPlayersMaySpendManaAsThoughAnyColor,
     /// CR 113.6b / 611.3 / 613.1f: while this card is in its owner's graveyard,
     /// their creatures gain the keyword if they control a land of the required subtype.
     /// Anger (Mountain/haste), Brawn (Forest/trample), and Wonder (Island/flying)

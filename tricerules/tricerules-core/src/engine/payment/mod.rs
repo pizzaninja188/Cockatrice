@@ -1019,7 +1019,19 @@ impl GameEngine {
 
     pub(super) fn can_pay_resolution_mana(&self, player: PlayerId, cost: &ManaCost) -> bool {
         self.state.player_idx(player).is_some_and(|player_idx| {
-            plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[]).is_ok()
+            mana::plan_mana_payment_with_any_color(
+                &self.state,
+                player_idx,
+                cost,
+                0,
+                0,
+                0,
+                &[],
+                &[],
+                &[],
+                self.may_spend_mana_as_any_color(player),
+            )
+            .is_ok()
         })
     }
 }

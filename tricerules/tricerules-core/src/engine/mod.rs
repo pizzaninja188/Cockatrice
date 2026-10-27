@@ -2222,7 +2222,12 @@ impl GameEngine {
         ))?;
         let life =
             self.validate_explicit_payment(player, command.object_id, false, &prepared, selection)?;
-        let plan = prepared.finish_explicit(&self.state, selection, life)?;
+        let plan = prepared.finish_explicit_with_any_color(
+            &self.state,
+            selection,
+            life,
+            self.may_spend_mana_as_any_color(player),
+        )?;
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("you do not have priority"));
         }
@@ -2296,7 +2301,12 @@ impl GameEngine {
         ))?;
         let life =
             self.validate_explicit_payment(player, command.object_id, false, &prepared, selection)?;
-        let plan = prepared.finish_explicit(&self.state, selection, life)?;
+        let plan = prepared.finish_explicit_with_any_color(
+            &self.state,
+            selection,
+            life,
+            self.may_spend_mana_as_any_color(player),
+        )?;
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("you do not have priority"));
         }

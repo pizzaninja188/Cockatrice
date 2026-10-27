@@ -69,6 +69,7 @@ fn slot(kind: i32) -> Option<usize> {
 fn residuals(
     cost: &PreparedPaymentCosts,
     selection: &rv1::PaymentSelection,
+    as_any_color: bool,
 ) -> Result<Vec<Demand>, EngineError> {
     let mut mana = mana_counts(selection.mana.as_ref());
     for r in &cost.restricted_mana {
@@ -92,7 +93,7 @@ fn residuals(
         &cost.flex_payments,
     )?
     .into_iter()
-    .filter_map(|d| d.pay(&creatures, mana))
+    .filter_map(|d| d.pay_with_any_color(&creatures, mana, as_any_color))
     .collect())
 }
 
@@ -186,7 +187,7 @@ impl GameEngine {
                 "illegal or duplicate Waterbend selection",
             ));
         }
-        residuals(costs, selection)?
+        residuals(costs, selection, self.may_spend_mana_as_any_color(player))?
             .into_iter()
             .find(Demand::complete)
             .map(|d| d.life)
@@ -385,6 +386,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("attack payment has no card source"));
         }
         selection.expected_state_revision = self.state.command_index;
+        let as_any_color = self.may_spend_mana_as_any_color(player);
         let idx = self
             .state
             .player_idx(player)
@@ -414,7 +416,7 @@ impl GameEngine {
                 && seen.insert(c.object.as_ref().map(|o| o.object_id));
             if valid {
                 selection.convoke.push(c);
-                if !residuals(&prepared, &selection)?.is_empty() {
+                if !residuals(&prepared, &selection, as_any_color)?.is_empty() {
                     continue;
                 }
                 selection.convoke.pop();
@@ -429,7 +431,7 @@ impl GameEngine {
                 && seen.insert(Some(reference.object_id))
             {
                 selection.waterbend.push(reference);
-                if !residuals(&prepared, &selection)?.is_empty() {
+                if !residuals(&prepared, &selection, as_any_color)?.is_empty() {
                     continue;
                 }
                 selection.waterbend.pop();
@@ -439,7 +441,7 @@ impl GameEngine {
         // Retain creatures first, then only remove unavailable or excess staged mana. The exact
         // resource planner also bounds restricted groups shared by multiple contributions.
         let fits = |costs: &PreparedPaymentCosts, selection: &rv1::PaymentSelection| {
-            residuals(costs, selection).is_ok_and(|demands| !demands.is_empty())
+            residuals(costs, selection, as_any_color).is_ok_and(|demands| !demands.is_empty())
                 && super::mana::plan_exact_mana_payment(
                     &self.state,
                     idx,
@@ -504,7 +506,7 @@ impl GameEngine {
                 prepared.restricted_mana.pop();
             }
         }
-        let mut remaining = residuals(&prepared, &selection)?;
+        let mut remaining = residuals(&prepared, &selection, as_any_color)?;
         let life = remaining
             .first()
             .ok_or(EngineError::Illegal("invalid payment selection"))?
@@ -546,7 +548,7 @@ impl GameEngine {
                     && self.waterbend_candidate(player, &prepared, &reference)
                 {
                     selection.waterbend.push(reference);
-                    let fits = !residuals(&prepared, &selection)?.is_empty();
+                    let fits = !residuals(&prepared, &selection, as_any_color)?.is_empty();
                     selection.waterbend.pop();
                     if fits {
                         response.candidates.push(rv1::ObjectPaymentCandidate {
@@ -570,7 +572,7 @@ impl GameEngine {
                     continue;
                 }
                 selection.convoke.push(contribution);
-                if !residuals(&prepared, &selection)?.is_empty() {
+                if !residuals(&prepared, &selection, as_any_color)?.is_empty() {
                     options.push(kind);
                 }
                 selection.convoke.pop();

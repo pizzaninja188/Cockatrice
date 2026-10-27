@@ -35,6 +35,11 @@ pub(in crate::engine) fn materialize_early_static_components(
             ContinuousEffectKind::Layer4AddTypes(addition.clone()),
             None,
         ),
+        StaticAbilityDef::AllCardsSpellsAndPermanentsAreColorless => emit(
+            AffectedScope::CardsSpellsAndPermanents,
+            ContinuousEffectKind::Layer5SetColors(Vec::new()),
+            None,
+        ),
         StaticAbilityDef::ConditionalPermanentTransformation {
             filter,
             condition,

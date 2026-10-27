@@ -161,7 +161,12 @@ impl GameEngine {
                         &costs,
                         selection,
                     )?;
-                    let plan = costs.finish_explicit(&self.state, selection, life)?;
+                    let plan = costs.finish_explicit_with_any_color(
+                        &self.state,
+                        selection,
+                        life,
+                        self.may_spend_mana_as_any_color(player),
+                    )?;
                     self.commit_cost_transaction(plan)
                 })();
                 let receipt = match result {

@@ -140,6 +140,9 @@ pub struct DiscardReceipt {
     pub cause: DiscardCause,
     /// None for an unrevealed hidden-zone destination (CR 701.9c).
     pub known_card_id: Option<String>,
+    /// Destination-incarnation color at the completed discard event, when observable.
+    /// None preserves undefined characteristics and stale or unavailable event evidence.
+    pub known_colorless: Option<bool>,
 }
 
 /// One semantic CR 701.9 discard action: every card one instruction, cost, or turn-based action
@@ -3381,6 +3384,9 @@ pub fn next_unresolved_from(resolved: &[bool], start_idx: usize) -> Option<usize
 pub enum AffectedScope {
     Single(ObjectId),
     AllCreatures,
+    /// Mycosynth Lattice's layer-five scope: cards in the game, spells, and permanents.
+    /// A token outside the battlefield and an ability on the stack are not members.
+    CardsSpellsAndPermanents,
     /// Creatures matching a creature-scope filter (CR 613) — resolved from a
     /// [`CreatureScopeFilter`] when
     /// the source's static ability fires. Evaluated dynamically each characteristics query so

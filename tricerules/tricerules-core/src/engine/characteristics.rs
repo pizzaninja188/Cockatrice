@@ -266,7 +266,7 @@ pub(super) fn spell_cast_characteristics(
     };
     let evaluator = CharacteristicsEvaluator { state, registry };
     evaluator.apply_layer_4_type(oid, &mut characteristics, &mut Vec::new());
-    evaluator.apply_layer_5_color(oid, &mut characteristics, &mut Vec::new());
+    evaluator.apply_layer_5_color(oid, &mut characteristics, &mut Vec::new(), false);
     characteristics
 }
 
@@ -306,6 +306,7 @@ pub(super) fn stack_spell_colors(
         item.id,
         &mut characteristics,
         &mut Vec::new(),
+        item.ability_text.is_none(),
     );
     Some(characteristics.colors)
 }
@@ -768,6 +769,7 @@ impl CharacteristicsEvaluator<'_> {
         oid: ObjectId,
         result: &mut Characteristics,
         started: &mut Vec<TriggerAbilityOrigin>,
+        is_explicit_spell: bool,
     ) {
         let mut effects: Vec<(usize, &ContinuousEffect)> = self
             .state
@@ -775,7 +777,17 @@ impl CharacteristicsEvaluator<'_> {
             .iter()
             .enumerate()
             .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer5SetColors(_)))
-            .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
+            .filter(|(_, effect)| {
+                if is_explicit_spell
+                    && matches!(effect.affected, AffectedScope::CardsSpellsAndPermanents)
+                {
+                    // A copied spell may still be parked for target choices and have no object or
+                    // stack entry. The explicit StackItem establishes that this recipient is a spell.
+                    global_color_source_started(self.state, self.registry, effect)
+                } else {
+                    effect_affects(self.state, self.registry, effect, oid, result)
+                }
+            })
             .filter(|(_, effect)| {
                 component_group(self.state, self.registry, effect)
                     .is_some_and(|origin| started.contains(&origin))
@@ -1655,13 +1667,23 @@ fn effect_affects_with_view(
             return false;
         }
     }
-    if !matches!(effect.affected, AffectedScope::Single(_))
-        && !state
-            .objects
-            .get(&oid)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
+    if !matches!(
+        effect.affected,
+        AffectedScope::Single(_) | AffectedScope::CardsSpellsAndPermanents
+    ) && !state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
     {
         return false;
+    }
+    if matches!(effect.affected, AffectedScope::CardsSpellsAndPermanents) {
+        // A spell or proposed face is evaluated outside the shared early world view. Ask whether
+        // this exact source ability began in layer five, rather than inheriting the separate
+        // artifact ability's layer-four start or ignoring a layer-four removal of its text.
+        if !global_color_source_started(state, registry, effect) {
+            return false;
+        }
     }
     // Resolved removal is independent of subsequent source ability loss for every duration.
     let resolved_removal = matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
@@ -1716,6 +1738,29 @@ fn effect_affects_with_view(
     effect_scope_affects(state, registry, effect, oid, characteristics)
 }
 
+fn global_color_source_started(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+) -> bool {
+    if !static_source_identity_is_current(state, registry, effect) {
+        return false;
+    }
+    let Some(origin) = component_group(state, registry, effect) else {
+        return false;
+    };
+    let Some(source) = effect.source_id else {
+        return false;
+    };
+    (CharacteristicsEvaluator { state, registry })
+        .evaluate_early_layers(source, true)
+        .is_some_and(|view| {
+            view.started
+                .get(&source)
+                .is_some_and(|started| started.contains(&origin))
+        })
+}
+
 fn effect_scope_affects(
     state: &GameState,
     registry: &'static CardRegistry,
@@ -1737,6 +1782,16 @@ fn effect_scope_affects_with_reference(
     match &effect.affected {
         AffectedScope::Single(id) => *id == oid,
         AffectedScope::AllCreatures => characteristics.is_creature(),
+        AffectedScope::CardsSpellsAndPermanents => {
+            state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Battlefield || state.is_card_object(oid))
+                || state
+                    .stack
+                    .iter()
+                    .any(|item| item.id == oid && item.ability_text.is_none())
+        }
         AffectedScope::AttachedTo(source_oid) => {
             state.objects.get(source_oid).is_some_and(|attachment| {
                 attachment.zone == Zone::Battlefield

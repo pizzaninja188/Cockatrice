@@ -2197,7 +2197,12 @@ impl GameEngine {
         {
             return Err(EngineError::Illegal("invalid attack tax payment selection"));
         }
-        let plan = prepared.finish_explicit(&self.state, selection, 0)?;
+        let plan = prepared.finish_explicit_with_any_color(
+            &self.state,
+            selection,
+            0,
+            self.may_spend_mana_as_any_color(player),
+        )?;
         let _payment = self.commit_cost_transaction(plan)?;
         self.pending_attack_declaration_internal = None;
         let pending = self.state.pending_attack_declaration.take().unwrap();

@@ -70,7 +70,12 @@ impl GameEngine {
                 &costs,
                 selection,
             )?;
-            let plan = costs.finish_explicit(&self.state, selection, life)?;
+            let plan = costs.finish_explicit_with_any_color(
+                &self.state,
+                selection,
+                life,
+                self.may_spend_mana_as_any_color(player),
+            )?;
             let amount = plan.mana_spent().ok_or(EngineError::Illegal(
                 "Join Forces payment has no mana debit",
             ))?;

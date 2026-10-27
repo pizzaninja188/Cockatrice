@@ -1242,15 +1242,21 @@ impl GameEngine {
                         {
                             continue;
                         }
-                        for receipt in batch.cards.iter().filter(|receipt| {
-                            filter.as_ref().is_none_or(|filter| {
-                                receipt
+                        for receipt in
+                            batch.cards.iter().filter(|receipt| {
+                                filter.as_ref().is_none_or(|filter| {
+                                    receipt
                                     .known_card_id
                                     .as_ref()
                                     .and_then(|id| self.registry.get(id))
-                                    .is_some_and(|card| card.matches_zone_card_filter(filter))
+                                    .is_some_and(|card| {
+                                        super::card_predicates::matches_filter_with_current_color(
+                                            card, filter, receipt.known_colorless, None,
+                                        )
+                                    })
+                                })
                             })
-                        }) {
+                        {
                             let mut occurrence = trigger.clone();
                             occurrence.trigger_context.observed_object = Some(TriggerObjectRef {
                                 object_id: receipt.object_id,
@@ -3833,6 +3839,215 @@ mod tests {
             destination: Zone::Graveyard,
             cause: crate::state::DiscardCause::Effect,
             known_card_id: None,
+            known_colorless: None,
+        }
+    }
+
+    // Actual Lattice and Waste Not, with synthetic grants only for the admitted color filters.
+    fn lattice_discard_fixture(
+        with_lattice: bool,
+    ) -> (GameEngine, ObjectId, ObjectId, ObjectId, Option<ObjectId>) {
+        let (mut engine, watcher) = trigger_limit_source();
+        let waste_not = issue_168_fixture_object(&mut engine, 0, "waste_not", Zone::Battlefield);
+        let filters = [
+            (
+                "colorless_fixture",
+                ZoneCardFilter {
+                    is_colorless: Some(true),
+                    ..Default::default()
+                },
+            ),
+            (
+                "colored_fixture",
+                ZoneCardFilter {
+                    is_colorless: Some(false),
+                    ..Default::default()
+                },
+            ),
+            (
+                "mixed_or_fixture",
+                ZoneCardFilter {
+                    any_of: Some(vec![
+                        ZoneCardFilter {
+                            exact_name: Some("Forest".into()),
+                            ..Default::default()
+                        },
+                        ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::Creature),
+                            is_colorless: Some(true),
+                            ..Default::default()
+                        },
+                    ]),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (id, filter) in filters {
+            let mut ability = engine
+                .registry
+                .get("waste_not")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .clone();
+            ability.ability_id = AbilityId::new(id).unwrap();
+            ability.presentation = AbilityPresentation::Fallback;
+            ability.trigger = TriggerCondition::WheneverPlayerDiscardsCard {
+                player: CastTriggerPlayer::Opponent,
+                filter: Some(filter),
+            };
+            engine.state.add_triggered_ability_grant(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(watcher),
+                kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+                condition: None,
+                duration: EffectDuration::Indefinite,
+                timestamp: engine.state.command_index,
+            });
+        }
+        let lattice = with_lattice.then(|| {
+            let source =
+                issue_168_fixture_object(&mut engine, 0, "mycosynth_lattice", Zone::Battlefield);
+            engine.emit_static_abilities_on_enter(source);
+            source
+        });
+        let card = engine.state.players[1].hand[0];
+        engine.state.objects.get_mut(&card).unwrap().card_id = "hill_giant".into();
+        assert_eq!(
+            engine.characteristics(card).unwrap().colors.is_empty(),
+            with_lattice
+        );
+        (engine, watcher, waste_not, card, lattice)
+    }
+
+    fn discard_to_fixture_destination(
+        engine: &mut GameEngine,
+        card: ObjectId,
+        destination: Zone,
+        revealed: bool,
+    ) -> DiscardBatch {
+        let (_, _, receipt) = engine
+            .commit_discard_to(
+                1,
+                card,
+                crate::state::DiscardCause::Effect,
+                destination,
+                revealed,
+            )
+            .expect("commit the selected fixture discard destination");
+        assert_eq!(
+            receipt.known_card_id.is_some(),
+            destination != Zone::Library || revealed
+        );
+        let batches = engine.fire_discard_batches(vec![(1, vec![receipt])], &mut Vec::new());
+        assert_eq!(batches.len(), 1);
+        batches.into_iter().next().unwrap()
+    }
+
+    fn discard_fixture_trigger_ids(
+        engine: &GameEngine,
+        batch: &DiscardBatch,
+        watcher: ObjectId,
+        waste_not: ObjectId,
+    ) -> (Vec<String>, Vec<String>) {
+        let collected = engine.collect_event_triggers(&[GameEvent::Discarded(batch.clone())]);
+        let mut granted = Vec::new();
+        let mut printed = Vec::new();
+        for trigger in collected {
+            if trigger.source_id == watcher {
+                granted.push(trigger.ability.ability_id.as_str().to_owned());
+            } else if trigger.source_id == waste_not {
+                printed.push(trigger.ability.ability_id.as_str().to_owned());
+            }
+        }
+        granted.sort();
+        printed.sort();
+        (granted, printed)
+    }
+
+    #[test]
+    fn lattice_discard_color_filters_and_waste_not_use_destination_event_colors() {
+        for with_lattice in [false, true] {
+            let (mut engine, watcher, waste_not, card, _) = lattice_discard_fixture(with_lattice);
+            let batch = discard_to_fixture_destination(&mut engine, card, Zone::Graveyard, false);
+            let (granted, printed) =
+                discard_fixture_trigger_ids(&engine, &batch, watcher, waste_not);
+            let expected = if with_lattice {
+                vec!["colorless_fixture", "mixed_or_fixture"]
+            } else {
+                vec!["colored_fixture"]
+            };
+            assert_eq!(granted, expected, "Lattice active: {with_lattice}");
+            assert_eq!(
+                printed,
+                ["triggered_01"],
+                "Waste Not still sees a creature card"
+            );
+        }
+    }
+
+    #[test]
+    fn lattice_discard_color_receipt_does_not_change_after_the_source_changes() {
+        for active_at_discard in [false, true] {
+            let (mut engine, watcher, waste_not, card, lattice) =
+                lattice_discard_fixture(active_at_discard);
+            let batch = discard_to_fixture_destination(&mut engine, card, Zone::Graveyard, false);
+            if let Some(source) = lattice {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    source,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+            } else {
+                let source = issue_168_fixture_object(
+                    &mut engine,
+                    0,
+                    "mycosynth_lattice",
+                    Zone::Battlefield,
+                );
+                engine.emit_static_abilities_on_enter(source);
+            }
+            assert_eq!(
+                engine.characteristics(card).unwrap().colors.is_empty(),
+                !active_at_discard
+            );
+            let (granted, printed) =
+                discard_fixture_trigger_ids(&engine, &batch, watcher, waste_not);
+            let expected = if active_at_discard {
+                vec!["colorless_fixture", "mixed_or_fixture"]
+            } else {
+                vec!["colored_fixture"]
+            };
+            assert_eq!(granted, expected, "color is fixed at the discard event");
+            assert_eq!(printed, ["triggered_01"]);
+        }
+    }
+
+    #[test]
+    fn lattice_discard_color_filters_preserve_hidden_and_revealed_library_destinations() {
+        for revealed in [false, true] {
+            let (mut engine, watcher, waste_not, card, _) = lattice_discard_fixture(true);
+            // Direct destination fixture for the Library of Leng replacement's two knowledge cases.
+            let batch = discard_to_fixture_destination(&mut engine, card, Zone::Library, revealed);
+            let (granted, printed) =
+                discard_fixture_trigger_ids(&engine, &batch, watcher, waste_not);
+            if revealed {
+                assert_eq!(granted, ["colorless_fixture", "mixed_or_fixture"]);
+                assert_eq!(printed, ["triggered_01"]);
+            } else {
+                assert!(
+                    granted.is_empty(),
+                    "CR 701.9c leaves hidden discard characteristics undefined"
+                );
+                assert!(
+                    printed.is_empty(),
+                    "Waste Not cannot inspect the hidden discard"
+                );
+            }
         }
     }
 

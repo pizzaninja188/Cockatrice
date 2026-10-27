@@ -179,6 +179,34 @@ impl GameEngine {
             .collect()
     }
 
+    /// Rules-changing permission is live, unlike characteristic effects which may already have
+    /// started in an earlier layer. Look for the exact static on each current battlefield source.
+    pub(super) fn may_spend_mana_as_any_color(&self, player: PlayerId) -> bool {
+        self.state
+            .player_idx(player)
+            .is_some_and(|index| !self.state.players[index].has_lost)
+            && self
+                .state
+                .objects
+                .values()
+                .filter(|object| object.zone == Zone::Battlefield)
+                .any(|object| {
+                    self.active_static_abilities(object.id)
+                        .iter()
+                        .any(|ability| {
+                            matches!(
+                                &ability.definition,
+                                StaticAbilityDef::AllPlayersMaySpendManaAsThoughAnyColor
+                            )
+                        })
+                        && super::characteristics::printed_static_source_is_available(
+                            &self.state,
+                            self.registry,
+                            object.id,
+                        )
+                })
+    }
+
     fn permanent_has_active_storied(&self, oid: ObjectId) -> bool {
         self.active_static_ability_definitions(oid)
             .iter()
@@ -727,6 +755,7 @@ impl GameEngine {
     pub(super) fn may_cast_library_top_face(
         &self,
         pid: PlayerId,
+        oid: ObjectId,
         definition: &tricerules_card_model::CardDefinition,
         face_index: usize,
     ) -> bool {
@@ -740,7 +769,15 @@ impl GameEngine {
                 else {
                     return false;
                 };
-                definition.matches_zone_card_filter_for_face(face_index, filter)
+                super::card_predicates::proposed_face_matches_filter(
+                    &self.state,
+                    self.registry,
+                    oid,
+                    pid,
+                    definition,
+                    face_index,
+                    filter,
+                )
             })
     }
 
@@ -835,7 +872,9 @@ impl GameEngine {
                     &static_ability.definition,
                 ));
             match static_ability.definition {
-                StaticAbilityDef::AddTypesToPermanents { .. } => {}
+                StaticAbilityDef::AddTypesToPermanents { .. }
+                | StaticAbilityDef::AllCardsSpellsAndPermanentsAreColorless
+                | StaticAbilityDef::AllPlayersMaySpendManaAsThoughAnyColor => {}
                 StaticAbilityDef::GrantKeywordToPermanents { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         trigger_grant_origin: None,

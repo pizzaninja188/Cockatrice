@@ -1,0 +1,28 @@
+// Oracle ae1f2ab5-c6a5-4d49-a746-3cb4668bf805.
+(
+  id: "mycosynth_lattice",
+  name: "Mycosynth Lattice",
+  face_id: "mycosynth_lattice",
+  mana_cost: "{6}",
+  types: ["Artifact"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AddTypesToPermanents(
+        filter: (kind: AnyPermanent),
+        addition: (card_types: [Artifact]),
+      ),
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([2]),
+      definition: AllCardsSpellsAndPermanentsAreColorless,
+    ),
+    (
+      ability_id: "static_03",
+      presentation: OracleLines([3]),
+      definition: AllPlayersMaySpendManaAsThoughAnyColor,
+    ),
+  ],
+)

@@ -39,6 +39,182 @@ fn object(engine: &GameEngine, card: &str) -> ObjectId {
         .expect("fixture card")
 }
 
+// Install the actual source definition through the same static emitter used by real entry.
+// The test fixture changes one existing physical object's identity before moving it.
+fn install_lattice(engine: &mut GameEngine) -> ObjectId {
+    let source = object(engine, "short_sword");
+    engine.state.objects.get_mut(&source).unwrap().card_id = "mycosynth_lattice".into();
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        source,
+        Zone::Battlefield,
+        None,
+    )
+    .expect("put Lattice on the battlefield");
+    engine.emit_static_abilities_on_enter(source);
+    source
+}
+
+#[test]
+fn lattice_zone_color_filters_and_library_top_permission_use_current_color() {
+    let mut engine = fixture();
+    let mut bears: Vec<_> = engine
+        .state
+        .objects
+        .values()
+        .filter(|object| object.owner == 0 && object.card_id == "grizzly_bears")
+        .map(|object| object.id)
+        .collect();
+    bears.sort_unstable();
+    assert_eq!(bears.len(), 3);
+    for (oid, zone) in bears
+        .iter()
+        .copied()
+        .zip([Zone::Hand, Zone::Library, Zone::Graveyard])
+    {
+        if engine.state.objects[&oid].zone != zone {
+            move_object_to_zone(&mut engine.state, engine.registry, oid, zone, None).unwrap();
+        }
+    }
+    let colorless_creature = ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Creature),
+        is_colorless: Some(true),
+        ..Default::default()
+    };
+    let disjunction = ZoneCardFilter {
+        any_of: Some(vec![
+            ZoneCardFilter {
+                exact_name: Some("Forest".into()),
+                ..Default::default()
+            },
+            colorless_creature.clone(),
+        ]),
+        ..Default::default()
+    };
+    for oid in &bears {
+        assert!(!zone_card_matches_filter(
+            &engine.state,
+            engine.registry,
+            *oid,
+            Some(&disjunction)
+        ));
+    }
+    engine.state.continuous_effects.push(ContinuousEffect {
+        source_id: None,
+        affected: AffectedScope::Player(0),
+        kind: ContinuousEffectKind::LibraryTopPermission {
+            look_at_top: true,
+            cast_filter: Some(colorless_creature.clone()),
+            play_lands: false,
+        },
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: 0,
+        trigger_grant_origin: None,
+    });
+    let bear_definition = engine.registry.get("grizzly_bears").unwrap();
+    assert!(!engine.may_cast_library_top_face(0, bears[1], bear_definition, 0));
+    install_lattice(&mut engine);
+    for oid in &bears {
+        assert!(zone_card_matches_filter(
+            &engine.state,
+            engine.registry,
+            *oid,
+            Some(&disjunction)
+        ));
+        assert!(!zone_card_matches_filter(
+            &engine.state,
+            engine.registry,
+            *oid,
+            Some(&ZoneCardFilter {
+                is_colorless: Some(false),
+                ..Default::default()
+            })
+        ));
+    }
+    assert!(engine.may_cast_library_top_face(0, bears[1], bear_definition, 0));
+}
+
+#[test]
+fn lattice_zone_color_filters_preserve_face_down_hideaway_permissions() {
+    let mut engine = fixture();
+    let hidden = object(&engine, "grizzly_bears");
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        hidden,
+        Zone::Exile,
+        None,
+    )
+    .unwrap();
+    engine.state.objects.get_mut(&hidden).unwrap().face_down = true;
+    let generation = engine
+        .state
+        .zone_change_generation
+        .get(&hidden)
+        .copied()
+        .unwrap_or(0);
+    let producer = engine
+        .registry
+        .get("mosswort_bridge")
+        .unwrap()
+        .primary_face();
+    let key = LinkedExileKey {
+        source_object_id: 900_001,
+        source_zone_change: 3,
+        producer: AbilityDefinitionId {
+            card_id: "mosswort_bridge".into(),
+            face_id: producer.face_id.clone(),
+            ability_path: vec![producer.triggered_abilities[0].ability_id.clone()],
+        },
+        ability_link_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+        occurrence: LinkedExileOccurrence::NativeOrTokenBase,
+    };
+    engine
+        .state
+        .hideaway_look_permissions
+        .insert((key.clone(), hidden, generation), BTreeSet::from([0]));
+    install_lattice(&mut engine);
+    let filter = ZoneCardFilter {
+        is_colorless: Some(true),
+        ..Default::default()
+    };
+    assert!(!zone_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        hidden,
+        Some(&filter)
+    ));
+    assert!(!card_predicates::linked_exile_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        &key,
+        1,
+        hidden,
+        generation,
+        Some(&filter)
+    ));
+    assert!(!card_predicates::linked_exile_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        &key,
+        0,
+        hidden,
+        generation + 1,
+        Some(&filter)
+    ));
+    assert!(card_predicates::linked_exile_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        &key,
+        0,
+        hidden,
+        generation,
+        Some(&filter)
+    ));
+}
+
 fn fixture_effect(effect: &str) -> SpellEffectKind {
     let card = format!(
         r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [{effect}])"#

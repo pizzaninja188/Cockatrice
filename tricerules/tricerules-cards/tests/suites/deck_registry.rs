@@ -89,6 +89,7 @@ mod deck_coverage_lotus_petal;
 mod deck_coverage_manifold_key;
 #[path = "../deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
+
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;
 #[path = "../deck_coverage_mh3_mdfcs_registry.rs"]
@@ -105,6 +106,8 @@ mod deck_coverage_mithril_coat;
 mod deck_coverage_molten_echoes;
 #[path = "../deck_coverage_mycosynth_gardens.rs"]
 mod deck_coverage_mycosynth_gardens;
+#[path = "../deck_coverage_mycosynth_lattice.rs"]
+mod deck_coverage_mycosynth_lattice;
 #[path = "../deck_coverage_myr_battlesphere.rs"]
 mod deck_coverage_myr_battlesphere;
 #[path = "../deck_coverage_myr_retriever.rs"]

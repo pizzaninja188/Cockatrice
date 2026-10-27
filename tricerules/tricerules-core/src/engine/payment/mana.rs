@@ -157,6 +157,9 @@ pub(in crate::engine) struct ManaPaymentPlan {
     pub(in crate::engine) remaining: PoolVec,
     pub(in crate::engine) life_cost: u32,
     pub(in crate::engine) restricted_spent: Vec<(u32, ManaAmount)>,
+    /// The exact debit needs a currently live as-though permission, even if another allocation
+    /// from the same pool would pay the cost without it.
+    pub(in crate::engine) requires_any_color: bool,
     expected_pool: PoolVec,
     remaining_retained_combat: PoolVec,
     expected_retained_combat: PoolVec,
@@ -378,6 +381,34 @@ pub(in crate::engine) fn plan_mana_payment_with_restricted_reduction(
     restricted_selections: &[rv1::ManaSpendSelection],
     eligible_group_ids: &[u32],
 ) -> Result<ManaPaymentPlan, EngineError> {
+    plan_mana_payment_with_any_color(
+        state,
+        player_idx,
+        cost,
+        x_value,
+        extra_generic,
+        generic_reduction,
+        flex_payments,
+        restricted_selections,
+        eligible_group_ids,
+        false,
+    )
+}
+
+/// Plan using the payer's live as-though permission; all pool entries remain actual mana.
+#[allow(clippy::too_many_arguments)]
+pub(in crate::engine) fn plan_mana_payment_with_any_color(
+    state: &GameState,
+    player_idx: usize,
+    cost: &ManaCost,
+    x_value: u32,
+    extra_generic: u32,
+    generic_reduction: u32,
+    flex_payments: &[rv1::FlexPipPayment],
+    restricted_selections: &[rv1::ManaSpendSelection],
+    eligible_group_ids: &[u32],
+    as_any_color: bool,
+) -> Result<ManaPaymentPlan, EngineError> {
     let life_pips: HashSet<usize> = flex_payments
         .iter()
         .filter(|fp| fp.pay_life)
@@ -485,18 +516,47 @@ pub(in crate::engine) fn plan_mana_payment_with_restricted_reduction(
         }
         restricted_spent.push((group_id, amount));
     }
-    for i in 0..6 {
-        if working[i] < need_color[i] {
-            return Err(EngineError::Illegal(
-                "not enough mana in pool; tap your lands first",
-            ));
-        }
-        working[i] -= need_color[i];
-    }
-    let remaining = if restricted_spent.is_empty() {
-        solve_flex(working, &flex, 0, need_generic)
+    let remaining = if as_any_color {
+        // Expand hybrid alternatives before applying generic reductions. The printed colored
+        // alternatives remain colored until after reduction, even though actual mana can pay them
+        // as any color. Prefer the least-mana valid alternative when several are available.
+        let mut demands = super::demand::normalize(
+            cost,
+            x_value,
+            extra_generic,
+            generic_reduction,
+            flex_payments,
+        )?;
+        demands.sort_by_key(|demand| demand.amounts.iter().map(|&n| u64::from(n)).sum::<u64>());
+        demands.into_iter().find_map(|demand| {
+            let mut available = working;
+            available[POOL_C] = available[POOL_C].checked_sub(demand.amounts[POOL_C])?;
+            let generic = demand
+                .amounts
+                .iter()
+                .enumerate()
+                .filter(|(slot, _)| *slot != POOL_C)
+                .try_fold(0u32, |sum, (_, amount)| sum.checked_add(*amount))?;
+            if restricted_spent.is_empty() {
+                solve_flex(available, &[], 0, generic)
+            } else {
+                solve_flex_with_required_spend(available, &[], 0, generic, unrestricted)
+            }
+        })
     } else {
-        solve_flex_with_required_spend(working, &flex, 0, need_generic, unrestricted)
+        for i in 0..6 {
+            if working[i] < need_color[i] {
+                return Err(EngineError::Illegal(
+                    "not enough mana in pool; tap your lands first",
+                ));
+            }
+            working[i] -= need_color[i];
+        }
+        if restricted_spent.is_empty() {
+            solve_flex(working, &flex, 0, need_generic)
+        } else {
+            solve_flex_with_required_spend(working, &flex, 0, need_generic, unrestricted)
+        }
     };
     let Some(remaining) = remaining else {
         return Err(EngineError::Illegal(
@@ -520,6 +580,7 @@ pub(in crate::engine) fn plan_mana_payment_with_restricted_reduction(
         remaining,
         life_cost,
         restricted_spent,
+        requires_any_color: false,
         expected_pool: unrestricted,
         remaining_retained_combat,
         expected_retained_combat,

@@ -2,6 +2,128 @@ use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1 as rv1;
 
+// Actual Lattice, Library of Leng, and Waste Not; only the color-filter observer is synthetic.
+#[test]
+fn lattice_discard_real_leng_replacement_distinguishes_hidden_and_revealed_cards() {
+    use tricerules_cards::primitives::{CastTriggerPlayer, TriggerCondition, ZoneCardFilter};
+    use tricerules_cards::{AbilityId, AbilityPresentation, ContinuousEffectKind, EffectDuration};
+    use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
+
+    for revealed in [false, true] {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            261_027_710 + u64::from(revealed),
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        advance_to_main1_from_game_start(&mut engine);
+        inject_card_into_hand(&mut engine, 0, "mycosynth_lattice");
+        move_ready_to_battlefield(&mut engine, 0, "mycosynth_lattice");
+        let waste_not = inject_permanent_on_battlefield(&mut engine, 0, "waste_not");
+        inject_card_into_hand(&mut engine, 1, "library_of_leng");
+        move_ready_to_battlefield(&mut engine, 1, "library_of_leng");
+        let mut observer = tricerules_cards::registry::global()
+            .get("waste_not")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        observer.ability_id = AbilityId::new("lattice_colorless_fixture").unwrap();
+        observer.presentation = AbilityPresentation::Fallback;
+        observer.trigger = TriggerCondition::WheneverPlayerDiscardsCard {
+            player: CastTriggerPlayer::Opponent,
+            filter: Some(ZoneCardFilter {
+                is_colorless: Some(true),
+                ..Default::default()
+            }),
+        };
+        engine.state.add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(waste_not),
+            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(observer)),
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: engine.state.command_index,
+        });
+        let creature = inject_card_into_hand(&mut engine, 1, "hill_giant");
+        let land = inject_card_into_hand(&mut engine, 1, "forest");
+        let spell = if revealed { "pilfer" } else { "mind_rot" };
+        inject_card_into_hand(&mut engine, 0, spell);
+        give_mana(
+            &mut engine,
+            0,
+            ManaGift {
+                b: 1,
+                c: if revealed { 1 } else { 2 },
+                ..Default::default()
+            },
+        );
+        let slot = hand_index_for_card(&engine, 0, spell);
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
+            .unwrap();
+        let resolution = pass_both_players_with_batch(&mut engine);
+        if revealed {
+            let offer = find_resolution_choice(&resolution).expect("Pilfer reveals the hand");
+            assert_eq!(
+                offer
+                    .public_reveal
+                    .as_ref()
+                    .map(|window| window.zone_owner_player_id),
+                Some(1)
+            );
+            let choice = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("Pilfer hand choice");
+            assert!(choice.presentation.candidates.contains(&creature));
+            engine
+                .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
+                .unwrap();
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
+                .unwrap();
+        } else {
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![creature, land]))
+                .unwrap();
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
+                .unwrap();
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
+                .unwrap();
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![land, creature]))
+                .unwrap();
+        }
+        assert_eq!(engine.state.objects[&creature].zone, Zone::Library);
+        answer_trigger_order_in_engine_order(&mut engine);
+        let mut triggered: Vec<_> = engine
+            .state
+            .stack
+            .iter()
+            .filter(|item| item.source_permanent_id == Some(waste_not))
+            .filter_map(|item| item.triggered_ability.as_ref())
+            .map(|ability| ability.ability_id.as_str().to_owned())
+            .collect();
+        triggered.sort();
+        if revealed {
+            assert_eq!(triggered, ["lattice_colorless_fixture", "triggered_01"]);
+        } else {
+            assert!(
+                triggered.is_empty(),
+                "CR 701.9c gives the hidden discards no characteristics"
+            );
+        }
+    }
+}
+
 #[test]
 fn issue_197_megrim_observes_each_discard_after_mind_rot_finishes() {
     let mut e = GameEngine::new(

@@ -398,8 +398,10 @@ impl CharacteristicsEvaluator<'_> {
                     .is_some_and(|started| started.contains(&origin));
             }
         }
-        if !matches!(effect.affected, AffectedScope::Single(_))
-            && view.projected_entrant != Some(oid)
+        if !matches!(
+            effect.affected,
+            AffectedScope::Single(_) | AffectedScope::CardsSpellsAndPermanents
+        ) && view.projected_entrant != Some(oid)
             && !self
                 .state
                 .objects
@@ -408,17 +410,20 @@ impl CharacteristicsEvaluator<'_> {
         {
             return false;
         }
-        if !effect_scope_affects_with_reference(
-            self.state,
-            self.registry,
-            effect,
-            oid,
-            &object.characteristics,
-            effect
-                .source_id
-                .and_then(|source| view.objects.get(&source))
-                .map(|source| source.characteristics.controller),
-        ) {
+        if !((matches!(effect.affected, AffectedScope::CardsSpellsAndPermanents)
+            && view.projected_entrant == Some(oid))
+            || effect_scope_affects_with_reference(
+                self.state,
+                self.registry,
+                effect,
+                oid,
+                &object.characteristics,
+                effect
+                    .source_id
+                    .and_then(|source| view.objects.get(&source))
+                    .map(|source| source.characteristics.controller),
+            ))
+        {
             return false;
         }
         let Some(condition) = effect.condition.as_ref() else {

@@ -4,8 +4,10 @@ use super::super::events::object_display_name;
 use super::super::resolution::{permanent_moved_event, sacrifice_permanents};
 use super::super::*;
 use super::components::{ObjectPaymentComponent, PermanentPaymentFilter, PlannedObjectPayment};
+#[cfg(test)]
+use super::mana::plan_mana_payment_with_restricted_reduction;
 use super::mana::{
-    commit_mana_payment, mana_payment_still_valid, plan_mana_payment_with_restricted_reduction,
+    commit_mana_payment, mana_payment_still_valid, plan_mana_payment_with_any_color,
     ManaPaymentPlan,
 };
 use super::ActivatedManaReduction;
@@ -304,6 +306,13 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
+/// Result of validating all other debits before considering a live mana permission.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::engine) enum CostPermissionStatus {
+    Available,
+    MissingAnyColor,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::engine) struct CounterPlacementCost {
     pub(in crate::engine) debit_index: usize,
@@ -414,6 +423,56 @@ pub(in crate::engine) struct PreparedPaymentCosts {
 }
 
 impl PreparedPaymentCosts {
+    /// Determine whether the exact proposed debit (including selected nonmana contributions)
+    /// could satisfy the locked cost without an as-though permission. This records dependency,
+    /// not a grant or a source, so a different live Lattice may still support a parked payment.
+    fn set_any_color_dependency(
+        &self,
+        plan: &mut ManaPaymentPlan,
+        selection: Option<&rv1::PaymentSelection>,
+    ) -> Result<(), EngineError> {
+        let actual = plan.unrestricted_spent();
+        let mut mana = [actual.w, actual.u, actual.b, actual.r, actual.g, actual.c];
+        for (_, amount) in plan.restricted_spent() {
+            for (slot, count) in [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                .into_iter()
+                .enumerate()
+            {
+                mana[slot] = mana[slot]
+                    .checked_add(count)
+                    .ok_or(EngineError::Illegal("payment overflow"))?;
+            }
+        }
+        let mut creatures = Vec::new();
+        if let Some(selection) = selection {
+            for contribution in &selection.convoke {
+                let slot = match contribution.kind {
+                    1..=5 => contribution.kind as usize - 1,
+                    6 => 6,
+                    _ => return Err(EngineError::Illegal("invalid Convoke contribution")),
+                };
+                creatures.push(slot);
+            }
+            creatures.extend(std::iter::repeat_n(6, selection.waterbend.len()));
+        }
+        let naturally_payable = super::demand::normalize(
+            &self.mana,
+            self.x_value,
+            self.extra_generic,
+            self.generic_reduction,
+            &self.flex_payments,
+        )?
+        .into_iter()
+        .any(|demand| {
+            demand.life == plan.life_cost
+                && demand
+                    .pay_with_any_color(&creatures, mana, false)
+                    .is_some_and(|remaining| remaining.complete())
+        });
+        plan.requires_any_color = !naturally_payable;
+        Ok(())
+    }
+
     pub(in crate::engine) fn total_cost_label(&self) -> Result<String, EngineError> {
         Ok(super::demand::normalize(
             &self.mana,
@@ -467,13 +526,24 @@ impl PreparedPaymentCosts {
         })
     }
 
+    #[cfg(test)]
     pub fn finish_explicit(
-        mut self,
+        self,
         state: &GameState,
         selection: &rv1::PaymentSelection,
         life: u32,
     ) -> Result<CostTransactionPlan, EngineError> {
-        let mana = super::mana::plan_exact_mana_payment(
+        self.finish_explicit_with_any_color(state, selection, life, false)
+    }
+
+    pub fn finish_explicit_with_any_color(
+        mut self,
+        state: &GameState,
+        selection: &rv1::PaymentSelection,
+        life: u32,
+        as_any_color: bool,
+    ) -> Result<CostTransactionPlan, EngineError> {
+        let mut mana = super::mana::plan_exact_mana_payment(
             state,
             self.transaction.player_idx,
             super::convoke::mana_counts(selection.mana.as_ref()),
@@ -481,6 +551,9 @@ impl PreparedPaymentCosts {
             &self.eligible_restricted_mana,
             life,
         )?;
+        if as_any_color {
+            self.set_any_color_dependency(&mut mana, Some(selection))?;
+        }
         let taps = selection
             .convoke
             .iter()
@@ -504,8 +577,17 @@ impl PreparedPaymentCosts {
         Ok(self.transaction)
     }
 
-    pub fn finish(mut self, state: &GameState) -> Result<CostTransactionPlan, EngineError> {
-        let mana = plan_mana_payment_with_restricted_reduction(
+    #[cfg(test)]
+    pub fn finish(self, state: &GameState) -> Result<CostTransactionPlan, EngineError> {
+        self.finish_with_any_color(state, false)
+    }
+
+    pub fn finish_with_any_color(
+        mut self,
+        state: &GameState,
+        as_any_color: bool,
+    ) -> Result<CostTransactionPlan, EngineError> {
+        let mut mana = plan_mana_payment_with_any_color(
             state,
             self.transaction.player_idx,
             &self.mana,
@@ -515,7 +597,11 @@ impl PreparedPaymentCosts {
             &self.flex_payments,
             &self.restricted_mana,
             &self.eligible_restricted_mana,
+            as_any_color,
         )?;
+        if as_any_color {
+            self.set_any_color_dependency(&mut mana, None)?;
+        }
         self.transaction.debits.insert(0, CostDebit::Mana(mana));
         Ok(self.transaction)
     }
@@ -774,7 +860,7 @@ impl GameEngine {
             cast_method,
             None,
         )?
-        .finish(&self.state)
+        .finish_with_any_color(&self.state, self.may_spend_mana_as_any_color(player))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1462,7 +1548,7 @@ impl GameEngine {
                 ..Default::default()
             },
         )?
-        .finish(&self.state)
+        .finish_with_any_color(&self.state, self.may_spend_mana_as_any_color(player))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2052,8 +2138,19 @@ impl GameEngine {
 
     pub(in crate::engine) fn prepare_cost_transaction_commit(
         &self,
-        mut plan: CostTransactionPlan,
+        plan: CostTransactionPlan,
     ) -> Result<CostTransactionPlan, EngineError> {
+        let (plan, permission) = self.prepare_cost_transaction_commit_with_permission(plan)?;
+        if permission == CostPermissionStatus::MissingAnyColor {
+            return Err(EngineError::Illegal("cost transaction became stale"));
+        }
+        Ok(plan)
+    }
+
+    pub(in crate::engine) fn prepare_cost_transaction_commit_with_permission(
+        &self,
+        mut plan: CostTransactionPlan,
+    ) -> Result<(CostTransactionPlan, CostPermissionStatus), EngineError> {
         let mut debits = Vec::new();
         for debit in plan.debits {
             match debit {
@@ -2069,8 +2166,8 @@ impl GameEngine {
         }
         plan.debits = debits;
         Self::order_cost_debits_for_commit(&mut plan);
-        self.revalidate_cost_transaction(&plan)?;
-        Ok(plan)
+        let permission = self.revalidate_cost_transaction(&plan)?;
+        Ok((plan, permission))
     }
 
     fn order_cost_debits_for_commit(plan: &mut CostTransactionPlan) {
@@ -2586,7 +2683,10 @@ impl GameEngine {
                 == generation
     }
 
-    fn revalidate_cost_transaction(&self, plan: &CostTransactionPlan) -> Result<(), EngineError> {
+    fn revalidate_cost_transaction(
+        &self,
+        plan: &CostTransactionPlan,
+    ) -> Result<CostPermissionStatus, EngineError> {
         if self.state.player_idx(plan.player) != Some(plan.player_idx) {
             return Err(EngineError::Illegal("cost transaction player changed"));
         }
@@ -2926,7 +3026,17 @@ impl GameEngine {
                 return Err(EngineError::Illegal("not enough counters to pay all costs"));
             }
         }
-        Ok(())
+        let requires_permission = plan
+            .debits
+            .iter()
+            .any(|debit| matches!(debit, CostDebit::Mana(mana) if mana.requires_any_color));
+        Ok(
+            if requires_permission && !self.may_spend_mana_as_any_color(plan.player) {
+                CostPermissionStatus::MissingAnyColor
+            } else {
+                CostPermissionStatus::Available
+            },
+        )
     }
 
     pub(in crate::engine) fn ability_cost_permanent_matches(

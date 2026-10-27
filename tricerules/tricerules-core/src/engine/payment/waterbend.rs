@@ -202,9 +202,14 @@ impl GameEngine {
         if let Some(selection) = selection {
             let life =
                 self.validate_explicit_payment(player, source, false, &prepared, selection)?;
-            prepared.finish_explicit(&self.state, selection, life)
+            prepared.finish_explicit_with_any_color(
+                &self.state,
+                selection,
+                life,
+                self.may_spend_mana_as_any_color(player),
+            )
         } else {
-            prepared.finish(&self.state)
+            prepared.finish_with_any_color(&self.state, self.may_spend_mana_as_any_color(player))
         }
     }
 }

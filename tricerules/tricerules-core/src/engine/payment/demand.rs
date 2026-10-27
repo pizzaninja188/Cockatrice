@@ -10,11 +10,37 @@ pub(in crate::engine) struct Demand {
 }
 
 impl Demand {
+    #[cfg(test)]
     pub fn pay(&self, creatures: &[usize], mana: [u32; 6]) -> Option<Self> {
+        self.pay_with_any_color(creatures, mana, false)
+    }
+
+    pub fn pay_with_any_color(
+        &self,
+        creatures: &[usize],
+        mana: [u32; 6],
+        as_any_color: bool,
+    ) -> Option<Self> {
         let mut result = self.clone();
         for &slot in creatures {
             let amount = result.amounts.get_mut(slot)?;
             *amount = amount.checked_sub(1)?;
+        }
+        if as_any_color {
+            // Actual colorless mana is the only resource that can satisfy {C}. Reserve it first;
+            // all remaining actual mana can satisfy colored or generic pips. Paying colored
+            // demands before generic leaves the most flexible residual for later Convoke taps.
+            let true_colorless = mana[5].min(result.amounts[5]);
+            result.amounts[5] -= true_colorless;
+            let mut remaining =
+                mana.into_iter().map(u64::from).sum::<u64>() - u64::from(true_colorless);
+            for demand in &mut result.amounts[..5] {
+                let used = remaining.min(u64::from(*demand)) as u32;
+                *demand -= used;
+                remaining -= u64::from(used);
+            }
+            result.amounts[6] = result.amounts[6].checked_sub(u32::try_from(remaining).ok()?)?;
+            return Some(result);
         }
         for (slot, amount) in mana.into_iter().enumerate() {
             let colored = amount.min(result.amounts[slot]);

@@ -81,7 +81,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     let mut t = compute_spell_targets_with_program(
                         eng,
                         p.id,
-                        TargetSourceIdentity::spell_face(eng, oid, face_index),
+                        TargetSourceIdentity::spell_face(eng, oid, face_index, p.id),
                         &face.spell_effect,
                         face.targeting.as_ref(),
                         &face.cost_modifiers,
@@ -99,7 +99,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         apply_cast_cost_target_requirements(
                             eng,
                             p.id,
-                            TargetSourceIdentity::spell_face(eng, oid, face_index),
+                            TargetSourceIdentity::spell_face(eng, oid, face_index, p.id),
                             face,
                             costs,
                             face.targeting.as_ref(),
@@ -237,7 +237,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             let mut targets = compute_spell_targets_with_program(
                 eng,
                 p.id,
-                TargetSourceIdentity::spell_face(eng, action.object_id, action.face_index as usize),
+                TargetSourceIdentity::spell_face(
+                    eng,
+                    action.object_id,
+                    action.face_index as usize,
+                    p.id,
+                ),
                 &face.spell_effect,
                 face.targeting.as_ref(),
                 &face.cost_modifiers,
@@ -251,6 +256,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         eng,
                         action.object_id,
                         action.face_index as usize,
+                        p.id,
                     ),
                     face,
                     costs,
@@ -2446,7 +2452,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                             let mut targets = compute_spell_targets_with_program(
                                 eng,
                                 pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
@@ -2455,7 +2461,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                             apply_cast_cost_target_requirements(
                                 eng,
                                 pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
                                 face,
                                 &mode_cost_choices,
                                 mode.targeting.as_ref(),
@@ -2660,7 +2666,7 @@ pub(super) fn legal_zone_cast_actions(
                             let mut targets = compute_spell_targets_with_program(
                                 eng,
                                 pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
@@ -2669,7 +2675,7 @@ pub(super) fn legal_zone_cast_actions(
                             apply_cast_cost_target_requirements(
                                 eng,
                                 pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
                                 face,
                                 &mode_cost_choices,
                                 mode.targeting.as_ref(),
@@ -2837,7 +2843,8 @@ pub(super) fn legal_zone_cast_actions(
                 prototyped: false,
             };
             if action.needs_target && face.modal_spell.is_none() {
-                let target_source = TargetSourceIdentity::spell_face(eng, object.id, face_index);
+                let target_source =
+                    TargetSourceIdentity::spell_face(eng, object.id, face_index, pid);
                 let mut targets = compute_spell_targets_with_program(
                     eng,
                     pid,
@@ -2885,7 +2892,7 @@ pub(super) fn legal_zone_cast_actions(
                         )
                         .has_targets();
                         let target_source =
-                            TargetSourceIdentity::spell_face(eng, object.id, face_index);
+                            TargetSourceIdentity::spell_face(eng, object.id, face_index, pid);
                         let mut targets = compute_spell_targets_with_program(
                             eng,
                             pid,
@@ -2991,7 +2998,7 @@ pub(super) fn legal_zone_cast_actions(
             for (face_index, face) in definition.faces_iter().enumerate() {
                 if face.is_land
                     || !definition.face_available_from_hand(face_index)
-                    || !eng.may_cast_library_top_face(pid, definition, face_index)
+                    || !eng.may_cast_library_top_face(pid, object_id, definition, face_index)
                 {
                     continue;
                 }
@@ -3074,7 +3081,7 @@ fn legal_library_top_face_cast_actions(
         prototyped: false,
     };
     if needs_target && face.modal_spell.is_none() {
-        let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
+        let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index, pid);
         let mut targets = compute_spell_targets_with_program(
             eng,
             pid,
@@ -3111,7 +3118,8 @@ fn legal_library_top_face_cast_actions(
                 let needs_target =
                     target_schema_with_program(&mode.effects, mode.targeting.as_ref(), program)
                         .has_targets();
-                let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
+                let target_source =
+                    TargetSourceIdentity::spell_face(eng, object_id, face_index, pid);
                 let mut targets = compute_spell_targets_with_program(
                     eng,
                     pid,

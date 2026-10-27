@@ -405,14 +405,28 @@ impl TargetSourceIdentity {
         }
     }
 
-    pub(super) fn spell_face(engine: &GameEngine, object_id: ObjectId, face_index: usize) -> Self {
+    pub(super) fn spell_face(
+        engine: &GameEngine,
+        object_id: ObjectId,
+        face_index: usize,
+        controller: PlayerId,
+    ) -> Self {
         let locked_qualities = engine
             .state
             .objects
             .get(&object_id)
             .and_then(|object| engine.registry.get(&object.card_id))
             .and_then(|definition| definition.face(face_index))
-            .map(|face| SourceQualities::from_values(&face.colors(), &face.types));
+            .map(|face| {
+                let values = super::characteristics::spell_cast_characteristics(
+                    &engine.state,
+                    engine.registry,
+                    object_id,
+                    controller,
+                    face,
+                );
+                SourceQualities::from_values(&values.colors, &values.types)
+            });
         Self {
             locked_qualities,
             ..Self::current(engine, object_id)
@@ -430,7 +444,28 @@ impl TargetSourceIdentity {
                 .registry
                 .get(&item.card_id)
                 .and_then(|definition| definition.face(item.face_index))
-                .map(|face| SourceQualities::from_values(&face.colors(), &face.types));
+                .and_then(|printed_face| {
+                    let prototype;
+                    let face = if item.prototyped {
+                        prototype = printed_face.prototyped_face()?;
+                        &prototype
+                    } else {
+                        printed_face
+                    };
+                    let values = super::characteristics::spell_cast_characteristics(
+                        &engine.state,
+                        engine.registry,
+                        item.id,
+                        item.controller,
+                        face,
+                    );
+                    let colors = super::characteristics::stack_spell_colors(
+                        &engine.state,
+                        engine.registry,
+                        item,
+                    )?;
+                    Some(SourceQualities::from_values(&colors, &values.types))
+                });
             Self {
                 object_id: item.id,
                 expected_zone: Zone::Stack,
@@ -602,11 +637,12 @@ pub(super) fn graveyard_target_legal(
     let Some(definition) = engine.registry.get(&obj.card_id) else {
         return false;
     };
-    if !filter
-        .card
-        .as_ref()
-        .is_none_or(|card| definition.matches_zone_card_filter(card))
-    {
+    if !super::card_predicates::zone_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        oid,
+        filter.card.as_ref(),
+    ) {
         return false;
     }
     if filter.mana_value_less_than_trigger_object {

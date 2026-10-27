@@ -176,6 +176,7 @@ impl GameEngine {
             cause,
             known_card_id: (revealed || matches!(destination, Zone::Graveyard | Zone::Exile))
                 .then_some(card_id),
+            known_colorless: None,
         };
         if destination == Zone::Exile {
             if let Some(cost) = madness {
@@ -219,9 +220,41 @@ impl GameEngine {
     /// destination zone's contents.
     pub(super) fn fire_discard_batches(
         &mut self,
-        receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>,
+        mut receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Vec<DiscardBatch> {
+        // CR 603.10: capture the destination object's color after the whole discard event and
+        // before dispatch. An unrevealed hidden destination has undefined characteristics
+        // (CR 701.9c); a stale object must not supply a later incarnation's color.
+        for (player, cards) in &mut receipts {
+            for receipt in cards {
+                let current = receipt.known_card_id.as_ref().is_some_and(|card_id| {
+                    receipt.player == *player
+                        && self
+                            .state
+                            .objects
+                            .get(&receipt.object_id)
+                            .is_some_and(|object| {
+                                object.owner == receipt.player
+                                    && object.zone == receipt.destination
+                                    && &object.card_id == card_id
+                            })
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(&receipt.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == receipt.after_generation
+                });
+                receipt.known_colorless = current
+                    .then(|| {
+                        self.characteristics(receipt.object_id)
+                            .map(|value| value.colors.is_empty())
+                    })
+                    .flatten();
+            }
+        }
         let batches = receipts
             .into_iter()
             .filter_map(|(player, cards)| {
