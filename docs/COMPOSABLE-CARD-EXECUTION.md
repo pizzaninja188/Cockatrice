@@ -75,8 +75,12 @@ bind that result to `AttachEquipment`'s creature input. The engine publishes the
 object only after entry commits; an empty library or skipped entry publishes no object, and a stale
 Equipment source makes the attach operation a no-op. Existing modifiers, equip costs, and
 presentation remain under exact owner assertions. This admits no general attachment resolver or
-new effect-list forms. The runtime has a skipped-entry path, but these three owners cannot currently
-produce an actual skipped-entry scenario, so that specific scenario evidence remains deferred.
+new effect-list forms. Prepared-state engine tests exercise the skipped-entry completion for
+all three real compiled owners: one-card completion, both two-card graveyard orders, invalid/stale
+choices, exact-incarnation face restoration, empty results, and terminal continuation. They do not
+establish legal-session reachability: these owners still cannot reach an entry-prohibition path
+through currently admitted mechanics, so that gameplay scenario remains deferred. CR 701.40f,
+701.62a, and 404.3 govern the defensive completion; CR 400.7 prevents stale-incarnation rebinding.
 No protobuf, relay, or client contract changed.
 
 Equipment attachment Programs preserve exact produced and selected objects. Kyoshi Battle Fan binds
