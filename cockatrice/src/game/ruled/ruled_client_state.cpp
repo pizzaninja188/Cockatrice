@@ -2326,6 +2326,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     stackTargetKindByStackAndTargetOid.clear();
     stackAnnotationByOid.clear();
     stackSourceOidByStackOid.clear();
+    stackSourceCapturedOidByStackOid.clear();
+    stackSourceGenerationByStackOid.clear();
     syntheticAbilityControllerPid.clear();
     syntheticAbilityFakeIds.clear();
 

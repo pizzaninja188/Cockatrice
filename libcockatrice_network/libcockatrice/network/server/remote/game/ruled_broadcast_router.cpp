@@ -34,6 +34,8 @@ void RuledBroadcastRouter::resetForNewGame()
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
     currentPublicZoneView.reset();
+    currentPriority.reset();
+    currentStackPresentations.clear();
     privateLibraryTopByPlayer.clear();
     privateLibraryTopClearPendingByPlayer.clear();
     currentLegalActionsByPlayer.clear();
@@ -148,6 +150,31 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
         }
     }
     for (const auto &event : response.batch().events()) {
+        if (event.has_priority_changed())
+            currentPriority = event.priority_changed();
+        const auto retireStack = [this](quint32 oid) {
+            currentStackPresentations.erase(
+                std::remove_if(currentStackPresentations.begin(), currentStackPresentations.end(),
+                               [oid](const auto &entry) { return entry.object_id() == oid; }),
+                currentStackPresentations.end());
+        };
+        if (event.has_phase_changed()) {
+            // An engine phase transition requires the preceding stack to be empty.
+            currentStackPresentations.clear();
+        } else if (event.has_stack_pushed()) {
+            const auto &pushed = event.stack_pushed();
+            retireStack(pushed.object_id());
+            currentStackPresentations.append(pushed);
+        } else if (event.has_stack_resolved()) {
+            retireStack(event.stack_resolved().object_id());
+        } else if (event.has_stack_object_countered()) {
+            retireStack(event.stack_object_countered().object_id());
+        } else if (event.has_stack_object_removed()) {
+            retireStack(event.stack_object_removed().object_id());
+        } else if (event.has_permanent_moved()) {
+            // Only a matching physical spell on the stack is removed by such a move.
+            retireStack(event.permanent_moved().object_id());
+        }
         if (event.has_active_public_reveal_snapshot()) {
             activePublicRevealSnapshot = event.active_public_reveal_snapshot();
         }
@@ -242,7 +269,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     const bool hasActiveReveal = activePublicRevealSnapshot && activePublicRevealSnapshot->reveals_size() > 0;
     const bool hasPrivateLibraryTop = privateLibraryTopByPlayer.contains(participant->getPlayerId());
     const bool hasPrivateLibraryTopClear = privateLibraryTopClearPendingByPlayer.contains(participant->getPlayerId());
-    const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal || hasPrivateLibraryTop || hasPrivateLibraryTopClear;
+    const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal || hasPrivateLibraryTop ||
+                                   hasPrivateLibraryTopClear || !currentStackPresentations.isEmpty();
     ruled::v1::IpcResponse snapshot;
     auto *batch = snapshot.mutable_batch();
     if (opening) {
@@ -278,12 +306,23 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         if (!batch->legal_by_player().contains(participant->getPlayerId()))
             (*batch->mutable_legal_by_player())[participant->getPlayerId()].Clear();
     }
+    if (!currentStackPresentations.isEmpty()) {
+        const auto legal = currentLegalActionsByPlayer.constFind(participant->getPlayerId());
+        if (legal != currentLegalActionsByPlayer.cend() &&
+            !batch->legal_by_player().contains(participant->getPlayerId()))
+            (*batch->mutable_legal_by_player())[participant->getPlayerId()].CopyFrom(legal.value());
+        const bool hasPriority = std::any_of(batch->events().begin(), batch->events().end(),
+                                             [](const auto &event) { return event.has_priority_changed(); });
+        // Terminal batches publish no legal entries and no priority; never revive a departed seat.
+        if (!hasPriority && currentPriority && currentLegalActionsByPlayer.contains(currentPriority->player_id()))
+            batch->add_events()->mutable_priority_changed()->CopyFrom(*currentPriority);
+    }
     if (currentResolutionPromptState)
         batch->mutable_resolution_prompt_state()->CopyFrom(*currentResolutionPromptState);
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
     const bool restoreFullIdentityMaps =
-        opening || casting ||
+        opening || casting || !currentStackPresentations.isEmpty() ||
         (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST);
     if (restoreFullIdentityMaps) {
         appendServerObjectMaps(snapshot);
@@ -302,6 +341,21 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         if (!hasFaceDownMap)
             appendFaceDownObjectMap(snapshot);
     }
+    // Maps and the latest zone view precede the complete stack replay. Any pending resolution
+    // choice follows it: a replayed copy must not clear a newer copy-target prompt.
+    const ruled::v1::RuledEventBatch prior = *batch;
+    batch->clear_events();
+    for (const auto &event : prior.events()) {
+        if (!event.has_resolution_choice_required())
+            batch->add_events()->CopyFrom(event);
+    }
+    for (const auto &pushed : currentStackPresentations)
+        batch->add_events()->mutable_stack_pushed()->CopyFrom(pushed);
+    for (const auto &event : prior.events()) {
+        if (event.has_resolution_choice_required())
+            batch->add_events()->CopyFrom(event);
+    }
+    batch->set_replace_stack_presentation(true);
     const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(*batch, participant);
     if (hasPrivateLibraryTopClear &&
         std::any_of(filtered.events().begin(), filtered.events().end(),

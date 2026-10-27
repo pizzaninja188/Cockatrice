@@ -215,10 +215,15 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
    A public reveal is mirrored separately on every participant, including observers that do not
    own the choice; authoritative batches replace or clear that exact snapshot, while local combat
    previews leave it untouched.
-2. **Trigger stack bookkeeping is not a choice.** `lastTriggerSourceOid` /
-   `lastTriggerAbilityIndex` / `lastTriggerControllerPlayerId` are recorded on **every** client,
-   because the synthetic stack card and its source arrow are built from them on seats that never
-   get to choose. Only the controller parks a choice.
+2. **Trigger choice bookkeeping is not stack identity.** `lastTriggerSourceOid` and
+   `lastTriggerAbilityIndex` describe the current trigger choice. Each ability's `StackPushed`
+   publishes its controller and optional exact battlefield source. The client tracks the source
+   occurrence, clears stale generations, and never borrows missing metadata from a previous trigger.
+   The current shared-stack host does not render a separate controller label or source arrow;
+   targeting arrows begin at the synthetic stack card. Copies take the copy path even with no card id.
+   A reconnect stack snapshot replaces tracked synthetic presentation, replays ordered synthetic
+   ability and copy entries, and restores a pending resolution choice afterward. Existing physical
+   bindings are preserved; a fresh session's physical spell stack bootstrap remains a limitation.
 3. **Session teardown is asymmetric.** `RuledSessionResetScope::All` on game stop;
    `KeepCurrentBatch` on game start, because the new session's first batch is broadcast *before*
    the `Event_GameStateChanged` that flips `game_started` — clearing it would strand the opening.

@@ -265,6 +265,7 @@ pub(in crate::engine) fn counter_move_target_pair_is_current(
 pub(super) struct TargetSourceIdentity {
     object_id: ObjectId,
     zone_change_generation: Option<u64>,
+    expected_zone: Zone,
     locked_qualities: Option<SourceQualities>,
 }
 
@@ -383,7 +384,24 @@ impl TargetSourceIdentity {
         Self {
             object_id,
             zone_change_generation: Some(zone_change_generation),
+            expected_zone: Zone::Battlefield,
             locked_qualities: None,
+        }
+    }
+
+    pub(super) fn captured_for_ability(
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        ability: &ActivatedAbilityDef,
+    ) -> Self {
+        let expected_zone = match ability.source_zone {
+            AbilitySourceZone::Battlefield => Zone::Battlefield,
+            AbilitySourceZone::Hand => Zone::Hand,
+            AbilitySourceZone::Graveyard => Zone::Graveyard,
+        };
+        Self {
+            expected_zone,
+            ..Self::captured(object_id, zone_change_generation)
         }
     }
 
@@ -403,7 +421,10 @@ impl TargetSourceIdentity {
 
     pub(super) fn for_stack_item(engine: &GameEngine, item: &StackItem) -> Self {
         if let Some(source_id) = item.source_permanent_id {
-            Self::captured(source_id, item.source_zone_change)
+            item.activated_ability.as_ref().map_or_else(
+                || Self::captured(source_id, item.source_zone_change),
+                |ability| Self::captured_for_ability(source_id, item.source_zone_change, ability),
+            )
         } else {
             let locked_qualities = engine
                 .registry
@@ -412,6 +433,7 @@ impl TargetSourceIdentity {
                 .map(|face| SourceQualities::from_values(&face.colors(), &face.types));
             Self {
                 object_id: item.id,
+                expected_zone: Zone::Stack,
                 zone_change_generation: (!item.is_copy).then(|| {
                     engine
                         .state
@@ -441,7 +463,7 @@ impl TargetSourceIdentity {
                 .state
                 .objects
                 .get(&self.object_id)
-                .is_some_and(|object| object.zone == Zone::Battlefield)
+                .is_some_and(|object| object.zone == self.expected_zone)
         {
             return engine
                 .characteristics(self.object_id)
@@ -1793,6 +1815,7 @@ fn validate_effect_targets(
         // `spell_target_legality_error`).
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+        | SpellEffectKind::CopyTriggeringActivatedAbility
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::ExileAll { .. }
@@ -2667,6 +2690,7 @@ pub(super) fn compute_spell_targets_with_program(
             program,
         },
         Some(TargetingCostAction::Spells),
+        true,
     );
     targets.targeted_cost_reduction_applications = engine.targeted_cost_reduction_applications(
         caster,
@@ -2696,6 +2720,7 @@ pub(super) fn compute_ability_targets_with_program(
             program,
         },
         Some(TargetingCostAction::ActivatedAbilities),
+        true,
     )
 }
 
@@ -2739,6 +2764,33 @@ pub(super) fn compute_ability_targets_with_context_and_program(
             program,
         },
         None,
+        true,
+    )
+}
+
+/// Retargeting a copy may retain an illegal original target. Offer each currently legal role
+/// independently; the completed target vector validates any relationships between them.
+pub(super) fn compute_copy_targets_with_context_and_program(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    trigger_context: TriggerContext,
+    program: Option<&CompiledProgram>,
+) -> rv1::SpellTargets {
+    compute_targets_with_context(
+        engine,
+        caster,
+        source,
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context,
+            program,
+        },
+        None,
+        false,
     )
 }
 
@@ -2748,6 +2800,7 @@ fn compute_targets_with_context(
     source: TargetSourceIdentity,
     target_context: TargetResolutionContext<'_>,
     targeting_cost_action: Option<TargetingCostAction>,
+    prune_unpaired_artifact_targets: bool,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
     let mut fixed_damage: u32 = 0;
@@ -2899,7 +2952,9 @@ fn compute_targets_with_context(
         .collect::<Vec<_>>();
 
     for (effect_index, effect) in target_context.effects.iter().enumerate() {
-        if !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+        if !prune_unpaired_artifact_targets
+            || !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard)
+        {
             continue;
         }
         let (first, second) = schema

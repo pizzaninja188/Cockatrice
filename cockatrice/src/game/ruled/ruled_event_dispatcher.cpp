@@ -244,6 +244,9 @@ QString resolvedStackAnnotation(const ruled::v1::StackPushed &event, const Ruled
     if (parts.isEmpty()) {
         return legacy;
     }
+    if (event.is_copy() && !parts.contains(QStringLiteral("(copy)"))) {
+        parts.append(QStringLiteral("(copy)"));
+    }
     if ((legacy.contains(QStringLiteral("X =")) || legacy == QStringLiteral("(copy)")) && !parts.contains(legacy)) {
         parts.append(legacy);
     }
@@ -701,6 +704,26 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
+    if (batch.replace_stack_presentation()) {
+        // Reconnects can reuse a client whose tracked stack is older than the relay snapshot.
+        // Retire only synthetic cards; a physical spell's binding belongs to the normal zone path.
+        const auto syntheticOids = state->syntheticAbilityFakeIds.keys();
+        for (quint32 oid : syntheticOids) {
+            host->removeSyntheticStackCard(oid);
+            // Production hosts unregister during removal; test or unavailable hosts may not.
+            if (state->syntheticAbilityFakeIds.contains(oid))
+                state->unregisterSyntheticStackCard(oid, -1);
+        }
+        state->stackOidOrder.clear();
+        state->prototypedStackOids.clear();
+        state->stackTargetsByStackOid.clear();
+        state->stackTargetKindByStackAndTargetOid.clear();
+        state->stackAnnotationByOid.clear();
+        state->stackSourceOidByStackOid.clear();
+        state->stackSourceCapturedOidByStackOid.clear();
+        state->stackSourceGenerationByStackOid.clear();
+        ctx.stackTrackingDirty = true;
+    }
     bool hasCombatPreview = false;
     bool onlyCourtesyEvents = true;
     for (const auto &event : batch.events()) {
@@ -959,6 +982,9 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     state->prototypedStackOids.clear();
     state->stackTargetsByStackOid.clear();
     state->stackTargetKindByStackAndTargetOid.clear();
+    state->stackSourceOidByStackOid.clear();
+    state->stackSourceCapturedOidByStackOid.clear();
+    state->stackSourceGenerationByStackOid.clear();
     ctx.stackTrackingDirty = true;
     if (host->currentActivePlayerId() != static_cast<int>(pc.active_player_id())) {
         host->setActivePlayerId(static_cast<int>(pc.active_player_id()));
@@ -1079,10 +1105,44 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
     const QString stackAnnotation = resolvedStackAnnotation(sp, presentationResolver);
     if (!stackAnnotation.isEmpty()) {
         state->stackAnnotationByOid.insert(sp.object_id(), stackAnnotation);
+        std::optional<RuledClientHost::TokenStackIdentity> sourceTokenIdentity;
+        if (sp.has_source_token_identity() && !sp.source_token_identity().name().empty()) {
+            const auto &published = sp.source_token_identity();
+            RuledClientHost::TokenStackIdentity identity;
+            identity.name = QString::fromStdString(published.name());
+            identity.basePt = QString::fromStdString(published.pt());
+            identity.color = QString::fromStdString(published.color());
+            identity.manaCost = QString::fromStdString(published.mana_cost());
+            identity.manaValue = published.mana_value();
+            for (const auto &keyword : published.keywords())
+                identity.keywords.append(QString::fromStdString(keyword));
+            for (const auto &abilityText : published.ability_texts())
+                identity.abilityTexts.append(QString::fromStdString(abilityText));
+            sourceTokenIdentity = std::move(identity);
+        }
+        const int abilityController = sp.has_ability_controller_player_id()
+                                          ? sp.ability_controller_player_id() : -1;
+        if (sp.card_id().empty() && sp.has_ability_source() && sp.ability_source().object_id() != 0) {
+            state->stackSourceCapturedOidByStackOid.insert(sp.object_id(), sp.ability_source().object_id());
+            state->stackSourceGenerationByStackOid.insert(sp.object_id(), sp.ability_source().zone_change_generation());
+        }
         // Abilities (no card_id) and spell copies (is_copy) both lack a physical CardItem on the
         // stack and need a synthetic one. A normal spell (non-empty card_id, not a copy) already
         // has a real card.
-        if (sp.card_id().empty()) {
+        if (sp.is_copy()) {
+            // A copy can itself be an ability and therefore have an empty card_id.
+            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget);
+            const auto srcOid = static_cast<quint32>(sp.copy_source_object_id());
+            const QString copySetName = srcOid != 0 ? host->stackCardProviderId(srcOid) : QString{};
+            const QString copyDisplayName =
+                QString::fromStdString(sp.card_display_name().empty() ? sp.description() : sp.card_display_name());
+            host->createSyntheticStackCard(sp.object_id(), copyDisplayName, abilityController, copySetName,
+                                           sourceTokenIdentity);
+            if (!sp.card_id().empty() && srcOid != 0 && !state->stackOidOrder.contains(srcOid) &&
+                state->stackTargetsByStackOid.contains(srcOid)) {
+                state->stackOidOrder.insert(1, srcOid);
+            }
+        } else if (sp.card_id().empty()) {
             // A *triggered* ability reaching the stack means its target was chosen and is no
             // longer pending. An activated ability also has an empty card_id, and must not clear
             // the prompt: paying a sacrifice cost queues a dies trigger whose prompt would then be
@@ -1091,48 +1151,8 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
                 state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
                 state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode);
             }
-            // Record the source permanent so the targeting arrow starts from it.
-            if (state->lastTriggerSourceOid != 0) {
-                state->stackSourceOidByStackOid.insert(sp.object_id(), state->lastTriggerSourceOid);
-            }
-            std::optional<RuledClientHost::TokenStackIdentity> sourceTokenIdentity;
-            if (sp.has_source_token_identity() && !sp.source_token_identity().name().empty()) {
-                const auto &published = sp.source_token_identity();
-                RuledClientHost::TokenStackIdentity identity;
-                identity.name = QString::fromStdString(published.name());
-                identity.basePt = QString::fromStdString(published.pt());
-                identity.color = QString::fromStdString(published.color());
-                identity.manaCost = QString::fromStdString(published.mana_cost());
-                identity.manaValue = published.mana_value();
-                for (const auto &keyword : published.keywords()) {
-                    identity.keywords.append(QString::fromStdString(keyword));
-                }
-                for (const auto &abilityText : published.ability_texts()) {
-                    identity.abilityTexts.append(QString::fromStdString(abilityText));
-                }
-                sourceTokenIdentity = std::move(identity);
-            }
             host->createSyntheticStackCard(sp.object_id(), QString::fromStdString(sp.description()),
-                                           state->lastTriggerControllerPlayerId, {}, sourceTokenIdentity);
-        } else if (sp.is_copy()) {
-            // The copy is being placed on the stack — any pending copy-target choice has been
-            // accepted by the engine.
-            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget);
-            // CR 707.10: a spell copy (Twincast/Fork) has no physical card; create a synthetic
-            // stack card so the copy is visible. Inherit the original spell's printing so the copy
-            // shows the same card art rather than defaulting to the newest printing.
-            const auto srcOid = static_cast<quint32>(sp.copy_source_object_id());
-            const QString copySetName = srcOid != 0 ? host->stackCardProviderId(srcOid) : QString{};
-            const QString copyDisplayName =
-                QString::fromStdString(sp.card_display_name().empty() ? sp.description() : sp.card_display_name());
-            host->createSyntheticStackCard(sp.object_id(), copyDisplayName, -1, copySetName);
-            // The StackResolved for the copy-maker (Twincast/Fork) uses counterspell cleanup logic
-            // that removes targets from stackOidOrder — but the source spell was NOT removed from
-            // the engine stack, so restore it here.
-            if (srcOid != 0 && !state->stackOidOrder.contains(srcOid) &&
-                state->stackTargetsByStackOid.contains(srcOid)) {
-                state->stackOidOrder.insert(1, srcOid);
-            }
+                                           abilityController, {}, sourceTokenIdentity);
         }
     }
     ctx.stackTrackingDirty = true;
@@ -1197,6 +1217,8 @@ void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx
     state->stackAnnotationByOid.remove(rid);
     state->prototypedStackOids.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
+    state->stackSourceCapturedOidByStackOid.remove(rid);
+    state->stackSourceGenerationByStackOid.remove(rid);
     host->removeSyntheticStackCard(rid);
     ctx.stackTrackingDirty = true;
 }
@@ -2854,6 +2876,20 @@ void RuledEventDispatcher::applyNoLegalActions(bool preserveCombatCapabilities)
 
 void RuledEventDispatcher::finishBatch(BatchContext &ctx)
 {
+    // A source OID can be reused after a zone change. Retain only the captured battlefield
+    // incarnation in current-source metadata, reconciling after each batch's ZoneView updates.
+    for (auto it = state->stackSourceCapturedOidByStackOid.cbegin();
+         it != state->stackSourceCapturedOidByStackOid.cend(); ++it) {
+        const quint32 stackOid = it.key();
+        const quint32 sourceOid = it.value();
+        const auto generation = state->stackSourceGenerationByStackOid.value(stackOid);
+        if (state->battlefieldGenerationByOid.contains(sourceOid) &&
+            state->battlefieldGenerationByOid.value(sourceOid) == generation) {
+            state->stackSourceOidByStackOid.insert(stackOid, sourceOid);
+        } else {
+            state->stackSourceOidByStackOid.remove(stackOid);
+        }
+    }
     if (ctx.preparationSnapshotSeen) {
         QVector<RuledClientHost::PreparationCopy> boundCopies;
         for (auto copy : ctx.preparationCopies) {

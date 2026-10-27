@@ -16,7 +16,7 @@ use super::resolution::{
     sacrifice_permanent, ResolutionEffect,
 };
 use super::targeting::{
-    artifact_exchange_player, capture_stack_target, compute_spell_targets_with_program,
+    artifact_exchange_player, capture_stack_target, compute_copy_targets_with_context_and_program,
     face_mode_program, face_program, target_role_legality_error, target_schema_with_program,
     TargetResolutionContext, TargetSourceIdentity,
 };

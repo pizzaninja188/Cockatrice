@@ -1820,6 +1820,8 @@ impl GameEngine {
                 chosen_mode_presentations: stack_presentation.chosen_modes,
                 chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
                 prototyped: command.prototyped,
+                ability_controller_player_id: None,
+                ability_source: None,
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
@@ -2362,7 +2364,8 @@ impl GameEngine {
 
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
-        let target_source = TargetSourceIdentity::captured(permanent_id, source_zone_change);
+        let target_source =
+            TargetSourceIdentity::captured_for_ability(permanent_id, source_zone_change, &ability);
         let program = self.program_for_activation_occurrence(&effective.occurrence);
         validate_ability_targets_with_context_and_program(
             self,
@@ -2785,6 +2788,7 @@ impl GameEngine {
                 source_label: Some(card_name.clone()),
                 activation_reveal_id,
                 primary: primary_presentation.clone(),
+                source_token_identity: source_token_identity.clone(),
                 ..Default::default()
             },
         );
@@ -2885,6 +2889,8 @@ impl GameEngine {
                 chosen_mode_presentations: vec![],
                 chosen_cast_cost_presentations: vec![],
                 prototyped: false,
+                ability_controller_player_id: Some(player),
+                ability_source: self.public_stack_ability_source(permanent_id, source_zone_change),
             })),
         });
         // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*
@@ -2896,6 +2902,13 @@ impl GameEngine {
         target_triggers.extend(
             self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed),
         );
+        target_triggers.extend(self.collect_event_triggers(&[GameEvent::AbilityActivated {
+            controller: player,
+            stack_object: StackObjectRef {
+                object_id: virtual_id,
+                zone_change_generation: None,
+            },
+        }]));
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);

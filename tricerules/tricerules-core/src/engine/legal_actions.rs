@@ -207,9 +207,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         compute_ability_targets_with_program(
                             eng,
                             p.id,
-                            TargetSourceIdentity::captured(
+                            TargetSourceIdentity::captured_for_ability(
                                 action.object_id,
                                 action.zone_change_generation,
+                                &ability,
                             ),
                             &ability.effect,
                             ability.targeting.as_ref(),

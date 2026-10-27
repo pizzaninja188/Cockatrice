@@ -1566,6 +1566,7 @@ impl GameEngine {
             .stack
             .pop()
             .ok_or(EngineError::Illegal("empty stack"))?;
+        self.refresh_captured_activated_ability(&top);
         // Bind authored program owners from this exact stack occurrence before target
         // revalidation or the stack-wide fizzle check can consume it through legacy resolution.
         let compiled_program_owners = self.compiled_resolution_program_owners(&top)?;
@@ -1999,6 +2000,7 @@ impl GameEngine {
         }
 
         self.state.stack.retain(|item| item.id != top.id);
+        self.state.captured_activated_abilities.remove(&top.id);
         let released_state_trigger = self
             .state
             .millennium_calendar_state_trigger_stack_keys
@@ -2856,6 +2858,9 @@ impl GameEngine {
         suspended_resolution.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         self.state.pending_resolution = Some(suspended_resolution);
         self.state.pending_replacement_event = suspended_replacement_event;
+        if self.refresh_parent_copy_targets_after_departure(events)? {
+            return Ok(true);
+        }
         if self.refresh_suspended_ward_payment(events)? {
             return Ok(true);
         }
@@ -4078,7 +4083,27 @@ pub(super) fn prepare_zone_move(
     {
         z = Zone::Exile;
     }
-    let last_known_characteristics = leaving_battlefield
+    // An ability can be activated from hand or graveyard and its source can leave as a cost.
+    // Capture the layered qualities at the actual departure, not from its newly changed zone.
+    let nonbattlefield_ability_source = match old_zone {
+        Some(Zone::Hand) => Some(AbilitySourceZone::Hand),
+        Some(Zone::Graveyard) => Some(AbilitySourceZone::Graveyard),
+        _ => None,
+    }
+    .is_some_and(|source_zone| {
+        state
+            .objects
+            .get(&oid)
+            .and_then(|object| registry.get(&object.card_id))
+            .is_some_and(|definition| {
+                definition.faces_iter().any(|face| {
+                    face.activated_abilities
+                        .iter()
+                        .any(|ability| ability.source_zone == source_zone)
+                })
+            })
+    });
+    let last_known_characteristics = (leaving_battlefield || nonbattlefield_ability_source)
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten();
     let copy = leaving_battlefield
@@ -4368,9 +4393,9 @@ pub(super) fn commit_zone_move(
                 .insert((oid, generation), was_tapped);
             state.last_known_tapped.insert(oid, was_tapped);
         }
-        if let Some(characteristics) = last_known_characteristics {
-            record_last_known_characteristics(state, oid, prior_generation, characteristics);
-        }
+    }
+    if let Some(characteristics) = last_known_characteristics {
+        record_last_known_characteristics(state, oid, prior_generation, characteristics);
     }
 
     // Remove from *every* player's lists, not just the owner's: `battlefield` is keyed by

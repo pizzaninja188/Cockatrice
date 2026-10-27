@@ -446,6 +446,8 @@ pub struct TriggerContext {
     pub(crate) emblem_graveyard_object: Option<TriggerObjectRef>,
     pub observed_stack_object: Option<TriggerStackObjectRef>,
     pub targeting_stack_object: Option<StackObjectRef>,
+    /// Exact virtual ability occurrence that completed its activation for this observer.
+    pub activated_stack_object: Option<StackObjectRef>,
     pub attacking_player: Option<PlayerId>,
     pub defending_player: Option<PlayerId>,
     /// The player or planeswalker this source attacked. Battles deliberately populate neither:
@@ -1617,6 +1619,8 @@ pub(crate) struct CopyTargetObjectOffer {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct CopyTargetChoiceProgress {
     pub stack: ParkedStackResolution,
+    /// The resolving copy-maker's advanced Program frame, separate from the prospective copy.
+    pub parent: Option<Box<ParkedStackResolution>>,
     pub copy_source_object_id: ObjectId,
     pub remaining: Vec<ParkedStackResolution>,
     pub occurrences: Vec<CopyTargetOccurrence>,
@@ -2324,7 +2328,9 @@ impl ResolutionContinuation {
             Self::EquipmentReceiptAttach { attachment } => Some(&attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::CopyTargets { progress, .. } => Some(&progress.stack),
+            Self::CopyTargets { progress, .. } => {
+                Some(progress.parent.as_deref().unwrap_or(&progress.stack))
+            }
             Self::CounterReplacement { stack, .. } => stack.as_ref(),
             Self::EntryCounterReplacement { resume } => match resume.as_ref() {
                 EntryCounterReplacementResume::Single { stack, .. } => Some(stack),
@@ -2396,7 +2402,12 @@ impl ResolutionContinuation {
             Self::EquipmentReceiptAttach { attachment } => Some(&mut attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&mut order.stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::CopyTargets { progress, .. } => Some(&mut progress.stack),
+            Self::CopyTargets { progress, .. } => Some(
+                progress
+                    .parent
+                    .as_deref_mut()
+                    .unwrap_or(&mut progress.stack),
+            ),
             Self::CounterReplacement { stack, .. } => stack.as_mut(),
             Self::EntryCounterReplacement { resume } => match resume.as_mut() {
                 EntryCounterReplacementResume::Single { stack, .. } => Some(stack),
@@ -3262,12 +3273,21 @@ pub struct StackPresentation {
     /// Public source label captured when an ability is activated; never reconstruct a concealed
     /// source's identity after it changes zones or turns face up while the ability is on the stack.
     pub source_label: Option<String>,
+    /// Public token identity captured at announcement, even if the source later departs.
+    pub source_token_identity: Option<tricerules_proto::ruled::v1::TokenIdentity>,
     /// Public reveal identity reserved when a staged hand ability was announced. Kept with the
     /// presentation so the pending reveal and its resulting stack item remain one occurrence.
     pub activation_reveal_id: Option<String>,
     pub primary: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_modes: Vec<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_cast_costs: Vec<tricerules_proto::ruled::v1::PresentationRef>,
+}
+
+/// Server-only last copyable state of one exact observed activated ability occurrence.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct CapturedActivatedAbility {
+    pub(crate) item: StackItem,
+    pub(crate) presentation: StackPresentation,
 }
 
 impl StackItem {
@@ -3791,6 +3811,8 @@ pub struct GameState {
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
+    /// One receipt for each activation-observing trigger, keyed by the trigger's virtual id.
+    pub(crate) captured_activated_abilities: BTreeMap<ObjectId, CapturedActivatedAbility>,
     /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.
     pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
     /// A single resolving linked-play occurrence remains open across nested cast/entry choices.

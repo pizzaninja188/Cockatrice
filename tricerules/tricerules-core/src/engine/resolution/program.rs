@@ -2632,6 +2632,19 @@ fn validate_program_unit_inputs(
     validate_program_cast_payment_import(top, compiled)?;
     if compiled
         .required_inputs
+        .contains(&ProgramRequiredInput::TriggerActivatedStackObject)
+        && (top.trigger_context.activated_stack_object.is_none()
+            || !engine
+                .state
+                .captured_activated_abilities
+                .contains_key(&top.id))
+    {
+        return Err(EngineError::ProgramInvariant(
+            "resolution program is missing its observed activated-ability receipt",
+        ));
+    }
+    if compiled
+        .required_inputs
         .contains(&ProgramRequiredInput::TriggerTargetingStackObject)
         && top.trigger_context.targeting_stack_object.is_none()
     {

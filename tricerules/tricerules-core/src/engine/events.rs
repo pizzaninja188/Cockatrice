@@ -315,6 +315,27 @@ impl GameEngine {
         batch
     }
 
+    /// Publish an ability arrow anchor only for its still-current public battlefield source.
+    pub(super) fn public_stack_ability_source(
+        &self,
+        source_id: ObjectId,
+        generation: u64,
+    ) -> Option<rv1::StackAbilitySource> {
+        let object = self.state.objects.get(&source_id)?;
+        (object.zone == Zone::Battlefield
+            && self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0)
+                == generation)
+            .then_some(rv1::StackAbilitySource {
+                object_id: source_id,
+                zone_change_generation: generation,
+            })
+    }
+
     /// Engine-owned card identity for the session: the union of all deck card ids mapped
     /// to Oracle names plus the mechanical info Servatrice needs without querying Oracle.
     /// Server-only — Servatrice strips it from client broadcasts (it enumerates decks).
@@ -1262,6 +1283,7 @@ pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> R
     let mut b = RuledEventBatch {
         payment_preview: None,
         resolution_prompt_state: None,
+        replace_stack_presentation: false,
         events,
         legal_by_player: Default::default(),
     };

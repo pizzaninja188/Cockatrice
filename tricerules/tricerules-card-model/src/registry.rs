@@ -279,6 +279,12 @@ fn compile_authored_program_owner(
             ProgramRequiredInput::TriggerTargetingStackObject => {
                 trigger.is_some_and(TriggerCondition::supplies_targeting_stack_object)
             }
+            ProgramRequiredInput::TriggerActivatedStackObject => {
+                matches!(
+                    trigger,
+                    Some(TriggerCondition::WheneverControllerActivatesNonManaAbility)
+                )
+            }
         };
         if !supplied {
             return Err(RegistryError::InvalidCard {

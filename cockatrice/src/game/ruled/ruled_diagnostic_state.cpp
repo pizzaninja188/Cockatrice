@@ -72,6 +72,8 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(stackTargetsByStackOid);
     FIELD(stackAnnotationByOid);
     FIELD(stackSourceOidByStackOid);
+    FIELD(stackSourceCapturedOidByStackOid);
+    FIELD(stackSourceGenerationByStackOid);
     FIELD(activatedAbilitiesByOid);
     FIELD(engineOidMarkedDamage);
     FIELD(engineOidBattlefieldPower);

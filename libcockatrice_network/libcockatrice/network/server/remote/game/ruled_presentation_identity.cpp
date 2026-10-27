@@ -73,7 +73,7 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        const QByteArray expected("dc084948bc9ba80e833a8de6f0fb1224bec0447c9b789291ef89d1d13cf28553");
+        const QByteArray expected("1c564af2ac3897f85414eff56d940e7d7428da601f66e007659a2b2d438b9558");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -579,6 +579,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         {"PreparationState.copy_object_id", "copy_zone_change_generation"},
         {"PrepareSpellCopyView.object_id", "zone_change_generation"},
         {"BattlefieldObject.object_id", "zone_change_generation"},
+        {"StackAbilitySource.object_id", "zone_change_generation"},
         {"PublicHandCard.object_id", "zone_change_generation"},
         {"PrivateLibraryTopView.object_id", "zone_change_generation"},
         {"FaceDownObjectMap.Entry.engine_object_id", "zone_change_generation"}

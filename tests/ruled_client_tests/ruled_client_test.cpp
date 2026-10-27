@@ -4513,6 +4513,10 @@ TEST_F(RuledClientTest, StackObjectRemovedRetiresOnlyExactSyntheticPresentation)
     departingAbility->set_description("Departing triggered ability");
     departingAbility->set_ability_annotation("Return target creature card...");
     departingAbility->set_is_triggered(true);
+    departingAbility->set_ability_controller_player_id(kLocalPlayer);
+    departingAbility->mutable_ability_source()->set_object_id(100u);
+    departingAbility->mutable_ability_source()->set_zone_change_generation(0u);
+    state->battlefieldGenerationByOid.insert(100u, 0u);
     departingAbility->mutable_targets()->Add()->set_object_id(200);
 
     auto *unrelatedAbility = pushed.add_events()->mutable_stack_pushed();
@@ -5161,6 +5165,10 @@ TEST_F(RuledClientTest, AbilityOnStackGetsASyntheticCardAndClearsThePendingTrigg
     // No card_id => an ability, which has no physical CardItem. is_triggered distinguishes a
     // *triggered* ability (this one) from an activated one; only the former retires the prompt.
     sp->set_is_triggered(true);
+    sp->set_ability_controller_player_id(kLocalPlayer);
+    sp->mutable_ability_source()->set_object_id(100u);
+    sp->mutable_ability_source()->set_zone_change_generation(0u);
+    state->battlefieldGenerationByOid.insert(100u, 0u);
     apply(push);
 
     EXPECT_FALSE(state->hasPendingTriggerTarget());
@@ -5467,6 +5475,187 @@ TEST_F(RuledClientTest, SpellCopyInheritsTheOriginalPrinting)
     ASSERT_EQ(host.createdSyntheticCards.size(), 1);
     EXPECT_EQ(host.createdSyntheticCards[0].oid, 11u);
     EXPECT_EQ(host.createdSyntheticCards[0].setName, QStringLiteral("lea"));
+}
+
+TEST_F(RuledClientTest, AbilityCopyClearsRetargetChoiceWithoutBorrowingAnUnrelatedTriggerSource)
+{
+    RuledClientState::RuledPendingChoice pending;
+    pending.kind = RuledClientState::ChoiceKind::CopyTarget;
+    pending.candidateOids = {123u};
+    stageChoiceForTest(pending);
+    state->lastTriggerSourceOid = 777u;
+    state->lastTriggerControllerPlayerId = kOpponent;
+
+    ruled::v1::RuledEventBatch batch;
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_description("Voltaic Key");
+    copy->set_ability_annotation("Untap target artifact. (copy)");
+    copy->set_is_copy(true);
+    copy->set_is_triggered(false);
+    copy->set_copy_source_object_id(900u);
+    apply(batch);
+
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    EXPECT_FALSE(state->stackSourceOidByStackOid.contains(901u));
+    ASSERT_EQ(host.createdSyntheticCards.size(), 1);
+    EXPECT_EQ(host.createdSyntheticCards[0].controllerPlayerId, -1)
+        << "without published metadata the stale trigger controller is not the copy's controller";
+}
+
+TEST_F(RuledClientTest, AbilityCopyPushDoesNotEraseTheNextCopyTargetPromptInTheSameBatch)
+{
+    RuledClientState::RuledPendingChoice old;
+    old.kind = RuledClientState::ChoiceKind::CopyTarget;
+    old.candidateOids = {123u};
+    stageChoiceForTest(old);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_description("Goblin Welder");
+    copy->set_ability_annotation("Exchange artifacts. (copy)");
+    copy->set_is_copy(true);
+    auto *next = batch.add_events()->mutable_resolution_choice_required();
+    next->set_deciding_player_id(kLocalPlayer);
+    next->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    next->set_prompt_text("Choose the next copy's target or keep the original.");
+    next->set_min(0);
+    next->set_max(1);
+    next->add_candidate_object_ids(456u);
+    next->add_candidate_card_ids("sol_ring");
+    next->add_candidate_names("Sol Ring");
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 456u));
+    EXPECT_FALSE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 123u));
+}
+
+TEST_F(RuledClientTest, AbilityCopyUsesPublishedControllerAndExactPublicSourceIncarnation)
+{
+    state->lastTriggerSourceOid = 777u;
+    state->lastTriggerControllerPlayerId = kOpponent;
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *player = view->add_per_player();
+    player->set_player_id(kLocalPlayer);
+    auto *source = player->add_battlefield_objects();
+    source->set_object_id(100u);
+    source->set_zone_change_generation(4u);
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_description("Clue");
+    copy->set_ability_annotation("Draw a card. (copy)");
+    copy->set_is_copy(true);
+    copy->set_ability_controller_player_id(kLocalPlayer);
+    copy->mutable_ability_source()->set_object_id(100u);
+    copy->mutable_ability_source()->set_zone_change_generation(4u);
+    copy->mutable_source_token_identity()->set_name("Clue");
+    apply(batch);
+    ASSERT_EQ(host.createdSyntheticCards.size(), 1);
+    EXPECT_EQ(host.createdSyntheticCards[0].controllerPlayerId, kLocalPlayer);
+    ASSERT_TRUE(host.createdSyntheticCards[0].sourceTokenIdentity.has_value());
+    EXPECT_EQ(host.createdSyntheticCards[0].sourceTokenIdentity->name, QStringLiteral("Clue"));
+    EXPECT_EQ(state->stackSourceOidByStackOid.value(901u), 100u);
+
+    // The same OID returning with a new generation is a different source occurrence.
+    ruled::v1::RuledEventBatch returned;
+    auto *returnedView = returned.add_events()->mutable_zone_view();
+    auto *returnedPlayer = returnedView->add_per_player();
+    returnedPlayer->set_player_id(kLocalPlayer);
+    auto *newSource = returnedPlayer->add_battlefield_objects();
+    newSource->set_object_id(100u);
+    newSource->set_zone_change_generation(6u);
+    apply(returned);
+    EXPECT_FALSE(state->stackSourceOidByStackOid.contains(901u));
+    EXPECT_TRUE(state->stackSourceCapturedOidByStackOid.contains(901u));
+}
+
+TEST_F(RuledClientTest, AbilityCopyWithoutPublicSourceNeverUsesStaleTriggerOrHiddenIdentity)
+{
+    state->lastTriggerSourceOid = 777u;
+    state->lastTriggerControllerPlayerId = kOpponent;
+    ruled::v1::RuledEventBatch batch;
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_description("Face-down permanent");
+    copy->set_ability_annotation("Ability (copy)");
+    copy->set_is_copy(true);
+    copy->set_ability_controller_player_id(kLocalPlayer);
+    apply(batch);
+    ASSERT_EQ(host.createdSyntheticCards.size(), 1);
+    EXPECT_EQ(host.createdSyntheticCards[0].name, QStringLiteral("Face-down permanent"));
+    EXPECT_EQ(host.createdSyntheticCards[0].controllerPlayerId, kLocalPlayer);
+    EXPECT_FALSE(state->stackSourceOidByStackOid.contains(901u));
+}
+
+TEST_F(RuledClientTest, ReconnectStackPresentationReplacesStaleAndRepeatedCopiesBeforeChoice)
+{
+    ruled::v1::RuledEventBatch old;
+    for (quint32 oid : {900u, 999u}) {
+        auto *ability = old.add_events()->mutable_stack_pushed();
+        ability->set_object_id(oid);
+        ability->set_description("Voltaic Key");
+        ability->set_ability_annotation("Untap target artifact.");
+        ability->set_ability_controller_player_id(kLocalPlayer);
+    }
+    auto *physical = old.add_events()->mutable_stack_pushed();
+    physical->set_object_id(902u);
+    physical->set_card_id("lightning_bolt");
+    physical->set_description("Lightning Bolt");
+    apply(old);
+    state->registerSyntheticStackCard(900u, 100900, kLocalPlayer);
+    state->registerSyntheticStackCard(999u, 100999, kLocalPlayer);
+    state->engineOidToCardId.insert(902u, 42);
+    state->currentPriorityPlayerId = kLocalPlayer;
+    host.priorityPlayer = kLocalPlayer;
+    ASSERT_EQ(state->getStackOidOrder(), QList<quint32>({902u, 999u, 900u}));
+
+    ruled::v1::RuledEventBatch snapshot;
+    snapshot.set_replace_stack_presentation(true);
+    snapshot.add_events()->mutable_priority_changed()->set_player_id(kOpponent);
+    snapshot.add_events()->mutable_stack_pushed()->CopyFrom(*physical);
+    for (quint32 oid : {900u, 901u}) {
+        auto *ability = snapshot.add_events()->mutable_stack_pushed();
+        ability->set_object_id(oid);
+        ability->set_description("Voltaic Key");
+        ability->set_ability_annotation("Untap target artifact.");
+        ability->set_ability_controller_player_id(kLocalPlayer);
+        ability->set_is_copy(oid == 901u);
+    }
+    auto *choice = snapshot.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    choice->set_prompt_text("Keep or change the target.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(456u);
+    choice->add_candidate_card_ids("sol_ring");
+    choice->add_candidate_names("Sol Ring");
+    apply(snapshot);
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({901u, 900u, 902u}));
+    EXPECT_TRUE(host.removedSyntheticCards.contains(999u));
+    EXPECT_FALSE(host.removedSyntheticCards.contains(902u));
+    EXPECT_EQ(state->cardIdForEngineOid(902u), 42);
+    EXPECT_EQ(state->currentPriorityPlayerId, kOpponent);
+    EXPECT_EQ(host.priorityPlayer, kOpponent);
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 456u));
+
+    state->registerSyntheticStackCard(900u, 100900, kLocalPlayer);
+    state->registerSyntheticStackCard(901u, 100901, kLocalPlayer);
+    apply(snapshot);
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({901u, 900u, 902u}));
+    EXPECT_EQ(state->cardIdForEngineOid(902u), 42);
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 456u));
+
+    state->registerSyntheticStackCard(900u, 100900, kLocalPlayer);
+    state->registerSyntheticStackCard(901u, 100901, kLocalPlayer);
+    ruled::v1::RuledEventBatch empty;
+    empty.set_replace_stack_presentation(true);
+    apply(empty);
+    EXPECT_TRUE(state->getStackOidOrder().isEmpty());
+    EXPECT_TRUE(state->stackTargetsByStackOid.isEmpty());
 }
 
 TEST_F(RuledClientTest, PendingSpellCastIsAuthoritativePerBatchState)

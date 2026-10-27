@@ -1,0 +1,30 @@
+// Oracle bbf9494c-c4bb-4d36-98fe-8387846b342e; official Commander Legends release notes.
+// CR 602.2b, 603.2 and 707.10a-c govern the activation, trigger, and copy.
+(
+  id: "rings_of_brighthearth",
+  name: "Rings of Brighthearth",
+  face_id: "rings_of_brighthearth",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverControllerActivatesNonManaAbility,
+    program: Some((body: (steps: [
+      (id: "choose_rings_payment", kind: Choose(
+        choice: "rings_payment",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_2",
+          presentation: OracleLines([1]),
+          cost: Mana("{2}"),
+          body: (steps: [
+            (id: "copy_activated_ability", kind: Perform(CopyTriggeringActivatedAbility)),
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

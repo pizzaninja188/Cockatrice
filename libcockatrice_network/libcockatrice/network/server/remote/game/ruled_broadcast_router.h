@@ -9,6 +9,7 @@
 
 #include <QHash>
 #include <QSet>
+#include <QVector>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
 
@@ -53,6 +54,11 @@ private:
     // reconnect. The fail-closed redactor removes each transaction for every other participant.
     ruled::v1::RuledEventBatch pendingAnnouncementState;
     std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
+    // The last public priority event is retained independently of per-seat legal offers.
+    std::optional<ruled::v1::PriorityChanged> currentPriority;
+    // Engine-published live stack presentations, in bottom-to-top order. They carry no private
+    // legal actions or physical card bindings and are redacted/projected for each reconnect.
+    QVector<ruled::v1::StackPushed> currentStackPresentations;
     // Latest engine-authorized top identity per player. It is never copied into the shared
     // public reconnect cache; redactBatchForParticipant restores only the matching recipient.
     QHash<int, ruled::v1::PrivateLibraryTopView> privateLibraryTopByPlayer;

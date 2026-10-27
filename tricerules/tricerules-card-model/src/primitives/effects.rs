@@ -1338,6 +1338,9 @@ pub enum SpellEffectKind {
     CounterTriggeringStackObjectUnlessPays {
         cost: ResolutionCost,
     },
+    /// Copy the exact nonmana activated ability that caused the owning trigger. Rings of
+    /// Brighthearth and Locus of Enlightenment use this resultless trigger-only instruction.
+    CopyTriggeringActivatedAbility,
     /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
     /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
     /// ceases to exist after it resolves (CR 707.10d). The copy uses the original's chosen modes,
@@ -3844,6 +3847,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+            | SpellEffectKind::CopyTriggeringActivatedAbility
             | SpellEffectKind::RevealCohort
             | SpellEffectKind::MoveCohortPartition { .. }
             | SpellEffectKind::ShuffleLibrary { .. }
@@ -4159,6 +4163,15 @@ impl SpellEffectKind {
             return Err(
                 "CounterTriggeringStackObjectUnlessPays in a legacy effect list requires an authored Program"
                     .into(),
+            );
+        }
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, SpellEffectKind::CopyTriggeringActivatedAbility)
+            })
+        }) {
+            return Err(
+                "CopyTriggeringActivatedAbility requires an authored trigger Program".into(),
             );
         }
         if effects

@@ -235,6 +235,7 @@ impl GameEngine {
                         let mut b = RuledEventBatch {
                             payment_preview: None,
                             resolution_prompt_state: None,
+                            replace_stack_presentation: false,
                             events,
                             legal_by_player: Default::default(),
                         };
@@ -304,6 +305,7 @@ impl GameEngine {
         let mut b = RuledEventBatch {
             payment_preview: None,
             resolution_prompt_state: None,
+            replace_stack_presentation: false,
             events,
             legal_by_player: Default::default(),
         };

@@ -196,6 +196,13 @@ impl GameEngine {
                     // when this exact saved continuation is restored.
                     return None;
                 }
+                if matches!(&pending.continuation,
+                    ResolutionContinuation::CopyTargets { progress, .. } if progress.parent.is_some())
+                {
+                    // The independent return must restore the entire begun copy transaction.
+                    // Its parent still owns the in-flight operation and exact prior result.
+                    return None;
+                }
                 let stack = pending.continuation.stack()?;
                 let discard = match &pending.continuation {
                     ResolutionContinuation::PlayerSetDiscard { discard, .. } => Some(discard),
@@ -481,6 +488,13 @@ impl GameEngine {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
                     // can route the occurrence to a legal delegate or its Otherwise block.
+                    preserve = true;
+                }
+                ResolutionContinuation::CopyTargets { progress, .. }
+                    if progress.parent.is_some() =>
+                {
+                    // The parent has begun resolving. After departed objects and control effects
+                    // are removed, retire an unavailable copy or refresh its surviving chooser.
                     preserve = true;
                 }
                 ResolutionContinuation::OptionalTriggeredAbility { .. } => {
@@ -781,6 +795,17 @@ impl GameEngine {
         }
         removed_stack_object_ids.sort_unstable();
         removed_stack_object_ids.dedup();
+        let departing_items = self
+            .state
+            .stack
+            .iter()
+            .filter(|item| owned.contains(&item.id) || item.controller == player)
+            .cloned()
+            .collect::<Vec<_>>();
+        for item in &departing_items {
+            self.refresh_captured_activated_ability(item);
+            self.state.captured_activated_abilities.remove(&item.id);
+        }
         self.state
             .stack
             .retain(|item| !owned.contains(&item.id) && item.controller != player);
@@ -827,6 +852,7 @@ impl GameEngine {
             .map(|player| player.id)
             .collect();
         let mut discarded_cohorts = Vec::new();
+        let mut discarded_activation_receipts = Vec::new();
         for observer in &self.state.active_event_observers {
             if let EventObserverPayload::StageDelayedTrigger(trigger) = &observer.payload {
                 if !live_players.contains(&trigger.controller)
@@ -847,6 +873,7 @@ impl GameEngine {
             .flat_map(|group| &group.triggers)
         {
             if !live_players.contains(&trigger.controller) {
+                discarded_activation_receipts.push(trigger.object_id);
                 discarded_cohorts.extend(observed_token_cohort_key(
                     &trigger.ability,
                     trigger.trigger_context,
@@ -856,6 +883,7 @@ impl GameEngine {
         if let Some(order) = self.state.pending_trigger_order.as_ref() {
             for trigger in &order.candidates {
                 if !live_players.contains(&trigger.controller) {
+                    discarded_activation_receipts.push(trigger.object_id);
                     discarded_cohorts.extend(observed_token_cohort_key(
                         &trigger.ability,
                         trigger.trigger_context,
@@ -865,6 +893,7 @@ impl GameEngine {
         }
         for trigger in &self.state.pending_triggers {
             if !live_players.contains(&trigger.controller) {
+                discarded_activation_receipts.push(trigger.object_id);
                 discarded_cohorts.extend(observed_token_cohort_key(
                     &trigger.ability,
                     trigger.trigger_context,
@@ -873,6 +902,9 @@ impl GameEngine {
         }
         for key in discarded_cohorts {
             self.state.observed_object_cohorts.remove(&key);
+        }
+        for id in discarded_activation_receipts {
+            self.state.captured_activated_abilities.remove(&id);
         }
         self.state
             .active_event_observers
@@ -1036,6 +1068,7 @@ impl GameEngine {
         for id in stranded {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
+        self.refresh_parent_copy_targets_after_departure(events)?;
         let observer_return_parked = self.drain_immediate_observer_actions(None, events)?;
         self.reconcile_departed_special_cast_resolution(events)?;
         if self.state.turn_step == TurnStep::DeclareBlockers
@@ -1297,6 +1330,7 @@ impl GameEngine {
             let mut batch = RuledEventBatch {
                 payment_preview: None,
                 resolution_prompt_state: None,
+                replace_stack_presentation: false,
                 events: ev,
                 legal_by_player: Default::default(),
             };

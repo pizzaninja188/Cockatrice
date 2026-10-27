@@ -29,6 +29,9 @@ mod deck_coverage_flux_abundance;
 #[path = "scenario/deck_coverage_daretti.rs"]
 mod deck_coverage_daretti;
 
+#[path = "scenario/deck_coverage_rings_of_brighthearth.rs"]
+mod deck_coverage_rings_of_brighthearth;
+
 #[path = "scenario/deck_coverage_combustible_gearhulk.rs"]
 mod deck_coverage_combustible_gearhulk;
 

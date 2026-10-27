@@ -630,6 +630,8 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    engine.refresh_captured_activated_ability(&st);
+    engine.state.captured_activated_abilities.remove(&target_id);
     engine
         .state
         .millennium_calendar_state_trigger_stack_keys
@@ -736,6 +738,132 @@ pub(super) fn counter_target_ability(
             controller_at_event: countered.controller,
         });
     }
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn copy_triggering_activated_ability(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let reference =
+        cx.top
+            .trigger_context
+            .activated_stack_object
+            .ok_or(EngineError::ProgramInvariant(
+                "copy trigger lacks an activated-ability occurrence",
+            ))?;
+    // The parent Program can resume after a copy-target prompt and must still prove its input.
+    // Its normal stack-exit path, rather than the copy operation, retires this receipt.
+    let receipt = cx
+        .engine
+        .state
+        .captured_activated_abilities
+        .get(&cx.top.id)
+        .cloned()
+        .ok_or(EngineError::ProgramInvariant(
+            "copy trigger lacks its activated-ability receipt",
+        ))?;
+    if reference.zone_change_generation.is_some() || reference.object_id != receipt.item.id {
+        return Err(EngineError::ProgramInvariant(
+            "copy trigger receipt identity mismatch",
+        ));
+    }
+    let live = cx.engine.state.stack.iter().find(|item| {
+        item.id == reference.object_id && !item.is_copy && item.activated_ability.is_some()
+    });
+    let original = live.cloned().unwrap_or(receipt.item);
+    let presentation = live
+        .and_then(|item| cx.engine.state.stack_presentations.get(&item.id))
+        .cloned()
+        .unwrap_or(receipt.presentation);
+    let copy_id = cx.engine.state.next_object_id;
+    cx.engine.state.next_object_id += 1;
+    let mut copy = original.clone();
+    copy.id = copy_id;
+    copy.controller = cx.controller;
+    copy.is_copy = true;
+    copy.mana_colors_spent_to_cast = Default::default();
+    copy.cast_condition_results.clear();
+    copy.cast_occurrence = None;
+    copy.cast_by = None;
+    copy.exiled_cohorts.clear();
+    copy.chaos_warp_owner_instructions.clear();
+    copy.resolution_branch_choices.clear();
+    cx.engine
+        .state
+        .stack_presentations
+        .insert(copy_id, presentation.clone());
+
+    if !copy.targets.is_empty()
+        || copy
+            .chosen_modes
+            .iter()
+            .any(|mode| !mode.targets.is_empty())
+    {
+        let parent = Box::new(cx.parked_stack());
+        cx.engine.begin_copy_target_choices(
+            vec![ParkedStackResolution::new(copy)],
+            original.id,
+            Some(parent),
+            cx.events,
+        )?;
+        return Ok(EffectOutcome::Suspended);
+    }
+
+    let description = presentation
+        .source_label
+        .clone()
+        .unwrap_or_else(|| "Ability".to_string());
+    let annotation = copy
+        .ability_text
+        .as_ref()
+        .map(|text| format!("{text} (copy)"))
+        .unwrap_or_else(|| "(copy)".to_string());
+    let ability_source = copy.source_permanent_id.and_then(|source_id| {
+        cx.engine
+            .public_stack_ability_source(source_id, copy.source_zone_change)
+    });
+    cx.engine.state.stack.push(copy);
+    cx.engine.state.passes_since_stack_change = 0;
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+            object_id: copy_id,
+            description: description.clone(),
+            targets: Vec::new(),
+            ability_annotation: annotation,
+            card_id: String::new(),
+            card_display_name: String::new(),
+            is_prepare_spell: false,
+            is_copy: true,
+            is_triggered: false,
+            copy_source_object_id: original.id,
+            chosen_mode_indices: Vec::new(),
+            chosen_mode_labels: Vec::new(),
+            chosen_cast_cost_labels: Vec::new(),
+            source_token_identity: presentation.source_token_identity,
+            primary_presentation: presentation.primary,
+            chosen_mode_presentations: presentation.chosen_modes,
+            chosen_cast_cost_presentations: presentation.chosen_cast_costs,
+            prototyped: false,
+            ability_controller_player_id: Some(cx.controller),
+            ability_source,
+        })),
+    });
+    cx.events.push(ev_log(format!(
+        "{} copies {description} (P{})",
+        cx.spell_label, cx.controller
+    )));
+    cx.engine.fire_triggers(
+        &[GameEvent::TargetsChosen {
+            controller: cx.controller,
+            source: TargetingSourceKind::Ability,
+            stack_object: StackObjectRef {
+                object_id: copy_id,
+                zone_change_generation: None,
+            },
+            targets: Vec::new(),
+        }],
+        cx.events,
+    );
     Ok(EffectOutcome::Continue)
 }
 
@@ -920,6 +1048,8 @@ pub(super) fn copy_target_spell(
                         chosen_mode_presentations: copy_presentation.chosen_modes,
                         chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
                         prototyped: src.prototyped,
+                        ability_controller_player_id: None,
+                        ability_source: None,
                     })),
                 });
                 events.push(ev_log(format!(
@@ -940,7 +1070,7 @@ pub(super) fn copy_target_spell(
             }
         }
         if !target_choice_copies.is_empty() {
-            engine.begin_copy_target_choices(target_choice_copies, src.id, events)?;
+            engine.begin_copy_target_choices(target_choice_copies, src.id, None, events)?;
         }
     }
 

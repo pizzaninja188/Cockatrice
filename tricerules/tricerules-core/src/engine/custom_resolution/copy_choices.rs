@@ -1,6 +1,95 @@
 use super::*;
 
+type CopyTargetData<'a> = (
+    &'a [SpellEffectKind],
+    Option<&'a tricerules_card_model::primitives::TargetingDef>,
+    Option<&'a tricerules_card_model::primitives::CompiledProgram>,
+);
+
 impl GameEngine {
+    /// Reconcile a begun Program's pending ability copy only after departed objects and control
+    /// effects have been removed. An unavailable copy never reaches the stack; its exact parent
+    /// still finishes. A surviving chooser gets fresh offers and keeps every valid changed prefix.
+    pub(in crate::engine) fn refresh_parent_copy_targets_after_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::CopyTargets { progress, .. } = &pending.continuation else {
+            return Ok(false);
+        };
+        if progress.parent.is_none() {
+            return Ok(false);
+        }
+        let mut progress = progress.clone();
+        if progress.selected_targets.len() != progress.cursor
+            || progress.cursor >= progress.occurrences.len()
+        {
+            return Err(EngineError::ProgramInvariant(
+                "copy target progress is inconsistent",
+            ));
+        }
+        let controller_left = self
+            .state
+            .player_idx(progress.stack.item.controller)
+            .is_none_or(|index| self.state.players[index].has_lost);
+        if controller_left {
+            // The sole parent-bearing producer is the one-copy activated-ability operation.
+            // Fail closed if another producer ever queues a surviving player's copy here.
+            if progress.remaining.iter().any(|copy| {
+                self.state
+                    .player_idx(copy.item.controller)
+                    .is_some_and(|index| !self.state.players[index].has_lost)
+            }) {
+                return Err(EngineError::ProgramInvariant(
+                    "copy queue contains a surviving controller",
+                ));
+            }
+            // Suspend the whole transaction under an independently owed observer return. This
+            // preserves both the parent's prior result and the distinct resultless completion;
+            // restoration re-enters this reconciliation after that return has finished.
+            if self.drain_immediate_observer_actions(None, events)? {
+                return Ok(true);
+            }
+            self.state.pending_resolution = None;
+            self.state
+                .stack_presentations
+                .remove(&progress.stack.item.id);
+            for copy in &progress.remaining {
+                self.state.stack_presentations.remove(&copy.item.id);
+            }
+            let parent = *progress.parent.take().expect("parent was checked above");
+            let completed = self.complete_parked_stack_with_previous(
+                parent,
+                EffectResult::default(),
+                std::mem::take(events),
+            )?;
+            *events = completed.events;
+            return Ok(true);
+        }
+
+        let invalid_changed_prefix = progress
+            .selected_targets
+            .iter()
+            .zip(&progress.occurrences)
+            .any(|(target, occurrence)| {
+                !same_copy_target_identity(target, &occurrence.original)
+                    && self
+                        .validate_copy_target_occurrence(&progress.stack.item, occurrence, target)
+                        .is_err()
+            });
+        if invalid_changed_prefix {
+            progress.cursor = 0;
+            progress.selected_targets.clear();
+        }
+        // The previous offer can contain departed objects even if its accepted prefix is valid.
+        self.state.pending_resolution = None;
+        self.publish_copy_target_occurrence(progress, events)?;
+        Ok(true)
+    }
+
     /// Queue target selection for copied spells one at a time. Every copy gets its own CR
     /// 707.10c choice, and the next prompt is installed before target-chosen triggers are fired so
     /// priority cannot appear between copies.
@@ -8,6 +97,7 @@ impl GameEngine {
         &mut self,
         copies: Vec<ParkedStackResolution>,
         copy_source_object_id: ObjectId,
+        parent: Option<Box<ParkedStackResolution>>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let mut copies = copies.into_iter();
@@ -23,6 +113,7 @@ impl GameEngine {
         self.publish_copy_target_occurrence(
             CopyTargetChoiceProgress {
                 stack,
+                parent,
                 copy_source_object_id,
                 remaining: copies.collect(),
                 occurrences,
@@ -111,12 +202,19 @@ impl GameEngine {
                     .unwrap_or_else(|| "[object]".to_string())
             })
             .collect();
-        let copied_name = self
-            .registry
-            .get(&progress.stack.item.card_id)
-            .and_then(|definition| definition.face(progress.stack.item.face_index))
-            .map(|face| face.name.to_string())
-            .unwrap_or_else(|| progress.stack.item.card_id.clone());
+        let copied_name = if progress.stack.item.activated_ability.is_some() {
+            self.state
+                .stack_presentations
+                .get(&progress.stack.item.id)
+                .and_then(|presentation| presentation.source_label.clone())
+                .unwrap_or_else(|| "Ability".to_string())
+        } else {
+            self.registry
+                .get(&progress.stack.item.card_id)
+                .and_then(|definition| definition.face(progress.stack.item.face_index))
+                .map(|face| face.name.to_string())
+                .unwrap_or_else(|| progress.stack.item.card_id.clone())
+        };
         let mode_label = progress
             .occurrences
             .get(progress.cursor)
@@ -188,43 +286,69 @@ impl GameEngine {
         Ok(())
     }
 
-    fn copy_target_group(
-        &self,
-        item: &StackItem,
-        occurrence: &CopyTargetOccurrence,
-    ) -> Result<rv1::LegalTargetGroup, EngineError> {
+    fn copy_target_data<'a>(
+        &'a self,
+        item: &'a StackItem,
+        mode_id: Option<&tricerules_card_model::ModeId>,
+    ) -> Result<CopyTargetData<'a>, EngineError> {
+        if let Some(ability) = item.activated_ability.as_ref() {
+            if mode_id.is_some() {
+                return Err(EngineError::ProgramInvariant(
+                    "activated abilities do not support modal target owners",
+                ));
+            }
+            let program = item
+                .ability_program_owner()
+                .and_then(|owner| self.registry.compiled_program_for_owner(&owner));
+            return Ok((&ability.effect, ability.targeting.as_ref(), program));
+        }
         let face = self
             .registry
             .get(&item.card_id)
             .and_then(|definition| definition.face(item.face_index))
             .ok_or(EngineError::Illegal("copied spell face no longer exists"))?;
-        let source = TargetSourceIdentity::for_stack_item(self, item);
-        let targets = if let Some(mode_id) = &occurrence.mode_id {
+        if let Some(mode_id) = mode_id {
             let mode = face
                 .modal_spell
                 .as_ref()
                 .and_then(|modal| modal.mode_by_id(mode_id))
                 .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
-            compute_spell_targets_with_program(
-                self,
-                item.controller,
-                source,
+            Ok((
                 &mode.effects,
                 mode.targeting.as_ref(),
-                &[],
                 face_mode_program(self, &item.card_id, &face.face_id, &mode.mode_id),
-            )
+            ))
         } else {
-            compute_spell_targets_with_program(
-                self,
-                item.controller,
-                source,
+            Ok((
                 &face.spell_effect,
                 face.targeting.as_ref(),
-                &[],
                 face_program(self, &item.card_id, &face.face_id),
-            )
+            ))
+        }
+    }
+
+    fn copy_target_group(
+        &self,
+        item: &StackItem,
+        occurrence: &CopyTargetOccurrence,
+    ) -> Result<rv1::LegalTargetGroup, EngineError> {
+        let (effects, targeting, program) =
+            self.copy_target_data(item, occurrence.mode_id.as_ref())?;
+        let source = TargetSourceIdentity::for_stack_item(self, item);
+        let trigger_context = if item.activated_ability.is_some() {
+            item.trigger_context
+        } else {
+            TriggerContext::default()
         };
+        let targets = compute_copy_targets_with_context_and_program(
+            self,
+            item.controller,
+            source,
+            effects,
+            targeting,
+            trigger_context,
+            program,
+        );
         targets
             .groups
             .into_iter()
@@ -385,6 +509,7 @@ impl GameEngine {
             progress.copy_source_object_id,
             progress.remaining,
             progress.selected_targets,
+            progress.parent,
         )
     }
 
@@ -394,29 +519,9 @@ impl GameEngine {
         occurrence: &CopyTargetOccurrence,
         target: &StackTarget,
     ) -> Result<(), EngineError> {
-        let face = self
-            .registry
-            .get(&item.card_id)
-            .and_then(|definition| definition.face(item.face_index))
-            .ok_or(EngineError::Illegal("copied spell face no longer exists"))?;
-        let schema = if let Some(mode_id) = &occurrence.mode_id {
-            let mode = face
-                .modal_spell
-                .as_ref()
-                .and_then(|modal| modal.mode_by_id(mode_id))
-                .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
-            target_schema_with_program(
-                &mode.effects,
-                mode.targeting.as_ref(),
-                face_mode_program(self, &item.card_id, &face.face_id, &mode.mode_id),
-            )
-        } else {
-            target_schema_with_program(
-                &face.spell_effect,
-                face.targeting.as_ref(),
-                face_program(self, &item.card_id, &face.face_id),
-            )
-        };
+        let (effects, targeting, program) =
+            self.copy_target_data(item, occurrence.mode_id.as_ref())?;
+        let schema = target_schema_with_program(effects, targeting, program);
         let group = schema.groups.get(occurrence.group_index as usize).ok_or(
             EngineError::ProgramInvariant(
                 "copy target occurrence references an unknown target group",
@@ -440,7 +545,7 @@ impl GameEngine {
                 target.object_id,
                 item.controller,
                 source,
-                TriggerContext::default(),
+                item.trigger_context,
             )?;
         }
         Ok(())
@@ -457,11 +562,6 @@ impl GameEngine {
                 "wrong number of copied target occurrences",
             ));
         }
-        let face = self
-            .registry
-            .get(&item.card_id)
-            .and_then(|definition| definition.face(item.face_index))
-            .ok_or(EngineError::Illegal("copied spell face no longer exists"))?;
         let mut mode_ids = Vec::<Option<tricerules_card_model::ModeId>>::new();
         for occurrence in occurrences {
             if !mode_ids.contains(&occurrence.mode_id) {
@@ -469,24 +569,7 @@ impl GameEngine {
             }
         }
         for mode_id in mode_ids {
-            let (effects, targeting, program) = if let Some(mode_id) = &mode_id {
-                let mode = face
-                    .modal_spell
-                    .as_ref()
-                    .and_then(|modal| modal.mode_by_id(mode_id))
-                    .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
-                (
-                    mode.effects.as_slice(),
-                    mode.targeting.as_ref(),
-                    face_mode_program(self, &item.card_id, &face.face_id, &mode.mode_id),
-                )
-            } else {
-                (
-                    face.spell_effect.as_slice(),
-                    face.targeting.as_ref(),
-                    face_program(self, &item.card_id, &face.face_id),
-                )
-            };
+            let (effects, targeting, program) = self.copy_target_data(item, mode_id.as_ref())?;
             let schema = target_schema_with_program(effects, targeting, program);
             let owner_occurrences = occurrences
                 .iter()
@@ -566,14 +649,46 @@ impl GameEngine {
                     target_for_group(departure_group),
                     target_for_group(incoming_group),
                 ) {
-                    if copy_target_is_current(self, departure)
-                        && copy_target_is_current(self, incoming)
-                        && artifact_exchange_player(self, departure.object_id, incoming.object_id)
-                            .is_none()
-                    {
-                        return Err(EngineError::Illegal(
-                            "artifact targets must belong to the same player",
-                        ));
+                    // CR 115.7d permits retaining an already-illegal original pair. A current
+                    // graveyard target in a changed pair must match the battlefield target's
+                    // controller, including the departed target's exact-incarnation LKI.
+                    let pair_changed = owner_occurrences.iter().any(|(index, occurrence)| {
+                        (occurrence.group_index as usize == departure_group
+                            || occurrence.group_index as usize == incoming_group)
+                            && !same_copy_target_identity(&selected[*index], &occurrence.original)
+                    });
+                    if pair_changed && copy_target_is_current(self, incoming) {
+                        let compatible = if copy_target_is_current(self, departure) {
+                            artifact_exchange_player(self, departure.object_id, incoming.object_id)
+                                .is_some()
+                        } else {
+                            let controller =
+                                departure.zone_change_generation.and_then(|generation| {
+                                    self.state
+                                        .last_known_controller_by_generation
+                                        .get(&(departure.object_id, generation))
+                                        .copied()
+                                });
+                            let graveyard_owner = self
+                                .state
+                                .objects
+                                .get(&incoming.object_id)
+                                .filter(|object| object.zone == Zone::Graveyard)
+                                .map(|object| object.owner);
+                            controller
+                                .zip(graveyard_owner)
+                                .is_some_and(|(controller, owner)| {
+                                    controller == owner
+                                        && self.state.player_idx(controller).is_some_and(|index| {
+                                            !self.state.players[index].has_lost
+                                        })
+                                })
+                        };
+                        if !compatible {
+                            return Err(EngineError::Illegal(
+                                "artifact targets must belong to the same player",
+                            ));
+                        }
                     }
                 }
             }
@@ -601,6 +716,7 @@ impl GameEngine {
         copy_source_object_id: ObjectId,
         remaining: Vec<ParkedStackResolution>,
         selected_targets: Vec<StackTarget>,
+        parent: Option<Box<ParkedStackResolution>>,
     ) -> Result<RuledEventBatch, EngineError> {
         let copy_id = stack.item.id;
         let card_id = stack.item.card_id.clone();
@@ -608,6 +724,19 @@ impl GameEngine {
         let controller = stack.item.controller;
         let prototyped = stack.item.prototyped;
         let mut copy_item = stack.item;
+        let is_ability = copy_item.activated_ability.is_some();
+        let ability_source = if is_ability {
+            copy_item.source_permanent_id.and_then(|source_id| {
+                self.public_stack_ability_source(source_id, copy_item.source_zone_change)
+            })
+        } else {
+            None
+        };
+        let ability_annotation = copy_item
+            .ability_text
+            .clone()
+            .map(|text| format!("{text} (copy)"))
+            .unwrap_or_else(|| "(copy)".to_string());
         if copy_item.chosen_modes.is_empty() {
             copy_item.targets = selected_targets.clone();
         } else {
@@ -626,12 +755,19 @@ impl GameEngine {
             }
         }
 
-        let copied_name = self
-            .registry
-            .get(&card_id)
-            .and_then(|d| d.face(face_index))
-            .map(|f| f.name.to_string())
-            .unwrap_or_else(|| card_id.clone());
+        let copied_name = if is_ability {
+            self.state
+                .stack_presentations
+                .get(&copy_id)
+                .and_then(|presentation| presentation.source_label.clone())
+                .unwrap_or_else(|| "Ability".to_string())
+        } else {
+            self.registry
+                .get(&card_id)
+                .and_then(|d| d.face(face_index))
+                .map(|f| f.name.to_string())
+                .unwrap_or_else(|| card_id.clone())
+        };
 
         let selected_targets: Vec<_> = if copy_item.chosen_modes.is_empty() {
             copy_item.targets.to_vec()
@@ -711,29 +847,39 @@ impl GameEngine {
                     object_id: copy_id,
                     description: copied_name.clone(),
                     targets: published_targets,
-                    ability_annotation: "(copy)".to_string(),
-                    card_id: card_id.clone(),
-                    card_display_name: self
-                        .registry
-                        .get(&card_id)
-                        .and_then(|definition| definition.face_display_name(face_index))
-                        .unwrap_or(&copied_name)
-                        .to_string(),
-                    is_prepare_spell: self
-                        .registry
-                        .get(&card_id)
-                        .is_some_and(|d| d.layout == Layout::Preparation && face_index == 1),
+                    ability_annotation,
+                    card_id: if is_ability {
+                        String::new()
+                    } else {
+                        card_id.clone()
+                    },
+                    card_display_name: if is_ability {
+                        String::new()
+                    } else {
+                        self.registry
+                            .get(&card_id)
+                            .and_then(|definition| definition.face_display_name(face_index))
+                            .unwrap_or(&copied_name)
+                            .to_string()
+                    },
+                    is_prepare_spell: !is_ability
+                        && self
+                            .registry
+                            .get(&card_id)
+                            .is_some_and(|d| d.layout == Layout::Preparation && face_index == 1),
                     is_copy: true,
                     is_triggered: false,
                     copy_source_object_id,
                     chosen_mode_indices,
                     chosen_mode_labels,
                     chosen_cast_cost_labels,
-                    source_token_identity: None,
+                    source_token_identity: copy_presentation.source_token_identity,
                     primary_presentation: copy_presentation.primary,
                     chosen_mode_presentations: copy_presentation.chosen_modes,
                     chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
                     prototyped,
+                    ability_controller_player_id: is_ability.then_some(controller),
+                    ability_source,
                 })),
             },
             ev_log(format!(
@@ -743,12 +889,34 @@ impl GameEngine {
 
         let has_remaining = !remaining.is_empty();
         if has_remaining {
-            self.begin_copy_target_choices(remaining, copy_source_object_id, &mut ev)?;
+            self.begin_copy_target_choices(remaining, copy_source_object_id, parent, &mut ev)?;
+        } else if let Some(parent) = parent {
+            self.fire_triggers(
+                &[GameEvent::TargetsChosen {
+                    controller,
+                    source: if is_ability {
+                        TargetingSourceKind::Ability
+                    } else {
+                        TargetingSourceKind::SpellCopy
+                    },
+                    stack_object: StackObjectRef {
+                        object_id: copy_id,
+                        zone_change_generation: None,
+                    },
+                    targets: event_targets,
+                }],
+                &mut ev,
+            );
+            return self.complete_parked_stack_with_previous(*parent, EffectResult::default(), ev);
         }
         self.fire_triggers(
             &[GameEvent::TargetsChosen {
                 controller,
-                source: TargetingSourceKind::SpellCopy,
+                source: if is_ability {
+                    TargetingSourceKind::Ability
+                } else {
+                    TargetingSourceKind::SpellCopy
+                },
                 stack_object: StackObjectRef {
                     object_id: copy_id,
                     zone_change_generation: None,

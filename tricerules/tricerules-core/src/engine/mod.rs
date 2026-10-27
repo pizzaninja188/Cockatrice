@@ -1241,6 +1241,11 @@ enum GameEvent {
     SpellCast {
         fact: crate::state::SpellCastFact,
     },
+    /// CR 602.2b: all costs of this nonmana ability have committed and it is on the stack.
+    AbilityActivated {
+        controller: PlayerId,
+        stack_object: StackObjectRef,
+    },
     /// CR 700.14: one committed spell mana debit. No protocol event or client spending ledger.
     ManaSpentCastingSpell {
         player: PlayerId,
@@ -1874,6 +1879,7 @@ impl GameEngine {
             prepared_permanents: Default::default(),
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),
+            captured_activated_abilities: Default::default(),
             linked_exile_records: Default::default(),
             pending_linked_exile_play: None,
             hideaway_look_permissions: Default::default(),

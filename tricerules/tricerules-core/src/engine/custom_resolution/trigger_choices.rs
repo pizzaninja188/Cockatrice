@@ -231,6 +231,7 @@ impl GameEngine {
             virtual_id,
             StackPresentation {
                 source_label: Some(card_name.clone()),
+                source_token_identity: None,
                 activation_reveal_id: None,
                 primary: primary_presentation.clone(),
                 chosen_modes: chosen_mode_presentations.clone(),
@@ -305,6 +306,8 @@ impl GameEngine {
                 chosen_mode_presentations,
                 chosen_cast_cost_presentations: vec![],
                 prototyped: false,
+                ability_controller_player_id: Some(controller),
+                ability_source: self.public_stack_ability_source(source_id, source_zone_change),
             })),
         });
 

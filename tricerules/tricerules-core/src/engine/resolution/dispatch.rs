@@ -199,6 +199,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CopyTargetSpell { .. } => {
             stack_ops::copy_target_spell(cx, effect)?
         }
+        SpellEffectKind::CopyTriggeringActivatedAbility => {
+            stack_ops::copy_triggering_activated_ability(cx)?
+        }
         effect @ SpellEffectKind::CopyTargetArtifactWithManaValueX { .. } => {
             misc::copy_target_artifact_with_mana_value_x(cx, effect)?
         }

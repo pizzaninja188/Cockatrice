@@ -679,6 +679,9 @@ pub enum TriggerCondition {
     /// controller is that active player and at least one of their permanents actually untapped.
     /// The completed action's successful untap count is available as `Amount::EventCount`.
     WheneverControllerUntapsOneOrMorePermanents,
+    /// Rings of Brighthearth and Locus of Enlightenment observe a completed activation controlled
+    /// by this ability's controller. Mana abilities do not use this event (CR 605.1a).
+    WheneverControllerActivatesNonManaAbility,
     /// The Millennium Calendar's CR 603.8 state trigger. This is checked from current rules state,
     /// not collected from a discrete counter-placement event, and its original ability is
     /// suppressed until it resolves, is countered, or otherwise leaves the stack.

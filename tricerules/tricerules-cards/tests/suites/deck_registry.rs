@@ -125,6 +125,8 @@ mod deck_coverage_prosperity;
 mod deck_coverage_quicksmith_genius;
 #[path = "../deck_coverage_rangers_guile.rs"]
 mod deck_coverage_rangers_guile;
+#[path = "../deck_coverage_rings_of_brighthearth.rs"]
+mod deck_coverage_rings_of_brighthearth;
 #[path = "../deck_coverage_sakura_tribe_elder.rs"]
 mod deck_coverage_sakura_tribe_elder;
 #[path = "../deck_coverage_scavenger_grounds.rs"]

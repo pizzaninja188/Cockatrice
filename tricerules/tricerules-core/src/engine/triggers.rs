@@ -72,6 +72,26 @@ fn trigger_ability_path(
 }
 
 impl GameEngine {
+    /// Freeze the latest copyable values before an observed activated ability leaves the stack.
+    /// Each observing trigger owns a distinct receipt; a still-live original takes precedence.
+    pub(super) fn refresh_captured_activated_ability(&mut self, item: &StackItem) {
+        if item.is_copy || item.activated_ability.is_none() {
+            return;
+        }
+        let presentation = self
+            .state
+            .stack_presentations
+            .get(&item.id)
+            .cloned()
+            .unwrap_or_default();
+        for receipt in self.state.captured_activated_abilities.values_mut() {
+            if receipt.item.id == item.id {
+                receipt.item = item.clone();
+                receipt.presentation = presentation.clone();
+            }
+        }
+    }
+
     fn trigger_public_presentation(
         &self,
         source_id: ObjectId,
@@ -562,7 +582,9 @@ impl GameEngine {
             let event_sources = match event {
                 // CR 603.6a: an entrant is observed by the battlefield after this event,
                 // never by permanents that departed in the same simultaneous instruction.
-                GameEvent::EntersBattlefield { .. } => &post_event_sources,
+                GameEvent::EntersBattlefield { .. } | GameEvent::AbilityActivated { .. } => {
+                    &post_event_sources
+                }
                 GameEvent::BecameTapped { action, .. } => &action.sources,
                 GameEvent::LeavesBattlefield { source }
                 | GameEvent::Dies { source, .. }
@@ -810,6 +832,27 @@ impl GameEngine {
                         .captured_spell_copies
                         .insert(object_id, *snapshot);
                 }
+                if let Some(reference) = trigger.trigger_context.activated_stack_object {
+                    if let Some(item) = self.state.stack.iter().find(|item| {
+                        item.id == reference.object_id
+                            && reference.zone_change_generation.is_none()
+                            && !item.is_copy
+                            && item.activated_ability.is_some()
+                    }) {
+                        self.state.captured_activated_abilities.insert(
+                            object_id,
+                            crate::state::CapturedActivatedAbility {
+                                item: item.clone(),
+                                presentation: self
+                                    .state
+                                    .stack_presentations
+                                    .get(&item.id)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                            },
+                        );
+                    }
+                }
                 let card_name = trigger.source_label;
                 let may = trigger.ability.may;
                 let presentation = trigger.presentation;
@@ -1038,6 +1081,25 @@ impl GameEngine {
     ) -> Vec<CollectedTrigger> {
         match event {
             GameEvent::ZoneChanges(batch) => self.collect_zone_triggers(batch),
+            GameEvent::AbilityActivated {
+                controller,
+                stack_object,
+            } => sources
+                .iter()
+                .filter(|source| source.controller == *controller)
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        matches!(
+                            condition,
+                            TriggerCondition::WheneverControllerActivatesNonManaAbility
+                        )
+                    })
+                })
+                .map(|mut trigger| {
+                    trigger.trigger_context.activated_stack_object = Some(*stack_object);
+                    trigger
+                })
+                .collect(),
             // The completed operation is available for Blight observers; this delivery adds
             // payment consumers, not a new authored observer condition.
             GameEvent::Proliferated { player } => sources
@@ -3043,6 +3105,7 @@ impl GameEngine {
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::SpellCast { fact } => Some(fact.caster),
+            GameEvent::AbilityActivated { controller, .. } => Some(*controller),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
         }
@@ -3329,6 +3392,8 @@ impl GameEngine {
                     chosen_mode_presentations: vec![],
                     chosen_cast_cost_presentations: vec![],
                     prototyped: false,
+                    ability_controller_player_id: Some(controller),
+                    ability_source: self.public_stack_ability_source(source_id, source_zone_change),
                 })),
             });
             events.push(ev_log_ability(

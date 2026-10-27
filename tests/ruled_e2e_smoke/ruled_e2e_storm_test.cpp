@@ -316,4 +316,236 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     ASSERT_EQ(secondCopy->targets_size(), 1);
     EXPECT_EQ(secondCopy->targets(0).object_id(), giant->oid);
 }
+TEST_F(RuledE2ESmokeTest, RingsCopiesAnActivatedAbilityWithPublicSourceAndRetargeting)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    StormDriver p1(true, QStringLiteral("ringsp1"), &transcript);
+    StormDriver p2(false, QStringLiteral("ringsp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Rings start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Rings start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](StormDriver &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        placement->set_ready(true);
+        return send(p1, command, QStringLiteral("put %1").arg(name));
+    };
+    auto pass = [&](StormDriver &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(sender, command, QStringLiteral("pass Rings interaction"));
+    };
+
+    ASSERT_TRUE(put("Rings of Brighthearth"));
+    ASSERT_TRUE(put("Voltaic Key"));
+    ASSERT_TRUE(put("Sol Ring"));
+    ASSERT_TRUE(put("Mind Stone"));
+    const auto key = permanent(p1, p1.myId, QStringLiteral("voltaic_key"));
+    const auto ring = permanent(p1, p1.myId, QStringLiteral("sol_ring"));
+    const auto stone = permanent(p1, p1.myId, QStringLiteral("mind_stone"));
+    ASSERT_TRUE(key && ring && stone);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(key->oid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(key->oid));
+    const int keyPhysicalId = p1.serverCardByEngineOid.at(key->oid);
+    ASSERT_EQ(p2.serverCardByEngineOid.at(key->oid), keyPhysicalId);
+
+    for (const auto &source : {*ring, *stone}) {
+        ruled::v1::RuledCommand mana;
+        p1.setBattlefieldAbilitySource(mana.mutable_activate_ability(), source.oid);
+        mana.mutable_activate_ability()->set_ability_index(0);
+        ASSERT_TRUE(send(p1, mana, QStringLiteral("tap artifact for mana")));
+    }
+    ASSERT_EQ(p1.myPool.c, 3);
+    ASSERT_EQ(p1.stackDepth, 0) << "mana abilities must not trigger Rings";
+    auto ringState = permanent(p1, p1.myId, QStringLiteral("sol_ring"));
+    auto stoneState = permanent(p1, p1.myId, QStringLiteral("mind_stone"));
+    ASSERT_TRUE(ringState && stoneState);
+    ASSERT_TRUE(ringState->tapped);
+    ASSERT_TRUE(stoneState->tapped);
+
+    const auto abilityKey = static_cast<quint64>(key->oid) << 32;
+    const auto offered = p1.latestLegal.valid_targets_by_ability().find(abilityKey);
+    ASSERT_NE(offered, p1.latestLegal.valid_targets_by_ability().end());
+    ASSERT_EQ(offered->second.groups_size(), 1);
+    const auto &group = offered->second.groups(0);
+    ASSERT_NE(std::find(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end(), ring->oid),
+              group.valid_permanent_ids().end());
+
+    ruled::v1::RuledCommand previewKey;
+    auto *keyPreview = previewKey.mutable_preview_payment();
+    keyPreview->set_transaction_id(26102701);
+    keyPreview->set_revision(1);
+    auto *keyActivation = keyPreview->mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(keyActivation, key->oid);
+    keyActivation->set_ability_index(0);
+    auto *target = keyActivation->add_targets();
+    target->set_object_id(ring->oid);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target->set_group_index(group.group_index());
+    keyActivation->mutable_payment()->mutable_mana()->set_c(1);
+    const int previewsBeforeKey = p1.paymentPreviewCount;
+    const int observerPreviewsBeforeKey = p2.paymentPreviewCount;
+    p1.sendRuled(previewKey, QStringLiteral("preview Key payment"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount > previewsBeforeKey; }, 10000, "Key payment preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviewsBeforeKey);
+    ruled::v1::RuledCommand activate;
+    *activate.mutable_activate_ability() = *keyActivation;
+    *activate.mutable_activate_ability()->mutable_payment() = p1.paymentPreview.selection();
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("activate Voltaic Key")));
+    ASSERT_EQ(p1.myPool.c, 2);
+    ASSERT_EQ(p1.stackDepth, 2);
+    const auto original = std::find_if(p1.stackPushes.rbegin(), p1.stackPushes.rend(), [&](const auto &push) {
+        return !push.is_copy() && !push.is_triggered() && push.card_id().empty() && push.has_ability_source() &&
+               push.ability_source().object_id() == key->oid;
+    });
+    ASSERT_NE(original, p1.stackPushes.rend());
+    const quint32 originalOid = original->object_id();
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    EXPECT_FALSE(p2.pendingChoice);
+    ruled::v1::RuledCommand branch;
+    branch.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, branch, QStringLiteral("choose Rings payment")));
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    ASSERT_EQ(p1.pendingChoice->generic_mana_cost(), 2u);
+    ASSERT_NE(p1.pendingChoice->resolution_prompt_id(), 0u);
+    EXPECT_FALSE(p2.pendingChoice);
+
+    ruled::v1::RuledCommand previewRings;
+    auto *ringsPreview = previewRings.mutable_preview_payment();
+    ringsPreview->set_transaction_id(26102702);
+    ringsPreview->set_revision(1);
+    auto *paymentChoice = ringsPreview->mutable_resolution_choice();
+    paymentChoice->set_resolution_prompt_id(p1.pendingChoice->resolution_prompt_id());
+    paymentChoice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    paymentChoice->mutable_payment()->mutable_mana()->set_c(2);
+    const int previewsBeforeRings = p1.paymentPreviewCount;
+    const int observerPreviewsBeforeRings = p2.paymentPreviewCount;
+    p1.sendRuled(previewRings, QStringLiteral("preview Rings payment"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount > previewsBeforeRings; }, 10000,
+                             "Rings payment preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviewsBeforeRings);
+    ruled::v1::RuledCommand pay;
+    *pay.mutable_submit_resolution_choice() = *paymentChoice;
+    *pay.mutable_submit_resolution_choice()->mutable_payment() = p1.paymentPreview.selection();
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, pay, QStringLiteral("pay Rings {2}")));
+    ASSERT_EQ(p1.myPool.c, 0);
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    ASSERT_NE(std::find(p1.pendingChoice->candidate_object_ids().begin(),
+                        p1.pendingChoice->candidate_object_ids().end(), stone->oid),
+              p1.pendingChoice->candidate_object_ids().end());
+    EXPECT_FALSE(p2.pendingChoice);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->resolution_prompt_id(), 0u);
+
+    ruled::v1::RuledCommand retarget;
+    retarget.mutable_submit_resolution_choice()->add_chosen_object_ids(stone->oid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, retarget, QStringLiteral("retarget Key copy to Mind Stone")));
+    const auto copy = std::find_if(p1.stackPushes.rbegin(), p1.stackPushes.rend(),
+                                   [](const auto &push) { return push.is_copy() && push.card_id().empty(); });
+    ASSERT_NE(copy, p1.stackPushes.rend());
+    const auto observedCopy = std::find_if(p2.stackPushes.rbegin(), p2.stackPushes.rend(),
+                                           [&](const auto &push) { return push.object_id() == copy->object_id(); });
+    ASSERT_NE(observedCopy, p2.stackPushes.rend());
+    EXPECT_EQ(copy->SerializeAsString(), observedCopy->SerializeAsString());
+    EXPECT_EQ(copy->copy_source_object_id(), originalOid);
+    ASSERT_TRUE(copy->has_ability_controller_player_id());
+    EXPECT_EQ(copy->ability_controller_player_id(), p1.myId);
+    ASSERT_TRUE(copy->has_ability_source());
+    EXPECT_EQ(copy->ability_source().object_id(), key->oid);
+    EXPECT_EQ(copy->ability_source().zone_change_generation(), key->generation);
+    ASSERT_EQ(copy->targets_size(), 1);
+    EXPECT_EQ(copy->targets(0).object_id(), stone->oid);
+    EXPECT_FALSE(p1.serverCardByEngineOid.count(copy->object_id()));
+    EXPECT_FALSE(p2.serverCardByEngineOid.count(copy->object_id()));
+    EXPECT_EQ(p1.serverCardByEngineOid.at(key->oid), keyPhysicalId);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(key->oid), keyPhysicalId);
+    ASSERT_EQ(p1.stackDepth, 2);
+    ASSERT_EQ(p2.stackDepth, 2);
+
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    stoneState = permanent(p1, p1.myId, QStringLiteral("mind_stone"));
+    ringState = permanent(p1, p1.myId, QStringLiteral("sol_ring"));
+    auto observerStone = permanent(p2, p1.myId, QStringLiteral("mind_stone"));
+    auto observerRing = permanent(p2, p1.myId, QStringLiteral("sol_ring"));
+    ASSERT_TRUE(stoneState && ringState);
+    ASSERT_TRUE(observerStone && observerRing);
+    EXPECT_FALSE(stoneState->tapped);
+    EXPECT_TRUE(ringState->tapped);
+    EXPECT_FALSE(observerStone->tapped);
+    EXPECT_TRUE(observerRing->tapped);
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ringState = permanent(p1, p1.myId, QStringLiteral("sol_ring"));
+    const auto keyState = permanent(p1, p1.myId, QStringLiteral("voltaic_key"));
+    observerRing = permanent(p2, p1.myId, QStringLiteral("sol_ring"));
+    const auto observerKey = permanent(p2, p1.myId, QStringLiteral("voltaic_key"));
+    ASSERT_TRUE(ringState && keyState);
+    ASSERT_TRUE(observerRing && observerKey);
+    EXPECT_FALSE(ringState->tapped);
+    EXPECT_TRUE(keyState->tapped);
+    EXPECT_FALSE(observerRing->tapped);
+    EXPECT_TRUE(observerKey->tapped);
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p2.stackDepth, 0);
+}
 } // namespace ruled_e2e

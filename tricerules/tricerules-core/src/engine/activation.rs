@@ -222,9 +222,10 @@ impl GameEngine {
         compute_ability_targets_with_program(
             self,
             pending.actor_player_id,
-            TargetSourceIdentity::captured(
+            TargetSourceIdentity::captured_for_ability(
                 pending.source_object_id,
                 pending.source_zone_change_generation,
+                ability,
             ),
             &ability.effect,
             ability.targeting.as_ref(),
@@ -622,9 +623,10 @@ impl GameEngine {
                 super::targeting::validate_ability_targets_with_context_and_program(
                     self,
                     pending.actor_player_id,
-                    TargetSourceIdentity::captured(
+                    TargetSourceIdentity::captured_for_ability(
                         pending.source_object_id,
                         pending.source_zone_change_generation,
+                        ability,
                     ),
                     &targets,
                     TargetResolutionContext {

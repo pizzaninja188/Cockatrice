@@ -108,6 +108,8 @@ pub enum ProgramRequiredInput {
     /// Exact spell or ability reference that chose a permanent carrying a Ward ability. The
     /// captured identity remains present even when that stack object has since left the stack.
     TriggerTargetingStackObject,
+    /// Exact activated-ability occurrence observed by the owning nonmana activation trigger.
+    TriggerActivatedStackObject,
 }
 
 impl ProgramOwnerId {
@@ -2600,6 +2602,13 @@ impl Compiler<'_> {
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerTargetingStackObject);
+                    }
+                    if matches!(
+                        effect.as_ref(),
+                        SpellEffectKind::CopyTriggeringActivatedAbility
+                    ) {
+                        self.required_inputs
+                            .insert(ProgramRequiredInput::TriggerActivatedStackObject);
                     }
                     if matches!(
                         effect.as_ref(),
@@ -5689,6 +5698,13 @@ fn validate_and_result_types(
             effect.validate(context)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::CopyTriggeringActivatedAbility if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::CopyTriggeringActivatedAbility => Err(
+            "CopyTriggeringActivatedAbility requires an ability-owned trigger Program".into(),
+        ),
         SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => {
             if context != EffectContext::Ability {
                 return Err(

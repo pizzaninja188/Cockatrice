@@ -1012,13 +1012,15 @@ public:
     }
     // Stack ability engine ObjectId -> ability annotation text (empty string for spells).
     QHash<quint32, QString> stackAnnotationByOid;
-    // Maps trigger stack OID → source permanent OID, for drawing the ability arrow from the source.
+    // Stack ability OID -> source OID while the captured occurrence is still on the battlefield.
     QHash<quint32, quint32> stackSourceOidByStackOid;
+    // Engine-published source occurrence and generation, retained for diagnostics and validation.
+    QHash<quint32, quint32> stackSourceCapturedOidByStackOid;
+    QHash<quint32, quint64> stackSourceGenerationByStackOid;
     // Virtual engine ObjectId -> fake server card ID used for the synthetic card's OID mapping.
     // Re-registered after every BattlefieldObjectMap clear so the italic annotation stays visible.
     QHash<quint32, int> syntheticAbilityFakeIds;
-    // Virtual engine ObjectId -> controller player ID for the synthetic ability card.
-    // The controller's zone is where the card lives; needed for OID-map registration and removal.
+    // Virtual engine ObjectId -> shared stack zone player ID, for OID-map registration and removal.
     QHash<quint32, int> syntheticAbilityControllerPid;
 
     // -----------------------------------------------------------------------------------

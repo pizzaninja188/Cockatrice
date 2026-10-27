@@ -645,6 +645,9 @@ message RuledEventBatch {
   // Final actionable custom-resolution status after this batch. Present on accepted gameplay,
   // initial, reconnect, and terminal batches; standalone payment-preview replies omit it.
   ResolutionPromptState resolution_prompt_state = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // The relay's reconnect presentation contains a complete ordered replay of the current stack.
+  // Clients replace tracked stack presentation before applying its events, even when it is empty.
+  bool replace_stack_presentation = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Authoritative final status of the engine's single parked resolution choice. The public active
@@ -1912,6 +1915,12 @@ message PriorityChanged {
   int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
+// Public, exact battlefield source incarnation for an ability on the stack.
+message StackAbilitySource {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 message StackPushed {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string description = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
@@ -1932,9 +1941,7 @@ message StackPushed {
   // triggered ability arriving on the stack is what tells it a pending trigger-target prompt has
   // been answered. An activated ability (Bottle Gnomes' sacrifice) must not clear that prompt.
   bool is_triggered = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // CR 707.10: true when this stack item is a *copy* of a spell (Twincast/Fork), not a cast
-  // object. Like an ability it has no physical card on the shared stack; the client shows it via
-  // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
+  // CR 707.10: this is a copy of a spell or ability, with no physical card on the shared stack.
   bool is_copy = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // For copies (is_copy == true): the object_id of the original stack item being copied. The
   // client uses this to inherit the original spell's Oracle printing (set/provider) so the copy
@@ -1957,6 +1964,10 @@ message StackPushed {
   // Empty for abilities without a physical card face.
   string card_display_name = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   bool prototyped = 18 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // The controller of a synthetic ability (including an ability copy). Spell pushes omit this.
+  optional int32 ability_controller_player_id = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Present only when the exact source incarnation is currently a public battlefield object.
+  StackAbilitySource ability_source = 20 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivePublicRevealSnapshot {

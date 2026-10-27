@@ -91,6 +91,21 @@ public:
 
     QList<GameEventContainer> gameEvents;
 };
+
+// Reconnect batches can contain stack and snapshot events before their one active choice.
+// A missing or duplicate choice is a test failure, never a default protobuf value.
+const ruled::v1::ResolutionChoiceRequired *onlyResolutionChoice(const ruled::v1::RuledEventBatch &batch)
+{
+    const ruled::v1::ResolutionChoiceRequired *choice = nullptr;
+    for (const auto &event : batch.events()) {
+        if (!event.has_resolution_choice_required())
+            continue;
+        if (choice)
+            return nullptr;
+        choice = &event.resolution_choice_required();
+    }
+    return choice;
+}
 } // namespace
 
 TEST(RuledServerDiagnostics, CorrelatesAuthenticatedActorAndRejectedEngineRequestWithoutLeakingSnapshot)
@@ -1488,6 +1503,295 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
         std::none_of(forP2.events().begin(), forP2.events().end(), [](const auto &event) { return event.has_log(); }));
 }
 
+TEST_F(RuledBatchTest, ReconnectRestoresLiveAbilityCopiesBeforeTheirPendingChoice)
+{
+    ruled::v1::IpcResponse announced;
+    auto *batch = announced.mutable_batch();
+    auto *original = batch->add_events()->mutable_stack_pushed();
+    original->set_object_id(900u);
+    original->set_description("Voltaic Key");
+    original->set_ability_controller_player_id(p1->getPlayerId());
+    original->mutable_ability_source()->set_object_id(800u);
+    original->mutable_ability_source()->set_zone_change_generation(4u);
+    auto *copy = batch->add_events()->mutable_stack_pushed();
+    copy->CopyFrom(*original);
+    copy->set_object_id(901u);
+    copy->set_is_copy(true);
+    copy->set_copy_source_object_id(900u);
+    auto *retired = batch->add_events()->mutable_stack_pushed();
+    retired->CopyFrom(*copy);
+    retired->set_object_id(902u);
+    auto *parent = batch->add_events()->mutable_stack_pushed();
+    parent->set_object_id(903u);
+    parent->set_description("Rings of Brighthearth");
+    parent->set_is_triggered(true);
+    parent->set_ability_controller_player_id(p1->getPlayerId());
+    auto *view = batch->add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *source = view->add_battlefield_objects();
+    source->set_object_id(800u);
+    source->set_zone_change_generation(4u);
+    source->set_card_id("voltaic_key");
+    updatePendingResolutionChoiceCache(announced);
+
+    ruled::v1::IpcResponse pending;
+    pending.mutable_batch()->add_events()->mutable_stack_resolved()->set_object_id(902u);
+    auto *choice = pending.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    choice->set_source_object_id(903u);
+    choice->set_prompt_text("Keep or change the target.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(800u);
+    choice->add_candidate_card_ids("voltaic_key");
+    choice->add_candidate_names("Voltaic Key");
+    updatePendingResolutionChoiceCache(pending);
+    ASSERT_TRUE(hasCachedResolutionChoice());
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        std::vector<quint32> stackIds;
+        int lastPush = -1;
+        int pendingChoice = -1;
+        bool hasCurrentSourceView = false;
+        for (int i = 0; i < restored.events_size(); ++i) {
+            const auto &event = restored.events(i);
+            if (event.has_stack_pushed()) {
+                const auto &pushed = event.stack_pushed();
+                stackIds.push_back(pushed.object_id());
+                lastPush = i;
+                ASSERT_TRUE(pushed.has_ability_controller_player_id());
+                EXPECT_EQ(pushed.ability_controller_player_id(), p1->getPlayerId());
+                if (pushed.object_id() != 903u) {
+                    ASSERT_TRUE(pushed.has_ability_source());
+                    EXPECT_EQ(pushed.ability_source().object_id(), 800u);
+                    EXPECT_EQ(pushed.ability_source().zone_change_generation(), 4u);
+                }
+            } else if (event.has_resolution_choice_required()) {
+                pendingChoice = i;
+            } else if (event.has_zone_view()) {
+                for (const auto &player : event.zone_view().per_player()) {
+                    for (const auto &object : player.battlefield_objects()) {
+                        hasCurrentSourceView |= object.object_id() == 800u && object.zone_change_generation() == 4u;
+                    }
+                }
+            }
+        }
+        EXPECT_EQ(stackIds, (std::vector<quint32>{900u, 901u, 903u}));
+        EXPECT_GE(lastPush, 0);
+        ASSERT_TRUE(restored.has_resolution_prompt_state());
+        EXPECT_TRUE(restored.resolution_prompt_state().active());
+        EXPECT_EQ(restored.resolution_prompt_state().has_resolution_prompt_id(), recipient == p1);
+        if (recipient == p1)
+            EXPECT_GT(pendingChoice, lastPush) << "a restored copy must not clear the live target prompt";
+        EXPECT_TRUE(hasCurrentSourceView);
+    }
+}
+
+TEST_F(RuledBatchTest, ReconnectStackReplayRetiresAllEngineExitEventsAndEmptyStack)
+{
+    ruled::v1::IpcResponse seed;
+    for (quint32 oid : {900u, 901u, 902u, 903u, 904u}) {
+        auto *push = seed.mutable_batch()->add_events()->mutable_stack_pushed();
+        push->set_object_id(oid);
+        push->set_description("Ability");
+        push->set_ability_annotation("Ability text");
+        push->set_ability_controller_player_id(p1->getPlayerId());
+    }
+    updatePendingResolutionChoiceCache(seed);
+    ruled::v1::IpcResponse exits;
+    exits.mutable_batch()->add_events()->mutable_stack_resolved()->set_object_id(900u);
+    exits.mutable_batch()->add_events()->mutable_stack_object_countered()->set_object_id(901u);
+    exits.mutable_batch()->add_events()->mutable_stack_object_removed()->set_object_id(902u);
+    exits.mutable_batch()->add_events()->mutable_permanent_moved()->set_object_id(903u);
+    updatePendingResolutionChoiceCache(exits);
+
+    ResponseContainer reconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reconnect);
+    ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+    const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(container, nullptr);
+    ruled::v1::RuledEventBatch restored;
+    ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    EXPECT_TRUE(restored.replace_stack_presentation());
+    std::vector<quint32> remaining;
+    for (const auto &event : restored.events()) {
+        if (event.has_stack_pushed())
+            remaining.push_back(event.stack_pushed().object_id());
+    }
+    EXPECT_EQ(remaining, (std::vector<quint32>{904u}));
+
+    ruled::v1::IpcResponse newPhase;
+    newPhase.mutable_batch()->add_events()->mutable_phase_changed()->set_phase_id(ruled::v1::PHASE_ID_MAIN1);
+    updatePendingResolutionChoiceCache(newPhase);
+    ResponseContainer emptyReconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, emptyReconnect);
+    ASSERT_EQ(emptyReconnect.getPostResponseQueue().size(), 1);
+    const auto *emptyContainer =
+        dynamic_cast<const GameEventContainer *>(emptyReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(emptyContainer, nullptr);
+    ruled::v1::RuledEventBatch empty;
+    ASSERT_TRUE(empty.ParseFromString(emptyContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    EXPECT_TRUE(empty.replace_stack_presentation());
+    EXPECT_TRUE(std::none_of(empty.events().begin(), empty.events().end(),
+                             [](const auto &event) { return event.has_stack_pushed(); }));
+}
+
+TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipientsLegalOffers)
+{
+    ruled::v1::IpcResponse initial;
+    auto *batch = initial.mutable_batch();
+    auto *push = batch->add_events()->mutable_stack_pushed();
+    push->set_object_id(900u);
+    push->set_description("Voltaic Key");
+    push->set_ability_annotation("Untap target artifact.");
+    push->set_ability_controller_player_id(p1->getPlayerId());
+    batch->add_events()->mutable_priority_changed()->set_player_id(p1->getPlayerId());
+    batch->add_events()->mutable_zone_view()->add_per_player()->set_player_id(p1->getPlayerId());
+    updatePendingResolutionChoiceCache(initial);
+
+    // The disconnecting client may have retained P1 priority; a later engine event gives P2
+    // priority and publishes separate private action lists for both seats.
+    ruled::v1::IpcResponse latest;
+    latest.mutable_batch()->add_events()->mutable_priority_changed()->set_player_id(p2->getPlayerId());
+    auto &first = (*latest.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    first.add_labels("first seat only");
+    auto &second = (*latest.mutable_batch()->mutable_legal_by_player())[p2->getPlayerId()];
+    second.add_labels("second seat only");
+    auto *offered = second.add_zone_ability_actions();
+    offered->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    offered->set_object_id(801u);
+    offered->set_zone_change_generation(3u);
+    offered->set_card_name("Forgotten Cave");
+    updatePendingResolutionChoiceCache(latest);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto priority = std::find_if(restored.events().begin(), restored.events().end(),
+                                           [](const auto &event) { return event.has_priority_changed(); });
+        EXPECT_NE(priority, restored.events().end());
+        if (priority != restored.events().end())
+            EXPECT_EQ(priority->priority_changed().player_id(), p2->getPlayerId());
+        EXPECT_EQ(restored.legal_by_player_size(), 1);
+        const auto own = restored.legal_by_player().find(recipient->getPlayerId());
+        EXPECT_NE(own, restored.legal_by_player().end());
+        if (own != restored.legal_by_player().end()) {
+            EXPECT_EQ(own->second.labels_size(), 1);
+            if (own->second.labels_size() == 1)
+                EXPECT_EQ(own->second.labels(0), recipient == p1 ? "first seat only" : "second seat only");
+            EXPECT_EQ(own->second.zone_ability_actions_size(), recipient == p2 ? 1 : 0);
+        }
+    }
+
+    // The engine's terminal publication removes every legal seat and publishes no priority.
+    // The previously observed priority must not be resurrected from the reconnect cache.
+    ruled::v1::IpcResponse terminal;
+    terminal.mutable_batch()->mutable_resolution_prompt_state()->set_active(false);
+    updatePendingResolutionChoiceCache(terminal);
+    ResponseContainer terminalReconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, terminalReconnect);
+    ASSERT_EQ(terminalReconnect.getPostResponseQueue().size(), 1);
+    const auto *terminalContainer =
+        dynamic_cast<const GameEventContainer *>(terminalReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(terminalContainer, nullptr);
+    ruled::v1::RuledEventBatch terminalSnapshot;
+    ASSERT_TRUE(terminalSnapshot.ParseFromString(
+        terminalContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    EXPECT_TRUE(terminalSnapshot.legal_by_player().empty());
+    EXPECT_TRUE(std::none_of(terminalSnapshot.events().begin(), terminalSnapshot.events().end(),
+                             [](const auto &event) { return event.has_priority_changed(); }));
+}
+
+TEST_F(RuledBatchTest, AbilityCopySourceUsesTheSamePublicIdentityAndGenerationAsBattlefield)
+{
+    ruled::v1::RuledEventBatch batch;
+    const auto canonicalSource = static_cast<quint32>(p1->getPlayerId());
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *source = view->add_battlefield_objects();
+    source->set_object_id(canonicalSource);
+    source->set_zone_change_generation(4u);
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_is_copy(true);
+    copy->set_ability_controller_player_id(p1->getPlayerId());
+    copy->mutable_ability_source()->set_object_id(canonicalSource);
+    copy->mutable_ability_source()->set_zone_change_generation(4u);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    for (Server_Player *recipient : {p1, p2}) {
+        const auto routed = redactFor(batch, recipient);
+        ASSERT_EQ(routed.events_size(), 2);
+        const auto &visible = routed.events(0).zone_view().per_player(0).battlefield_objects(0);
+        const auto &published = routed.events(1).stack_pushed();
+        ASSERT_TRUE(published.has_ability_controller_player_id());
+        EXPECT_EQ(published.ability_controller_player_id(), p1->getPlayerId());
+        ASSERT_TRUE(published.has_ability_source());
+        EXPECT_NE(visible.object_id(), canonicalSource) << "player/object collision uses a public handle";
+        EXPECT_EQ(published.ability_source().object_id(), visible.object_id());
+        EXPECT_EQ(published.ability_source().zone_change_generation(), visible.zone_change_generation());
+    }
+}
+
+TEST_F(RuledBatchTest, AbilityCopySourceDoesNotProjectAsAReturnedIncarnation)
+{
+    constexpr quint32 oid = 800u;
+    ruled::v1::RuledEventBatch initial;
+    auto *old = initial.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    old->set_object_id(oid);
+    old->set_zone_change_generation(4u);
+    ASSERT_TRUE(prepareIdentityBatch(initial));
+    const auto first = redactFor(initial, p2);
+    ASSERT_EQ(first.events_size(), 1);
+    const auto oldHandle = first.events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    const auto oldGeneration = first.events(0).zone_view().per_player(0).battlefield_objects(0).zone_change_generation();
+
+    ruled::v1::RuledEventBatch returned;
+    auto *boundary = returned.add_events()->mutable_presentation_identity_break();
+    boundary->set_object_id(oid);
+    boundary->set_zone_change_generation(6u);
+    auto *current = returned.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    current->set_object_id(oid);
+    current->set_zone_change_generation(6u);
+    current->set_face_down(true);
+    ASSERT_TRUE(prepareIdentityBatch(returned));
+    const auto second = redactFor(returned, p2);
+    ASSERT_EQ(second.events_size(), 1);
+    const auto newHandle = second.events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+    EXPECT_NE(newHandle, oldHandle);
+
+    // A reconnect may replay a previously public push after the source's hidden-zone transition.
+    ruled::v1::RuledEventBatch snapshot;
+    auto *push = snapshot.add_events()->mutable_stack_pushed();
+    push->set_object_id(901u);
+    push->set_is_copy(true);
+    push->set_ability_controller_player_id(p1->getPlayerId());
+    push->mutable_ability_source()->set_object_id(oid);
+    push->mutable_ability_source()->set_zone_change_generation(4u);
+    auto *currentAgain = snapshot.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    currentAgain->CopyFrom(*current);
+    ASSERT_TRUE(prepareIdentityBatch(snapshot));
+    const auto projected = redactFor(snapshot, p2);
+    ASSERT_EQ(projected.events_size(), 2);
+    ASSERT_TRUE(projected.events(0).stack_pushed().has_ability_source());
+    const auto &published = projected.events(0).stack_pushed().ability_source();
+    EXPECT_EQ(published.object_id(), oldHandle);
+    EXPECT_EQ(published.zone_change_generation(), oldGeneration);
+    EXPECT_NE(published.object_id(), projected.events(1).zone_view().per_player(0).battlefield_objects(0).object_id());
+}
+
 TEST_F(RuledBatchTest, GenericResolutionChoiceReconnectRestoresCurrentPublicHandSnapshot)
 {
     ruled::v1::IpcResponse seed;
@@ -2243,8 +2547,9 @@ TEST_F(RuledBatchTest, DiscardAlternativesArePrivateValidatedAndRestoredOnReconn
         ASSERT_NE(container, nullptr);
         ruled::v1::RuledEventBatch restored;
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-        EXPECT_EQ(restored.events(0).resolution_choice_required().selection_alternatives_size(),
-                  participant == p1 ? 2 : 0);
+        const auto *restoredChoice = onlyResolutionChoice(restored);
+        ASSERT_NE(restoredChoice, nullptr);
+        EXPECT_EQ(restoredChoice->selection_alternatives_size(), participant == p1 ? 2 : 0);
     }
 }
 
@@ -2308,7 +2613,9 @@ TEST_F(RuledBatchTest, HeterogeneousLibrarySearchSlotsArePrivateAndMalformedSlot
     ruled::v1::RuledEventBatch restoredForDecider;
     ASSERT_TRUE(restoredForDecider.ParseFromString(
         deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    EXPECT_EQ(restoredForDecider.events(0).resolution_choice_required().selection_slots_size(), 2);
+    const auto *restoredDeciderChoice = onlyResolutionChoice(restoredForDecider);
+    ASSERT_NE(restoredDeciderChoice, nullptr);
+    EXPECT_EQ(restoredDeciderChoice->selection_slots_size(), 2);
 
     ResponseContainer observerReconnect(-1);
     game->createGameJoinedEvent(p2, observerReconnect, true);
@@ -2318,7 +2625,9 @@ TEST_F(RuledBatchTest, HeterogeneousLibrarySearchSlotsArePrivateAndMalformedSlot
     ruled::v1::RuledEventBatch restoredForObserver;
     ASSERT_TRUE(restoredForObserver.ParseFromString(
         observerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    EXPECT_EQ(restoredForObserver.events(0).resolution_choice_required().selection_slots_size(), 0);
+    const auto *restoredObserverChoice = onlyResolutionChoice(restoredForObserver);
+    ASSERT_NE(restoredObserverChoice, nullptr);
+    EXPECT_EQ(restoredObserverChoice->selection_slots_size(), 0);
 }
 
 // CR 101.4: a player-set hidden choice advances from one decider to the next. Every replacement
@@ -3194,7 +3503,9 @@ TEST_F(RuledBatchTest, LibraryAlternativesArePrivateValidatedAndRestoredOnReconn
         ASSERT_NE(container, nullptr);
         ruled::v1::RuledEventBatch restored;
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-        EXPECT_EQ(restored.events(0).resolution_choice_required().selection_alternatives_size(), participant == p1 ? 2 : 0);
+        const auto *restoredChoice = onlyResolutionChoice(restored);
+        ASSERT_NE(restoredChoice, nullptr);
+        EXPECT_EQ(restoredChoice->selection_alternatives_size(), participant == p1 ? 2 : 0);
     }
 }
 
@@ -3356,10 +3667,15 @@ TEST_F(RuledBatchTest, ProposedTokenIdentitiesArePrivateValidatedAndRestoredOnRe
         ASSERT_NE(container, nullptr);
         ruled::v1::RuledEventBatch restored;
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-        const auto &routed = restored.events(0).resolution_choice_required();
-        EXPECT_EQ(routed.candidate_token_identities_size(), participant == p1 ? 3 : 0);
-        EXPECT_EQ(routed.candidate_server_card_ids_size(), participant == p1 ? 3 : 0);
-        if (participant == p1) EXPECT_EQ(routed.candidate_token_identities(2).keywords(0), "Trample");
+        const auto *restoredChoice = onlyResolutionChoice(restored);
+        ASSERT_NE(restoredChoice, nullptr);
+        const auto &routed = *restoredChoice;
+        ASSERT_EQ(routed.candidate_token_identities_size(), participant == p1 ? 3 : 0);
+        ASSERT_EQ(routed.candidate_server_card_ids_size(), participant == p1 ? 3 : 0);
+        if (participant == p1) {
+            ASSERT_EQ(routed.candidate_token_identities(2).keywords_size(), 1);
+            EXPECT_EQ(routed.candidate_token_identities(2).keywords(0), "Trample");
+        }
     }
 }
 
@@ -5081,7 +5397,9 @@ TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedFor
     ruled::v1::RuledEventBatch payerBatch;
     ASSERT_TRUE(
         payerBatch.ParseFromString(payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
+    const auto *payerChoiceEvent = onlyResolutionChoice(payerBatch);
+    ASSERT_NE(payerChoiceEvent, nullptr);
+    const auto &payerChoice = *payerChoiceEvent;
     ASSERT_EQ(payerChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(payerChoice.candidate_object_ids(0), 501u);
     ASSERT_EQ(payerChoice.candidate_server_card_ids_size(), 1);
@@ -5097,7 +5415,9 @@ TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedFor
     ruled::v1::RuledEventBatch opponentBatch;
     ASSERT_TRUE(opponentBatch.ParseFromString(
         opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    const auto *opponentChoiceEvent = onlyResolutionChoice(opponentBatch);
+    ASSERT_NE(opponentChoiceEvent, nullptr);
+    const auto &opponentChoice = *opponentChoiceEvent;
     EXPECT_EQ(opponentChoice.candidate_object_ids_size(), 0);
     EXPECT_EQ(opponentChoice.candidate_card_ids_size(), 0);
     EXPECT_EQ(opponentChoice.candidate_names_size(), 0);
@@ -5157,11 +5477,13 @@ TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyA
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
         EXPECT_TRUE(restored.legal_by_player().contains(recipient->getPlayerId()));
         EXPECT_FALSE(restored.legal_by_player().contains(recipient == p1 ? p2->getPlayerId() : p1->getPlayerId()));
-        const auto &restoredChoice = restored.events(0).resolution_choice_required();
+        const auto *restoredChoiceEvent = onlyResolutionChoice(restored);
+        ASSERT_NE(restoredChoiceEvent, nullptr);
+        const auto &restoredChoice = *restoredChoiceEvent;
         EXPECT_FALSE(restoredChoice.has_public_reveal());
         EXPECT_EQ(restoredChoice.candidate_object_ids_size(), recipient == p1 ? 1 : 0);
         EXPECT_EQ(restoredChoice.candidate_names_size(), recipient == p1 ? 1 : 0);
-        EXPECT_EQ(restoredChoice.candidate_server_card_ids_size(), recipient == p1 ? 1 : 0);
+        ASSERT_EQ(restoredChoice.candidate_server_card_ids_size(), recipient == p1 ? 1 : 0);
         if (recipient == p1) EXPECT_EQ(restoredChoice.candidate_server_card_ids(0), forest->getId());
         const auto snapshot = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_active_public_reveal_snapshot(); });
         ASSERT_NE(snapshot, restored.events().end());
@@ -5292,7 +5614,9 @@ TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOp
     ruled::v1::RuledEventBatch payerBatch;
     ASSERT_TRUE(
         payerBatch.ParseFromString(payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
+    const auto *payerChoiceEvent = onlyResolutionChoice(payerBatch);
+    ASSERT_NE(payerChoiceEvent, nullptr);
+    const auto &payerChoice = *payerChoiceEvent;
     ASSERT_EQ(payerChoice.candidate_object_ids_size(), 2);
     EXPECT_EQ(payerChoice.candidate_object_ids(0), 601u);
     EXPECT_EQ(payerChoice.candidate_object_ids(1), 602u);
@@ -5310,7 +5634,9 @@ TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOp
     ruled::v1::RuledEventBatch opponentBatch;
     ASSERT_TRUE(opponentBatch.ParseFromString(
         opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    const auto *opponentChoiceEvent = onlyResolutionChoice(opponentBatch);
+    ASSERT_NE(opponentChoiceEvent, nullptr);
+    const auto &opponentChoice = *opponentChoiceEvent;
     EXPECT_EQ(opponentChoice.candidate_object_ids_size(), 0);
     EXPECT_EQ(opponentChoice.candidate_card_ids_size(), 0);
     EXPECT_EQ(opponentChoice.candidate_names_size(), 0);
@@ -5347,7 +5673,9 @@ TEST_F(RuledBatchTest, ProliferateChoiceShowsPublicPermanentsButRoutesPlayerIdsO
     ruled::v1::RuledEventBatch deciderBatch;
     ASSERT_TRUE(deciderBatch.ParseFromString(
         deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &deciderChoice = deciderBatch.events(0).resolution_choice_required();
+    const auto *deciderChoiceEvent = onlyResolutionChoice(deciderBatch);
+    ASSERT_NE(deciderChoiceEvent, nullptr);
+    const auto &deciderChoice = *deciderChoiceEvent;
     ASSERT_EQ(deciderChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(deciderChoice.candidate_object_ids(0), 601u);
     ASSERT_EQ(deciderChoice.candidate_player_ids_size(), 2);
@@ -5364,7 +5692,9 @@ TEST_F(RuledBatchTest, ProliferateChoiceShowsPublicPermanentsButRoutesPlayerIdsO
     ruled::v1::RuledEventBatch opponentBatch;
     ASSERT_TRUE(opponentBatch.ParseFromString(
         opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    const auto *opponentChoiceEvent = onlyResolutionChoice(opponentBatch);
+    ASSERT_NE(opponentChoiceEvent, nullptr);
+    const auto &opponentChoice = *opponentChoiceEvent;
     ASSERT_EQ(opponentChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(opponentChoice.candidate_object_ids(0), 601u);
     EXPECT_EQ(opponentChoice.candidate_player_ids_size(), 0);
@@ -5399,7 +5729,9 @@ TEST_F(RuledBatchTest, CopyRetargetKeepsPlayerCandidatesPrivateWhileObjectCandid
     ruled::v1::RuledEventBatch deciderBatch;
     ASSERT_TRUE(deciderBatch.ParseFromString(
         deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &deciderChoice = deciderBatch.events(0).resolution_choice_required();
+    const auto *deciderChoiceEvent = onlyResolutionChoice(deciderBatch);
+    ASSERT_NE(deciderChoiceEvent, nullptr);
+    const auto &deciderChoice = *deciderChoiceEvent;
     EXPECT_EQ(deciderChoice.choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
     ASSERT_EQ(deciderChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(deciderChoice.candidate_object_ids(0), 601u);
@@ -5416,7 +5748,9 @@ TEST_F(RuledBatchTest, CopyRetargetKeepsPlayerCandidatesPrivateWhileObjectCandid
     ruled::v1::RuledEventBatch opponentBatch;
     ASSERT_TRUE(opponentBatch.ParseFromString(
         opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    const auto *opponentChoiceEvent = onlyResolutionChoice(opponentBatch);
+    ASSERT_NE(opponentChoiceEvent, nullptr);
+    const auto &opponentChoice = *opponentChoiceEvent;
     EXPECT_EQ(opponentChoice.choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
     ASSERT_EQ(opponentChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(opponentChoice.candidate_object_ids(0), 601u);
@@ -5998,6 +6332,41 @@ TEST_F(RuledBatchTest, SameBatchStackPushAndRemovalRetiresDeferredCastAndSynthet
     EXPECT_FALSE(hasSyntheticStackBookkeeping(831u));
     EXPECT_FALSE(hasSyntheticStackBookkeeping(832u));
     EXPECT_EQ(pendingCastVisualCount(), 0);
+}
+
+TEST_F(RuledBatchTest, AbilityCopyNeverBindsOrMovesItsPhysicalSource)
+{
+    seedCardCatalog({"Voltaic Key"});
+    Server_Card *source = addCardToTable(p1, QStringLiteral("Voltaic Key"));
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    ASSERT_NE(table, nullptr);
+    ASSERT_NE(stack, nullptr);
+    bindPublicObject(p1, 800u, source);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *copy = response.mutable_batch()->add_events()->mutable_stack_pushed();
+    copy->set_object_id(901u);
+    copy->set_description("Voltaic Key");
+    copy->set_ability_annotation("Untap target artifact. (copy)");
+    copy->set_is_copy(true);
+    copy->set_is_triggered(false);
+    copy->set_copy_source_object_id(900u);
+    callBatchApply(response);
+
+    EXPECT_TRUE(table->getCards().contains(source));
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_EQ(boundStackServerCardId(901u), -1);
+    EXPECT_TRUE(hasSyntheticStackBookkeeping(901u));
+
+    ruled::v1::IpcResponse resolved;
+    resolved.set_ok(true);
+    resolved.mutable_batch()->add_events()->mutable_stack_resolved()->set_object_id(901u);
+    callBatchApply(resolved);
+    EXPECT_TRUE(table->getCards().contains(source));
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(901u));
 }
 
 TEST_F(RuledBatchTest, PermanentMovedFromStackRetiresItsBindingAndRegistersLibraryIdentity)
@@ -8470,7 +8839,9 @@ TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalAc
         ASSERT_NE(container, nullptr);
         ruled::v1::RuledEventBatch restored;
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-        EXPECT_EQ(restored.events(0).resolution_choice_required().choice_kind(), ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        const auto *restoredChoice = onlyResolutionChoice(restored);
+        ASSERT_NE(restoredChoice, nullptr);
+        EXPECT_EQ(restoredChoice->choice_kind(), ruled::v1::CHOICE_KIND_SPECIAL_CAST);
         const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_zone_view(); });
         ASSERT_NE(restoredView, restored.events().end());
         EXPECT_FALSE(restoredView->zone_view().battlefields_unchanged());
