@@ -3070,10 +3070,16 @@ impl GameEngine {
         {
             return false;
         }
-        if let Some(delta) = ability.costs.iter().find_map(|cost| match cost {
+        if let Some(printed) = ability.costs.iter().find_map(|cost| match cost {
             AbilityCost::Loyalty(delta) => Some(*delta),
             _ => None,
         }) {
+            let actor = self
+                .controller_of(permanent_id)
+                .unwrap_or(activating_player);
+            let Some(delta) = self.effective_loyalty_cost(actor, permanent_id, printed) else {
+                return false;
+            };
             if (delta > 0 && !self.can_receive_counters(permanent_id))
                 || (delta < 0 && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs())
             {

@@ -3854,6 +3854,21 @@ fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
 use super::*;
 
 #[test]
+fn carth_loyalty_cost_static_is_parameter_free_and_round_trips() {
+    let ability: StaticAbilityDef =
+        ron::from_str("ControllerPlaneswalkerLoyaltyCostsAdditionalOne").unwrap();
+    assert_eq!(
+        ability,
+        StaticAbilityDef::ControllerPlaneswalkerLoyaltyCostsAdditionalOne
+    );
+    let encoded = ron::to_string(&ability).unwrap();
+    assert_eq!(
+        ron::from_str::<StaticAbilityDef>(&encoded).unwrap(),
+        ability
+    );
+}
+
+#[test]
 fn attack_declaration_limit_authoring_preserves_zero_and_scope_and_rejects_ambiguous_input() {
     for (text, maximum, affected) in [
         (

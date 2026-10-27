@@ -2535,6 +2535,10 @@ pub enum StaticAbilityDef {
     /// planeswalkers to two. Multiple sources do not accumulate. This does not represent the
     /// separate, consumable as-though permissions created by The Chain Veil.
     ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn,
+    /// Carth the Lion adds one to the signed loyalty cost of each planeswalker loyalty
+    /// ability its controller activates. Multiple active instances accumulate. This specialized
+    /// rule combines with the printed cost before payment rather than placing a separate counter.
+    ControllerPlaneswalkerLoyaltyCostsAdditionalOne,
     /// Alhammarret's Archive, Rhox Faithmender and Boon Reflection replace their controller's
     /// individual incoming life-gain events with twice that amount (CR 119 / 614.5).
     DoubleControllerLifeGain,

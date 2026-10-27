@@ -179,6 +179,45 @@ impl GameEngine {
             .collect()
     }
 
+    /// Carth's additional loyalty cost is combined before payment. The actor, the source's
+    /// current planeswalker type and controller, and each active static are evaluated live;
+    /// callers lock the resulting signed amount in the existing payment plan.
+    pub(super) fn effective_loyalty_cost(
+        &self,
+        actor: PlayerId,
+        source: ObjectId,
+        printed: i32,
+    ) -> Option<i32> {
+        let object = self.state.objects.get(&source)?;
+        if object.zone != Zone::Battlefield {
+            return Some(printed);
+        }
+        let characteristics = self.characteristics(source)?;
+        if !characteristics.has_type("Planeswalker") || characteristics.controller != actor {
+            return Some(printed);
+        }
+        let mut total = printed;
+        for permanent in self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield)
+        {
+            if self.controller_of(permanent.id) != Some(actor) {
+                continue;
+            }
+            for ability in self.active_static_ability_definitions(permanent.id) {
+                if matches!(
+                    ability,
+                    StaticAbilityDef::ControllerPlaneswalkerLoyaltyCostsAdditionalOne
+                ) {
+                    total = total.checked_add(1)?;
+                }
+            }
+        }
+        Some(total)
+    }
+
     /// The resolving item's controller is captured on the stack; Ashiok's controller and
     /// ability availability are checked live when the search would begin.
     pub(super) fn prohibits_own_library_search(
@@ -950,6 +989,7 @@ impl GameEngine {
                 | StaticAbilityDef::LimitAttackers { .. }
                 | StaticAbilityDef::AttackTax { .. }
                 | StaticAbilityDef::ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn
+                | StaticAbilityDef::ControllerPlaneswalkerLoyaltyCostsAdditionalOne
                 | StaticAbilityDef::OpponentsCannotCauseOwnLibrarySearch
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
                 | StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker

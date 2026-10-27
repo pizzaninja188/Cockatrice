@@ -1775,7 +1775,7 @@ impl GameEngine {
                         owner,
                     });
                 }
-                AbilityCost::Loyalty(delta) => {
+                AbilityCost::Loyalty(printed) => {
                     let object = self
                         .state
                         .objects
@@ -1786,8 +1786,11 @@ impl GameEngine {
                             "loyalty cost requires its battlefield source under your control",
                         ));
                     }
-                    if (*delta > 0 && !self.can_receive_counters(permanent_id))
-                        || (*delta < 0
+                    let delta = self
+                        .effective_loyalty_cost(player, permanent_id, *printed)
+                        .ok_or(EngineError::Illegal("loyalty cost exceeds numeric limit"))?;
+                    if (delta > 0 && !self.can_receive_counters(permanent_id))
+                        || (delta < 0
                             && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs())
                     {
                         return Err(EngineError::Illegal("not enough loyalty counters"));
@@ -1800,7 +1803,7 @@ impl GameEngine {
                             .get(&permanent_id)
                             .copied()
                             .unwrap_or(0),
-                        delta: *delta,
+                        delta,
                     });
                 }
                 AbilityCost::Tap => {

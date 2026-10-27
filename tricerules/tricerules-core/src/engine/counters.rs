@@ -192,8 +192,14 @@ impl GameEngine {
                     payment_source: CounterRemovalPaymentSource::SelectedPermanent(_),
                     ..
                 } => return false,
-                AbilityCost::Loyalty(delta) if *delta < 0 => {
-                    demands.push((delta.unsigned_abs(), vec![(source, CounterKind::Loyalty)]));
+                AbilityCost::Loyalty(printed) => {
+                    let actor = self.controller_of(source).unwrap_or(player);
+                    let Some(delta) = self.effective_loyalty_cost(actor, source, *printed) else {
+                        return false;
+                    };
+                    if delta < 0 {
+                        demands.push((delta.unsigned_abs(), vec![(source, CounterKind::Loyalty)]));
+                    }
                 }
                 _ => continue,
             }

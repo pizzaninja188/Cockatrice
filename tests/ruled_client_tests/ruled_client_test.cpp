@@ -7038,6 +7038,63 @@ TEST_F(RuledClientTest, WarRoomNumericEngineCostsReachBothMenusWithoutChangingUn
     }
 }
 
+TEST_F(RuledClientTest, EffectiveLoyaltyCostsReachBothMenusOnlyWithCompleteMatchingPrefixes)
+{
+    // Synthetic Oracle text isolates the same emitted presentation contract for each cost form.
+    const QString oracle = QStringLiteral("+1: Scry 1, then draw a card.\n"
+                                          "0: Create two Wolf creature tokens.\n"
+                                          "-1: Target player draws a card.\n"
+                                          "-3: Destroy target creature. Draw a card.\n"
+                                          "{3}, {T}, +1: Draw a card.\n"
+                                          "{2}, {T}, Sacrifice a token, +1: Draw a card.");
+    host.presentationCards = readPresentationCards(
+        QByteArray("<cockatrice_carddatabase version=\"4\"><cards><card><name>Loyalty Fixture</name>"
+                   "<ruled-oracle><face card-name=\"Loyalty Fixture\" face-name=\"Loyalty Fixture\"><text>") +
+        oracle.toUtf8() + QByteArray("</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>"));
+    struct CostCase
+    {
+        const char *fallback;
+        const char *cost;
+        int line;
+        const char *expected;
+    };
+    const CostCase cases[] = {
+        {"+2: Generic ability", "+2", 1, "+2: Scry 1, then draw a card."},
+        {"+1: Generic ability", "+1", 2, "+1: Create two Wolf creature tokens."},
+        {"+0: Generic ability", "+0", 3, "+0: Target player draws a card."},
+        {"-2: Generic ability", "-2", 4, "-2: Destroy target creature. Draw a card."},
+        {"{3}, {T}, +2: Generic ability", "{3}, {T}, +2", 5, "{3}, {T}, +2: Draw a card."},
+        {"+2: Stale fallback", "+3", 1, "+1: Scry 1, then draw a card."},
+        {"{2}, {T}, Sacrifice a permanent, +2: Generic ability", "{2}, {T}, Sacrifice a permanent, +2", 6,
+         "{2}, {T}, Sacrifice a token, +1: Draw a card."},
+    };
+    for (const auto &entry : cases) {
+        ruled::v1::RuledEventBatch batch;
+        auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+        view->set_player_id(kLocalPlayer);
+        auto *object = view->add_battlefield_objects();
+        object->set_object_id(100);
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(0);
+        ability->set_text(entry.fallback);
+        ability->set_cost_label(entry.cost);
+        ability->set_activatable(true);
+        auto *presentation = ability->mutable_presentation();
+        presentation->set_external_card_name("Loyalty Fixture");
+        presentation->set_external_face_name("Loyalty Fixture");
+        presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
+        presentation->add_oracle_line_indices(entry.line);
+        presentation->set_fallback_text(entry.fallback);
+        apply(batch);
+        const auto expected = QString::fromUtf8(entry.expected);
+        EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), expected);
+        const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 100);
+        ASSERT_EQ(options.size(), 1);
+        EXPECT_EQ(options[0].label, expected);
+        EXPECT_TRUE(options[0].enabled);
+    }
+}
+
 TEST_F(RuledClientTest, WarRoomAbsentCommanderRetainsOracleLabelAndEngineDisabledAction)
 {
     ruled::v1::RuledEventBatch batch;

@@ -1170,15 +1170,24 @@ impl GameEngine {
                 )
                 .ok_or(EngineError::Illegal("counter cost recipient became stale"))?;
             replayed.cost_debit_index = Some(debit.debit_index);
+            // Applied replacements are an ordered engine-owned receipt. A source can leave
+            // after its replacement was applied, so only unapplied choices use live sources.
+            let mut applied = BTreeSet::new();
             for replacement in &placement.applied_replacements {
-                let candidates = self.counter_replacement_candidates(&replayed);
-                if !candidates
-                    .iter()
-                    .any(|(candidate, _)| candidate == replacement)
-                    || (candidates.len() == 1 && candidates[0].0 != *replacement)
+                if !applied.insert((
+                    replacement.source_object_id,
+                    replacement.source_zone_change_generation,
+                    replacement.ability_id.as_str(),
+                )) {
+                    return Err(EngineError::Illegal(
+                        "counter cost replacement was applied more than once",
+                    ));
+                }
+                if replacement.kind == CounterReplacementKind::DoublingSeason
+                    && !replayed.effect_created_counters
                 {
                     return Err(EngineError::Illegal(
-                        "counter replacement is no longer applicable to the cost",
+                        "effect-only counter replacement applied to a cost",
                     ));
                 }
                 Self::apply_counter_replacement(&mut replayed, replacement);
@@ -9443,6 +9452,157 @@ mod tests {
             .push(object_id);
         engine.emit_static_abilities_on_enter(object_id);
         object_id
+    }
+
+    #[test]
+    fn cost_replacement_history_preserves_receipts_and_rejects_forgery() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_099,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let walker = add_counter_fixture_permanent(&mut engine, 0, "jace,_unraveler_of_secrets");
+        let plan = engine
+            .plan_ability_costs(
+                0,
+                0,
+                walker,
+                &[AbilityCost::Loyalty(2)],
+                &[],
+                &[],
+                &[],
+                0,
+                0,
+            )
+            .expect("positive loyalty payment plan");
+        let debit = plan.counter_placement_costs().into_iter().next().unwrap();
+        let mut base = engine
+            .proposed_object_counter_placement(
+                0,
+                walker,
+                [(CounterKind::Loyalty, 2)],
+                super::super::continuous::CounterPlacementOrigin::Cost,
+            )
+            .unwrap();
+        base.cost_debit_index = Some(debit.debit_index);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, std::slice::from_ref(&base))
+            .is_ok());
+
+        // Synthetic historical sources are deliberately absent from the current battlefield.
+        let laezel = CounterReplacementInstance {
+            source_object_id: u32::MAX - 1,
+            source_zone_change_generation: 11,
+            ability_id: "static_01".into(),
+            kind: CounterReplacementKind::Laezel,
+        };
+        let season = CounterReplacementInstance {
+            source_object_id: u32::MAX - 2,
+            source_zone_change_generation: 12,
+            ability_id: "static_01".into(),
+            kind: CounterReplacementKind::DoublingSeason,
+        };
+        let mut resolved = base.clone();
+        GameEngine::apply_counter_replacement(&mut resolved, &laezel);
+        GameEngine::apply_counter_replacement(&mut resolved, &season);
+        assert_eq!(resolved.counters[&CounterKind::Loyalty], 6);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, std::slice::from_ref(&resolved))
+            .is_ok());
+
+        // Each forged history has internally consistent arithmetic, so rejection depends on
+        // receipt identity and the Cost-to-effect ordering, not merely the final count.
+        let mut duplicate = base.clone();
+        GameEngine::apply_counter_replacement(&mut duplicate, &laezel);
+        GameEngine::apply_counter_replacement(&mut duplicate, &laezel);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[duplicate])
+            .is_err());
+        let mut changed_kind = laezel.clone();
+        changed_kind.kind = CounterReplacementKind::DoublingSeason;
+        let mut duplicate_kind = base.clone();
+        GameEngine::apply_counter_replacement(&mut duplicate_kind, &laezel);
+        GameEngine::apply_counter_replacement(&mut duplicate_kind, &changed_kind);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[duplicate_kind])
+            .is_err());
+        let mut season_first = base.clone();
+        GameEngine::apply_counter_replacement(&mut season_first, &season);
+        GameEngine::apply_counter_replacement(&mut season_first, &laezel);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[season_first])
+            .is_err());
+
+        let mut bad_original = resolved.clone();
+        bad_original
+            .original_counters
+            .insert(CounterKind::Loyalty, 99);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_original])
+            .is_err());
+        let mut bad_final = resolved.clone();
+        bad_final.counters.insert(CounterKind::Loyalty, 99);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_final])
+            .is_err());
+        let mut bad_flag = resolved.clone();
+        bad_flag.effect_created_counters = false;
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_flag])
+            .is_err());
+        let mut bad_actor = resolved.clone();
+        bad_actor.actor = 1;
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_actor])
+            .is_err());
+        let mut bad_origin = resolved.clone();
+        bad_origin.origin = super::super::continuous::CounterPlacementOrigin::Effect;
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_origin])
+            .is_err());
+        let mut bad_debit = resolved.clone();
+        bad_debit.cost_debit_index = Some(debit.debit_index + 1);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_debit])
+            .is_err());
+        let mut bad_object = resolved.clone();
+        bad_object.recipient = CounterPlacementRecipient::Object {
+            object_id: walker + 1,
+            zone_change_generation: debit.generation,
+        };
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_object])
+            .is_err());
+        let mut bad_generation = resolved.clone();
+        bad_generation.recipient = CounterPlacementRecipient::Object {
+            object_id: walker,
+            zone_change_generation: debit.generation + 1,
+        };
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[bad_generation])
+            .is_err());
+
+        // Current sources still require fresh applications after the historical receipt.
+        add_counter_fixture_permanent(&mut engine, 0, "doubling_season");
+        add_counter_fixture_permanent(&mut engine, 0, "doubling_season");
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, std::slice::from_ref(&resolved))
+            .is_err());
+        let mut complete = resolved;
+        for _ in 0..2 {
+            let choices = engine.counter_replacement_candidates(&complete);
+            assert!(!choices.is_empty());
+            GameEngine::apply_counter_replacement(&mut complete, &choices[0].0);
+        }
+        assert!(engine.counter_replacement_candidates(&complete).is_empty());
+        assert_eq!(complete.counters[&CounterKind::Loyalty], 24);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[complete])
+            .is_ok());
     }
 
     fn resolved_counter_map(

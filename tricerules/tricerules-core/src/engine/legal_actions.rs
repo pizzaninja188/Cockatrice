@@ -647,8 +647,14 @@ pub(super) fn activated_ability_info(
                 .unwrap_or_else(|| "Pay life (no commander)".to_string()),
             AbilityCost::ReturnUnblockedAttacker => "Return an unblocked attacker".to_string(),
             AbilityCost::ReturnTappedCreature => "Return a tapped creature".to_string(),
-            AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
-            AbilityCost::Loyalty(delta) => delta.to_string(),
+            AbilityCost::Loyalty(printed) => {
+                let actor = eng.controller_of(source_id).unwrap_or(controller);
+                match eng.effective_loyalty_cost(actor, source_id, *printed) {
+                    Some(delta) if delta >= 0 => format!("+{delta}"),
+                    Some(delta) => delta.to_string(),
+                    None => "Loyalty cost unavailable".to_string(),
+                }
+            }
             AbilityCost::Mana(cost) => cost.to_string(),
             AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
             AbilityCost::Discard => "Discard a card".to_string(),
@@ -704,6 +710,45 @@ pub(super) fn activated_ability_info(
     {
         if let Some((_, effect)) = fallback.split_once(':') {
             fallback = format!("{cost_label}:{effect}");
+        }
+    } else if ability.cost_modifiers.is_empty()
+        && ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::Loyalty(_)))
+        && ability.costs.iter().all(|cost| {
+            matches!(
+                cost,
+                AbilityCost::Mana(_)
+                    | AbilityCost::Tap
+                    | AbilityCost::PayLife { .. }
+                    | AbilityCost::PayCommanderColorIdentityLife
+                    | AbilityCost::Loyalty(_)
+            )
+        })
+    {
+        let actor = eng.controller_of(source_id).unwrap_or(controller);
+        let life_cost = eng.activated_life_cost(controller, &ability.costs);
+        let loyalty_costs_resolved = ability.costs.iter().all(|cost| match cost {
+            AbilityCost::Loyalty(printed) => eng
+                .effective_loyalty_cost(actor, source_id, *printed)
+                .is_some(),
+            _ => true,
+        });
+        if life_cost.is_some()
+            && eng.activated_life_cost(actor, &ability.costs) == life_cost
+            && loyalty_costs_resolved
+        {
+            let identifier = tricerules_card_model::ability_fallback(
+                &public_name,
+                "activated ability",
+                &ability_path,
+            );
+            if fallback == identifier {
+                fallback = format!("{cost_label}: {fallback}");
+            } else if let Some((_, effect)) = fallback.split_once(':') {
+                fallback = format!("{cost_label}:{effect}");
+            }
         }
     }
     let presentation = if concealed || ability.intrinsic_land_mana {

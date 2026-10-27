@@ -27,6 +27,8 @@ mod deck_coverage_boseiju;
 mod deck_coverage_brokers_ascendancy;
 #[path = "../deck_coverage_buried_ruin.rs"]
 mod deck_coverage_buried_ruin;
+#[path = "../deck_coverage_carth_the_lion.rs"]
+mod deck_coverage_carth_the_lion;
 #[path = "../deck_coverage_chasm_skulker.rs"]
 mod deck_coverage_chasm_skulker;
 #[path = "../deck_coverage_clock_of_omens.rs"]

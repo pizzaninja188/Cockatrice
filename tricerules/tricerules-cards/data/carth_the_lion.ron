@@ -1,0 +1,40 @@
+// Oracle e0709843-0a91-4a21-9512-d7481707f3c9; MH2 release notes and CR 603.6c, 701.20e, 701.24a.
+(
+  id: "carth_the_lion",
+  name: "Carth the Lion",
+  face_id: "carth_the_lion",
+  mana_cost: "{2}{B}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Warrior"],
+  power: 3,
+  toughness: 5,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: ControllerPlaneswalkerLoyaltyCostsAdditionalOne,
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(
+      count: 7,
+      filter: Some((card_type: Some(Planeswalker))),
+      bottom_order: Random,
+    )],
+  ), (
+    ability_id: "triggered_02",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Planeswalker)),
+      destination: OneOf([Graveyard]),
+      cardinality: EachObject,
+    ),
+    effect: [LookChooseToHand(
+      count: 7,
+      filter: Some((card_type: Some(Planeswalker))),
+      bottom_order: Random,
+    )],
+  )],
+)

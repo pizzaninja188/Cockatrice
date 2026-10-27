@@ -636,13 +636,7 @@ impl GameEngine {
                 "P{controller} puts {} cards on the bottom of their library in a random order.",
                 remaining.len()
             )));
-            ev.push(ev_log_private(
-                format!(
-                    "P{controller} randomly bottoms {}.",
-                    self.object_names(&remaining).join(", ")
-                ),
-                controller,
-            ));
+            // The player knows the looked-at cards, but not their new random library order.
             return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
         }
 

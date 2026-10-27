@@ -38,6 +38,12 @@ mod deck_coverage_ajani_steadfast;
 #[path = "scenario/deck_coverage_garruk_cursed_huntsman.rs"]
 mod deck_coverage_garruk_cursed_huntsman;
 
+#[path = "scenario/deck_coverage_carth_the_lion.rs"]
+mod deck_coverage_carth_the_lion;
+
+#[path = "scenario/deck_coverage_carth_the_lion_cost_edges.rs"]
+mod deck_coverage_carth_the_lion_cost_edges;
+
 #[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
 mod deck_coverage_jace_unraveler_of_secrets;
 

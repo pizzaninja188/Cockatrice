@@ -559,7 +559,7 @@ bool engineFallbackHasCompleteCostPrefix(const ruled::v1::AbilityInfo &ability)
     // Only classify presentation forms whose entire cost is represented. In particular,
     // sacrifice/tap/discard summaries can omit restrictions and must retain Oracle text.
     static const QRegularExpression completePart(
-        QStringLiteral("^(?:\\{T\\}|(?:\\{(?:[0-9]+|[WUBRGC])\\})+|Pay [0-9]+ life)$"));
+        QStringLiteral("^(?:\\{T\\}|(?:\\{(?:[0-9]+|[WUBRGC])\\})+|Pay [0-9]+ life|[+-][0-9]+)$"));
     const auto parts = prefix.split(QStringLiteral(", "));
     return std::all_of(parts.cbegin(), parts.cend(),
                        [](const QString &part) { return completePart.match(part).hasMatch(); });
