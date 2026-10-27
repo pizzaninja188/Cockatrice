@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "e0cef79c-ad47-4cbc-9d73-a913e487ccb7",
+  "spans": [
+    {"face_id": "garruk_cursed_huntsman", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "garruk_cursed_huntsman", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"]},
+    {"face_id": "garruk_cursed_huntsman", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/2"]}
+  ],
+  "primitive_references": [],
+  "tokens": ["wolf_bg_2_2_garruk_loyalty"],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_garruk_cursed_huntsman::garruk_exact_identity_and_destroy_then_draw", "covers": "Exact identity, mana cost, types, starting loyalty and ordered minus-three definition."},
+    {"test": "deck_registry::deck_coverage_garruk_cursed_huntsman::garruk_zero_creates_two_exact_wolves_with_a_death_trigger", "covers": "Zero cost, two black and green 2/2 Wolf tokens and their captured Garruk-subtype death instruction."},
+    {"test": "deck_registry::deck_coverage_garruk_cursed_huntsman::garruk_minus_six_has_the_printed_emblem_ability_shape", "covers": "Minus-six cost and the exact controller-scoped plus-three and trample emblem effects."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_minus_three_destroys_either_players_creature_then_draws", "covers": "Actual activation destroys either player's legal creature and then draws."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_minus_three_draws_even_if_the_legal_creature_is_indestructible", "covers": "A legal indestructible creature survives and the draw still happens."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_minus_three_rejects_noncreatures_and_does_not_draw_for_stale_targets", "covers": "Noncreature targeting fails and a sole stale target prevents the entire ability from resolving."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_minus_three_resolves_after_its_source_leaves", "covers": "The captured minus-three continues after its source changes zones."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_zero_creates_two_black_green_wolves_with_public_identity", "covers": "Actual zero activation creates two exact Wolves with public token identities."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_death_retains_its_trigger_and_counts_current_garruk_subtypes", "covers": "A ceased Wolf retains its captured trigger and public stack presentation; current controlled Garruk subtypes receive counters."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_two_wolves_dying_together_create_separate_loyalty_triggers", "covers": "Actual simultaneous Wolf deaths create two separately resolving triggers."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_zero_consumes_the_ordinary_loyalty_activation_allowance", "covers": "The zero-cost loyalty activation uses the normal per-turn allowance."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_stolen_wolf_death_uses_its_controller_at_death", "covers": "Actual Act of Treason and Bolt make the Wolf's controller at death own its trigger."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_copied_wolf_retains_its_death_trigger_after_cessation", "covers": "An actual Cackling Counterpart copy dies and its captured trigger survives token cessation."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_suppressed_at_death_has_no_trigger", "covers": "A labeled synthetic ability-removal effect suppresses the actual Wolf's death trigger."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_exiled_wolf_does_not_die_or_trigger", "covers": "Actual Swords to Plowshares exiles the Wolf without a death trigger."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_trigger_checks_live_recipient_type_subtype_and_controller", "covers": "Labeled synthetic changes before resolution establish live controller, planeswalker and Garruk subtype selection."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_cannot_be_saved_by_a_simultaneous_wolf_death_trigger", "covers": "Synthetic lethal and zero-loyalty marks cause real simultaneous state-based actions before the Wolf trigger."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_begun_counters_survive_trigger_controller_departure", "covers": "A surviving foreign-owned recipient retains the accepted Lae'zel replacement when the trigger controller leaves."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_restores_begun_counters_after_independent_aura_return", "covers": "A real Banishing Light observer suspends and restores the begun counter event exactly once."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_begun_counters_retire_when_the_recipient_owner_leaves", "covers": "A departed recipient is removed and the empty begun batch completes without a stranded choice."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_wolf_suspended_counters_prune_a_stale_incarnation_but_finish_the_other", "covers": "A labeled synthetic same-ID generation change is pruned while another original recipient completes."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblem_survives_its_source_and_affects_current_and_later_creatures", "covers": "The actual ultimate creates a public emblem after Garruk dies and affects current and later controlled creatures."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblem_tracks_current_control_type_and_layer_six_order", "covers": "Labeled synthetic control, type and newer ability-removal effects exercise the live emblem scope."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblems_stack_their_modifiers_without_duplicate_trample", "covers": "Two separately created emblems stack plus-three modifiers while trample remains present."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblem_and_its_effects_leave_with_their_controller", "covers": "The emblem and its marker-linked effects leave with their controller; a borrowed creature survives."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblem_grants_trample_after_an_older_ability_removal", "covers": "The newer emblem grants trample after an older synthetic ability-removal effect."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_emblem_grants_real_blocked_trample_damage", "covers": "Actual combat assigns lethal damage to a blocker and excess trample damage to the defending player."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_minus_three_draw_updates_only_its_server_private_hand_projection", "covers": "The engine's server-only hand facts contain the drawn card without publishing its identity in a move or log."},
+    {"test": "scenario deck_coverage_garruk_cursed_huntsman::garruk_all_three_abilities_replay_as_accepted_wire_commands", "covers": "All three actual abilities, Wolf death and subsequent action replay deterministically from accepted encoded commands."}
+  ],
+  "complete_definition_review_confirmed": true
+}

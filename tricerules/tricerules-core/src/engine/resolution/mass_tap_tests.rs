@@ -254,6 +254,7 @@ fn ajani_steadfast_loyalty_clause_excludes_its_source_planeswalker() {
             counter: CounterKind::Loyalty,
             count: 1.into(),
             exclude_self: true,
+            subtype: None,
         },
         source,
     );
@@ -289,6 +290,7 @@ fn ajani_steadfast_loyalty_clause_excludes_its_source_planeswalker() {
             counter: CounterKind::Loyalty,
             count: 1.into(),
             exclude_self: true,
+            subtype: None,
         },
         source,
     );
@@ -321,6 +323,7 @@ fn ajani_steadfast_loyalty_clause_excludes_its_source_planeswalker() {
             counter: CounterKind::Loyalty,
             count: 1.into(),
             exclude_self: false,
+            subtype: None,
         },
         source,
     );

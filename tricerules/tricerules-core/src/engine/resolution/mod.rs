@@ -2917,7 +2917,7 @@ impl GameEngine {
                 return Ok(true);
             }
         }
-        let combined_counters = self
+        let begun_flat_counters = self
             .state
             .pending_resolution
             .as_ref()
@@ -2925,9 +2925,12 @@ impl GameEngine {
                 self.begun_combined_counter_placement(
                     pending,
                     self.state.pending_replacement_event.as_ref(),
+                ) || self.begun_wolf_counter_placement(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
                 )
             });
-        if combined_counters {
+        if begun_flat_counters {
             // The nested return may have changed recipients and replacement sources while this
             // exact counter transaction waited. Reconcile its saved proposals, never replay it.
             let event_start = events.len();

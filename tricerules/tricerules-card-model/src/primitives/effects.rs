@@ -54,6 +54,12 @@ pub enum StaticEmblemEffect {
         power: i32,
         toughness: i32,
     },
+    /// Garruk's emblem grants an ordinary layer-6 keyword to a live creature scope.
+    CreatureKeyword {
+        #[serde(default)]
+        filter: CreatureScopeFilter,
+        keyword: Keyword,
+    },
     GrantSpellKeyword {
         #[serde(default)]
         filter: super::SpellCastFilter,
@@ -859,6 +865,21 @@ impl ArmySubtype {
         match self {
             Self::Goblin => "goblin_army_b_0_0",
             Self::Zombie => "zombie_army_b_0_0",
+        }
+    }
+}
+
+/// The supported named planeswalker scope of a mass-counter instruction. Garruk's Wolf
+/// requires this subtype; further variants need a real authored use and independent review.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlaneswalkerCounterSubtype {
+    Garruk,
+}
+
+impl PlaneswalkerCounterSubtype {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Garruk => "Garruk",
         }
     }
 }
@@ -1956,12 +1977,15 @@ pub enum SpellEffectKind {
         filter: CreatureScopeFilter,
     },
     /// CR 122: put `count` counters on each planeswalker controlled by the resolving ability's
-    /// controller. Brokers Ascendancy uses this resolution-time scope.
+    /// controller. Brokers Ascendancy uses the unrestricted scope; Garruk's Wolf restricts it
+    /// to planeswalkers with one subtype, evaluated from current derived characteristics.
     PutCountersAllPlaneswalkers {
         counter: CounterKind,
         count: Amount,
         #[serde(default)]
         exclude_self: bool,
+        #[serde(default)]
+        subtype: Option<PlaneswalkerCounterSubtype>,
     },
     /// Ajani Steadfast's single instruction puts a +1/+1 counter on each controlled creature and
     /// a loyalty counter on each other controlled planeswalker. The existing creature and walker
@@ -4732,6 +4756,24 @@ impl SpellEffectKind {
                             return Err("static emblem creature modifier cannot be zero".into());
                         }
                         filter.validate()?;
+                    }
+                    StaticEmblemEffect::CreatureKeyword { filter, .. } => {
+                        filter.validate()?;
+                        if matches!(
+                            filter.controller,
+                            Some(super::CreatureScopeController::TargetedPlayer { .. })
+                        ) {
+                            return Err(
+                                "static emblem keyword scope cannot use an unbound target player"
+                                    .into(),
+                            );
+                        }
+                        if filter.required_keyword.is_some() {
+                            return Err(
+                                "static emblem keyword scope cannot depend on a layer-6 keyword"
+                                    .into(),
+                            );
+                        }
                     }
                     StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
                     StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {}

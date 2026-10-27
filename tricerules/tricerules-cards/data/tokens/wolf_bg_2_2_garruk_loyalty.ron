@@ -1,0 +1,18 @@
+// Garruk, Cursed Huntsman's black and green Wolf token.
+(
+    id: "wolf_bg_2_2_garruk_loyalty",
+    name: "Wolf",
+    face_id: "wolf",
+    types: ["Creature", "Wolf"],
+    colors: [Black, Green],
+    power: 2,
+    toughness: 2,
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
+        trigger: WhenSelfDies,
+        effect: [PutCountersAllPlaneswalkers(
+            counter: Loyalty, count: 1, subtype: Some(Garruk),
+        )],
+    )],
+)

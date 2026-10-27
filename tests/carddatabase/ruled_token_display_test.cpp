@@ -169,3 +169,43 @@ TEST(RuledTokenDisplayTest, StableEngineFallbackResolvesOnlyOneStructuralTokenCa
                                                          {QStringLiteral("Marker — activated ability (activated_01)")});
     EXPECT_TRUE(ambiguous.name.isEmpty()) << "a stable fallback must not guess between display variants";
 }
+
+TEST(RuledTokenDisplayTest, StableEngineFallbackNeverChoosesVanillaTokenVariants)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+                                             new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+
+    // Project-owned synthetic fixtures deliberately put the vanilla entry on either side
+    // of the ability-bearing entry; the Boar family also has a gap in its suffixes.
+    for (const auto &name : {QStringLiteral("Wolf Token"), QStringLiteral("Wolf Token "),
+                             QStringLiteral("Boar Token"), QStringLiteral("Boar Token  "),
+                             QStringLiteral("Myr Token"), QStringLiteral("Marker Token"),
+                             QStringLiteral("Marker Token "), QStringLiteral("Marker Token  ")}) {
+        ASSERT_TRUE(db->query()->getCardInfo(name)) << name.toStdString();
+    }
+    ASSERT_FALSE(db->query()->getCardInfo(QStringLiteral("Boar Token ")));
+    ASSERT_TRUE(db->query()->getCardInfo(QStringLiteral("Wolf Token"))->getText().isEmpty());
+    ASSERT_FALSE(db->query()->getCardInfo(QStringLiteral("Wolf Token "))->getText().isEmpty());
+
+    const QString wolfFallback = QStringLiteral("Wolf — triggered ability (triggered_01)");
+    const QString boarFallback = QStringLiteral("Boar — triggered ability (triggered_01)");
+    EXPECT_EQ(RuledTokenDisplay::resolve(db->query(), "Wolf", "2/2", "bg", {}, {wolfFallback}).name,
+              QStringLiteral("Wolf Token "));
+    EXPECT_EQ(RuledTokenDisplay::resolve(db->query(), "Boar", "2/2", "g", {}, {boarFallback}).name,
+              QStringLiteral("Boar Token"));
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr", "1/1", "", {},
+                                           {QStringLiteral("Myr — triggered ability (triggered_01)")}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Marker", "", "", {},
+                                           {QStringLiteral("Marker — activated ability (activated_01)")}).name.isEmpty());
+
+    EXPECT_EQ(RuledTokenDisplay::resolve(db->query(), "Wolf", "2/2", "bg", {}, {}).name,
+              QStringLiteral("Wolf Token"));
+    EXPECT_EQ(RuledTokenDisplay::resolve(db->query(), "Boar", "2/2", "g", {}, {}).name,
+              QStringLiteral("Boar Token  "));
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Wolf", "2/2", "bg", {"Flying"},
+                                           {wolfFallback}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Wolf", "3/3", "bg", {},
+                                           {wolfFallback}).name.isEmpty());
+}

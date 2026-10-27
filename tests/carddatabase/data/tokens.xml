@@ -11,6 +11,15 @@
             <prop><type>Token Artifact Creature — Golem</type><maintype>Creature</maintype><pt>3/3</pt></prop></card>
         <card><name>Golem Token  </name><text>Trample</text><token>1</token><tablerow>0</tablerow>
             <prop><type>Token Artifact Creature — Golem</type><maintype>Creature</maintype><pt>3/3</pt></prop></card>
+        <!-- Synthetic variant families for the ruled token-display resolver. -->
+        <card><name>Wolf Token</name><text></text><token>1</token><tablerow>0</tablerow>
+            <prop><colors>BG</colors><type>Token Creature — Wolf</type><maintype>Creature</maintype><pt>2/2</pt></prop></card>
+        <card><name>Wolf Token </name><text>When this token dies, put a loyalty counter on each Garruk you control.</text><token>1</token><tablerow>0</tablerow>
+            <prop><colors>BG</colors><type>Token Creature — Wolf</type><maintype>Creature</maintype><pt>2/2</pt></prop></card>
+        <card><name>Boar Token</name><text>When this token dies, draw a card.</text><token>1</token><tablerow>0</tablerow>
+            <prop><colors>G</colors><type>Token Creature — Boar</type><maintype>Creature</maintype><pt>2/2</pt></prop></card>
+        <card><name>Boar Token  </name><text></text><token>1</token><tablerow>0</tablerow>
+            <prop><colors>G</colors><type>Token Creature — Boar</type><maintype>Creature</maintype><pt>2/2</pt></prop></card>
         <card>
             <name>Goblin Wizard Token </name>
             <text>Prowess</text>
@@ -66,6 +75,16 @@
         <card>
             <name>Marker Token </name>
             <text>{T}: Draw a card.</text>
+            <token>1</token>
+            <tablerow>1</tablerow>
+            <prop>
+                <type>Token Artifact — Marker</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
+            <name>Marker Token  </name>
+            <text></text>
             <token>1</token>
             <tablerow>1</tablerow>
             <prop>

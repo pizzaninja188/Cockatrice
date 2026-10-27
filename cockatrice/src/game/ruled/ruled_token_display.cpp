@@ -166,9 +166,12 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
         // Presentation-only Oracle prose is intentionally not embedded in tricerules card data.
         // When TokenIdentity therefore carries its stable fallback label, retain a candidate only
         // as a last resort and accept it below solely when the structural family is unambiguous.
-        if (hasStableAbilityFallback && !candidateText.isEmpty() && containsEveryAbility) {
-            structuralFallback = {info->getName(), {}};
-            ++structuralFallbackCount;
+        if (hasStableAbilityFallback) {
+            if (!candidateText.isEmpty() && containsEveryAbility) {
+                structuralFallback = {info->getName(), {}};
+                ++structuralFallbackCount;
+            }
+            continue;
         }
         if (expectedAbilities.isEmpty()) {
             if (!candidateText.isEmpty()) {

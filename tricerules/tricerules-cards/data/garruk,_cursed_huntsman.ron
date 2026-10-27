@@ -1,0 +1,39 @@
+// Oracle e0cef79c-ad47-4cbc-9d73-a913e487ccb7; CR 608.2b governs all-illegal targets.
+(
+    id: "garruk,_cursed_huntsman",
+    name: "Garruk, Cursed Huntsman",
+    face_id: "garruk_cursed_huntsman",
+    mana_cost: "{4}{B}{G}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Garruk"],
+    loyalty: 5,
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Loyalty(0)],
+        effect: [CreateTokens(token: "wolf_bg_2_2_garruk_loyalty", count: 2)],
+    ), (
+        ability_id: "activated_02",
+        presentation: OracleLines([2]),
+        costs: [Loyalty(-3)],
+        effect: [
+            Destroy(subject: Chosen((kind: Creature))),
+            Draw(count: 1),
+        ],
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0],
+        )])),
+    ), (
+        ability_id: "activated_03",
+        presentation: OracleLines([3]),
+        costs: [Loyalty(-6)],
+        effect: [CreateStaticEmblem(
+            emblem_id: "garruk_cursed_huntsman_emblem",
+            display_name: "Garruk, Cursed Huntsman Emblem",
+            effects: [
+                CreaturePt(filter: (controller: Some(YouControl)), power: 3, toughness: 3),
+                CreatureKeyword(filter: (controller: Some(YouControl)), keyword: Trample),
+            ],
+        )],
+    )],
+)

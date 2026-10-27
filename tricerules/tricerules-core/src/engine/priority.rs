@@ -192,6 +192,10 @@ impl GameEngine {
                     // The independent observer must restore the begun return and its cursor.
                     return None;
                 }
+                if self.begun_wolf_counter_placement(pending, replacement) {
+                    // The captured Wolf trigger's begun counter batch must be restored intact.
+                    return None;
+                }
                 if matches!(
                     &pending.continuation,
                     ResolutionContinuation::WardPayment { .. }
@@ -459,6 +463,16 @@ impl GameEngine {
                         self.state.pending_replacement_event.as_ref(),
                     )
                 });
+        let begun_wolf_counters = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                self.begun_wolf_counter_placement(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                )
+            });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -574,8 +588,9 @@ impl GameEngine {
                     // controller or physical source leaves (CR 608.2m).
                     preserve = true;
                 }
-                ResolutionContinuation::CounterReplacement { .. } if begun_combined_counters => {
-                    // The exact flat combined instruction has begun. Surviving recipients keep
+                ResolutionContinuation::CounterReplacement { .. }
+                    if begun_combined_counters || begun_wolf_counters => {
+                    // These exact flat instructions have begun. Surviving recipients keep
                     // accepted replacements and the original cursor after controller departure.
                     preserve = true;
                 }

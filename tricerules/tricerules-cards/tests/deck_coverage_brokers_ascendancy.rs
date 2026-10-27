@@ -61,6 +61,7 @@ fn brokers_ascendancy_registers_its_characteristics_and_end_step_mapping() {
                 counter: CounterKind::Loyalty,
                 count: Amount::Fixed(1),
                 exclude_self: false,
+                subtype: None,
             },
         ]
     );

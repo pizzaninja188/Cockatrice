@@ -292,6 +292,15 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                         )
                     }
                 }
+                SpellEffectKind::PutCountersAllPlaneswalkers {
+                    counter,
+                    count: Amount::Fixed(1),
+                    exclude_self: false,
+                    subtype: Some(subtype),
+                } => format!(
+                    "Put a {} counter on each {} planeswalker you control.",
+                    counter.label(), subtype.as_str()
+                ),
                 SpellEffectKind::RemoveCounters {
                     counter,
                     count,

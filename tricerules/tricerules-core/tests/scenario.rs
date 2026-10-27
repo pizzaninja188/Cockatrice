@@ -35,6 +35,9 @@ mod deck_coverage_ashiok_dream_render;
 #[path = "scenario/deck_coverage_ajani_steadfast.rs"]
 mod deck_coverage_ajani_steadfast;
 
+#[path = "scenario/deck_coverage_garruk_cursed_huntsman.rs"]
+mod deck_coverage_garruk_cursed_huntsman;
+
 #[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
 mod deck_coverage_jace_unraveler_of_secrets;
 

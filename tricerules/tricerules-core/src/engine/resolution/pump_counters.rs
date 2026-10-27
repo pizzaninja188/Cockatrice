@@ -137,6 +137,21 @@ pub(super) fn create_static_emblem(
                     timestamp: cx.engine.state.command_index,
                 });
             }
+            StaticEmblemEffect::CreatureKeyword { filter, keyword } => {
+                cx.engine.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: Some(object_id),
+                    affected: AffectedScope::CreaturesMatching {
+                        reference_player: cx.controller,
+                        filter,
+                        exclude: None,
+                    },
+                    kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                    condition: None,
+                    duration: EffectDuration::Indefinite,
+                    timestamp: cx.engine.state.command_index,
+                });
+            }
             StaticEmblemEffect::GrantSpellKeyword { .. } => {}
             StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {
                 // The marker supplies lifetime identity, not a physical replacement source.
@@ -1314,6 +1329,7 @@ pub(super) fn put_counters_all_planeswalkers(
         counter,
         count,
         exclude_self,
+        subtype,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -1352,6 +1368,7 @@ pub(super) fn put_counters_all_planeswalkers(
             });
             characteristics.controller == cx.controller
                 && characteristics.has_type("Planeswalker")
+                && subtype.is_none_or(|subtype| characteristics.has_type(subtype.as_str()))
                 && (!exclude_self || !is_source_object)
         })
         .map(|(object_id, _)| object_id)

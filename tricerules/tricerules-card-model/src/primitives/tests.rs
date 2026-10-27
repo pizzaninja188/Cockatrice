@@ -1820,6 +1820,107 @@ fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
 }
 
 #[test]
+fn planeswalker_counter_subtype_defaults_and_round_trips_garruk() {
+    let unrestricted: super::SpellEffectKind =
+        ron::from_str("PutCountersAllPlaneswalkers(counter: Loyalty, count: 1)").unwrap();
+    assert!(matches!(
+        unrestricted,
+        super::SpellEffectKind::PutCountersAllPlaneswalkers { subtype: None, .. }
+    ));
+    let scoped: super::SpellEffectKind = ron::from_str(
+        "PutCountersAllPlaneswalkers(counter: Loyalty, count: 1, subtype: Some(Garruk))",
+    )
+    .unwrap();
+    assert!(scoped.validate(super::EffectContext::Ability).is_ok());
+    assert!(matches!(
+        &scoped,
+        super::SpellEffectKind::PutCountersAllPlaneswalkers {
+            subtype: Some(super::PlaneswalkerCounterSubtype::Garruk),
+            ..
+        }
+    ));
+    let serialized = ron::to_string(&scoped).expect("serialize the typed subtype");
+    let decoded: super::SpellEffectKind =
+        ron::from_str(&serialized).expect("round-trip the typed subtype");
+    assert_eq!(decoded, scoped);
+}
+
+#[test]
+fn planeswalker_counter_subtype_rejects_invalid_and_unsupported_names() {
+    let mut accepted = Vec::new();
+    for subtype in [
+        "Creature",
+        "Wolf",
+        "DefinitelyUnknown",
+        "Garruk Jace",
+        "\" Garruk \"",
+        "\"\"",
+        "\"   \"",
+        // Jace is a real planeswalker subtype, but is not an admitted use of this
+        // specialized scope until an actual card requires it.
+        "Jace",
+    ] {
+        let text = format!(
+            "PutCountersAllPlaneswalkers(counter: Loyalty, count: 1, subtype: Some({subtype}))"
+        );
+        if ron::from_str::<super::SpellEffectKind>(&text)
+            .is_ok_and(|effect| effect.validate(super::EffectContext::Ability).is_ok())
+        {
+            accepted.push(subtype);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "unsupported subtype values were admitted: {accepted:?}"
+    );
+}
+
+#[test]
+fn static_emblem_creature_keyword_admits_earlier_layer_filters_only() {
+    let allowed: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "garruk_fixture", display_name: "Garruk fixture",
+            effects: [CreatureKeyword(filter: (controller: Some(YouControl)), keyword: Trample)],
+        )"#,
+    )
+    .expect("the typed creature-keyword emblem shape must be admitted");
+    assert!(allowed.validate(super::EffectContext::Ability).is_ok());
+
+    let same_layer: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "dependency_fixture", display_name: "Dependency fixture",
+            effects: [CreatureKeyword(
+                filter: (controller: Some(YouControl), required_keyword: Some(Flying)),
+                keyword: Trample,
+            )],
+        )"#,
+    )
+    .expect("the filter shape parses before the semantic dependency check");
+    assert!(
+        same_layer.validate(super::EffectContext::Ability).is_err(),
+        "same-layer keyword-dependent scopes require CR 613.8 support"
+    );
+}
+
+#[test]
+fn static_emblem_creature_keyword_rejects_unbound_targeted_player_scope() {
+    let effect: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "targeted_fixture", display_name: "Targeted fixture",
+            effects: [CreatureKeyword(
+                filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer))),
+                keyword: Trample,
+            )],
+        )"#,
+    )
+    .expect("the targeted-player filter parses before validation");
+    assert!(
+        effect.validate(super::EffectContext::Ability).is_err(),
+        "an emblem keyword scope cannot bind a target player"
+    );
+}
+
+#[test]
 fn storm_is_a_spell_keyword_and_static_emblems_require_typed_effects() {
     let face: crate::CardFace = ron::from_str(
         r#"(

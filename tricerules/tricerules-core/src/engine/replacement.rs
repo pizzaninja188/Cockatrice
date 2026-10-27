@@ -2416,6 +2416,65 @@ impl GameEngine {
             })
     }
 
+    /// Recognize the begun Wolf death instruction from its captured trigger and effect batch.
+    /// The token may already have ceased, and recipients may have departed or changed
+    /// incarnation; those live facts are reconciled only after the structural match.
+    pub(super) fn begun_wolf_counter_placement(
+        &self,
+        pending: &PendingResolution,
+        replacement: Option<&PendingReplacementEvent>,
+    ) -> bool {
+        use tricerules_card_model::primitives::PlaneswalkerCounterSubtype;
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion: crate::state::CounterPlacementCompletion::StackEffect { .. },
+        } = &pending.continuation
+        else {
+            return false;
+        };
+        let Some(PendingReplacementEvent::Counters(batch)) = replacement else {
+            return false;
+        };
+        stack.item.is_triggered
+            && stack.item.ability_text.is_some()
+            && stack.item.source_permanent_id.is_some()
+            && stack.item.activated_ability.is_none()
+            && stack.program.is_none()
+            && stack.resume_effect_index == Some(1)
+            && pending.presentation.source_object_id == stack.item.id
+            && stack
+                .item
+                .triggered_ability
+                .as_ref()
+                .is_some_and(|ability| {
+                    ability.trigger == TriggerCondition::WhenSelfDies
+                        && ability.program.is_none()
+                        && ability.modal.is_none()
+                        && ability.targeting.is_none()
+                        && !ability.may
+                        && ability.intervening_if.is_none()
+                        && !ability.triggers_only_once
+                        && ability.max_triggers_per_turn.is_none()
+                        && matches!(
+                            ability.effect.as_slice(),
+                            [SpellEffectKind::PutCountersAllPlaneswalkers {
+                                counter: CounterKind::Loyalty,
+                                count: Amount::Fixed(1),
+                                exclude_self: false,
+                                subtype: Some(PlaneswalkerCounterSubtype::Garruk),
+                            }]
+                        )
+                })
+            && batch.event_index < batch.events.len()
+            && batch.events.iter().all(|event| {
+                matches!(&event.recipient, CounterPlacementRecipient::Object { .. })
+                    && event.actor == stack.item.controller
+                    && event.origin == super::continuous::CounterPlacementOrigin::Effect
+                    && event.original_counters.len() == 1
+                    && event.original_counters.get(&CounterKind::Loyalty) == Some(&1)
+            })
+    }
+
     /// Recompute the supported begun counter-order offers after player departure. Their saved
     /// proposals retain accepted replacements while stale recipients are pruned; a changed
     /// recipient controller receives a fresh CR 616.1 order prompt.
@@ -2429,8 +2488,9 @@ impl GameEngine {
         let Some(original_replacement) = self.state.pending_replacement_event.clone() else {
             return Ok(());
         };
-        let combined =
-            self.begun_combined_counter_placement(&original_pending, Some(&original_replacement));
+        let begun_flat = self
+            .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
+            || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement));
         let (stack, completion) = match &original_pending.continuation {
             ResolutionContinuation::CounterReplacement {
                 stack: Some(stack),
@@ -2441,7 +2501,7 @@ impl GameEngine {
                 stack: Some(stack),
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::StackEffect { .. },
-            } if combined => (stack.clone(), completion.clone()),
+            } if begun_flat => (stack.clone(), completion.clone()),
             _ => return Ok(()),
         };
         let PendingReplacementEvent::Counters(batch) = &original_replacement else {
@@ -2602,12 +2662,12 @@ impl GameEngine {
                 return Err(error);
             }
         };
-        let mut previous_result = if combined {
+        let mut previous_result = if begun_flat {
             stack.previous_result.clone()
         } else {
             crate::state::EffectResult::default()
         };
-        if combined {
+        if begun_flat {
             previous_result.counter_placements.extend(receipts);
         }
         let completion_events =
@@ -8547,6 +8607,191 @@ mod tests {
         };
         batch.events[0].actor = 1;
         assert!(!engine.begun_combined_counter_placement(&pending, Some(&wrong_actor)));
+    }
+
+    #[test]
+    fn wolf_counter_departure_guard_requires_exact_captured_trigger_and_batch() {
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_221,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        // Neither the source nor recipient exists here: structural recognition uses captured
+        // provenance, while the normal refresh later prunes a missing or newer incarnation.
+        let mut item = engine.observer_return_item(900, 0);
+        item.card_id = "wolf_bg_2_2_garruk_loyalty".into();
+        item.source_permanent_id = Some(901);
+        item.is_triggered = true;
+        item.triggered_ability = Some(
+            engine
+                .registry
+                .get(&item.card_id)
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .clone(),
+        );
+        let mut stack = ParkedStackResolution::new(item);
+        stack.resume_effect_index = Some(1);
+        let pending = PendingResolution {
+            deciding_player: 0,
+            presentation: PendingResolutionPresentation {
+                source_object_id: 900,
+                candidates: vec![1, 2],
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt: String::new(),
+                choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion: crate::state::CounterPlacementCompletion::StackEffect {
+                    spell_label: String::new(),
+                },
+            },
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        };
+        let counters = BTreeMap::from([(CounterKind::Loyalty, 1)]);
+        let replacement =
+            PendingReplacementEvent::Counters(Box::new(PendingCounterPlacementBatch {
+                events: vec![ProposedCounterPlacement {
+                    recipient: CounterPlacementRecipient::Object {
+                        object_id: 902,
+                        zone_change_generation: 7,
+                    },
+                    actor: 0,
+                    original_counters: counters.clone(),
+                    counters,
+                    origin: super::super::continuous::CounterPlacementOrigin::Effect,
+                    entry_source: None,
+                    entry_context: None,
+                    counter_move_context: None,
+                    cost_debit_index: None,
+                    effect_created_counters: true,
+                    applied_replacements: Vec::new(),
+                }],
+                event_index: 0,
+                applications: Vec::new(),
+            }));
+        assert!(engine.begun_wolf_counter_placement(&pending, Some(&replacement)));
+        assert!(!engine.begun_wolf_counter_placement(&pending, None));
+
+        let mut wrong_trigger = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_trigger.continuation
+        else {
+            unreachable!()
+        };
+        stack.item.triggered_ability.as_mut().unwrap().trigger =
+            TriggerCondition::WhenSelfEntersBattlefield;
+        assert!(!engine.begun_wolf_counter_placement(&wrong_trigger, Some(&replacement)));
+
+        let mut wrong_leaf = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_leaf.continuation
+        else {
+            unreachable!()
+        };
+        stack.item.triggered_ability.as_mut().unwrap().effect = vec![SpellEffectKind::None];
+        assert!(!engine.begun_wolf_counter_placement(&wrong_leaf, Some(&replacement)));
+
+        let mut wrong_scope = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_scope.continuation
+        else {
+            unreachable!()
+        };
+        let [SpellEffectKind::PutCountersAllPlaneswalkers { subtype, .. }] = stack
+            .item
+            .triggered_ability
+            .as_mut()
+            .unwrap()
+            .effect
+            .as_mut_slice()
+        else {
+            unreachable!()
+        };
+        *subtype = None;
+        assert!(!engine.begun_wolf_counter_placement(&wrong_scope, Some(&replacement)));
+
+        let mut wrong_cursor = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_cursor.continuation
+        else {
+            unreachable!()
+        };
+        stack.resume_effect_index = Some(2);
+        assert!(!engine.begun_wolf_counter_placement(&wrong_cursor, Some(&replacement)));
+
+        let mut wrong_kind = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_kind.continuation
+        else {
+            unreachable!()
+        };
+        stack.item.is_triggered = false;
+        assert!(!engine.begun_wolf_counter_placement(&wrong_kind, Some(&replacement)));
+
+        let mut wrong_presentation = pending.clone();
+        wrong_presentation.presentation.source_object_id = 901;
+        assert!(!engine.begun_wolf_counter_placement(&wrong_presentation, Some(&replacement)));
+
+        let mut wrong_completion = pending.clone();
+        let ResolutionContinuation::CounterReplacement { completion, .. } =
+            &mut wrong_completion.continuation
+        else {
+            unreachable!()
+        };
+        *completion = crate::state::CounterPlacementCompletion::Proliferate { player_id: 0 };
+        assert!(!engine.begun_wolf_counter_placement(&wrong_completion, Some(&replacement)));
+
+        let mut wrong_actor = replacement.clone();
+        let PendingReplacementEvent::Counters(batch) = &mut wrong_actor else {
+            unreachable!()
+        };
+        batch.events[0].actor = 1;
+        assert!(!engine.begun_wolf_counter_placement(&pending, Some(&wrong_actor)));
+
+        let mut wrong_recipient = replacement.clone();
+        let PendingReplacementEvent::Counters(batch) = &mut wrong_recipient else {
+            unreachable!()
+        };
+        batch.events[0].recipient = CounterPlacementRecipient::Player { player_id: 0 };
+        assert!(!engine.begun_wolf_counter_placement(&pending, Some(&wrong_recipient)));
+
+        let mut wrong_original = replacement.clone();
+        let PendingReplacementEvent::Counters(batch) = &mut wrong_original else {
+            unreachable!()
+        };
+        batch.events[0]
+            .original_counters
+            .insert(CounterKind::Loyalty, 2);
+        assert!(!engine.begun_wolf_counter_placement(&pending, Some(&wrong_original)));
+
+        let mut different_generation = replacement.clone();
+        let PendingReplacementEvent::Counters(batch) = &mut different_generation else {
+            unreachable!()
+        };
+        batch.events[0].recipient = CounterPlacementRecipient::Object {
+            object_id: 902,
+            zone_change_generation: 8,
+        };
+        assert!(
+            engine.begun_wolf_counter_placement(&pending, Some(&different_generation)),
+            "structural recognition leaves exact-generation pruning to reconciliation"
+        );
     }
 
     #[test]

@@ -65,6 +65,8 @@ mod deck_coverage_fire_lit_thicket;
 mod deck_coverage_flameshadow_conjuring;
 #[path = "../deck_coverage_frantic_search.rs"]
 mod deck_coverage_frantic_search;
+#[path = "../deck_coverage_garruk_cursed_huntsman.rs"]
+mod deck_coverage_garruk_cursed_huntsman;
 #[path = "../deck_coverage_garruks_packleader.rs"]
 mod deck_coverage_garruks_packleader;
 #[path = "../deck_coverage_ghalta.rs"]
