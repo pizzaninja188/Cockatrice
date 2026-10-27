@@ -186,6 +186,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::PutCountersAllPlaneswalkers { .. } => {
             pump_counters::put_counters_all_planeswalkers(cx, effect)?
         }
+        SpellEffectKind::PutCountersOnCreaturesAndOtherPlaneswalkers => {
+            pump_counters::put_counters_on_creatures_and_other_planeswalkers(cx)?
+        }
         SpellEffectKind::Proliferate => proliferate::proliferate(cx)?,
         effect @ (SpellEffectKind::Destroy { .. }
         | SpellEffectKind::DestroyPreventingRegeneration { .. }) => misc::destroy(cx, effect)?,

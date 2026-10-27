@@ -2378,10 +2378,48 @@ impl GameEngine {
         Ok(receipts)
     }
 
-    /// Recompute only a typed Proliferate replacement-order offer after player departure.
-    /// The effect controller and the CR 616.1 chooser are independent: a begun program must
-    /// retain its cursor, while a changed recipient controller receives a fresh order prompt.
-    pub(super) fn refresh_program_proliferate_replacement_departure(
+    /// Recognize the already-begun flat combined-counter instruction from its captured ability,
+    /// saved cursor, and effect-origin batch, without consulting its possibly departed source.
+    pub(super) fn begun_combined_counter_placement(
+        &self,
+        pending: &PendingResolution,
+        replacement: Option<&PendingReplacementEvent>,
+    ) -> bool {
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion: crate::state::CounterPlacementCompletion::StackEffect { .. },
+        } = &pending.continuation
+        else {
+            return false;
+        };
+        let Some(PendingReplacementEvent::Counters(batch)) = replacement else {
+            return false;
+        };
+        !stack.item.is_triggered
+            && stack.item.ability_text.is_some()
+            && stack.program.is_none()
+            && stack.resume_effect_index == Some(1)
+            && pending.presentation.source_object_id == stack.item.id
+            && stack
+                .item
+                .activated_ability
+                .as_ref()
+                .is_some_and(|ability| {
+                    ability.effect.as_slice()
+                        == [SpellEffectKind::PutCountersOnCreaturesAndOtherPlaneswalkers]
+                })
+            && batch.event_index < batch.events.len()
+            && batch.events.iter().all(|event| {
+                matches!(&event.recipient, CounterPlacementRecipient::Object { .. })
+                    && event.actor == stack.item.controller
+                    && event.origin == super::continuous::CounterPlacementOrigin::Effect
+            })
+    }
+
+    /// Recompute the supported begun counter-order offers after player departure. Their saved
+    /// proposals retain accepted replacements while stale recipients are pruned; a changed
+    /// recipient controller receives a fresh CR 616.1 order prompt.
+    pub(super) fn refresh_counter_placement_departure(
         &mut self,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
@@ -2391,12 +2429,19 @@ impl GameEngine {
         let Some(original_replacement) = self.state.pending_replacement_event.clone() else {
             return Ok(());
         };
+        let combined =
+            self.begun_combined_counter_placement(&original_pending, Some(&original_replacement));
         let (stack, completion) = match &original_pending.continuation {
             ResolutionContinuation::CounterReplacement {
                 stack: Some(stack),
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::Proliferate { .. },
             } if stack.program.is_some() => (stack.clone(), completion.clone()),
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::StackEffect { .. },
+            } if combined => (stack.clone(), completion.clone()),
             _ => return Ok(()),
         };
         let PendingReplacementEvent::Counters(batch) = &original_replacement else {
@@ -2491,7 +2536,7 @@ impl GameEngine {
                 .events
                 .get(batch.event_index)
                 .ok_or(EngineError::Illegal(
-                    "proliferate replacement event disappeared while refreshing",
+                    "counter replacement event disappeared while refreshing",
                 ))?;
             let event_decider = match &event.recipient {
                 CounterPlacementRecipient::Object { object_id, .. } => {
@@ -2522,7 +2567,7 @@ impl GameEngine {
                         .map(|index| self.state.players[index].id)
                 })
                 .ok_or(EngineError::Illegal(
-                    "no live player can order proliferate counter replacements",
+                    "no live player can order counter replacements",
                 ))?;
             self.park_counter_placement_choice(batch, candidates, Some(stack), completion, out);
             if let Some(pending) = self.state.pending_resolution.as_mut() {
@@ -2548,17 +2593,25 @@ impl GameEngine {
         let original_event_count = out.len();
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        if let Err(error) = self.commit_counter_placement_batch(&batch.events, &completion, out) {
-            out.truncate(original_event_count);
-            self.state.pending_resolution = Some(original_pending);
-            self.state.pending_replacement_event = Some(original_replacement);
-            return Err(error);
+        let receipts = match self.commit_counter_placement_batch(&batch.events, &completion, out) {
+            Ok(receipts) => receipts,
+            Err(error) => {
+                out.truncate(original_event_count);
+                self.state.pending_resolution = Some(original_pending);
+                self.state.pending_replacement_event = Some(original_replacement);
+                return Err(error);
+            }
+        };
+        let mut previous_result = if combined {
+            stack.previous_result.clone()
+        } else {
+            crate::state::EffectResult::default()
+        };
+        if combined {
+            previous_result.counter_placements.extend(receipts);
         }
-        let completion_events = self.complete_parked_stack_with_previous(
-            stack,
-            crate::state::EffectResult::default(),
-            Vec::new(),
-        )?;
+        let completion_events =
+            self.complete_parked_stack_with_previous(stack, previous_result, Vec::new())?;
         out.extend(completion_events.events);
         Ok(())
     }
@@ -8385,6 +8438,116 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn combined_counter_departure_guard_requires_captured_leaf_cursor_and_stack_effect() {
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_220,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        // Synthetic pending batch isolates the preservation boundary; the scenario tests exercise
+        // actual replacement ordering, departure, and the suspended-observer continuation.
+        let mut item = engine.observer_return_item(900, 0);
+        item.card_id = "ajani_steadfast".into();
+        item.source_permanent_id = Some(901);
+        item.activated_ability = Some(
+            engine
+                .registry
+                .get("ajani_steadfast")
+                .unwrap()
+                .primary_face()
+                .activated_abilities[1]
+                .clone(),
+        );
+        let mut stack = ParkedStackResolution::new(item);
+        stack.resume_effect_index = Some(1);
+        let pending = PendingResolution {
+            deciding_player: 0,
+            presentation: PendingResolutionPresentation {
+                source_object_id: 900,
+                candidates: vec![1, 2],
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt: String::new(),
+                choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion: crate::state::CounterPlacementCompletion::StackEffect {
+                    spell_label: String::new(),
+                },
+            },
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        };
+        let counters = BTreeMap::from([(CounterKind::PlusOnePlusOne, 1)]);
+        let replacement =
+            PendingReplacementEvent::Counters(Box::new(PendingCounterPlacementBatch {
+                events: vec![ProposedCounterPlacement {
+                    recipient: CounterPlacementRecipient::Object {
+                        object_id: 902,
+                        zone_change_generation: 7,
+                    },
+                    actor: 0,
+                    original_counters: counters.clone(),
+                    counters,
+                    origin: super::super::continuous::CounterPlacementOrigin::Effect,
+                    entry_source: None,
+                    entry_context: None,
+                    counter_move_context: None,
+                    cost_debit_index: None,
+                    effect_created_counters: true,
+                    applied_replacements: Vec::new(),
+                }],
+                event_index: 0,
+                applications: Vec::new(),
+            }));
+        assert!(engine.begun_combined_counter_placement(&pending, Some(&replacement)));
+        assert!(!engine.begun_combined_counter_placement(&pending, None));
+
+        let mut wrong_leaf = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_leaf.continuation
+        else {
+            unreachable!()
+        };
+        stack.item.activated_ability.as_mut().unwrap().effect = vec![SpellEffectKind::None];
+        assert!(!engine.begun_combined_counter_placement(&wrong_leaf, Some(&replacement)));
+
+        let mut wrong_cursor = pending.clone();
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack), ..
+        } = &mut wrong_cursor.continuation
+        else {
+            unreachable!()
+        };
+        stack.resume_effect_index = Some(2);
+        assert!(!engine.begun_combined_counter_placement(&wrong_cursor, Some(&replacement)));
+
+        let mut wrong_completion = pending.clone();
+        let ResolutionContinuation::CounterReplacement { completion, .. } =
+            &mut wrong_completion.continuation
+        else {
+            unreachable!()
+        };
+        *completion = crate::state::CounterPlacementCompletion::Proliferate { player_id: 0 };
+        assert!(!engine.begun_combined_counter_placement(&wrong_completion, Some(&replacement)));
+
+        let mut wrong_actor = replacement.clone();
+        let PendingReplacementEvent::Counters(batch) = &mut wrong_actor else {
+            unreachable!()
+        };
+        batch.events[0].actor = 1;
+        assert!(!engine.begun_combined_counter_placement(&pending, Some(&wrong_actor)));
+    }
 
     #[test]
     fn exact_owner_return_preservation_requires_matching_leaf_and_completion_receipts() {

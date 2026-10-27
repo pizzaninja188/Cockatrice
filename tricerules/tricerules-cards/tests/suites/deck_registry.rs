@@ -3,6 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../deck_coverage_ajani_steadfast.rs"]
+mod deck_coverage_ajani_steadfast;
 #[path = "../deck_coverage_alhammarrets_archive.rs"]
 mod deck_coverage_alhammarrets_archive;
 #[path = "../deck_coverage_all_is_dust.rs"]

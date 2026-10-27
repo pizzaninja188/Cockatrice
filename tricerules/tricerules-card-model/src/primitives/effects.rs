@@ -59,6 +59,8 @@ pub enum StaticEmblemEffect {
         filter: super::SpellCastFilter,
         keyword: SpellKeyword,
     },
+    /// Ajani Steadfast's emblem protects its controller and their controlled planeswalkers.
+    PreventAllButOneDamageToYouAndYourPlaneswalkers,
 }
 /// A kind of counter that can sit on a permanent or player (CR 122.1). `Ord` is required so
 /// [`crate`] consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
@@ -1954,14 +1956,17 @@ pub enum SpellEffectKind {
         filter: CreatureScopeFilter,
     },
     /// CR 122: put `count` counters on each planeswalker controlled by the resolving ability's
-    /// controller. Brokers Ascendancy and Ajani Steadfast share this resolution-time scope; the
-    /// latter excludes its own source planeswalker for its loyalty-counter clause.
+    /// controller. Brokers Ascendancy uses this resolution-time scope.
     PutCountersAllPlaneswalkers {
         counter: CounterKind,
         count: Amount,
         #[serde(default)]
         exclude_self: bool,
     },
+    /// Ajani Steadfast's single instruction puts a +1/+1 counter on each controlled creature and
+    /// a loyalty counter on each other controlled planeswalker. The existing creature and walker
+    /// mass-counter leaves cannot preserve one replacement event for a dual-type permanent.
+    PutCountersOnCreaturesAndOtherPlaneswalkers,
     /// CR 701.34: choose any number of permanents and/or players with counters, then add one of
     /// each kind already on each chosen recipient. Atraxa, Evolution Sage, Inexorable Tide,
     /// Tezzeret's Gambit, Flux Channeler, and Karn's Bastion share this action.
@@ -3902,6 +3907,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DoublePowerToughnessAll { .. }
             | SpellEffectKind::PutCountersAll { .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
+            | SpellEffectKind::PutCountersOnCreaturesAndOtherPlaneswalkers
             | SpellEffectKind::Proliferate
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
@@ -4728,6 +4734,7 @@ impl SpellEffectKind {
                         filter.validate()?;
                     }
                     StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
+                    StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {}
                 }
             }
         }

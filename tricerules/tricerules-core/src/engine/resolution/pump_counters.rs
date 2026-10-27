@@ -114,28 +114,51 @@ pub(super) fn create_static_emblem(
         triggered_ability: None,
     });
     for effect in effects {
-        if let StaticEmblemEffect::CreaturePt {
-            filter,
-            power,
-            toughness,
-        } = effect
-        {
-            cx.engine.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: Some(object_id),
-                affected: AffectedScope::CreaturesMatching {
-                    reference_player: cx.controller,
-                    filter,
-                    exclude: None,
-                },
-                kind: ContinuousEffectKind::PtModify {
-                    delta_power: power,
-                    delta_toughness: toughness,
-                },
-                condition: None,
-                duration: EffectDuration::Indefinite,
-                timestamp: cx.engine.state.command_index,
-            });
+        match effect {
+            StaticEmblemEffect::CreaturePt {
+                filter,
+                power,
+                toughness,
+            } => {
+                cx.engine.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: Some(object_id),
+                    affected: AffectedScope::CreaturesMatching {
+                        reference_player: cx.controller,
+                        filter,
+                        exclude: None,
+                    },
+                    kind: ContinuousEffectKind::PtModify {
+                        delta_power: power,
+                        delta_toughness: toughness,
+                    },
+                    condition: None,
+                    duration: EffectDuration::Indefinite,
+                    timestamp: cx.engine.state.command_index,
+                });
+            }
+            StaticEmblemEffect::GrantSpellKeyword { .. } => {}
+            StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {
+                // The marker supplies lifetime identity, not a physical replacement source.
+                // The default empty presentation keeps replacement choices source-free.
+                let id = cx.engine.add_damage_prevention(
+                    None,
+                    display_name.clone(),
+                    DamagePreventionScope::ControllerAndPlaneswalkers {
+                        controller: cx.controller,
+                    },
+                    DamagePreventionAmount::AllButOne,
+                );
+                let prevention = cx
+                    .engine
+                    .state
+                    .damage_prevention_effects
+                    .iter_mut()
+                    .find(|effect| effect.id == id)
+                    .expect("new emblem prevention exists");
+                prevention.source_id = Some(object_id);
+                prevention.duration = EffectDuration::Indefinite;
+            }
         }
     }
     cx.events
@@ -1282,8 +1305,7 @@ pub(super) fn put_counters_all(
 }
 
 /// CR 122 / 608.2h: put `count` counters on each planeswalker the resolving ability's controller
-/// currently controls. Brokers Ascendancy and Ajani Steadfast share the resolution-time type and
-/// control check; Ajani's instruction sets `exclude_self` to omit its source planeswalker.
+/// currently controls. Brokers Ascendancy uses this resolution-time type and control check.
 pub(super) fn put_counters_all_planeswalkers(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1342,6 +1364,56 @@ pub(super) fn put_counters_all_planeswalkers(
                 cx.controller,
                 object_id,
                 [(counter, count)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+        })
+        .collect();
+    resolve_counter_placements(cx, proposed)
+}
+
+/// Ajani's two sets are one instruction. A creature/planeswalker gets one proposal with both
+/// counter kinds so replacement effects act on that combined event (CR 616.1).
+pub(super) fn put_counters_on_creatures_and_other_planeswalkers(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    use tricerules_card_model::primitives::CounterKind;
+    let source = cx
+        .top
+        .source_permanent_id
+        .map(|id| (id, cx.top.source_zone_change));
+    let proposed = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter_map(|object_id| {
+            let characteristics = cx.engine.characteristics(object_id)?;
+            if characteristics.controller != cx.controller {
+                return None;
+            }
+            let source_incarnation = source.is_some_and(|(source_id, generation)| {
+                object_id == source_id
+                    && cx
+                        .engine
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == generation
+            });
+            let mut counters = Vec::with_capacity(2);
+            if characteristics.is_creature() {
+                counters.push((CounterKind::PlusOnePlusOne, 1));
+            }
+            if characteristics.has_type("Planeswalker") && !source_incarnation {
+                counters.push((CounterKind::Loyalty, 1));
+            }
+            cx.engine.proposed_object_counter_placement(
+                cx.controller,
+                object_id,
+                counters,
                 super::super::continuous::CounterPlacementOrigin::Effect,
             )
         })

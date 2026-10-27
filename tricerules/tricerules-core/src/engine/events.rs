@@ -258,6 +258,8 @@ impl GameEngine {
                     per_event_prevention = per_event_prevention.saturating_add(amount);
                 }
                 DamagePreventionAmount::All => prevents_all = true,
+                // The emblem is indefinite and never contributes a temporary object label.
+                DamagePreventionAmount::AllButOne => {}
             }
         }
         if remaining_prevention > 0 {

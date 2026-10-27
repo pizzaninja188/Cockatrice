@@ -791,6 +791,10 @@ pub enum DamagePreventionScope {
         source_id: ObjectId,
         controller: PlayerId,
     },
+    /// The emblem's controller and planeswalkers that player currently controls.
+    ControllerAndPlaneswalkers {
+        controller: PlayerId,
+    },
 }
 
 /// How much damage one active prevention effect can prevent.
@@ -799,6 +803,8 @@ pub enum DamagePreventionAmount {
     All,
     FixedPerEvent(u32),
     Remaining(u32),
+    /// Ajani's emblem (and Temple Altisaur's analogous amount): leave one damage per event.
+    AllButOne,
 }
 
 /// Public display identity captured when an effect is created, independent of later zone moves.

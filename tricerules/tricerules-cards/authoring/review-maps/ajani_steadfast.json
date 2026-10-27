@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "90249526-1875-450a-882d-bf6f6bfd37a6",
+  "spans": [
+    {"face_id": "ajani_steadfast", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "ajani_steadfast", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"]},
+    {"face_id": "ajani_steadfast", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/2"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_ajani_steadfast::ajani_exact_identity_and_optional_plus_one", "covers": "Exact identity, cost, types, loyalty, optional shared target and plus-one presentation."},
+    {"test": "deck_registry::deck_coverage_ajani_steadfast::ajani_minus_two_has_the_printed_cost_and_one_untargeted_instruction", "covers": "The minus-two is one untargeted combined counter instruction with the printed cost and presentation."},
+    {"test": "deck_registry::deck_coverage_ajani_steadfast::ajani_minus_seven_has_the_printed_cost_and_creates_one_emblem", "covers": "The minus-seven has the printed cost and creates the exact prevention emblem."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_plus_one_accepts_zero_targets_and_pays_loyalty", "covers": "The actual loyalty ability permits no target and pays its cost."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_plus_one_buff_applies_to_either_players_creature_and_survives_source_departure", "covers": "Either player's creature can receive the bonus, which survives the source leaving."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_plus_one_rejects_noncreature_and_does_not_buff_a_stale_incarnation", "covers": "A noncreature target is rejected and a changed target incarnation is not modified."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_plus_one_keywords_affect_combat_then_expire_at_cleanup", "covers": "Actual combat demonstrates first strike, vigilance and lifelink; the bonus expires at cleanup."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_uses_current_control_and_excludes_opponents", "covers": "Current control, rather than ownership, determines the recipient set."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_combines_both_counter_kinds_before_replacement_ordering", "covers": "Real Bello and Lattice make both walkers creatures; real Lae'zel and Doubling Season yield paired 4/4 or 3/3 in the two orders."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_excludes_only_its_exact_source_incarnation", "covers": "The loyalty exclusion follows the source generation while an animated source still receives its creature counter."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_begun_counter_batch_survives_controller_departure", "covers": "A borrowed surviving creature receives the already modified counter proposal after the ability controller leaves."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_prunes_departed_recipient_and_refreshes_remaining_batch", "covers": "A removed recipient is pruned and remaining replacement choices resume and finish once."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_minus_two_restores_begun_counters_after_independent_aura_return", "covers": "A real Banishing Light observer suspends and restores the begun batch with its accepted replacement intact."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_is_created_after_its_source_dies_to_the_loyalty_cost", "covers": "The actual ultimate creates a public emblem after Ajani dies to the loyalty cost."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_protects_its_controller_and_controlled_planeswalkers_only", "covers": "The emblem protects its player and their planeswalker, not unrelated recipients."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_leaves_one_damage_for_each_separate_source", "covers": "Separate actual Lightning Bolts each leave one damage."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_does_not_prevent_damage_when_stomp_prohibits_prevention", "covers": "Actual Stomp prevents the emblem from preventing damage for the turn."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_and_gratuitous_violence_obey_both_replacement_orders", "covers": "Actual Nebula Dragon and Gratuitous Violence produce 3-to-1-to-2 or 3-to-6-to-1; source-free emblem and real source metadata are distinct."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblems_are_independent_applications_for_each_damage_event", "covers": "Two emblems have independent opaque applications for each damage event and reject invalid answers."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_uses_current_planeswalker_type_and_control", "covers": "Labeled synthetic control and type effects demonstrate the current derived planeswalker scope."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_prevents_each_combat_source_and_lifelink_uses_damage_dealt", "covers": "Two attacking creatures deal one each and Child of Night gains life from damage actually dealt."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_departure_refreshes_a_borrowed_walkers_parked_damage_choice", "covers": "A departing emblem controller loses the marker and prevention; the surviving walker owner receives a refreshed choice and stale input is rejected."},
+    {"test": "scenario deck_coverage_ajani_steadfast::ajani_emblem_creation_and_replacement_choice_replay_as_accepted_wire_commands", "covers": "Actual emblem creation, damage, replacement choice and a subsequent action replay as accepted encoded commands."}
+  ],
+  "complete_definition_review_confirmed": true
+}

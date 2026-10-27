@@ -425,6 +425,30 @@ impl GameEngine {
                 }
                 DamageRecipient::Player(_) => false,
             },
+            DamagePreventionScope::ControllerAndPlaneswalkers { controller } => {
+                if self
+                    .state
+                    .player_idx(controller)
+                    .is_none_or(|index| self.state.players[index].has_lost)
+                {
+                    return false;
+                }
+                match event.recipient {
+                    DamageRecipient::Player(player) => player == controller,
+                    DamageRecipient::Permanent(recipient) => {
+                        self.state
+                            .objects
+                            .get(&recipient)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                            && self
+                                .characteristics(recipient)
+                                .is_some_and(|characteristics| {
+                                    characteristics.controller == controller
+                                        && characteristics.has_type("Planeswalker")
+                                })
+                    }
+                }
+            }
         }
     }
 
@@ -1142,6 +1166,7 @@ impl GameEngine {
         } else {
             match effect.amount {
                 DamagePreventionAmount::All => application_attempted,
+                DamagePreventionAmount::AllButOne => application_attempted.saturating_sub(1),
                 DamagePreventionAmount::FixedPerEvent(capacity)
                 | DamagePreventionAmount::Remaining(capacity) => {
                     application_attempted.min(capacity)
@@ -1267,6 +1292,8 @@ impl GameEngine {
                     .map(|effect| {
                         let mut description = match effect.amount {
                             DamagePreventionAmount::All => "Prevent all damage.".to_string(),
+                            DamagePreventionAmount::AllButOne =>
+                                "Prevent all but 1 of this damage.".to_string(),
                             DamagePreventionAmount::FixedPerEvent(amount) =>
                                 format!("Prevent {amount} damage from this event."),
                             DamagePreventionAmount::Remaining(amount) =>

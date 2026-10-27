@@ -32,6 +32,9 @@ mod deck_coverage_daretti;
 #[path = "scenario/deck_coverage_ashiok_dream_render.rs"]
 mod deck_coverage_ashiok_dream_render;
 
+#[path = "scenario/deck_coverage_ajani_steadfast.rs"]
+mod deck_coverage_ajani_steadfast;
+
 #[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
 mod deck_coverage_jace_unraveler_of_secrets;
 

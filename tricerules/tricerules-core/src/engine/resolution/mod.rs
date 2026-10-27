@@ -2917,6 +2917,33 @@ impl GameEngine {
                 return Ok(true);
             }
         }
+        let combined_counters = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                self.begun_combined_counter_placement(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                )
+            });
+        if combined_counters {
+            // The nested return may have changed recipients and replacement sources while this
+            // exact counter transaction waited. Reconcile its saved proposals, never replay it.
+            let event_start = events.len();
+            self.refresh_counter_placement_departure(events)?;
+            if self.state.pending_resolution.is_some()
+                && !events[event_start..].iter().any(|event| {
+                    matches!(
+                        &event.ev,
+                        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                    )
+                })
+            {
+                self.republish_cached_resolution_choice(events)?;
+            }
+            return Ok(true);
+        }
         if self.reprocess_suspended_battlefield_entry(events)? {
             return Ok(true);
         }
@@ -4390,7 +4417,8 @@ pub(super) fn commit_zone_move(
                 DamagePreventionScope::CombatRecipient { object_id, .. }
                 | DamagePreventionScope::CombatSource { object_id, .. } => object_id == oid,
                 DamagePreventionScope::Combat
-                | DamagePreventionScope::OtherCreaturesYouControl { .. } => false,
+                | DamagePreventionScope::OtherCreaturesYouControl { .. }
+                | DamagePreventionScope::ControllerAndPlaneswalkers { .. } => false,
             };
             let static_from_this = effect.source_id == Some(oid)
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield;

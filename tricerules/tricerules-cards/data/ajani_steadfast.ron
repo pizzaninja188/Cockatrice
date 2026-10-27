@@ -1,0 +1,36 @@
+// Oracle 90249526-1875-450a-882d-bf6f6bfd37a6; CR 608.2b, 613.1f, 613.4c, 615.1 and 616.1.
+(
+    id: "ajani_steadfast",
+    name: "Ajani Steadfast",
+    face_id: "ajani_steadfast",
+    mana_cost: "{3}{W}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Ajani"],
+    loyalty: 4,
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Loyalty(1)],
+        effect: [
+            PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature))),
+            GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike, Vigilance, Lifelink]),
+        ],
+        targeting: Some((groups: [(
+            min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0, 1],
+        )])),
+    ), (
+        ability_id: "activated_02",
+        presentation: OracleLines([2]),
+        costs: [Loyalty(-2)],
+        effect: [PutCountersOnCreaturesAndOtherPlaneswalkers],
+    ), (
+        ability_id: "activated_03",
+        presentation: OracleLines([3]),
+        costs: [Loyalty(-7)],
+        effect: [CreateStaticEmblem(
+            emblem_id: "ajani_steadfast_emblem",
+            display_name: "Ajani Steadfast Emblem",
+            effects: [PreventAllButOneDamageToYouAndYourPlaneswalkers],
+        )],
+    )],
+)

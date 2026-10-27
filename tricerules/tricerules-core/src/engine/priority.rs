@@ -449,6 +449,16 @@ impl GameEngine {
                 )
                 .is_some()
             });
+        let begun_combined_counters =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    self.begun_combined_counter_placement(
+                        pending,
+                        self.state.pending_replacement_event.as_ref(),
+                    )
+                });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -562,6 +572,11 @@ impl GameEngine {
                     // Proliferate has already selected its recipients. A recipient's independent
                     // CR 616.1 replacement-order choice can finish even if the original effect
                     // controller or physical source leaves (CR 608.2m).
+                    preserve = true;
+                }
+                ResolutionContinuation::CounterReplacement { .. } if begun_combined_counters => {
+                    // The exact flat combined instruction has begun. Surviving recipients keep
+                    // accepted replacements and the original cursor after controller departure.
                     preserve = true;
                 }
                 ResolutionContinuation::EntryChooseOpponent { .. }
@@ -1139,6 +1154,9 @@ impl GameEngine {
                 } if controller == player)
             });
         }
+        // A player can leave during a parked replacement choice, before the next SBA pass.
+        // Retire their emblem effects now so the pending damage menu is refreshed correctly.
+        self.remove_departed_emblems(&departed_set);
         self.discard_departed_triggered_abilities();
         self.reindex_battlefield_control(events);
         self.reconcile_departed_target_hand_discard_program(events)?;
@@ -1221,7 +1239,7 @@ impl GameEngine {
         self.refresh_program_choose_departure(events)?;
         self.refresh_optional_triggered_ability_departure(events)?;
         self.refresh_program_proliferate_departure(events)?;
-        self.refresh_program_proliferate_replacement_departure(events)?;
+        self.refresh_counter_placement_departure(events)?;
         self.refresh_battlefield_cohort_move_departure(
             &departed_objects,
             &stranded_objects,

@@ -1922,6 +1922,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DoublePowerToughnessAll { .. }
         | SpellEffectKind::PutCountersAll { .. }
         | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
+        | SpellEffectKind::PutCountersOnCreaturesAndOtherPlaneswalkers
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }

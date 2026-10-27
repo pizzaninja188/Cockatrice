@@ -46,6 +46,35 @@ fn commit_prepared_state_based_zone_move(
 }
 
 impl GameEngine {
+    /// Emblems leave with their controller, including while a resolution is parked. Remove the
+    /// marker and only the indefinite effects linked to that marker before refreshing choices.
+    pub(super) fn remove_departed_emblems(&mut self, departed: &HashSet<PlayerId>) -> bool {
+        let removed = self
+            .state
+            .static_emblems
+            .iter()
+            .filter(|emblem| departed.contains(&emblem.controller))
+            .map(|emblem| emblem.object_id)
+            .collect::<HashSet<_>>();
+        if removed.is_empty() {
+            return false;
+        }
+        self.state
+            .static_emblems
+            .retain(|emblem| !removed.contains(&emblem.object_id));
+        self.state.continuous_effects.retain(|effect| {
+            effect
+                .source_id
+                .is_none_or(|source| !removed.contains(&source))
+        });
+        self.state.damage_prevention_effects.retain(|effect| {
+            effect
+                .source_id
+                .is_none_or(|source| !removed.contains(&source))
+        });
+        true
+    }
+
     /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds
     /// nothing left to do. Stops while the current CR 704.3 choice set is being collected.
     pub(super) fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
@@ -156,24 +185,7 @@ impl GameEngine {
         let mut changed = self.state.continuous_effects.len() != effect_count;
         changed |= self.reindex_battlefield_control(out);
         changed |= self.refresh_enduring_story_designations();
-        let removed_emblems = self
-            .state
-            .static_emblems
-            .iter()
-            .filter(|emblem| lost_players.contains(&emblem.controller))
-            .map(|emblem| emblem.object_id)
-            .collect::<HashSet<_>>();
-        if !removed_emblems.is_empty() {
-            self.state
-                .static_emblems
-                .retain(|emblem| !removed_emblems.contains(&emblem.object_id));
-            self.state.continuous_effects.retain(|effect| {
-                effect
-                    .source_id
-                    .is_none_or(|source| !removed_emblems.contains(&source))
-            });
-            changed = true;
-        }
+        changed |= self.remove_departed_emblems(&lost_players);
         if self.state.pending_resolution.is_some() {
             return Ok((changed, false));
         }
