@@ -26,7 +26,7 @@ fn four_deck_commanders_resolve_with_source_backed_identity() {
             "daretti,_scrap_savant",
             "Daretti, Scrap Savant",
             vec![Color::Red],
-            true,
+            false,
         ),
     ] {
         let card = registry

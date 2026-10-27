@@ -585,13 +585,19 @@ mod face_change_tests {
 
     #[test]
     fn commander_setup_only_definition_cannot_enter_a_mainboard() {
+        let registry = Box::leak(Box::new(
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[
+                r#"(id: "setup_only_fixture", name: "Setup Only Fixture", face_id: "setup_only_fixture",
+                    types: ["Creature"], power: 1, toughness: 1, commander_setup_only: true)"#,
+            ], &[]).expect("setup-only fixture"),
+        ));
         let result = GameEngine::new_with_commander_decks(
-            tricerules_cards::registry::global(),
+            registry,
             23,
             &[0, 1],
             20,
             Some(vec![
-                commander_engine_deck(&["daretti,_scrap_savant"], &[]),
+                commander_engine_deck(&["setup_only_fixture"], &[]),
                 commander_engine_deck(&[], &[]),
             ]),
             false,

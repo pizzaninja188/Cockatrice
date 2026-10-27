@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea9f4de3-fc35-435a-8dff-a5657d14a9bd",
+  "spans": [
+    {"face_id": "daretti_scrap_savant", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "daretti_scrap_savant", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"]},
+    {"face_id": "daretti_scrap_savant", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/2"]},
+    {"face_id": "daretti_scrap_savant", "start_line": 4, "end_line": 4, "typed_paths": ["/id", "/faces/0/types/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_daretti::daretti_complete_definition_maps_the_three_loyalty_abilities", "covers": "Exact face, costs, compiled program owners, emblem event and delayed return."},
+    {"test": "scenario deck_coverage_daretti::daretti_plus_two_discards_zero_one_or_two_and_draws_that_many", "covers": "Up to two private discards, draw count, choice ownership and rejected excessive choices."},
+    {"test": "scenario deck_coverage_daretti::daretti_plus_two_with_empty_hand_finishes_without_a_choice_or_draw", "covers": "Empty hand auto-completes without a prompt or draw."},
+    {"test": "scenario deck_coverage_daretti::daretti_plus_two_counts_a_library_of_leng_discard_as_one", "covers": "A discard redirected to the library still counts for the draw."},
+    {"test": "scenario deck_coverage_daretti::daretti_minus_two_targets_first_then_sacrifices_a_controlled_artifact", "covers": "Required target, mandatory resolution sacrifice, and sacrifice replaced by exile."},
+    {"test": "scenario deck_coverage_daretti::daretti_minus_two_with_a_stale_target_does_not_sacrifice", "covers": "Illegal target prevents the entire ability from resolving."},
+    {"test": "scenario deck_coverage_daretti::daretti_minus_two_does_nothing_when_there_is_no_artifact_to_sacrifice", "covers": "No sacrifice candidate produces no return."},
+    {"test": "scenario deck_coverage_daretti::daretti_minus_two_resumes_after_the_returned_artifacts_copy_choice", "covers": "Returned artifact's entry choice preserves the resolution."},
+    {"test": "scenario deck_coverage_daretti::daretti_graveyard_entry_program_resumes_its_tail_once_after_copy_choice", "covers": "A synthetic resultless Program continuation executes its tail exactly once."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_stacks_a_trigger_then_returns_the_exact_card_at_the_next_end_step", "covers": "Marker publication, separate counterable triggers, source departure and exact return."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_never_returns_a_later_graveyard_incarnation", "covers": "Later zone changes cannot replace the captured graveyard incarnation."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_uses_the_artifacts_owner_and_its_last_battlefield_types", "covers": "Owner rather than former controller and event-time artifact type."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_token_triggers_but_cannot_return_a_card", "covers": "A token produces the trigger but cannot return."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_initial_and_delayed_triggers_can_each_be_countered", "covers": "Each stage is independently counterable."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_trigger_created_during_end_step_waits_for_the_next_end_step", "covers": "A trigger created during an end step waits for a later end step."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_ignores_artifacts_exiled_instead_of_entering_graveyard", "covers": "Replacement-adjusted exile does not trigger the emblem."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_delayed_return_pauses_for_a_copy_entry_choice", "covers": "Delayed return resumes after the returned card's copy choice."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblems_order_simultaneous_events_apnap_and_each_returns_at_most_once", "covers": "Multiple emblems and simultaneous departures use APNAP and independent exact-object returns."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_and_its_pending_triggers_leave_with_their_controller", "covers": "Emblem and pending work leave with their controller."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_survives_departure_of_the_original_planeswalkers_owner", "covers": "An emblem controlled by a surviving opponent remains when its creator's owner departs."},
+    {"test": "scenario deck_coverage_daretti::daretti_emblem_event_and_delayed_return_replay_accepted_wire_commands", "covers": "Accepted commands reproduce event batches and the final diagnostic snapshot."},
+    {"test": "scenario deck_coverage_daretti::daretti_triggered_emblem_admission_is_bounded_to_its_captured_ability_scope", "covers": "The child scope is independent and unsupported trigger, identity, source and nested Program profiles are rejected."},
+    {"test": "scenario deck_coverage_daretti::daretti_is_accepted_as_a_declared_commander_and_as_a_mainboard_card", "covers": "The exact card can be declared as commander and is also admitted to a mainboard; their object identities are distinct."}
+  ],
+  "complete_definition_review_confirmed": true
+}

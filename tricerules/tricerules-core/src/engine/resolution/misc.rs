@@ -626,7 +626,12 @@ pub(super) fn create_delayed_trigger(
     } else {
         None
     };
-    let watched = if let Some(subject) = subject.as_ref() {
+    let emblem_object = matches!(subject, Some(EffectSubject::TriggerObject))
+        .then_some(cx.top.trigger_context.emblem_graveyard_object)
+        .flatten();
+    let watched = if let Some(object) = emblem_object {
+        Some(object)
+    } else if let Some(subject) = subject.as_ref() {
         let watched_id = match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject

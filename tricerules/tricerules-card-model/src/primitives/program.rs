@@ -1430,6 +1430,43 @@ fn ability_graveyard_exile_target_group(
     Ok((target_group_index, group.max))
 }
 
+fn ability_graveyard_battlefield_target_group(
+    instruction_id: &str,
+    references: &[ProgramTargetReference],
+    targeting: Option<&TargetingDef>,
+) -> Result<(u32, u32), String> {
+    let reference = single_instruction_target_binding(
+        instruction_id,
+        references,
+        ProgramTargetRole::Target,
+        "ability_program MoveGraveyardCards Battlefield",
+    )?;
+    let targeting = targeting.ok_or_else(|| {
+        "ability_program graveyard Battlefield requires an authored target group".to_string()
+    })?;
+    if targeting.groups.len() != 1 {
+        return Err(
+            "ability_program graveyard Battlefield requires exactly one target group".into(),
+        );
+    }
+    let target_group_index = reference.target_group_index;
+    let group = targeting
+        .groups
+        .get(target_group_index as usize)
+        .ok_or_else(|| "program target binding references an unknown target group".to_string())?;
+    if group.chooser != super::TargetChooser::Controller
+        || group.min != 1
+        || group.max != 1
+        || group.same_graveyard
+        || !group.effect_indices.is_empty()
+        || !group.distinct_from.is_empty()
+        || group.cast_cost_expansion.is_some()
+    {
+        return Err("ability_program graveyard Battlefield requires one controller-chosen singleton target group".into());
+    }
+    Ok((target_group_index, group.max))
+}
+
 fn counter_target_ability_target_group(
     instruction_id: &str,
     references: &[ProgramTargetReference],
@@ -1687,7 +1724,7 @@ fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole)
         )
         | (
             SpellEffectKind::MoveGraveyardCards {
-                destination: GraveyardDestination::Exile,
+                destination: GraveyardDestination::Exile | GraveyardDestination::Battlefield { .. },
                 ..
             },
             ProgramTargetRole::Target,
@@ -2444,6 +2481,19 @@ impl Compiler<'_> {
                             } => {
                                 let (group_index, group_max) =
                                     ability_graveyard_exile_target_group(
+                                        &instruction.id,
+                                        &self.target_references,
+                                        self.targeting,
+                                    )?;
+                                target_group_max = Some(group_max);
+                                Some(group_index)
+                            }
+                            SpellEffectKind::MoveGraveyardCards {
+                                destination: GraveyardDestination::Battlefield { .. },
+                                ..
+                            } => {
+                                let (group_index, group_max) =
+                                    ability_graveyard_battlefield_target_group(
                                         &instruction.id,
                                         &self.target_references,
                                         self.targeting,
@@ -4689,8 +4739,29 @@ fn validate_and_result_types(
                 target_group_index,
             }])
         }
+        SpellEffectKind::MoveGraveyardCards {
+            filter,
+            destination: GraveyardDestination::Battlefield { tapped: false },
+            linked_exile_id: None,
+            entry_modifiers,
+        } if context == EffectContext::Ability => {
+            if target_group_index.is_none() || target_group_max != Some(1) {
+                return Err("ability_program graveyard Battlefield requires one explicit singleton Target binding".into());
+            }
+            if *filter != (super::GraveyardFilter {
+                card: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Artifact),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }) || !entry_modifiers.is_empty() {
+                return Err("ability_program graveyard Battlefield supports only an unmodified artifact card from the controller's graveyard".into());
+            }
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
         SpellEffectKind::MoveGraveyardCards { .. } => Err(
-            "MoveGraveyardCards in a resolution program supports only a targeted ability-owned graveyard Exile".into(),
+            "MoveGraveyardCards in a resolution program supports only targeted ability-owned graveyard Exile or the singleton artifact Battlefield profile".into(),
         ),
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(filter),

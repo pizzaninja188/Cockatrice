@@ -828,6 +828,61 @@ fn goblin_welder_cast_and_activation_have_complete_fixtures() {
 }
 
 #[test]
+fn daretti_artifact_return_activation_has_a_complete_fixture() {
+    use tricerules_core::Zone;
+
+    let case = Case {
+        card: "daretti,_scrap_savant".into(),
+        face: 0,
+        ability: Some(1),
+    };
+    assert_eq!(
+        evaluate(&case).expect("evaluate Daretti's artifact-return fixture"),
+        Outcome::Exercised,
+        "{}",
+        case.key()
+    );
+
+    // Independently verify the shared positive fixture exercises its published target and cost,
+    // rather than considering a completed but empty resolution sufficient semantic evidence.
+    let mut e = fixture(&case);
+    let baseline = e.state.objects.len();
+    let target = e.state.players[0]
+        .graveyard
+        .iter()
+        .copied()
+        .find(|id| e.state.objects[id].card_id == "sol_ring")
+        .expect("own Sol Ring is in the graveyard before activation");
+    let sacrifice = e.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| e.state.objects[id].card_id == "explosive_apparatus")
+        .expect("controlled artifact can be sacrificed on resolution");
+    let source = helpers::authoring_fixture::ability_source(&mut e, 0, &case.card, 0, 1);
+    let command = offers::activation(&mut e, 0, source, 1)
+        .expect("the live offer exposes the graveyard target");
+    let Some(Cmd::ActivateAbility(activation)) = &command.cmd else {
+        panic!("Daretti uses a normal activation");
+    };
+    let [selected] = activation.targets.as_slice() else {
+        panic!("the activation selects exactly one target");
+    };
+    assert_eq!(selected.object_id, target);
+    assert_eq!(selected.kind, TargetRefKind::Graveyard as i32);
+    let batch = apply(&mut e, 0, &command).expect("activate the offered ability");
+    drain(&mut e, batch, COMMAND_BUDGET).expect("complete the mandatory sacrifice and return");
+    assert_eq!(e.state.objects[&sacrifice].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(e.state.objects[&target].controller, 0);
+    assert_eq!(
+        e.state.objects[&source].counter_count(tricerules_cards::CounterKind::Loyalty),
+        1
+    );
+    integrity::assert_zone_integrity(&e, baseline, &case.key());
+}
+
+#[test]
 fn drain_rejects_exhaustion_and_rejected_progression() {
     let case = Case {
         card: "grizzly_bears".into(),

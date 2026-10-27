@@ -1879,6 +1879,7 @@ fn validate_effect_targets(
         | SpellEffectKind::SetClassLevel { .. }
         | SpellEffectKind::SolveCase
         | SpellEffectKind::CreateStaticEmblem { .. }
+        | SpellEffectKind::CreateTriggeredEmblem { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.

@@ -1750,6 +1750,7 @@ fn push_effect_mana_colors(collected: &mut Vec<Color>, effect: &SpellEffectKind)
             }
         }
         SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
         | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
             for effect in &ability.effect {
                 push_effect_mana_colors(collected, effect);

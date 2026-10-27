@@ -16,6 +16,7 @@ pub(super) struct CompletedZoneEntryBatch {
 pub(super) struct ZoneEventSnapshot {
     sources: Vec<TriggerSourceSnapshot>,
     objects: Vec<(Zone, TurnObjectFact)>,
+    emblems: Vec<StaticEmblemInstance>,
 }
 
 impl ZoneEventSnapshot {
@@ -52,6 +53,7 @@ pub(super) struct CommittedZoneMoveReceipt {
 pub(super) struct ZoneEventBatch {
     pub sources: Vec<TriggerSourceSnapshot>,
     pub moves: Vec<ZoneChangeReceipt>,
+    pub emblems: Vec<StaticEmblemInstance>,
 }
 
 impl GameEngine {
@@ -93,6 +95,34 @@ impl GameEngine {
             return false;
         };
         origin == Zone::Library && search.searcher == stack.item.controller
+    }
+
+    /// The admitted singleton graveyard return is resultless, but may suspend during entry.
+    /// Keep the Program cursor until the whole replacement and entry transaction finishes.
+    fn is_typed_resultless_graveyard_return_completion(
+        &self,
+        stack: &ParkedStackResolution,
+        origin: Zone,
+        completion: Option<&crate::state::ZoneEntryCompletion>,
+    ) -> bool {
+        let Some(program) = stack.program.as_ref() else {
+            return false;
+        };
+        origin == Zone::Graveyard
+            && completion.is_none()
+            && program.in_flight.as_ref().is_some_and(Vec::is_empty)
+            && self.current_program_perform(program).is_ok_and(|effect| {
+                matches!(
+                    effect,
+                    SpellEffectKind::MoveGraveyardCards {
+                        destination:
+                            tricerules_card_model::primitives::GraveyardDestination::Battlefield {
+                                tapped: false
+                            },
+                        ..
+                    }
+                )
+            })
     }
 
     pub(super) fn is_typed_resultful_library_search(&self, stack: &ParkedStackResolution) -> bool {
@@ -450,6 +480,11 @@ impl GameEngine {
         };
         let mut program_operation_result = if typed_resultful_library_search
             || self.is_typed_resultless_library_search_completion(
+                &stack,
+                batch.origin,
+                batch.completion.as_ref(),
+            )
+            || self.is_typed_resultless_graveyard_return_completion(
                 &stack,
                 batch.origin,
                 batch.completion.as_ref(),
@@ -1014,7 +1049,18 @@ impl GameEngine {
             })
             .collect();
         objects.sort_by_key(|(_, fact)| fact.object_id);
-        ZoneEventSnapshot { sources, objects }
+        let emblems = self
+            .state
+            .static_emblems
+            .iter()
+            .filter(|emblem| emblem.triggered_ability.is_some())
+            .cloned()
+            .collect();
+        ZoneEventSnapshot {
+            sources,
+            objects,
+            emblems,
+        }
     }
 
     /// Capture the actual destination immediately after commitment, before a later instruction
@@ -1042,6 +1088,7 @@ impl GameEngine {
         GameEvent::ZoneChanges(ZoneEventBatch {
             sources: snapshot.sources,
             moves,
+            emblems: snapshot.emblems,
         })
     }
 
@@ -1133,6 +1180,100 @@ impl GameEngine {
                         });
                 }
                 out.extend(matching);
+            }
+        }
+        // Emblems observe the same committed event, but are not permanents and therefore have
+        // no source fact for permanent-trigger multipliers. Preserve both event incarnations.
+        for emblem in &batch.emblems {
+            let Some(captured) = emblem.triggered_ability.as_ref() else {
+                continue;
+            };
+            let TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller,
+                filter,
+                destination,
+                cardinality: ZoneEventCardinality::EachObject,
+            } = &captured.ability.trigger
+            else {
+                continue;
+            };
+            let Some(face) = self
+                .registry
+                .get(&captured.card_id)
+                .and_then(|card| card.face(captured.face_index))
+            else {
+                continue;
+            };
+            for movement in &batch.moves {
+                let fact = &movement.before;
+                if movement.origin != Zone::Battlefield
+                    || movement.destination == Zone::Battlefield
+                    || !self.relative_player_matches(
+                        *controller,
+                        fact.controller,
+                        emblem.controller,
+                    )
+                    || !destination_matches(destination, movement.destination)
+                    || !super::history::permanent_event_fact_matches(
+                        &self.state,
+                        filter,
+                        fact,
+                        ConditionContext {
+                            controller: emblem.controller,
+                            source_object_id: emblem.object_id,
+                            source_zone_change: 0,
+                            resolving_spell_id: None,
+                            stack_item: None,
+                            previous_effect_result: None,
+                        },
+                    )
+                {
+                    continue;
+                }
+                let ability_text = captured.ability.fallback_text(&emblem.display_name);
+                let presentation = super::presentation::presentation_ref(
+                    self.registry,
+                    &captured.card_id,
+                    &face.face_id,
+                    [
+                        super::presentation::PresentationPath::Ability(&captured.parent_ability_id),
+                        super::presentation::PresentationPath::Ability(
+                            &captured.ability.ability_id,
+                        ),
+                    ],
+                    &captured.ability.presentation,
+                    ability_text.clone(),
+                );
+                out.push(triggers::CollectedTrigger {
+                    captured_spell: None,
+                    source_id: emblem.object_id,
+                    card_id: captured.card_id.clone(),
+                    source_label: emblem.display_name.clone(),
+                    face_index: captured.face_index,
+                    source_zone_change: 0,
+                    source_face_change: 0,
+                    source_fact: None,
+                    additional_instances: 0,
+                    controller: emblem.controller,
+                    ability_index: 0,
+                    ability_origin: None,
+                    presentation: Some(presentation),
+                    ability: captured.ability.clone(),
+                    ability_text,
+                    trigger_context: TriggerContext {
+                        observed_object: Some(TriggerObjectRef {
+                            object_id: fact.object_id,
+                            zone_change_generation: fact.zone_change_generation,
+                            controller_at_event: fact.controller,
+                        }),
+                        emblem_graveyard_object: Some(TriggerObjectRef {
+                            object_id: fact.object_id,
+                            zone_change_generation: movement.destination_generation,
+                            controller_at_event: fact.controller,
+                        }),
+                        ..TriggerContext::default()
+                    },
+                });
             }
         }
         out

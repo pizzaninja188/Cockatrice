@@ -26,6 +26,9 @@ mod deck_coverage_thickest_in_the_thicket;
 #[path = "scenario/deck_coverage_flux_abundance.rs"]
 mod deck_coverage_flux_abundance;
 
+#[path = "scenario/deck_coverage_daretti.rs"]
+mod deck_coverage_daretti;
+
 #[path = "scenario/deck_coverage_combustible_gearhulk.rs"]
 mod deck_coverage_combustible_gearhulk;
 

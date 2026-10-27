@@ -583,7 +583,7 @@ unrevealed Library of Leng discard has undefined characteristics and contributes
 choosers, visibility, filters, optional choices, target-group sizes, and ability-owned forms remain
 unsupported.
 
-An ability Program may bind `MoveGraveyardCards` only with destination `Exile`, no linked Exile,
+An ability Program may bind a `MoveGraveyardCards` result only with destination `Exile`, no linked Exile,
 no entry modifiers, and an ordinary validated graveyard filter that does not depend on a trigger
 object. It requires one explicit `ProgramTargetRole::Target` reference to the instruction and one
 controller-chosen graveyard-card group with bounds `0..2`, `same_graveyard: true`, and empty legacy
@@ -594,9 +594,26 @@ Soul-Shackled Zombie uses this profile when at least one creature was exiled: ea
 2 life and its controller gains 2 life once. Arashin Sunshield uses the same underlying targeted Exile
 operation but remains on its existing path. Zero targets and a surviving noncreature alone cause
 no life change. Illegal or stale targets contribute no receipt; an already-triggered ability
-survives source departure. Spell-owned forms, other destinations, multiple groups, other group
-bounds, and event-dependent filters remain unsupported. This does not widen the separate Destroy
+survives source departure. Spell-owned forms, other result-bearing destinations, multiple groups,
+other group bounds, and event-dependent filters remain unsupported. This does not widen the separate Destroy
 or targeted hand-discard profiles.
+
+An ability Program also admits a resultless `MoveGraveyardCards` to the battlefield, untapped,
+for exactly one target artifact card in the controller's graveyard. Bind its `Target` role to a
+single required controller-chosen group with empty legacy `effect_indices`. Linked exile, entry
+modifiers, event-dependent filters, other owners and card predicates are outside this profile.
+Daretti, Scrap Savant uses it after a mandatory, resolution-time artifact sacrifice: a replaced
+graveyard destination still counts as a sacrifice, while an illegal target prevents the ability
+from resolving (CR 608.2b, 118.12, 701.21a). A parked battlefield-entry choice retains the exact
+Program cursor and resumes its tail after completion; a skipped entry completes that instruction.
+
+`CreateTriggeredEmblem` currently admits only Daretti, Scrap Savant's untargeted, per-artifact
+battlefield-to-controller-owned-graveyard trigger and its single next-end-step return. This
+specialized profile is necessary because existing static emblems do not observe events and
+permanent-granted triggers cannot represent an emblem. The initial and delayed abilities each use
+the normal counterable trigger pipeline. The first captures the exact graveyard incarnation when
+the zone change commits; the delayed return follows only that incarnation (CR 400.7e, 603.7).
+Nested Programs, alternative trigger filters and other delayed effects are rejected.
 
 Two additional leaves are restricted to ability-owned Programs: `Sacrifice` may use only
 `subject: Source`, and source-scoped `ApplyCombatRestriction` may use only

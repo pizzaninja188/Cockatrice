@@ -64,6 +64,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CreateStaticEmblem { .. } => {
             pump_counters::create_static_emblem(cx, effect)?
         }
+        effect @ SpellEffectKind::CreateTriggeredEmblem { .. } => {
+            pump_counters::create_triggered_emblem(cx, effect)?
+        }
         effect @ SpellEffectKind::ExileIfWouldDieThisTurn { .. } => {
             zones::exile_if_would_die_this_turn(cx, effect)?
         }

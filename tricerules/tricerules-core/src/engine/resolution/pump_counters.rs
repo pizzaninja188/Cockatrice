@@ -111,6 +111,7 @@ pub(super) fn create_static_emblem(
         emblem_id,
         display_name: display_name.clone(),
         effects: effects.clone(),
+        triggered_ability: None,
     });
     for effect in effects {
         if let StaticEmblemEffect::CreaturePt {
@@ -137,6 +138,48 @@ pub(super) fn create_static_emblem(
             });
         }
     }
+    cx.events
+        .push(ev_log(format!("P{} gets {display_name}.", cx.controller)));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn create_triggered_emblem(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateTriggeredEmblem {
+        emblem_id,
+        display_name,
+        ability,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let parent_ability_id = cx
+        .top
+        .activated_ability
+        .as_ref()
+        .map(|a| &a.ability_id)
+        .or_else(|| cx.top.triggered_ability.as_ref().map(|a| &a.ability_id))
+        .cloned()
+        .ok_or(EngineError::ProgramInvariant(
+            "triggered emblem has no captured parent ability",
+        ))?;
+    let object_id = cx.engine.state.next_object_id;
+    cx.engine.state.next_object_id += 1;
+    cx.engine.state.static_emblems.push(StaticEmblemInstance {
+        object_id,
+        controller: cx.controller,
+        emblem_id,
+        display_name: display_name.clone(),
+        effects: Vec::new(),
+        triggered_ability: Some(crate::state::TriggeredEmblemAbility {
+            card_id: cx.top.card_id.clone(),
+            face_index: cx.top.face_index,
+            parent_ability_id,
+            ability: *ability,
+        }),
+    });
     cx.events
         .push(ev_log(format!("P{} gets {display_name}.", cx.controller)));
     Ok(EffectOutcome::Continue)

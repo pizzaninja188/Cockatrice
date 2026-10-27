@@ -39,6 +39,8 @@ mod deck_coverage_commander_setup;
 mod deck_coverage_coveted_jewel;
 #[path = "../deck_coverage_creature_board_wipes.rs"]
 mod deck_coverage_creature_board_wipes;
+#[path = "../deck_coverage_daretti.rs"]
+mod deck_coverage_daretti;
 #[path = "../deck_coverage_deepglow_skate.rs"]
 mod deck_coverage_deepglow_skate;
 #[path = "../deck_coverage_devotion_gods.rs"]

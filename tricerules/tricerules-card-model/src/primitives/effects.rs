@@ -991,6 +991,13 @@ pub enum SpellEffectKind {
         display_name: String,
         effects: Vec<StaticEmblemEffect>,
     },
+    /// A persistent command-zone emblem carrying one event-triggered ability.
+    /// Admission is limited to the artifact-to-owner-graveyard delayed return profile.
+    CreateTriggeredEmblem {
+        emblem_id: String,
+        display_name: String,
+        ability: Box<TriggeredAbilityDef>,
+    },
     DamageTarget {
         amount: Amount,
         target: TargetFilter,
@@ -3582,6 +3589,7 @@ impl SpellEffectKind {
                 .iter()
                 .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
             Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateTriggeredEmblem { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. } => {
                 ability
                     .effect
@@ -3630,6 +3638,7 @@ impl SpellEffectKind {
                 .iter()
                 .any(Self::contains_retired_flat_equipment_attachment),
             Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateTriggeredEmblem { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. } => ability
                 .effect
                 .iter()
@@ -3825,6 +3834,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::PutAbilitySourceOntoBattlefield
             | SpellEffectKind::CreateStaticEmblem { .. }
+            | SpellEffectKind::CreateTriggeredEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::JoinForces
@@ -4600,6 +4610,72 @@ impl SpellEffectKind {
                     }
                     StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
                 }
+            }
+        }
+        if let SpellEffectKind::CreateTriggeredEmblem {
+            emblem_id,
+            display_name,
+            ability,
+        } = self
+        {
+            if context != EffectContext::Ability
+                || emblem_id.trim().is_empty()
+                || display_name.trim().is_empty()
+            {
+                return Err(
+                    "triggered emblem requires an ability and nonempty id and display name".into(),
+                );
+            }
+            ability.reject_unowned_authored_program()?;
+            ability.validate_shape()?;
+            let expected_trigger = TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: super::CastTriggerPlayer::AnyPlayer,
+                filter: super::PermanentEventFilter {
+                    permanent_type: Some(super::PermanentTypeFilter::Artifact),
+                    owner: Some(super::CastTriggerPlayer::Controller),
+                    ..Default::default()
+                },
+                destination: super::ZoneEventDestination::OneOf(vec![EventZone::Graveyard]),
+                cardinality: super::ZoneEventCardinality::EachObject,
+            };
+            let child_is_valid = match ability.effect.as_slice() {
+                [SpellEffectKind::CreateDelayedTrigger {
+                    subject: Some(EffectSubject::TriggerObject),
+                    affected_player: None,
+                    ability: delayed,
+                }] => {
+                    delayed.reject_unowned_authored_program()?;
+                    delayed.validate_shape()?;
+                    matches!(delayed.effect.as_slice(), [SpellEffectKind::ReturnTriggeredCard {
+                        reference: TriggeredCardReference::ExactTriggerObject,
+                        from,
+                        destination: TriggeredCardDestination::Battlefield,
+                        tapped: false,
+                        controller: ReturnController::AbilityController,
+                        entry_counters,
+                        set_types: None,
+                    }] if from == &[EventZone::Graveyard] && entry_counters.is_empty())
+                        && delayed.trigger == TriggerCondition::AtBeginningOfNextEndStep
+                        && delayed.targeting.is_none()
+                        && !delayed.may
+                        && delayed.intervening_if.is_none()
+                        && !delayed.triggers_only_once
+                        && delayed.max_triggers_per_turn.is_none()
+                }
+                _ => false,
+            };
+            if ability.trigger != expected_trigger
+                || ability.targeting.is_some()
+                || ability.may
+                || ability.intervening_if.is_some()
+                || ability.triggers_only_once
+                || ability.max_triggers_per_turn.is_some()
+                || !child_is_valid
+            {
+                return Err("triggered emblem supports only the per-artifact graveyard delayed return profile".into());
+            }
+            for effect in &ability.effect {
+                effect.validate(EffectContext::Ability)?;
             }
         }
         for filter in self.target_filters() {
@@ -6476,6 +6552,7 @@ impl SpellEffectKind {
                 .flat_map(Self::referenced_token_ids)
                 .collect(),
             Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateTriggeredEmblem { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. } => ability
                 .effect
                 .iter()

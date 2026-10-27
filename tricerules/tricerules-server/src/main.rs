@@ -440,15 +440,11 @@ mod tests {
     }
 
     #[test]
-    fn resolve_deck_names_rejects_setup_only_commanders_from_mainboards() {
-        let err = resolve_deck_names(&[0], &[deck(0, &["Daretti, Scrap Savant"])])
-            .expect_err("setup-only records do not imply mainboard gameplay support");
-        assert_eq!(
-            err,
-            DeckResolveError::Invalid(
-                "Daretti, Scrap Savant is available only for Commander setup and cannot be in a mainboard".into()
-            )
-        );
+    fn resolve_deck_names_accepts_complete_daretti_in_mainboards() {
+        let decks = resolve_deck_names(&[0], &[deck(0, &["Daretti, Scrap Savant"])])
+            .expect("completed card is available for mainboard gameplay")
+            .expect("deck supplied");
+        assert_eq!(decks[0].mainboard, vec!["daretti,_scrap_savant"]);
     }
 
     fn names(list: &[&str]) -> Vec<String> {

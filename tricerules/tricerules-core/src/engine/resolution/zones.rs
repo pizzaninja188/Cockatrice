@@ -4506,11 +4506,12 @@ pub(super) fn move_graveyard_cards(
                 applied_effects: vec![],
             })
             .collect();
+        let stack = cx.parked_stack();
         return Ok(
             if cx
                 .engine
                 .begin_zone_entry_batch(
-                    ParkedStackResolution::new(cx.top.clone()),
+                    stack,
                     entries,
                     Zone::Graveyard,
                     cx.spell_label,

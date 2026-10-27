@@ -4807,6 +4807,7 @@ mod cast_snapshot_tests {
                     },
                     keyword: SpellKeyword::Storm,
                 }],
+                triggered_ability: None,
             });
         }
         let storm = add(&mut e, 0, "storm_spell", Zone::Hand);

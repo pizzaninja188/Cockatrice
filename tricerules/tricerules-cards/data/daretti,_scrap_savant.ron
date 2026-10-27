@@ -1,8 +1,7 @@
 // Exact Oracle card and rulings fetched 2026-09-28:
 // https://scryfall.com/card/cmm/213/daretti-scrap-savant?utm_source=api
 // https://api.scryfall.com/cards/7cb9d4a0-66bd-454d-b676-80192a96c723/rulings
-// This setup-only definition records printed characteristics for Commander identity binding.
-// Daretti's loyalty abilities and delayed emblem return are not implemented.
+// Loyalty abilities use typed discard, resolution payment, and emblem paths.
 (
     id: "daretti,_scrap_savant",
     name: "Daretti, Scrap Savant",
@@ -11,5 +10,79 @@
     supertypes: ["Legendary"],
     types: ["Planeswalker", "Daretti"],
     loyalty: 3,
-    commander_setup_only: true,
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Loyalty(2)],
+        effect: [],
+        program: Some((body: (steps: [
+            (id: "discard", bind: ["discarded"],
+                kind: Perform(Discard(who: Controller, quantity: UpTo(2)))),
+            (id: "draw", input: Some("discarded"),
+                kind: Perform(Draw(who: Controller, count: Count(
+                    BoundCardResultCount(aggregation: Total),
+                )))),
+        ]))),
+    ), (
+        ability_id: "activated_02",
+        presentation: OracleLines([2]),
+        costs: [Loyalty(-2)],
+        effect: [],
+        targeting: Some((groups: [(
+            min: 1, max: 1,
+            prompt: "Choose target artifact card from your graveyard",
+            effect_indices: [],
+        )])),
+        program: Some((body: (steps: [
+            (id: "sacrifice", kind: Choose(
+                choice: "sacrifice_artifact", chooser: Controller, optional: false,
+                branches: [(
+                    branch_id: "sacrifice", presentation: Fallback,
+                    cost: SacrificePermanent(filter: (
+                        kind: AnyPermanent, controller: You, permanent_types: [Artifact],
+                    )),
+                    body: (steps: [
+                        (id: "return", kind: Perform(MoveGraveyardCards(
+                            filter: (card: Some((card_type: Some(Artifact)))),
+                            destination: Battlefield(),
+                        ))),
+                    ]),
+                )],
+                otherwise: (),
+            )),
+        ]), target_bindings: [
+            (instruction_id: "return", role: Target, target_group_index: 0),
+        ])),
+    ), (
+        ability_id: "activated_03",
+        presentation: OracleLines([3]),
+        costs: [Loyalty(-10)],
+        effect: [CreateTriggeredEmblem(
+            emblem_id: "daretti_scrap_savant_emblem",
+            display_name: "Daretti, Scrap Savant Emblem",
+            ability: (
+                ability_id: "emblem_01",
+                presentation: OracleLines([3]),
+                trigger: WheneverPermanentLeavesBattlefield(
+                    controller: AnyPlayer,
+                    filter: (permanent_type: Some(Artifact), owner: Some(Controller)),
+                    destination: OneOf([Graveyard]),
+                    cardinality: EachObject,
+                ),
+                effect: [CreateDelayedTrigger(
+                    subject: Some(TriggerObject),
+                    ability: (
+                        ability_id: "delayed_01",
+                        presentation: OracleLines([3]),
+                        trigger: AtBeginningOfNextEndStep,
+                        effect: [ReturnTriggeredCard(
+                            reference: ExactTriggerObject,
+                            from: [Graveyard],
+                            controller: AbilityController,
+                        )],
+                    ),
+                )],
+            ),
+        )],
+    )],
 )

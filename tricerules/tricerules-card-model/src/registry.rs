@@ -712,6 +712,7 @@ fn visit_scoped_grant_effect(
             }
         }
         SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
         | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
             for nested in ability.effect.iter().chain(
                 ability
@@ -860,6 +861,7 @@ fn validate_scoped_grant_payment_effects(
                 validate_scoped_grant_payment_effects(&ability.effect, &[])?
             }
             SpellEffectKind::GrantTriggeredAbility { ability, .. }
+            | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
             | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
                 validate_scoped_grant_payment_effects(&ability.effect, &[])?;
                 for mode in ability.modal.iter().flat_map(|modal| &modal.modes) {
@@ -940,6 +942,7 @@ fn validate_scoped_granted_activation(ability: &crate::ActivatedAbilityDef) -> R
                 validate_scoped_grant_targeting(ability.targeting.as_ref())?;
             }
             if let SpellEffectKind::GrantTriggeredAbility { ability, .. }
+            | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
             | SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect
             {
                 if let Some(condition) = &ability.intervening_if {
@@ -2280,6 +2283,11 @@ fn validate_nested_effect_metadata_with_delayed_child_program(
             ability.validate_shape()?;
             validate_triggered_ability_effect_tree(ability)
         }
+        SpellEffectKind::CreateTriggeredEmblem { ability, .. } => {
+            ability.reject_unowned_authored_program()?;
+            ability.validate_shape()?;
+            validate_triggered_ability_effect_tree(ability)
+        }
         SpellEffectKind::CreateDelayedTrigger {
             subject, ability, ..
         } => {
@@ -2488,6 +2496,7 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
             }
         }
         SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
         | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
             for effect in &ability.effect {
                 collect_linked_exile_uses(effect, uses);
@@ -3261,6 +3270,7 @@ fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
             ability.effect.iter().any(effect_returns_source_transformed)
         }
         SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateTriggeredEmblem { ability, .. }
         | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
             ability.effect.iter().any(effect_returns_source_transformed)
         }

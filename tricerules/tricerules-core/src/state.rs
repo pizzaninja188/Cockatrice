@@ -441,6 +441,9 @@ pub struct TriggerContext {
     pub source_after_zone_change: Option<TriggerObjectRef>,
     pub affected_player: Option<PlayerId>,
     pub observed_object: Option<TriggerObjectRef>,
+    /// Exact graveyard incarnation captured by an admitted triggered-emblem event. This immutable
+    /// receipt survives marker removal and remains distinct from the event's battlefield LKI.
+    pub(crate) emblem_graveyard_object: Option<TriggerObjectRef>,
     pub observed_stack_object: Option<TriggerStackObjectRef>,
     pub targeting_stack_object: Option<StackObjectRef>,
     pub attacking_player: Option<PlayerId>,
@@ -3399,7 +3402,7 @@ pub struct ContinuousEffect {
 }
 
 /// A public emblem marker with no engine-zone presence. Its runtime object id gives the relay a
-/// stable table-token identity and links the marker to its separately compiled indefinite effect.
+/// stable table-token identity and links the marker to its indefinite effects or triggers.
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct StaticEmblemInstance {
     pub object_id: ObjectId,
@@ -3407,6 +3410,16 @@ pub struct StaticEmblemInstance {
     pub emblem_id: String,
     pub display_name: String,
     pub effects: Vec<StaticEmblemEffect>,
+    pub triggered_ability: Option<TriggeredEmblemAbility>,
+}
+
+/// Captured printed provenance and ability remain valid after the creating source leaves play.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct TriggeredEmblemAbility {
+    pub card_id: String,
+    pub face_index: usize,
+    pub parent_ability_id: tricerules_card_model::AbilityId,
+    pub ability: TriggeredAbilityDef,
 }
 
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
