@@ -7103,8 +7103,89 @@ pub(in crate::engine) struct SearchRequest {
     pub destination: SearchDestination,
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
+    /// An optional search that has become forbidden is not chosen and owes no shuffle.
+    pub shuffle_if_blocked: bool,
     pub reveal: bool,
     pub stack: ParkedStackResolution,
+}
+
+pub(in crate::engine) enum SearchRequestOutcome {
+    Parked,
+    Completed(Box<EffectResult>),
+}
+
+fn permitted_search_zones(
+    engine: &GameEngine,
+    top: &StackItem,
+    searcher: PlayerId,
+    zones: &SearchZoneSelection,
+) -> (SearchZoneSelection, bool) {
+    if !engine.prohibits_own_library_search(top.controller, searcher) {
+        return (zones.clone(), false);
+    }
+    let (available, is_choice) = match zones {
+        SearchZoneSelection::Fixed(zones) => (zones, false),
+        SearchZoneSelection::PlayerChoice(zones) => (zones, true),
+    };
+    let removed_library = available.contains(&CardSearchZone::Library);
+    let remaining = available
+        .iter()
+        .copied()
+        .filter(|zone| *zone != CardSearchZone::Library)
+        .collect();
+    (
+        if is_choice {
+            SearchZoneSelection::PlayerChoice(remaining)
+        } else {
+            SearchZoneSelection::Fixed(remaining)
+        },
+        removed_library,
+    )
+}
+
+fn search_zones_are_empty(zones: &SearchZoneSelection) -> bool {
+    match zones {
+        SearchZoneSelection::Fixed(zones) | SearchZoneSelection::PlayerChoice(zones) => {
+            zones.is_empty()
+        }
+    }
+}
+
+fn complete_prohibited_search(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    searcher: PlayerId,
+    destination: SearchDestination,
+    shuffle: bool,
+) -> EffectResult {
+    if shuffle {
+        crate::engine::shuffle_player_library_for_current_command(&mut engine.state, searcher);
+        events.push(ev_log(format!("P{searcher} shuffles their library.")));
+    }
+    EffectResult {
+        program_value: (destination == SearchDestination::KeepInLibrary)
+            .then(|| ProgramValue::FoundLibraryCohort(Vec::new())),
+        ..Default::default()
+    }
+}
+
+/// The admitted resultless Program searches use their controller as searcher. Only a
+/// single direct search is checked; compound or cost-bearing branches keep their own rules.
+pub(super) fn direct_program_search_is_selectable(
+    engine: &GameEngine,
+    top: &StackItem,
+    effect: &SpellEffectKind,
+) -> bool {
+    let SpellEffectKind::SearchLibrary {
+        who: PlayerRecipient::Controller,
+        zones,
+        ..
+    } = effect
+    else {
+        return true;
+    };
+    let (allowed, removed_library) = permitted_search_zones(engine, top, top.controller, zones);
+    !removed_library || !search_zones_are_empty(&allowed)
 }
 
 pub(in crate::engine) fn park_zone_search_choice(
@@ -7352,7 +7433,7 @@ pub(in crate::engine) fn begin_search_request(
     top: &StackItem,
     searcher: PlayerId,
     request: SearchRequest,
-) -> Result<(), EngineError> {
+) -> Result<SearchRequestOutcome, EngineError> {
     let SearchRequest {
         count,
         selection_bounds,
@@ -7363,29 +7444,45 @@ pub(in crate::engine) fn begin_search_request(
         destination,
         conditional_destination,
         shuffle,
+        shuffle_if_blocked,
         reveal,
         stack,
     } = request;
-    match zones {
-        SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
-            engine,
-            events,
-            top,
-            searcher,
-            ZoneSearchRequest {
-                count,
-                selection_bounds,
-                filter,
-                selection_constraint,
-                slots,
-                zones,
+    let (zones, removed_library) = permitted_search_zones(engine, top, searcher, &zones);
+    if removed_library && search_zones_are_empty(&zones) {
+        return Ok(SearchRequestOutcome::Completed(Box::new(
+            complete_prohibited_search(
+                engine,
+                events,
+                searcher,
                 destination,
-                conditional_destination,
-                shuffle,
-                reveal,
-                stack,
-            },
-        ),
+                shuffle && shuffle_if_blocked,
+            ),
+        )));
+    }
+    match zones {
+        SearchZoneSelection::Fixed(zones) => {
+            park_zone_search_choice(
+                engine,
+                events,
+                top,
+                searcher,
+                ZoneSearchRequest {
+                    count,
+                    selection_bounds,
+                    filter,
+                    selection_constraint,
+                    slots,
+                    zones,
+                    destination,
+                    conditional_destination,
+                    shuffle,
+                    reveal,
+                    stack,
+                },
+            )?;
+            Ok(SearchRequestOutcome::Parked)
+        }
         SearchZoneSelection::PlayerChoice(available_zones) => {
             if selection_constraint.is_some() || selection_bounds.is_some() {
                 return Err(EngineError::Illegal(
@@ -7474,7 +7571,7 @@ pub(in crate::engine) fn begin_search_request(
                     reveal,
                 },
             });
-            Ok(())
+            Ok(SearchRequestOutcome::Parked)
         }
     }
 }
@@ -7534,6 +7631,20 @@ pub(super) fn search_library(
         .program_state
         .as_ref()
         .is_some_and(|program| program.in_flight.as_ref().is_some_and(Vec::is_empty));
+    // A prohibition applies before the empty-library shortcut and before any optional or
+    // private choice is offered. SearchLibrary's searcher also owns the searched zones.
+    let (allowed_zones, removed_library) =
+        permitted_search_zones(cx.engine, cx.top, searcher, &zones);
+    if removed_library && search_zones_are_empty(&allowed_zones) {
+        *cx.effect_result = complete_prohibited_search(
+            cx.engine,
+            cx.events,
+            searcher,
+            destination,
+            shuffle && !optional,
+        );
+        return Ok(EffectOutcome::Continue);
+    }
     if selection_bounds.is_some()
         && cx
             .engine
@@ -7650,7 +7761,7 @@ pub(super) fn search_library(
         return Ok(EffectOutcome::Suspended);
     }
     let parked_stack = cx.parked_stack();
-    begin_search_request(
+    let outcome = begin_search_request(
         cx.engine,
         cx.events,
         cx.top,
@@ -7665,12 +7776,18 @@ pub(super) fn search_library(
             destination,
             conditional_destination,
             shuffle,
+            shuffle_if_blocked: true,
             reveal,
             stack: parked_stack,
         },
     )?;
-    // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
-    Ok(EffectOutcome::Suspended)
+    match outcome {
+        SearchRequestOutcome::Parked => Ok(EffectOutcome::Suspended),
+        SearchRequestOutcome::Completed(result) => {
+            *cx.effect_result = *result;
+            Ok(EffectOutcome::Continue)
+        }
+    }
 }
 
 #[cfg(test)]

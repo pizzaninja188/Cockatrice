@@ -1,0 +1,25 @@
+// Oracle 93723b12-db34-4047-885e-8606415b1553; CR 101.2, 608.2b, 701.13,
+// 701.17, and 701.23–24 govern prohibitions, targeting, exile, mill and search/shuffle.
+(
+    id: "ashiok,_dream_render",
+    name: "Ashiok, Dream Render",
+    face_id: "ashiok_dream_render",
+    mana_cost: "{1}{U/B}{U/B}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Ashiok"],
+    loyalty: 5,
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: OpponentsCannotCauseOwnLibrarySearch,
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
+        costs: [Loyalty(-1)],
+        effect: [
+            MillTargetPlayer(count: 4, target: (kind: AnyPlayer)),
+            ExileGraveyards(players: Opponents),
+        ],
+    )],
+)

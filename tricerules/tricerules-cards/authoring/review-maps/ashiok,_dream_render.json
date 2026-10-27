@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "oracle_id": "93723b12-db34-4047-885e-8606415b1553",
+  "spans": [
+    {"face_id": "ashiok_dream_render", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "ashiok_dream_render", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_ashiok_dream_render::ashiok_exact_identity_hybrid_cost_and_minus_one", "covers": "Exact identity, hybrid cost, starting loyalty, static restriction and ordered minus-one definition."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_hybrid_cast_mills_target_then_exiles_all_opponents_graveyards", "covers": "Actual hybrid payments and mill before all opposing graveyards are exiled."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_can_mill_its_controller_without_exiling_that_graveyard", "covers": "A controller's milled cards remain in their own graveyard."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_mills_available_cards_from_a_short_library_then_exiles", "covers": "Short and empty libraries mill only available cards before the exile."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_minus_one_resolves_after_its_source_leaves", "covers": "The loyalty ability continues after its physical source leaves."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_all_illegal_target_stops_the_whole_ability", "covers": "A departed sole target prevents both instructions from resolving."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_blocks_opponents_evolving_wilds_but_preserves_its_shuffle", "covers": "An actual mandatory search is skipped with no private picker or search trigger, while its shuffle occurs."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_removes_solemn_simulacrums_optional_search_without_shuffling", "covers": "Solemn's forbidden optional search is not offered and does not shuffle."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_allows_boseiju_when_controller_and_searcher_differ", "covers": "Actual Boseiju channel distinguishes the ability controller from the player searching."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_blocked_gifts_uses_empty_result_and_shuffles", "covers": "Blocked Gifts binds an empty cohort and reaches its independent shuffle tail."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_blocks_gifts_empty_library_before_the_search_event_shortcut", "covers": "An empty library does not produce a picker or false search event when the search is prohibited."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_removes_only_library_from_say_its_names_search_scope", "covers": "Hand and graveyard scopes remain available; a Hand-only search does not shuffle."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_search_restriction_tracks_live_source_and_captured_ability_controller", "covers": "Labeled synthetic suppression, control changes and a moved source exercise live static and captured ability controller; allowed failure-to-find still triggers and shuffles."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_rejects_a_previously_offered_optional_search_if_the_static_becomes_active", "covers": "A synthetically activated restriction invalidates a previously offered actual Solemn branch while preserving decline."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_does_not_retroactively_cancel_an_already_started_search", "covers": "A real Wilds search started before synthetic Ashiok placement completes and fires its observer."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_does_not_prevent_opponents_scrying_or_drawing", "covers": "An opponent's actual Opt Scry and draw remain available without a search event."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_blocked_search_replays_only_accepted_wire_commands", "covers": "Accepted wire commands deterministically replay a blocked search, shuffle and subsequent action."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_does_not_interrupt_started_search_or_its_copy_entry_choice", "covers": "An actual Forgemaster search and Sculpting Steel entry choice finish after synthetic Ashiok placement and unrelated departure."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_does_not_interrupt_started_commander_search_on_departure", "covers": "Actual Tutor and a synthetically designated commander preserve the owner choice, or cleanly retire it when the searcher departs."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::say_its_name_unrestricted_zone_scopes_preserve_conditional_search_and_shuffle", "covers": "Unrestricted Hand and graveyard searches do not shuffle; a Library search that finds nothing shuffles and fires its observer."},
+    {"test": "scenario deck_coverage_ashiok_dream_render::ashiok_blocked_fabled_passage_binds_empty_land_and_finishes_its_real_tail", "covers": "A blocked typed Fabled Passage search binds an empty land result and completes its real four-land Untap branch without touching another land."}
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -11,6 +11,8 @@ mod deck_coverage_all_is_dust;
 mod deck_coverage_anger;
 #[path = "../deck_coverage_arena.rs"]
 mod deck_coverage_arena;
+#[path = "../deck_coverage_ashiok_dream_render.rs"]
+mod deck_coverage_ashiok_dream_render;
 #[path = "../deck_coverage_beast_within.rs"]
 mod deck_coverage_beast_within;
 #[path = "../deck_coverage_berserkers_onslaught.rs"]

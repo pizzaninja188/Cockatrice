@@ -343,7 +343,7 @@ impl GameEngine {
                 events,
             );
         }
-        resolution::zones::begin_search_request(
+        let outcome = resolution::zones::begin_search_request(
             self,
             &mut events,
             &stack.item,
@@ -358,10 +358,14 @@ impl GameEngine {
                 destination,
                 conditional_destination,
                 shuffle,
+                shuffle_if_blocked: false,
                 reveal,
                 stack: stack.clone(),
             },
         )?;
+        if let resolution::zones::SearchRequestOutcome::Completed(result) = outcome {
+            return self.complete_parked_stack_with_previous(stack, *result, events);
+        }
         let Some(next) = self
             .state
             .pending_resolution

@@ -21,6 +21,10 @@ use tricerules_card_model::primitives::{
 };
 
 #[cfg(test)]
+#[path = "program_search_tests.rs"]
+mod program_search_tests;
+
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ProgramFailpoint {
     DomainCommitted,
@@ -1190,7 +1194,7 @@ impl GameEngine {
                                         .get(&branch.branch_id)
                                         .copied(),
                                 )
-                                && self.program_choose_draw_is_selectable(
+                                && self.program_choose_leaf_is_selectable(
                                     top,
                                     &previous_result,
                                     branch,
@@ -1753,7 +1757,7 @@ impl GameEngine {
         }
     }
 
-    fn program_choose_draw_is_selectable(
+    fn program_choose_leaf_is_selectable(
         &self,
         top: &StackItem,
         previous_result: &EffectResult,
@@ -1765,13 +1769,14 @@ impl GameEngine {
         let CompiledInstructionKind::Perform(effect) = &branch.body.steps[0].kind else {
             return true;
         };
-        super::direct_draw_effect_is_selectable(
-            self,
-            top,
-            previous_result,
-            std::slice::from_ref(effect.as_ref()),
-        )
-        .unwrap_or(true)
+        super::zones::direct_program_search_is_selectable(self, top, effect.as_ref())
+            && super::direct_draw_effect_is_selectable(
+                self,
+                top,
+                previous_result,
+                std::slice::from_ref(effect.as_ref()),
+            )
+            .unwrap_or(true)
     }
 
     /// Enter one selected branch (or the explicit otherwise block) of a parked Choose node.
@@ -1864,7 +1869,7 @@ impl GameEngine {
                     .get(&branch.branch_id)
                     .copied(),
             )
-            || !self.program_choose_draw_is_selectable(&stack.item, &stack.previous_result, &branch)
+            || !self.program_choose_leaf_is_selectable(&stack.item, &stack.previous_result, &branch)
             || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
         {
             return Err(EngineError::Illegal(
@@ -1969,7 +1974,7 @@ impl GameEngine {
                                         .get(&branch.branch_id)
                                         .copied(),
                                 )
-                            && self.program_choose_draw_is_selectable(
+                            && self.program_choose_leaf_is_selectable(
                                 &stack.item,
                                 &stack.previous_result,
                                 branch,

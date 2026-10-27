@@ -179,6 +179,41 @@ impl GameEngine {
             .collect()
     }
 
+    /// The resolving item's controller is captured on the stack; Ashiok's controller and
+    /// ability availability are checked live when the search would begin.
+    pub(super) fn prohibits_own_library_search(
+        &self,
+        resolving_controller: PlayerId,
+        searcher: PlayerId,
+    ) -> bool {
+        if resolving_controller != searcher
+            || self
+                .state
+                .player_idx(searcher)
+                .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return false;
+        }
+        self.state.objects.values().any(|object| {
+            object.zone == Zone::Battlefield
+                && self.controller_of(object.id).is_some_and(|controller| {
+                    self.state
+                        .player_idx(controller)
+                        .is_some_and(|index| !self.state.players[index].has_lost)
+                        && self.state.are_opponents(controller, resolving_controller)
+                })
+                && self
+                    .active_static_ability_definitions(object.id)
+                    .iter()
+                    .any(|ability| {
+                        matches!(
+                            ability,
+                            StaticAbilityDef::OpponentsCannotCauseOwnLibrarySearch
+                        )
+                    })
+        })
+    }
+
     /// Rules-changing permission is live, unlike characteristic effects which may already have
     /// started in an earlier layer. Look for the exact static on each current battlefield source.
     pub(super) fn may_spend_mana_as_any_color(&self, player: PlayerId) -> bool {
@@ -915,6 +950,7 @@ impl GameEngine {
                 | StaticAbilityDef::LimitAttackers { .. }
                 | StaticAbilityDef::AttackTax { .. }
                 | StaticAbilityDef::ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn
+                | StaticAbilityDef::OpponentsCannotCauseOwnLibrarySearch
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
                 | StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
                 | StaticAbilityDef::DoubleTokensCreatedUnderYourControl
