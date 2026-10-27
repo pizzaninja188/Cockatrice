@@ -833,6 +833,37 @@ impl GameEngine {
         moves: &[(ObjectId, Zone, Option<PlayerId>)],
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Vec<CommittedZoneMoveReceipt>, EngineError> {
+        self.commit_observed_zone_move_batch_inner(moves, out, false)
+    }
+
+    /// Memory Jar moves a simultaneous hand cohort face down before observers see the event.
+    pub(super) fn commit_memory_jar_exile_batch(
+        &mut self,
+        moves: &[(ObjectId, Zone, Option<PlayerId>)],
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Vec<CommittedZoneMoveReceipt>, EngineError> {
+        if moves.iter().any(|(id, destination, controller)| {
+            *destination != Zone::Exile
+                || controller.is_some()
+                || !self
+                    .state
+                    .objects
+                    .get(id)
+                    .is_some_and(|object| object.zone == Zone::Hand)
+        }) {
+            return Err(EngineError::ProgramInvariant(
+                "Memory Jar requires a hand-to-exile cohort",
+            ));
+        }
+        self.commit_observed_zone_move_batch_inner(moves, out, true)
+    }
+
+    fn commit_observed_zone_move_batch_inner(
+        &mut self,
+        moves: &[(ObjectId, Zone, Option<PlayerId>)],
+        out: &mut Vec<rv1::RuledEvent>,
+        face_down_exile: bool,
+    ) -> Result<Vec<CommittedZoneMoveReceipt>, EngineError> {
         if moves.is_empty() {
             return Err(EngineError::Illegal(
                 "an observed zone batch must contain a move",
@@ -896,8 +927,21 @@ impl GameEngine {
                 .flatten()
             })
             .collect();
-        for movement in prepared {
+        for (movement, (object_id, _, _)) in prepared.into_iter().zip(moves) {
             super::resolution::commit_zone_move(&mut self.state, self.registry, movement)?;
+            if face_down_exile {
+                self.state
+                    .objects
+                    .get_mut(object_id)
+                    .ok_or(EngineError::ProgramInvariant(
+                        "Memory Jar lost an exiled hand card",
+                    ))?
+                    .face_down = true;
+                let generation = self.state.zone_change_generation[object_id];
+                out.push(super::events::ev_presentation_identity_break(
+                    *object_id, generation,
+                ));
+            }
         }
         self.fire_zone_triggers(snapshot, leave_events, out);
         before

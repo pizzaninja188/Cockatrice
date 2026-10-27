@@ -5,6 +5,7 @@
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/reflection.h>
+#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/utility/ruled_debug.h>
 #include <libcockatrice/utility/zone_names.h>
 #include <vector>
@@ -59,6 +60,22 @@ bool ruledConcealsMoveSource(const Server_Game *game,
     return game && game->getRuledGame() && startZone && targetZone &&
            startZone->getType() != ServerInfo_Zone::PublicZone &&
            (destinationFaceDown || targetZone->getType() != ServerInfo_Zone::PublicZone);
+}
+
+void clearRuledFaceDownExileMoveIdentity(const Server_Game *game,
+                                        const Server_CardZone *targetZone,
+                                        bool destinationFaceDown,
+                                        Event_MoveCard &privateEvent,
+                                        Event_MoveCard &otherEvent)
+{
+    if (!game || !game->getRuledGame() || !targetZone || targetZone->getName() != ZoneNames::EXILE ||
+        !destinationFaceDown) {
+        return;
+    }
+    for (auto *event : {&privateEvent, &otherEvent}) {
+        event->set_card_name("");
+        event->clear_new_card_provider_id();
+    }
 }
 
 void clearRuledFieldsByVisibility(google::protobuf::Message *message, ruled::v1::FieldVisibility visibility)

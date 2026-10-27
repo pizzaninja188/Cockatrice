@@ -106,6 +106,7 @@ set(cockatrice_SOURCES
     src/game/player/player_target.cpp
     src/game/replay.cpp
     src/game/ruled/ruled_actions.cpp
+    src/game/ruled/ruled_card_popup.cpp
     src/game/ruled/ruled_public_zone_order.cpp
     src/game/ruled/ruled_preparation_display.cpp
     src/game/ruled/ruled_autopilot.cpp

@@ -426,11 +426,20 @@ pub struct TriggerStackObjectRef {
     pub controller_at_event: PlayerId,
 }
 
+/// One resolving Memory Jar activation's private hand-exile receipts.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct MemoryJarCohort {
+    pub controller: PlayerId,
+    pub cards: Vec<TriggerObjectRef>,
+}
+
 /// Event-time facts carried by a triggered ability from collection through resolution. Keeping
 /// these together prevents target publication, target validation, and effect resolution from
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
+    /// Private occurrence key for one Memory Jar delayed hand return.
+    pub memory_jar_cohort: Option<ObjectId>,
     /// Event-time copy occurrence for a linked-exile producer/consumer pair. The stack item's
     /// card, face, and ability definition capture the other identity parts.
     pub(crate) linked_exile_occurrence: Option<LinkedExileOccurrence>,
@@ -3451,6 +3460,8 @@ pub struct DelayedTriggerPayload {
     /// A player captured from the creating effect when a delayed ability addresses someone other
     /// than its controller.
     pub affected_player: Option<PlayerId>,
+    /// Present only for the closed Memory Jar delayed-return profile.
+    pub memory_jar_cohort: Option<ObjectId>,
     pub card_id: String,
     pub card_name: String,
     pub source_face_index: usize,
@@ -3928,6 +3939,8 @@ pub struct GameState {
     /// Mobilize keeps its whole token cohort here without making ubiquitous TriggerContext
     /// values heap-owning or reconstructing identity from card names.
     pub observed_object_cohorts: HashMap<(ObjectId, u64), Vec<TriggerObjectRef>>,
+    /// Rules-only exact hand incarnations, keyed by the resolving activation occurrence.
+    pub(crate) memory_jar_cohorts: BTreeMap<ObjectId, MemoryJarCohort>,
     /// Immediate observer work discovered by low-level state transitions. The engine drains this
     /// before the next resolving instruction or priority boundary.
     pub(crate) pending_immediate_observer_actions: Vec<ImmediateObserverAction>,
@@ -4424,6 +4437,7 @@ impl GameState {
                     trigger_context: TriggerContext {
                         observed_object: watched,
                         affected_player: delayed.affected_player,
+                        memory_jar_cohort: delayed.memory_jar_cohort,
                         ..TriggerContext::default()
                     },
                     may: delayed.ability.may,

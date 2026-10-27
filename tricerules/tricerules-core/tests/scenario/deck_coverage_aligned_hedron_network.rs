@@ -363,6 +363,7 @@ fn aligned_hedron_network_owner_concession_returns_survivors_before_publication(
                 source: network_ref,
                 controller: 9,
                 affected_player: None,
+                memory_jar_cohort: None,
                 card_id: "aligned_hedron_network".into(),
                 card_name: "Aligned Hedron Network".into(),
                 source_face_index: 0,

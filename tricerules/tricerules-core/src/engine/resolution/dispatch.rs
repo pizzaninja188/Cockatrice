@@ -88,6 +88,8 @@ pub(super) fn execute_effect(
             zones::shuffle_resolving_spell_into_owners_library(cx)?
         }
         SpellEffectKind::ExileResolvingSpell => zones::exile_resolving_spell(cx)?,
+        SpellEffectKind::MemoryJarExileHands => memory_jar::exile_hands(cx)?,
+        SpellEffectKind::ReturnMemoryJarHands => memory_jar::return_hands(cx)?,
         effect @ SpellEffectKind::Discard { .. } => zones::discard(cx, effect)?,
         effect @ SpellEffectKind::Scry { .. } => zones::scry(cx, effect)?,
         effect @ SpellEffectKind::LibraryPartition { .. } => zones::library_partition(cx, effect)?,

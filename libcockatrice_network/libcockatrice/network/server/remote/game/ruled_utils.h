@@ -22,6 +22,7 @@ int ruledBattlefieldGridY(bool isCreature, bool isLand);
 
 class Server_Game;
 class Server_CardZone;
+class Event_MoveCard;
 
 /// True when a ruled game legitimately moves a card between two players' zones, so the upstream
 /// `Server_AbstractPlayer::moveCard` controller-change guard must let it through.
@@ -48,6 +49,13 @@ bool ruledConcealsMoveSource(const Server_Game *game,
                             const Server_CardZone *startZone,
                             const Server_CardZone *targetZone,
                             bool destinationFaceDown);
+
+/// Clear retained client CardRefs when an engine-directed ruled move enters exile face down.
+void clearRuledFaceDownExileMoveIdentity(const Server_Game *game,
+                                        const Server_CardZone *targetZone,
+                                        bool destinationFaceDown,
+                                        Event_MoveCard &privateEvent,
+                                        Event_MoveCard &otherEvent);
 
 /// Reflection-based fail-closed clearing used by ruled broadcast redaction. Every field
 /// reachable from RuledEventBatch is classified in ruled_v1.proto; fields with `visibility`

@@ -1069,6 +1069,10 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
         count: Amount,
     },
+    /// Memory Jar's simultaneous hidden hand exile, retained for its delayed ability.
+    MemoryJarExileHands,
+    /// Return the exact surviving face-down exile incarnations from that activation.
+    ReturnMemoryJarHands,
     /// CR 117.1d / 608.2g: starting with the resolving controller, each player may pay any
     /// amount of mana. The exact committed total is the immediate result consumed by the next
     /// effect, as in Minds Aglow.
@@ -3616,6 +3620,12 @@ impl SpellEffectKind {
         }
     }
 
+    pub(crate) fn contains_memory_jar_leaf(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| {
+            matches!(leaf, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
+        })
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3840,6 +3850,8 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateTriggeredEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
+            | SpellEffectKind::MemoryJarExileHands
+            | SpellEffectKind::ReturnMemoryJarHands
             | SpellEffectKind::JoinForces
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
             | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
@@ -4146,10 +4158,60 @@ impl SpellEffectKind {
         Ok(())
     }
 
+    pub(crate) fn is_memory_jar_delayed(ability: &TriggeredAbilityDef) -> bool {
+        ability.trigger == TriggerCondition::AtBeginningOfNextEndStep
+            && ability.program.is_none()
+            && ability.modal.is_none()
+            && ability.targeting.is_none()
+            && !ability.may
+            && ability.intervening_if.is_none()
+            && !ability.triggers_only_once
+            && ability.max_triggers_per_turn.is_none()
+            && matches!(
+                ability.effect.as_slice(),
+                [
+                    Self::Discard {
+                        who: PlayerRecipient::EachPlayer,
+                        quantity: DiscardQuantity::All
+                    },
+                    Self::ReturnMemoryJarHands
+                ]
+            )
+    }
+
     /// Startup validation for a whole effect list (one face's `spell_effect`, or one mode's
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        let jar_parent = matches!(
+            effects,
+            [
+                Self::MemoryJarExileHands,
+                Self::Draw { who: PlayerRecipient::EachPlayer, count: Amount::Fixed(7) },
+                Self::CreateDelayedTrigger { subject: None, affected_player: None, ability }
+            ] if Self::is_memory_jar_delayed(ability)
+        );
+        let jar_child = matches!(
+            effects,
+            [
+                Self::Discard {
+                    who: PlayerRecipient::EachPlayer,
+                    quantity: DiscardQuantity::All
+                },
+                Self::ReturnMemoryJarHands
+            ]
+        );
+        if effects.iter().any(|effect| {
+            effect.contains_legacy_flat_signature(|leaf| {
+                matches!(leaf, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
+            })
+        }) && !(jar_parent || jar_child)
+        {
+            return Err(
+                "Memory Jar hand cohorts require their exact parent and delayed-child sequences"
+                    .into(),
+            );
+        }
         if effects
             .iter()
             .any(SpellEffectKind::contains_retired_flat_equipment_attachment)
@@ -4421,6 +4483,11 @@ impl SpellEffectKind {
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if matches!(self, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
+            && context != EffectContext::Ability
+        {
+            return Err("Memory Jar hand cohorts require an ability".into());
+        }
         if self.contains_unlowered_target_alias_marker() {
             return Err("target alias markers are valid only in a CardProgram source".into());
         }
@@ -5884,6 +5951,7 @@ impl SpellEffectKind {
                         ability.trigger,
                         TriggerCondition::AtBeginningOfNextTurnUpkeep
                     )
+                    && !Self::is_memory_jar_delayed(ability)
                 {
                     return Err(
                         "subjectless CreateDelayedTrigger requires a next-turn upkeep condition"

@@ -538,6 +538,7 @@ impl GameEngine {
                 trigger_context: TriggerContext {
                     observed_object: watched,
                     affected_player: delayed.affected_player,
+                    memory_jar_cohort: delayed.memory_jar_cohort,
                     ..TriggerContext::default()
                 },
                 ability: delayed.ability,

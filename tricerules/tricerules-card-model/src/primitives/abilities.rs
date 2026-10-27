@@ -619,6 +619,24 @@ impl ActivatedAbilityDef {
         {
             return Err("source counter quantities require a battlefield ability source".into());
         }
+        if self
+            .effect
+            .iter()
+            .any(|effect| matches!(effect, SpellEffectKind::MemoryJarExileHands))
+            && (self.costs.as_slice() != [AbilityCost::Tap, AbilityCost::SacrificeSelf]
+                || self.source_zone != AbilitySourceZone::Battlefield
+                || self.targeting.is_some()
+                || self.program.is_some())
+        {
+            return Err("Memory Jar hand exile requires its exact activated-ability shape".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(|effect| matches!(effect, SpellEffectKind::ReturnMemoryJarHands))
+        {
+            return Err("Memory Jar hand return requires its delayed trigger".into());
+        }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
         }
@@ -1724,6 +1742,15 @@ impl TriggeredAbilityDef {
         &self,
         allow_token_copy_cohort_exile: bool,
     ) -> Result<(), String> {
+        if self.modal.as_ref().is_some_and(|modal| {
+            modal
+                .modes
+                .iter()
+                .flat_map(|mode| &mode.effects)
+                .any(SpellEffectKind::contains_memory_jar_leaf)
+        }) {
+            return Err("Memory Jar hand cohorts do not support modal triggers".into());
+        }
         self.trigger.validate()?;
         self.validate_trigger_limit()?;
         self.ability_id.validate()?;
@@ -1961,6 +1988,18 @@ impl TriggeredAbilityDef {
                     .into(),
             );
         }
+        if self
+            .effect
+            .iter()
+            .any(|effect| matches!(effect, SpellEffectKind::MemoryJarExileHands))
+            || (self
+                .effect
+                .iter()
+                .any(|effect| matches!(effect, SpellEffectKind::ReturnMemoryJarHands))
+                && !SpellEffectKind::is_memory_jar_delayed(self))
+        {
+            return Err("Memory Jar hand cohorts require their exact delayed trigger".into());
+        }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
         }
@@ -2036,6 +2075,13 @@ impl ReflexiveTriggeredAbilityDef {
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_memory_jar_leaf)
+        {
+            return Err("Memory Jar hand cohorts do not support reflexive triggers".into());
+        }
         if self.effect.is_empty() {
             return Err("reflexive triggered ability requires effects".into());
         }

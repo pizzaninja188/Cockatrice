@@ -579,6 +579,40 @@ pub(super) fn create_delayed_trigger(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let memory_jar_delayed = matches!(
+        ability.effect.as_slice(),
+        [
+            SpellEffectKind::Discard {
+                who: PlayerRecipient::EachPlayer,
+                quantity: tricerules_card_model::primitives::DiscardQuantity::All
+            },
+            SpellEffectKind::ReturnMemoryJarHands
+        ]
+    ) && ability.trigger == TriggerCondition::AtBeginningOfNextEndStep;
+    let memory_jar_cohort =
+        if memory_jar_delayed {
+            let key = cx.top.id;
+            if cx
+                .engine
+                .state
+                .player_idx(cx.controller)
+                .is_none_or(|index| cx.engine.state.players[index].has_lost)
+            {
+                cx.engine.state.memory_jar_cohorts.remove(&key);
+                return Ok(EffectOutcome::Continue);
+            }
+            let cohort = cx.engine.state.memory_jar_cohorts.get(&key).ok_or(
+                EngineError::ProgramInvariant("Memory Jar delayed trigger lost its hand cohort"),
+            )?;
+            if cohort.controller != cx.controller {
+                return Err(EngineError::ProgramInvariant(
+                    "Memory Jar delayed trigger has the wrong controller",
+                ));
+            }
+            Some(key)
+        } else {
+            None
+        };
     let affected_player = match affected_player {
         Some(PlayerRecipient::ProgramInputPlayer) => {
             let Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) =
@@ -681,10 +715,12 @@ pub(super) fn create_delayed_trigger(
             }
         };
         Some(watched)
-    } else if matches!(
-        ability.trigger,
-        TriggerCondition::AtBeginningOfNextTurnUpkeep
-    ) {
+    } else if memory_jar_delayed
+        || matches!(
+            ability.trigger,
+            TriggerCondition::AtBeginningOfNextTurnUpkeep
+        )
+    {
         None
     } else {
         return Err(EngineError::Illegal(
@@ -813,6 +849,7 @@ pub(super) fn create_delayed_trigger(
                 },
                 controller: cx.controller,
                 affected_player,
+                memory_jar_cohort,
                 card_id: cx.top.card_id.clone(),
                 card_name,
                 source_face_index: cx.top.face_index,

@@ -203,6 +203,14 @@ impl GameEngine {
                     // Its parent still owns the in-flight operation and exact prior result.
                     return None;
                 }
+                if matches!(&pending.continuation,
+                    ResolutionContinuation::DiscardReplacement { stack }
+                        if super::discard::is_memory_jar_discard_replacement(stack))
+                {
+                    // The Jar's delayed child has begun: the independent observer must return
+                    // its saved discard transaction, even after the child's controller leaves.
+                    return None;
+                }
                 let stack = pending.continuation.stack()?;
                 let discard = match &pending.continuation {
                     ResolutionContinuation::PlayerSetDiscard { discard, .. } => Some(discard),
@@ -510,6 +518,12 @@ impl GameEngine {
                     // This exact begun target-hand discard survives controller departure. If the
                     // affected player leaves, post-cleanup reconciliation retires their
                     // uncommitted choice with an empty typed result instead of delegating it.
+                    preserve = true;
+                }
+                ResolutionContinuation::DiscardReplacement { stack }
+                    if super::discard::is_memory_jar_discard_replacement(stack) =>
+                {
+                    // A begun Jar child must finish the surviving players' discard and return.
                     preserve = true;
                 }
                 ResolutionContinuation::LinkedExileChoice { .. }
@@ -853,6 +867,48 @@ impl GameEngine {
             .collect();
         let mut discarded_cohorts = Vec::new();
         let mut discarded_activation_receipts = Vec::new();
+        let mut begun_jar_returns = HashSet::new();
+        let mut retain_stack_key = |stack: &ParkedStackResolution| {
+            if let Some(key) = stack.item.trigger_context.memory_jar_cohort {
+                begun_jar_returns.insert(key);
+            }
+        };
+        if let Some(pending) = self.state.pending_resolution.as_ref() {
+            if let Some(stack) = pending.continuation.stack() {
+                retain_stack_key(stack);
+            }
+            if let ResolutionContinuation::SimultaneousEntryOrder { order, .. } =
+                &pending.continuation
+            {
+                if let SimultaneousEntryBatch::Observer(batch) = &order.batch {
+                    if let Some(stack) = batch.resume_stack.as_ref() {
+                        retain_stack_key(stack);
+                    }
+                    if let Some(stack) = batch
+                        .suspended_resolution
+                        .as_ref()
+                        .and_then(|saved| saved.continuation.stack())
+                    {
+                        retain_stack_key(stack);
+                    }
+                }
+            }
+        }
+        if let Some(batch) = self.state.pending_observer_return_batch.as_ref() {
+            if let Some(stack) = batch.resume_stack.as_ref() {
+                retain_stack_key(stack);
+            }
+            if let Some(stack) = batch
+                .suspended_resolution
+                .as_ref()
+                .and_then(|saved| saved.continuation.stack())
+            {
+                retain_stack_key(stack);
+            }
+        }
+        self.state.memory_jar_cohorts.retain(|key, cohort| {
+            live_players.contains(&cohort.controller) || begun_jar_returns.contains(key)
+        });
         for observer in &self.state.active_event_observers {
             if let EventObserverPayload::StageDelayedTrigger(trigger) = &observer.payload {
                 if !live_players.contains(&trigger.controller)
@@ -1113,6 +1169,7 @@ impl GameEngine {
         }
         if !observer_return_parked {
             self.reconcile_pending_player_set_discard_departure(events, false)?;
+            self.reconcile_memory_jar_discard_departure(events)?;
             self.refresh_player_set_sacrifice_departure(events)?;
         }
         self.refresh_mass_sacrifice_departure(events)?;

@@ -1816,6 +1816,8 @@ fn validate_effect_targets(
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
         | SpellEffectKind::CopyTriggeringActivatedAbility
+        | SpellEffectKind::MemoryJarExileHands
+        | SpellEffectKind::ReturnMemoryJarHands
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::ExileAll { .. }

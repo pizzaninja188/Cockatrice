@@ -1165,8 +1165,6 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                                                  const QHash<quint32, int> &battlefieldGridRows,
                                                  const QHash<quint32, int> &battlefieldDisplayPlayers)
 {
-    GameEventStorage permanentMoveGes;
-    bool permanentMoveGesHasEvents = false;
     for (int ei = 0; ei < batch.events_size(); ++ei) {
         const auto &e = batch.events(ei);
         if (!e.has_permanent_moved()) {
@@ -1499,9 +1497,11 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                 qWarning() << "ruled PermanentMoved battlefield entry missing authoritative row for oid" << oid;
             }
         }
+        // Each physical move has its own private recipient. A shared storage across owners would
+        // route all private move envelopes to whichever player's move was enqueued last.
+        GameEventStorage permanentMoveGes;
         if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, destY,
                            "permanentMoved")) {
-            permanentMoveGesHasEvents = true;
             exactLibraryLandMoveOids.remove(oid);
             // Preserve the exact cast binding through physical resolution above, then retire only
             // the moved Stack OID. Unlike StackResolved/Countered this event describes a card
@@ -1532,10 +1532,8 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     binding.registerEngineOid(oid, card->getId());
                 }
             }
+            permanentMoveGes.sendToGame(game);
         }
-    }
-    if (permanentMoveGesHasEvents) {
-        permanentMoveGes.sendToGame(game);
     }
 }
 

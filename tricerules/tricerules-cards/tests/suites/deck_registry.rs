@@ -87,6 +87,8 @@ mod deck_coverage_liquimetal_torque;
 mod deck_coverage_lotus_petal;
 #[path = "../deck_coverage_manifold_key.rs"]
 mod deck_coverage_manifold_key;
+#[path = "../deck_coverage_memory_jar.rs"]
+mod deck_coverage_memory_jar;
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;
 #[path = "../deck_coverage_mh3_mdfcs_registry.rs"]

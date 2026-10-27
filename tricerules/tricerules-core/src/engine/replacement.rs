@@ -6525,6 +6525,7 @@ impl GameEngine {
                             },
                             controller: item.controller,
                             affected_player: None,
+                            memory_jar_cohort: None,
                             card_id: item.card_id.clone(),
                             card_name,
                             source_face_index: item.face_index,

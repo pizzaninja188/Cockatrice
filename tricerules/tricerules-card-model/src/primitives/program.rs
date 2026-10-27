@@ -2184,6 +2184,9 @@ impl Compiler<'_> {
                     ));
                 }
                 InstructionKind::Perform(effect) => {
+                    if effect.contains_memory_jar_leaf() {
+                        return Err("Memory Jar hand cohorts cannot occur in a Program".into());
+                    }
                     if let SpellEffectKind::GainLife { who, .. } = effect.as_ref() {
                         // Preserve the established ability-context recipient while keeping the
                         // new target-group recipient closed to the separately validated Swords

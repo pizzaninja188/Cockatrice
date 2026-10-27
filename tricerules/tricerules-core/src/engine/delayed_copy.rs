@@ -68,6 +68,7 @@ impl GameEngine {
                 source,
                 controller,
                 affected_player: None,
+                memory_jar_cohort: None,
                 card_id: top.card_id.clone(),
                 card_name: label.into(),
                 source_face_index: top.face_index,

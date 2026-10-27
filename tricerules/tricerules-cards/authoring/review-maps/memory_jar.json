@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "oracle_id": "eb9c9a34-88a8-4afe-a053-806f6b29834f",
+  "spans": [
+    {"face_id": "memory_jar", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_memory_jar::memory_jar_legacy_cohort_operations_require_the_closed_composition", "covers": "Exact mana cost, Artifact type, activation costs, and rejection of unsupported cohort shapes."},
+    {"test": "deck_registry::deck_coverage_memory_jar::memory_jar_delayed_child_cannot_be_smuggled_through_a_spell_program", "covers": "A Program cannot create a delayed child without its private occurrence."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_exiles_each_hand_face_down_draws_in_turn_order_and_restores_its_cohort", "covers": "Each player's face-down exile, APNAP draws, public projection, and delayed exact return."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_cannot_be_activated_when_tapped", "covers": "The tap cost is mandatory."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_copied_by_rings_tracks_two_independent_hand_cohorts", "covers": "Copied activations create independent cohorts and delayed triggers."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_commander_sba_after_draw_can_remove_it_from_the_delayed_cohort", "covers": "The 903.9a choice occurs after all draws and can remove the commander from the cohort."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_delayed_return_offers_owner_command_or_hand_before_the_batch", "covers": "The owner's 903.9b choice precedes the return batch and ordinary names remain private."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_initial_draw_finishes_after_controller_departs_without_future_trigger", "covers": "Started draws finish for survivors; an unavailable controller has no future trigger."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_delayed_discard_and_return_finish_when_controller_departs", "covers": "A started Library of Leng discard and the exact return finish after controller departure."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_child_restores_after_observer_and_controller_departures", "covers": "A real Banishing Light Aura return suspends and restores the begun child and cohort."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_with_every_hand_empty_still_discards_the_new_hands", "covers": "An empty initial cohort still produces its delayed discard."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_short_library_loss_does_not_skip_other_players_draws_or_returns", "covers": "An unsuccessful draw and player loss do not skip surviving players' instructions."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_activated_during_end_step_waits_for_the_next_one", "covers": "A delayed ability created during an end step waits for the next end step."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_activation_and_delayed_trigger_can_each_be_countered", "covers": "The activation and delayed trigger are separately counterable and release their cohorts."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_current_discard_chooser_can_depart_without_stranding_survivors", "covers": "A departing discard chooser is removed while the surviving discard and return finish."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_keeps_live_controller_when_source_owner_or_other_player_departs", "covers": "Source-owner and affected-player departures before and after the delayed trigger."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_does_not_return_a_later_exile_incarnation", "covers": "A later exile incarnation cannot replace the captured card."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_commander_return_choice_survives_controller_or_owner_departure", "covers": "A parked Commander return survives the controller or chooser leaving."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_replays_private_discard_choice_and_controller_departure", "covers": "Serialized accepted commands reproduce event batches across a private choice and departure."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_unbegun_work_ends_when_its_controller_departs", "covers": "Unbegun activation, observer, and stacked trigger are removed with their controller."},
+    {"test": "scenario deck_coverage_memory_jar::memory_jar_source_owner_can_depart_before_borrowed_activation_resolves", "covers": "A live controller resolves its borrowed activation after the physical source owner leaves."}
+  ],
+  "complete_definition_review_confirmed": true
+}

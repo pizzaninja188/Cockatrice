@@ -4057,7 +4057,9 @@ TEST_F(RuledBatchTest, CancelSpellCastRestoresExactExileCardAndPileOrder)
     ASSERT_NE(cancelMove, nullptr);
     EXPECT_EQ(cancelMove->start_zone(), ZoneNames::STACK);
     EXPECT_EQ(cancelMove->target_zone(), ZoneNames::EXILE);
-    EXPECT_EQ(cancelMove->card_name(), "Lightning Bolt");
+    EXPECT_TRUE(cancelMove->has_card_name());
+    EXPECT_TRUE(cancelMove->card_name().empty());
+    EXPECT_FALSE(cancelMove->has_new_card_provider_id());
     EXPECT_TRUE(cancelMove->face_down()) << "the recipient wire restores the face-down state";
     EXPECT_EQ(cancelMove->card_id(), originalPhysicalCardId)
         << "the event identifies the public Stack incarnation being returned";
@@ -4473,6 +4475,178 @@ TEST_F(RuledBatchTest, CompletedFaceDownHandMoveKeepsUnderlyingPhysicalIdentity)
     EXPECT_EQ(bear->getName(), QString("Grizzly Bears"));
     EXPECT_TRUE(bear->getFaceDown());
     EXPECT_EQ(findCardByEngineOid(p1, 2093u), bear);
+}
+
+// The IPC movement below is synthetic; the assertion exercises the real relay move producer.
+TEST_F(RuledBatchTest, RuledFaceDownHandToExileExplicitlyClearsCommonCardIdentity)
+{
+    Server_Card *bear = addCardToHand(p1, "Grizzly Bears");
+    const int oldPhysicalId = bear->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *handCard = p1Seed.add_hand_cards();
+    handCard->set_object_id(2094u);
+    handCard->set_card_id("grizzly_bears");
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(findCardByEngineOid(p1, 2094u), bear);
+
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    auto spectatorCapture = std::make_unique<CapturingTestUserInterface>(&server);
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    spectator->setUserInterface(spectatorCapture.get());
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    auto *moved = completed.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(2094u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    moved->set_face_down(true);
+    callBatchApply(completed);
+    spectator->setUserInterface(nullptr);
+
+    ASSERT_EQ(bear->getZone()->getName(), QString(ZoneNames::EXILE));
+    EXPECT_TRUE(bear->getFaceDown());
+    EXPECT_EQ(bear->getName(), QString("Grizzly Bears"));
+    EXPECT_NE(bear->getId(), oldPhysicalId);
+    for (const auto *capture : {p1Capture.get(), p2Capture.get(), spectatorCapture.get()}) {
+        const auto *move = lastMoveCard(*capture);
+        ASSERT_NE(move, nullptr);
+        EXPECT_TRUE(move->face_down());
+        EXPECT_TRUE(move->has_card_name()) << "the destination must clear a previously known CardRef";
+        EXPECT_TRUE(move->card_name().empty());
+        EXPECT_FALSE(move->has_new_card_provider_id());
+    }
+}
+
+// Synthetic IPC batches exercise the real mixed-owner relay and recipient envelopes.
+TEST_F(RuledBatchTest, MixedOwnerFaceDownExileAndHandReturnRouteEachMoveToItsOwner)
+{
+    seedCardCatalog({"Grizzly Bears", "Hill Giant"});
+    std::array<Server_Player *, 2> owners{p1, p2};
+    std::array<Server_Card *, 2> cards{addCardToHand(p1, "Grizzly Bears"), addCardToHand(p2, "Hill Giant")};
+    const std::array<quint32, 2> objectIds{2095u, 2096u};
+    const std::array<std::string, 2> cardIds{"grizzly_bears", "hill_giant"};
+    const std::array<std::string, 2> names{"Grizzly Bears", "Hill Giant"};
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *view = seed.mutable_batch()->add_events()->mutable_zone_view();
+    for (int i = 0; i < 2; ++i) {
+        auto player = buildPerPlayerView(owners[i], {}, {});
+        auto *hand = player.add_hand_cards();
+        hand->set_object_id(objectIds[i]);
+        hand->set_card_id(cardIds[i]);
+        *view->add_per_player() = player;
+    }
+    callBatchApply(seed);
+    for (int i = 0; i < 2; ++i)
+        ASSERT_EQ(findCardByEngineOid(owners[i], objectIds[i]), cards[i]);
+
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    auto spectatorCapture = std::make_unique<CapturingTestUserInterface>(&server);
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    spectator->setUserInterface(spectatorCapture.get());
+
+    const auto movesFor = [](const CapturingTestUserInterface &capture) {
+        std::vector<Event_MoveCard> moves;
+        for (const auto &container : capture.gameEvents)
+            for (const auto &event : container.event_list())
+                if (event.HasExtension(Event_MoveCard::ext))
+                    moves.push_back(event.GetExtension(Event_MoveCard::ext));
+        return moves;
+    };
+    const auto clearCaptures = [&] {
+        p1Capture->gameEvents.clear();
+        p2Capture->gameEvents.clear();
+        spectatorCapture->gameEvents.clear();
+    };
+    for (bool reverse : {false, true}) {
+        const std::array<int, 2> order = reverse ? std::array<int, 2>{1, 0} : std::array<int, 2>{0, 1};
+        clearCaptures();
+        ruled::v1::IpcResponse exile;
+        exile.set_ok(true);
+        for (int i : order) {
+            auto *move = exile.mutable_batch()->add_events()->mutable_permanent_moved();
+            move->set_object_id(objectIds[i]);
+            move->set_owner_player_id(owners[i]->getPlayerId());
+            move->set_controller_player_id(owners[i]->getPlayerId());
+            move->set_card_id(cardIds[i]);
+            move->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+            move->set_face_down(true);
+        }
+        callBatchApply(exile);
+        for (const auto &recipient : {std::make_pair(p1Capture.get(), p1->getPlayerId()),
+                                      std::make_pair(p2Capture.get(), p2->getPlayerId()),
+                                      std::make_pair(spectatorCapture.get(), spectator->getPlayerId())}) {
+            const auto moves = movesFor(*recipient.first);
+            ASSERT_EQ(moves.size(), 2u);
+            for (size_t index = 0; index < order.size(); ++index) {
+                const int i = order[index];
+                EXPECT_EQ(moves[index].start_player_id(), owners[i]->getPlayerId());
+                EXPECT_EQ(moves[index].target_player_id(), owners[i]->getPlayerId());
+                EXPECT_EQ(moves[index].start_zone(), ZoneNames::HAND);
+                EXPECT_EQ(moves[index].target_zone(), ZoneNames::EXILE);
+                EXPECT_TRUE(moves[index].face_down());
+                EXPECT_TRUE(moves[index].has_card_name());
+                EXPECT_TRUE(moves[index].card_name().empty());
+                EXPECT_FALSE(moves[index].has_new_card_provider_id());
+                EXPECT_EQ(moves[index].new_card_id(), cards[i]->getId());
+                if (recipient.second != owners[i]->getPlayerId()) {
+                    EXPECT_EQ(moves[index].card_id(), -1);
+                    EXPECT_EQ(moves[index].position(), 0);
+                }
+            }
+        }
+        clearCaptures();
+        ruled::v1::IpcResponse returned;
+        returned.set_ok(true);
+        for (int i : order) {
+            auto *move = returned.mutable_batch()->add_events()->mutable_permanent_moved();
+            move->set_object_id(objectIds[i]);
+            move->set_owner_player_id(owners[i]->getPlayerId());
+            move->set_controller_player_id(owners[i]->getPlayerId());
+            move->set_card_id(cardIds[i]);
+            move->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+            move->set_face_down(false);
+        }
+        callBatchApply(returned);
+        for (const auto &recipient : {std::make_pair(p1Capture.get(), p1->getPlayerId()),
+                                      std::make_pair(p2Capture.get(), p2->getPlayerId()),
+                                      std::make_pair(spectatorCapture.get(), spectator->getPlayerId())}) {
+            const auto moves = movesFor(*recipient.first);
+            ASSERT_EQ(moves.size(), 2u);
+            for (size_t index = 0; index < order.size(); ++index) {
+                const int i = order[index];
+                EXPECT_EQ(moves[index].start_player_id(), owners[i]->getPlayerId());
+                EXPECT_EQ(moves[index].target_player_id(), owners[i]->getPlayerId());
+                EXPECT_EQ(moves[index].start_zone(), ZoneNames::EXILE);
+                EXPECT_EQ(moves[index].target_zone(), ZoneNames::HAND);
+                EXPECT_EQ(moves[index].card_id(), cards[i]->getId());
+                if (recipient.second == owners[i]->getPlayerId()) {
+                    EXPECT_EQ(moves[index].card_name(), names[i]);
+                    EXPECT_TRUE(moves[index].has_new_card_provider_id());
+                } else {
+                    EXPECT_TRUE(moves[index].card_name().empty());
+                    EXPECT_FALSE(moves[index].has_new_card_provider_id());
+                }
+            }
+        }
+    }
+    spectator->setUserInterface(nullptr);
 }
 
 TEST_F(RuledBatchTest, BattlefieldLandClassificationIsServerOnly)
@@ -9251,7 +9425,9 @@ TEST_F(RuledBatchTest, PrivateLibraryMoveToFaceDownExileDoesNotPublishSourcePhys
     ASSERT_NE(observerMove, nullptr);
     EXPECT_EQ(observerMove->position(), 0);
     EXPECT_EQ(observerMove->card_id(), -1);
-    EXPECT_FALSE(observerMove->has_card_name());
+    EXPECT_TRUE(observerMove->has_card_name());
+    EXPECT_TRUE(observerMove->card_name().empty());
+    EXPECT_FALSE(observerMove->has_new_card_provider_id());
     EXPECT_NE(observerMove->new_card_id(), privateSourceId);
     EXPECT_EQ(observerMove->new_card_id(), selected->getId());
 }
@@ -9281,7 +9457,9 @@ TEST_F(RuledBatchTest, ConcealedLibraryToFaceDownExileDoesNotIdentifySourceToOwn
     ASSERT_NE(ownerMove, nullptr);
     EXPECT_EQ(ownerMove->position(), 0);
     EXPECT_EQ(ownerMove->card_id(), -1);
-    EXPECT_FALSE(ownerMove->has_card_name());
+    EXPECT_TRUE(ownerMove->has_card_name());
+    EXPECT_TRUE(ownerMove->card_name().empty());
+    EXPECT_FALSE(ownerMove->has_new_card_provider_id());
     EXPECT_NE(ownerMove->new_card_id(), privateSourceId);
     EXPECT_EQ(ownerMove->new_card_id(), selected->getId());
 }

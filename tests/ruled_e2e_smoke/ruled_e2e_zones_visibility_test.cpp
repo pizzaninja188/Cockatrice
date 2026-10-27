@@ -2724,5 +2724,288 @@ TEST_F(RuledE2ESmokeTest, FlowStateSelectsPrivateCardsAndPreservesChosenBottomOr
     EXPECT_TRUE(p2.libraryDetailsStayedConcealed);
 }
 
+class MemoryJarPrivacyDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    std::map<int, int> snapshotExileCounts;
+    std::map<int, std::vector<ServerInfo_Card>> snapshotExileCards;
+    std::vector<ruled::v1::FaceDownObjectMap::Entry> privateFaceDownEntries;
+
+    void onPhysicalEvent(const GameEvent &event) override
+    {
+        if (!event.HasExtension(Event_GameStateChanged::ext))
+            return;
+        for (const auto &player : event.GetExtension(Event_GameStateChanged::ext).player_list()) {
+            const int owner = player.properties().player_id();
+            for (const auto &zone : player.zone_list()) {
+                if (zone.name() != ZoneNames::EXILE)
+                    continue;
+                snapshotExileCounts[owner] = zone.card_count();
+                auto &cards = snapshotExileCards[owner];
+                cards.assign(zone.card_list().begin(), zone.card_list().end());
+            }
+        }
+    }
+
+    void onRuledEvent(const ruled::v1::RuledEvent &event) override
+    {
+        OpeningDriver::onRuledEvent(event);
+        if (event.has_face_down_object_map()) {
+            for (const auto &entry : event.face_down_object_map().entries())
+                privateFaceDownEntries.push_back(entry);
+        }
+    }
+};
+
+TEST_F(RuledE2ESmokeTest, MemoryJarFaceDownHandsSurviveProtocolReplayWithoutLookAccess)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+
+    MemoryJarPrivacyDriver p1(true, QStringLiteral("jarp1"), &transcript);
+    MemoryJarPrivacyDriver p2(false, QStringLiteral("jarp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    const auto deck1 = deckXml({{40, QStringLiteral("Plains")}});
+    const auto deck2 = deckXml({{40, QStringLiteral("Island")}});
+    ASSERT_TRUE(p1.selectDeck(deck1));
+    ASSERT_TRUE(p2.selectDeck(deck2));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Jar start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Jar start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 &&
+           !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+             p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+        p1.pump(25);
+        p2.pump(25);
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [](MemoryJarPrivacyDriver &one, MemoryJarPrivacyDriver &two, MemoryJarPrivacyDriver &sender,
+                   const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 v1 = one.stateVersion;
+        const quint64 v2 = two.stateVersion;
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while ((one.stateVersion <= v1 || two.stateVersion <= v2) && wait.elapsed() < 10000) {
+            one.pump(25);
+            two.pump(25);
+        }
+        return one.stateVersion > v1 && two.stateVersion > v2;
+    };
+    auto put = [&](int owner, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(owner);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(true);
+        return send(p1, p2, p1, command, QStringLiteral("Jar fixture put %1").arg(QString::fromLatin1(name)));
+    };
+    auto pass = [&](MemoryJarPrivacyDriver &one, MemoryJarPrivacyDriver &two, MemoryJarPrivacyDriver &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(one, two, sender, command, QStringLiteral("Jar pass"));
+    };
+    ASSERT_TRUE(put(p1.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(put(p2.myId, "Hill Giant", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(put(p1.myId, "Memory Jar", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(p1.physicalHandCountByPlayer.count(p1.myId));
+    ASSERT_TRUE(p1.physicalHandCountByPlayer.count(p2.myId));
+    ASSERT_TRUE(p2.physicalHandCountByPlayer.count(p1.myId));
+    ASSERT_TRUE(p2.physicalHandCountByPlayer.count(p2.myId));
+    const std::map<int, int> originalCounts = {
+        {p1.myId, p1.physicalHandCountByPlayer.at(p1.myId)},
+        {p2.myId, p1.physicalHandCountByPlayer.at(p2.myId)}};
+    ASSERT_GT(originalCounts.at(p1.myId), 1);
+    ASSERT_GT(originalCounts.at(p2.myId), 1);
+    EXPECT_EQ(p2.physicalHandCountByPlayer.at(p1.myId), originalCounts.at(p1.myId));
+    EXPECT_EQ(p2.physicalHandCountByPlayer.at(p2.myId), originalCounts.at(p2.myId));
+    const auto &battlefield = p1.battlefieldByPlayer.at(p1.myId);
+    const auto jar = std::find_if(battlefield.begin(), battlefield.end(), [](const auto &object) {
+        return object.cardId == QLatin1String("memory_jar");
+    });
+    ASSERT_NE(jar, battlefield.end());
+    ruled::v1::RuledCommand activation;
+    p1.setBattlefieldAbilitySource(activation.mutable_activate_ability(), jar->oid);
+    activation.mutable_activate_ability()->set_ability_index(0);
+    ASSERT_TRUE(send(p1, p2, p1, activation, QStringLiteral("activate Memory Jar")));
+    const size_t startMoves1 = p1.physicalMoveEvents.size();
+    const size_t startMoves2 = p2.physicalMoveEvents.size();
+    ASSERT_TRUE(pass(p1, p2, p1));
+    ASSERT_TRUE(pass(p1, p2, p2));
+    ASSERT_EQ(p1.stackDepth, 0);
+    ASSERT_EQ(p2.stackDepth, 0);
+    for (const auto &entry : originalCounts) {
+        ASSERT_TRUE(p1.physicalHandCountByPlayer.count(entry.first));
+        ASSERT_TRUE(p2.physicalHandCountByPlayer.count(entry.first));
+        EXPECT_EQ(p1.physicalHandCountByPlayer.at(entry.first), 7);
+        EXPECT_EQ(p2.physicalHandCountByPlayer.at(entry.first), 7);
+    }
+    for (const auto &recipient : {std::make_pair(&p1, startMoves1), std::make_pair(&p2, startMoves2)}) {
+        std::map<int, int> moved;
+        const auto &moves = recipient.first->physicalMoveEvents;
+        for (auto it = moves.begin() + recipient.second; it != moves.end(); ++it) {
+            if (it->start_zone() != ZoneNames::HAND || it->target_zone() != ZoneNames::EXILE)
+                continue;
+            ++moved[it->start_player_id()];
+            EXPECT_EQ(it->target_player_id(), it->start_player_id());
+            EXPECT_TRUE(it->face_down());
+            EXPECT_TRUE(it->has_card_name());
+            EXPECT_TRUE(it->card_name().empty());
+            EXPECT_FALSE(it->has_new_card_provider_id());
+            EXPECT_GE(it->new_card_id(), 0);
+            if (it->start_player_id() != recipient.first->myId) {
+                EXPECT_EQ(it->card_id(), -1);
+                EXPECT_EQ(it->position(), 0);
+            }
+        }
+        EXPECT_EQ(moved, originalCounts);
+        EXPECT_TRUE(recipient.first->privateFaceDownEntries.empty());
+    }
+
+    // Restart from an actual captured server stream. This checks replay/restoration with fresh
+    // protocol clients; it is not an ordinary TCP reconnect or a rendered GUI check.
+    const quint64 expectedVersion1 = p1.stateVersion;
+    const quint64 expectedVersion2 = p2.stateVersion;
+    collectServerLogs();
+    servatrice.kill();
+    ASSERT_TRUE(servatrice.waitForFinished(5000));
+    sidecar.kill();
+    ASSERT_TRUE(sidecar.waitForFinished(5000));
+    p1.sock.abort();
+    p2.sock.abort();
+    QString capture;
+    QDirIterator manifests(tempDir.filePath("captures"), {"manifest.json"}, QDir::Files, QDirIterator::Subdirectories);
+    while (manifests.hasNext()) {
+        QFile file(manifests.next());
+        ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+        if (QJsonDocument::fromJson(file.readAll()).object().value("source") == "server") {
+            ASSERT_TRUE(capture.isEmpty());
+            capture = QFileInfo(file).absolutePath();
+        }
+    }
+    ASSERT_FALSE(capture.isEmpty());
+    const auto planDir = tempDir.filePath("memory-jar-resume");
+    QProcess replay;
+    replay.start(QStringLiteral(RULED_E2E_REPLAY_PATH), {"--capture", capture, "--resume-plan", "--output", planDir});
+    ASSERT_TRUE(replay.waitForStarted(10000));
+    ASSERT_TRUE(replay.waitForFinished(60000));
+    ASSERT_EQ(replay.exitStatus(), QProcess::NormalExit) << replay.readAllStandardError().constData();
+    ASSERT_EQ(replay.exitCode(), 0) << replay.readAllStandardError().constData();
+    resumePlanPath = planDir + "/resume-plan.pb";
+    ASSERT_TRUE(startServers());
+    MemoryJarPrivacyDriver resumed1(true, QStringLiteral("jarresume1"), &transcript);
+    MemoryJarPrivacyDriver resumed2(false, QStringLiteral("jarresume2"), &transcript);
+    ASSERT_TRUE(resumed1.loginAndJoinRoom());
+    ASSERT_TRUE(resumed2.loginAndJoinRoom());
+    ASSERT_TRUE(resumed1.createRuledGame());
+    ASSERT_TRUE(resumed2.joinRuledGame(resumed1.gameId));
+    ASSERT_TRUE(resumed1.selectDeck(deck1));
+    ASSERT_TRUE(resumed2.selectDeck(deck2));
+    resumed1.sendReady();
+    resumed2.sendReady();
+    ASSERT_TRUE(resumed1.pumpUntil([&] { return resumed1.stateVersion == expectedVersion1; }, 20000, "Jar resumed P1"));
+    ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion2; }, 20000, "Jar resumed P2"));
+    ASSERT_EQ(resumed1.myId, p1.myId);
+    ASSERT_EQ(resumed2.myId, p2.myId);
+
+    std::map<int, std::set<int>> exileHandles;
+    for (const MemoryJarPrivacyDriver *client : {&resumed1, &resumed2}) {
+        ASSERT_TRUE(client->privateFaceDownEntries.empty());
+        for (const auto &entry : originalCounts) {
+            ASSERT_TRUE(client->snapshotExileCounts.count(entry.first));
+            EXPECT_EQ(client->snapshotExileCounts.at(entry.first), entry.second);
+            ASSERT_TRUE(client->snapshotExileCards.count(entry.first));
+            const auto &cards = client->snapshotExileCards.at(entry.first);
+            ASSERT_EQ(cards.size(), static_cast<size_t>(entry.second));
+            for (const auto &card : cards) {
+                EXPECT_TRUE(card.face_down());
+                EXPECT_TRUE(card.name().empty());
+                EXPECT_TRUE(card.provider_id().empty());
+                EXPECT_GE(card.id(), 0);
+                if (client == &resumed1)
+                    EXPECT_TRUE(exileHandles[entry.first].insert(card.id()).second);
+                else
+                    EXPECT_TRUE(exileHandles[entry.first].count(card.id()));
+            }
+            ASSERT_TRUE(client->physicalHandCountByPlayer.count(entry.first));
+            EXPECT_EQ(client->physicalHandCountByPlayer.at(entry.first), 7);
+        }
+        ASSERT_TRUE(client->physicalHandNamesByPlayer.count(client->oppId));
+        for (const auto &name : client->physicalHandNamesByPlayer.at(client->oppId))
+            EXPECT_TRUE(name.empty()) << "opponent hand identity must stay private after replay";
+    }
+
+    const size_t returnStart1 = resumed1.physicalMoveEvents.size();
+    const size_t returnStart2 = resumed2.physicalMoveEvents.size();
+    QElapsedTimer toEnd;
+    toEnd.start();
+    while (!(resumed1.phase == ruled::v1::PHASE_ID_END_STEP && resumed1.stackDepth > 0) && toEnd.elapsed() < 30000) {
+        if (resumed1.priorityPlayer == resumed1.myId)
+            ASSERT_TRUE(pass(resumed1, resumed2, resumed1));
+        else if (resumed1.priorityPlayer == resumed2.myId)
+            ASSERT_TRUE(pass(resumed1, resumed2, resumed2));
+        else {
+            resumed1.pump(25);
+            resumed2.pump(25);
+        }
+    }
+    ASSERT_EQ(resumed1.phase, ruled::v1::PHASE_ID_END_STEP);
+    ASSERT_GT(resumed1.stackDepth, 0);
+    ASSERT_TRUE(pass(resumed1, resumed2, resumed1.priorityPlayer == resumed1.myId ? resumed1 : resumed2));
+    ASSERT_TRUE(pass(resumed1, resumed2, resumed1.priorityPlayer == resumed1.myId ? resumed1 : resumed2));
+    ASSERT_EQ(resumed1.stackDepth, 0);
+
+    for (const auto &recipient : {std::make_pair(&resumed1, returnStart1), std::make_pair(&resumed2, returnStart2)}) {
+        const auto &moves = recipient.first->physicalMoveEvents;
+        std::map<int, std::set<int>> returned;
+        std::map<int, int> discarded;
+        bool sawReturn = false;
+        bool sawOwnCanary = false;
+        const std::string ownCanary = recipient.first == &resumed1 ? "Grizzly Bears" : "Hill Giant";
+        for (auto it = moves.begin() + recipient.second; it != moves.end(); ++it) {
+            if (it->start_zone() == ZoneNames::HAND && it->target_zone() == ZoneNames::GRAVE) {
+                EXPECT_FALSE(sawReturn) << "all new hands are discarded before any old hand returns";
+                ++discarded[it->start_player_id()];
+            }
+            if (it->start_zone() != ZoneNames::EXILE || it->target_zone() != ZoneNames::HAND)
+                continue;
+            sawReturn = true;
+            EXPECT_FALSE(it->face_down());
+            EXPECT_TRUE(exileHandles[it->start_player_id()].count(it->card_id()));
+            EXPECT_TRUE(returned[it->start_player_id()].insert(it->card_id()).second);
+            if (it->target_player_id() == recipient.first->myId && it->card_name() == ownCanary)
+                sawOwnCanary = true;
+            if (it->target_player_id() != recipient.first->myId) {
+                EXPECT_TRUE(it->card_name().empty());
+                EXPECT_FALSE(it->has_new_card_provider_id());
+            }
+        }
+        EXPECT_EQ(returned, exileHandles);
+        for (const auto &entry : originalCounts) {
+            EXPECT_EQ(discarded[entry.first], 7);
+            ASSERT_TRUE(recipient.first->physicalHandCountByPlayer.count(entry.first));
+            EXPECT_EQ(recipient.first->physicalHandCountByPlayer.at(entry.first), entry.second);
+        }
+        EXPECT_TRUE(sawOwnCanary);
+        EXPECT_TRUE(recipient.first->privateFaceDownEntries.empty());
+    }
+}
+
 } // namespace
 } // namespace ruled_e2e

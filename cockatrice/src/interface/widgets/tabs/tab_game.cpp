@@ -20,6 +20,7 @@
 #include "../game/ruled/ruled_activation_prompt.h"
 #include "../game/ruled/ruled_auto_pass_policy.h"
 #include "../game/ruled/ruled_card_display_identity.h"
+#include "../game/ruled/ruled_card_popup.h"
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
@@ -2136,8 +2137,9 @@ void TabGame::newCardAdded(AbstractCardItem *card)
         }
         cardInfoFrameWidget->setCard(hovered);
     });
-    connect(card, &AbstractCardItem::showCardInfoPopup, this, &TabGame::showCardInfoPopup);
-    connect(card, SIGNAL(deleteCardInfoPopup(QString)), this, SLOT(deleteCardInfoPopup(QString)));
+    connectRuledCardPopup(game, card, this, [this](const QPoint &pos, const CardRef &ref) {
+        showCardInfoPopup(pos, ref);
+    }, [this](const QString &name) { deleteCardInfoPopup(name); });
     connect(card, &AbstractCardItem::cardShiftClicked, this, &TabGame::linkCardToChat);
 }
 

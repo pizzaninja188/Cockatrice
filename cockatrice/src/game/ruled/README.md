@@ -47,6 +47,14 @@ engine `PendingSpellCast`, and the opening (choose-first / mulligan / bottom) st
 Members are public on purpose — this is a shared view model, and an accessor pair per field would
 be noise. The `[[nodiscard]]` query methods are the read API consumers should prefer.
 
+### `ruled_card_popup.{h,cpp}` — face-down exile inspection
+
+An authoritative ruled move into face-down exile clears the common card identity with an explicit
+empty name. Hover and popup inspection use the recipient's private `FaceDownObjectMap` permission;
+without a current grant the popup has no card name or provider. The popup adapter remembers the
+identity it actually displayed so the matching dismissal still works if that permission changes.
+Freeform cards and cards outside face-down exile retain their existing inspection behavior.
+
 ### `ruled_pending_cast.{h,cpp}` — `RuledPendingCast`
 
 Owns the mutually exclusive local spell-cast / activated-ability transaction. A spell progresses

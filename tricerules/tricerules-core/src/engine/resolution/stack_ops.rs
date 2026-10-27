@@ -630,6 +630,9 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    if let Some(key) = st.trigger_context.memory_jar_cohort {
+        engine.state.memory_jar_cohorts.remove(&key);
+    }
     engine.refresh_captured_activated_ability(&st);
     engine.state.captured_activated_abilities.remove(&target_id);
     engine

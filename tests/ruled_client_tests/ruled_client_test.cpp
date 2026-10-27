@@ -13,6 +13,7 @@
 #include "game/ruled/ruled_activation.h"
 #include "game/ruled/ruled_auto_pass_policy.h"
 #include "game/ruled/ruled_card_display_identity.h"
+#include "game/ruled/ruled_card_popup.h"
 #include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
 #include "game/ruled/ruled_dev_command_parser.h"
@@ -8119,6 +8120,23 @@ TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
     EXPECT_FALSE(state->isWaitingForChoice());
 }
 
+TEST(RuledCardPopupIdentityTest, ExistingCardRefAndDismissalArePreserved)
+{
+    RuledCardPopupIdentity identity;
+    const CardRef known{QStringLiteral("Island"), QStringLiteral("printing")};
+    const CardRef shown = identity.open(known, false, {});
+    EXPECT_EQ(shown.name, known.name);
+    EXPECT_EQ(shown.providerId, known.providerId);
+    EXPECT_EQ(identity.close(known.name), known.name);
+
+    const CardRef empty{};
+    const CardRef emptyShown = identity.open(empty, false, {});
+    EXPECT_TRUE(emptyShown.isEmpty());
+    EXPECT_TRUE(identity.close(QString{}).isEmpty());
+    identity.open(empty, true, QStringLiteral("Island"));
+    EXPECT_EQ(identity.close(QStringLiteral("_")), QStringLiteral("_"));
+}
+
 TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnReplacement)
 {
     ruled::v1::RuledEventBatch batch;
@@ -8151,6 +8169,48 @@ TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnRepla
     EXPECT_TRUE(state->privateFaceDownNameForCard(kLocalPlayer, 17).isEmpty());
     EXPECT_TRUE(state->privateFaceDownNameForCard(kOpponent, 17).isEmpty());
     EXPECT_FALSE(state->privateFaceDownGenerationByOid.contains(9801u));
+}
+
+// Exercises the same headless identity adapter used by the popup signal hook; no widget is rendered.
+TEST_F(RuledClientTest, FaceDownExilePopupUsesPrivateMapAndDismissesTheShownName)
+{
+    ruled::v1::RuledEventBatch reconnect;
+    auto *entry = reconnect.add_events()->mutable_face_down_object_map()->add_entries();
+    entry->set_viewer_player_id(kLocalPlayer);
+    entry->set_engine_object_id(9803u);
+    entry->set_zone_change_generation(5u);
+    entry->set_server_card_id(17);
+    entry->set_card_name("Island");
+    entry->set_zone_player_id(kOpponent);
+    apply(reconnect);
+
+    RuledCardPopupIdentity jar;
+    const CardRef blank{};
+    const CardRef unauthorized = jar.open(blank, true, state->privateFaceDownNameForCard(kLocalPlayer, 18));
+    EXPECT_TRUE(unauthorized.isEmpty());
+    EXPECT_TRUE(jar.close(QString{}).isEmpty());
+    const CardRef staleCommon{QStringLiteral("Grizzly Bears"), QStringLiteral("old printing")};
+    const CardRef staleUnauthorized = jar.open(staleCommon, true, state->privateFaceDownNameForCard(kLocalPlayer, 18));
+    EXPECT_TRUE(staleUnauthorized.isEmpty());
+    EXPECT_TRUE(jar.close(staleCommon.name).isEmpty());
+
+    RuledCardPopupIdentity hideaway;
+    ASSERT_EQ(state->privateFaceDownNameForCard(kOpponent, 17), QStringLiteral("Island"));
+    const CardRef authorized = hideaway.open(blank, true, state->privateFaceDownNameForCard(kOpponent, 17));
+    EXPECT_EQ(authorized.name, QStringLiteral("Island"));
+    EXPECT_TRUE(authorized.providerId.isEmpty());
+    ruled::v1::RuledEventBatch clear;
+    clear.add_events()->mutable_face_down_object_map();
+    apply(clear);
+    EXPECT_TRUE(state->privateFaceDownNameForCard(kOpponent, 17).isEmpty());
+    EXPECT_EQ(hideaway.close(QString{}), QStringLiteral("Island"));
+
+    RuledCardPopupIdentity ordinary;
+    const CardRef known{QStringLiteral("Forest"), QStringLiteral("printing")};
+    const CardRef shown = ordinary.open(known, false, QStringLiteral("Island"));
+    EXPECT_EQ(shown.name, known.name);
+    EXPECT_EQ(shown.providerId, known.providerId);
+    EXPECT_EQ(ordinary.close(known.name), known.name);
 }
 
 TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoLongerPublished)

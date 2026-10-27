@@ -80,6 +80,7 @@ pub(in crate::engine) mod library_cohorts;
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;
 mod mass;
+mod memory_jar;
 mod misc;
 #[cfg(test)]
 mod target_receipt_action_tests;
@@ -2000,6 +2001,9 @@ impl GameEngine {
         }
 
         self.state.stack.retain(|item| item.id != top.id);
+        if let Some(key) = top.trigger_context.memory_jar_cohort {
+            self.state.memory_jar_cohorts.remove(&key);
+        }
         self.state.captured_activated_abilities.remove(&top.id);
         let released_state_trigger = self
             .state
@@ -2887,6 +2891,9 @@ impl GameEngine {
             return Ok(true);
         }
         if self.reconcile_departed_target_hand_discard_program(events)? {
+            return Ok(true);
+        }
+        if self.reconcile_memory_jar_discard_departure(events)? {
             return Ok(true);
         }
         self.refresh_optional_triggered_ability_departure(events)?;
@@ -4430,6 +4437,10 @@ pub(super) fn commit_zone_move(
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;
+        if old_zone == Some(Zone::Exile) && matches!(z, Zone::Hand | Zone::Command) {
+            // The receipt already captured the old face-down incarnation above.
+            o.face_down = false;
+        }
         if z != Zone::Battlefield {
             o.prototyped = false;
         }

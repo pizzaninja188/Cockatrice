@@ -1,0 +1,29 @@
+// Oracle eb9c9a34-88a8-4afe-a053-806f6b29834f.
+(
+    id: "memory_jar",
+    name: "Memory Jar",
+    face_id: "memory_jar",
+    mana_cost: "{5}",
+    types: ["Artifact"],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Tap, SacrificeSelf],
+        effect: [
+            MemoryJarExileHands,
+            Draw(who: EachPlayer, count: 7),
+            CreateDelayedTrigger(
+                subject: None,
+                ability: (
+                    ability_id: "delayed_01",
+                    presentation: OracleLines([1]),
+                    trigger: AtBeginningOfNextEndStep,
+                    effect: [
+                        Discard(who: EachPlayer, quantity: All),
+                        ReturnMemoryJarHands,
+                    ],
+                ),
+            ),
+        ],
+    )],
+)

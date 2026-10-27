@@ -1939,6 +1939,7 @@ impl GameEngine {
             warped_permanent_incarnations: HashSet::new(),
             spell_entry_facts: HashMap::new(),
             observed_object_cohorts: HashMap::new(),
+            memory_jar_cohorts: BTreeMap::new(),
             pending_immediate_observer_actions: Vec::new(),
             pending_observer_return_batch: None,
             pending_trigger_order: None,

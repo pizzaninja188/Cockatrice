@@ -1,4 +1,4 @@
-//! CR 903.9b replacements for one frozen simultaneous battlefield-to-owner-zone cohort.
+//! CR 903.9b replacements for one frozen simultaneous owner-zone cohort.
 
 use super::*;
 use crate::state::{
@@ -64,9 +64,10 @@ pub(super) fn return_to_owners_hand(
     begin_battlefield_cohort_move(cx, subjects, Zone::Hand, Vec::new())
 }
 
-/// Begin one simultaneous battlefield-to-owner-zone instruction. Library-owner receipts are
-/// independent of the moving cohort so a stale source can still name its owner's library under
-/// CR 701.24c; live cohort owners are added automatically for library destinations.
+/// Begin one simultaneous owner-zone instruction. Battlefield returns and Memory Jar's exact
+/// Exile cohort use this same precommit choice transaction. Library-owner receipts are independent
+/// of the moving cohort so a stale source can still name its owner's library under CR 701.24c;
+/// live cohort owners are added automatically for library destinations.
 pub(super) fn begin_battlefield_cohort_move(
     cx: &mut EffectCx<'_>,
     object_ids: Vec<ObjectId>,

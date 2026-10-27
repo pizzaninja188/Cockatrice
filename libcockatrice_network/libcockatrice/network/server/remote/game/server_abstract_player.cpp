@@ -541,6 +541,7 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
             eventOthers.set_new_card_id(card->getId());
         }
 
+        clearRuledFaceDownExileMoveIdentity(game, targetzone, faceDown, eventPrivate, eventOthers);
         ges.enqueueGameEvent(eventPrivate, playerId, GameEventStorageItem::SendToPrivate, playerId);
         ges.enqueueGameEvent(eventOthers, playerId, GameEventStorageItem::SendToOthers);
 

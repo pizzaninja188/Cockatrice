@@ -4,6 +4,12 @@ use super::triggers::CollectedTrigger;
 use super::*;
 use crate::state::{DiscardBatch, DiscardCause, DiscardReceipt};
 
+/// Only the closed Memory Jar delayed child carries this private occurrence key. Its discard
+/// replacement is already part of a begun resolution, even when its controller has departed.
+pub(super) fn is_memory_jar_discard_replacement(stack: &ParkedStackResolution) -> bool {
+    stack.program.is_none() && stack.item.trigger_context.memory_jar_cohort.is_some()
+}
+
 impl GameEngine {
     /// A begun target-hand-discard Program cannot be reassigned after its target leaves. Retire
     /// only its uncommitted hand-choice or Library of Leng transaction with an empty typed result;
@@ -67,6 +73,55 @@ impl GameEngine {
         let completed =
             self.complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?;
         events.extend(completed.events);
+        Ok(true)
+    }
+
+    /// Preserve committed destination choices while removing only departed players' cards from
+    /// the uncommitted Memory Jar discard batch. The surviving cursor is republished through the
+    /// ordinary replacement path, which either asks the next owner or finishes the delayed tail.
+    pub(super) fn reconcile_memory_jar_discard_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::DiscardReplacement { stack } = &pending.continuation else {
+            return Ok(false);
+        };
+        if !is_memory_jar_discard_replacement(stack) {
+            return Ok(false);
+        }
+        let stack = stack.clone();
+        let Some(PendingReplacementEvent::Discard(mut batch)) =
+            self.state.pending_replacement_event.take()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "Memory Jar discard replacement lost its batch",
+            ));
+        };
+        let live_players: HashSet<_> = self
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect();
+        batch.current = batch
+            .cards
+            .iter()
+            .take(batch.current)
+            .filter(|card| live_players.contains(&card.player))
+            .count();
+        batch
+            .cards
+            .retain(|card| live_players.contains(&card.player));
+        batch
+            .library_orders
+            .retain(|player, _| live_players.contains(player));
+        self.state.pending_resolution = None;
+        let resumed = self.continue_discard_batch(stack, *batch)?;
+        events.extend(resumed.events);
         Ok(true)
     }
 
