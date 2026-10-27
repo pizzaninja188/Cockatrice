@@ -914,6 +914,7 @@ impl GameEngine {
                 | StaticAbilityDef::ProhibitCounters { .. }
                 | StaticAbilityDef::LimitAttackers { .. }
                 | StaticAbilityDef::AttackTax { .. }
+                | StaticAbilityDef::ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
                 | StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
                 | StaticAbilityDef::DoubleTokensCreatedUnderYourControl

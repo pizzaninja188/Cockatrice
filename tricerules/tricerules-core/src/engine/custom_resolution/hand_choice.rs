@@ -138,6 +138,7 @@ impl GameEngine {
                 spell_label: card_name,
                 object_label,
                 from_zone: Zone::Hand,
+                triggered_return_generation: None,
             };
             let entry = BattlefieldEntryEvent {
                 entry_reveal_receipts: Vec::new(),

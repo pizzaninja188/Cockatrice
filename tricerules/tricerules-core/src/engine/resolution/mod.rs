@@ -2877,6 +2877,46 @@ impl GameEngine {
         ) {
             self.refresh_player_set_sacrifice_departure(events)?;
         }
+        let exact_return = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                self.begun_exact_owner_exile_return(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                )
+                .is_some()
+            });
+        if exact_return {
+            if matches!(
+                self.state
+                    .pending_resolution
+                    .as_ref()
+                    .map(|pending| &pending.continuation),
+                Some(ResolutionContinuation::EntryCounterReplacement { .. })
+            ) {
+                if self.refresh_exact_return_entry_counters(events)? {
+                    return Ok(true);
+                }
+            } else {
+                // Reconcile against the saved receipts before publishing: the entrant or a
+                // candidate may have departed or changed incarnation below the observer.
+                let event_start = events.len();
+                self.refresh_participating_entry_departure(&HashSet::new(), events)?;
+                if self.state.pending_resolution.is_some()
+                    && !events[event_start..].iter().any(|event| {
+                        matches!(
+                            &event.ev,
+                            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                        )
+                    })
+                {
+                    self.republish_cached_resolution_choice(events)?;
+                }
+                return Ok(true);
+            }
+        }
         if self.reprocess_suspended_battlefield_entry(events)? {
             return Ok(true);
         }

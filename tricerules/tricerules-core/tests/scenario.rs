@@ -35,6 +35,9 @@ mod deck_coverage_jace_unraveler_of_secrets;
 #[path = "scenario/deck_coverage_onakke_oathkeeper.rs"]
 mod deck_coverage_onakke_oathkeeper;
 
+#[path = "scenario/deck_coverage_oath_of_teferi.rs"]
+mod deck_coverage_oath_of_teferi;
+
 #[path = "scenario/deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
 

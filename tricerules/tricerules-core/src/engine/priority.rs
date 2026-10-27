@@ -185,8 +185,13 @@ impl GameEngine {
             .state
             .pending_observer_return_batch
             .as_ref()
-            .and_then(|batch| batch.suspended_resolution.as_ref())
-            .and_then(|pending| {
+            .and_then(|batch| batch.suspended_resolution.as_ref().map(|pending|
+                (pending, batch.suspended_replacement_event.as_ref())))
+            .and_then(|(pending, replacement)| {
+                if self.begun_exact_owner_exile_return(pending, replacement).is_some() {
+                    // The independent observer must restore the begun return and its cursor.
+                    return None;
+                }
                 if matches!(
                     &pending.continuation,
                     ResolutionContinuation::WardPayment { .. }
@@ -433,6 +438,17 @@ impl GameEngine {
                 };
                 self.is_typed_resultless_library_search_entry(stack, &entry.completion)
             });
+        let begun_exact_return = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                self.begun_exact_owner_exile_return(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                )
+                .is_some()
+            });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -555,6 +571,23 @@ impl GameEngine {
                     // A typed resultless LibrarySearch ZoneEntryBatch has already begun. Preserve
                     // that exact cursor until departure reconciliation retires the departed
                     // entrant/chooser and completes the search boundary.
+                    preserve = true;
+                }
+                continuation if begun_exact_return && matches!(continuation,
+                    ResolutionContinuation::EntryCopySource { .. }
+                    | ResolutionContinuation::EntryAuraRecipient { .. }
+                    | ResolutionContinuation::EntryReplacement { .. }
+                    | ResolutionContinuation::EntryCost { .. }
+                    | ResolutionContinuation::EntryReveal { .. }
+                    | ResolutionContinuation::EntryBasicLandType { .. }
+                    | ResolutionContinuation::EntryChooseOpponent { .. }
+                    | ResolutionContinuation::EntryChooseCreatureType { .. }
+                    | ResolutionContinuation::SagaReadAhead { .. }
+                    | ResolutionContinuation::BattleProtector { .. }
+                    | ResolutionContinuation::EntryCounterReplacement { .. }) =>
+                {
+                    // A captured exact-owner return has begun; the live owner's entry choice and
+                    // its saved flat or typed cursor survive the trigger controller's departure.
                     preserve = true;
                 }
                 ResolutionContinuation::BattlefieldCohortMove { .. } => {
@@ -1177,6 +1210,7 @@ impl GameEngine {
         self.refresh_chaos_warp_departure(events)?;
         self.refresh_entry_timestamp_departure(&departed_objects, events)?;
         self.refresh_observer_aura_departure(events)?;
+        self.refresh_exact_return_entry_counters(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;

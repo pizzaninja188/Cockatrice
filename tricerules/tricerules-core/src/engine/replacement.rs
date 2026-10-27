@@ -247,6 +247,250 @@ pub(super) enum BattlefieldEntryProgress {
 }
 
 impl GameEngine {
+    /// Identify an already-started exact Exile-to-owner return by its captured operation and
+    /// entry receipts. This deliberately does not inspect the current object: its owner may
+    /// already have left, or the object ID may now denote a later incarnation.
+    pub(super) fn begun_exact_owner_exile_return(
+        &self,
+        pending: &PendingResolution,
+        replacement: Option<&PendingReplacementEvent>,
+    ) -> Option<TriggerObjectRef> {
+        let stack = pending.continuation.stack()?;
+        if !stack.item.is_triggered || stack.item.triggered_ability.is_none() {
+            return None;
+        }
+        let observed = stack.item.trigger_context.observed_object?;
+        let effect = if let Some(program) = stack.program.as_ref() {
+            if !program.in_flight.as_ref().is_some_and(Vec::is_empty) {
+                return None;
+            }
+            self.current_program_perform(program).ok()?
+        } else {
+            let index = stack.resume_effect_index?.checked_sub(1)? as usize;
+            self.build_resolution_effects(&stack.item)
+                .0
+                .get(index)?
+                .effect
+                .clone()
+        };
+        if !matches!(effect, SpellEffectKind::ReturnTriggeredCard {
+            reference: TriggeredCardReference::ExactTriggerObject,
+            ref from,
+            destination: tricerules_card_model::primitives::TriggeredCardDestination::Battlefield,
+            controller: ReturnController::Owner,
+            ..
+        } if from.as_slice() == [tricerules_card_model::primitives::EventZone::Exile])
+        {
+            return None;
+        }
+
+        let (event, completion) = match (&pending.continuation, replacement?) {
+            (
+                ResolutionContinuation::EntryCopySource {
+                    entering_zone,
+                    entering_generation,
+                    ..
+                },
+                PendingReplacementEvent::BattlefieldEntry(entry),
+            ) if *entering_zone == Zone::Exile
+                && *entering_generation == observed.zone_change_generation =>
+            {
+                (&entry.event, &entry.completion)
+            }
+            (
+                ResolutionContinuation::EntryAuraRecipient { .. },
+                PendingReplacementEvent::BattlefieldEntry(entry),
+            ) if entry
+                .event
+                .pending_aura_recipient
+                .as_ref()
+                .is_some_and(|choice| {
+                    choice.entering_zone_generation == observed.zone_change_generation
+                }) =>
+            {
+                (&entry.event, &entry.completion)
+            }
+            (
+                ResolutionContinuation::EntryReveal {
+                    entering_zone,
+                    entering_generation,
+                    ..
+                }
+                | ResolutionContinuation::EntryChooseOpponent {
+                    entering_zone,
+                    entering_generation,
+                    ..
+                }
+                | ResolutionContinuation::EntryChooseCreatureType {
+                    entering_zone,
+                    entering_generation,
+                    ..
+                },
+                PendingReplacementEvent::BattlefieldEntry(entry),
+            ) if *entering_zone == Zone::Exile
+                && *entering_generation == observed.zone_change_generation =>
+            {
+                (&entry.event, &entry.completion)
+            }
+            (
+                ResolutionContinuation::EntryReplacement { .. }
+                | ResolutionContinuation::EntryCost { .. }
+                | ResolutionContinuation::EntryBasicLandType { .. }
+                | ResolutionContinuation::SagaReadAhead { .. }
+                | ResolutionContinuation::BattleProtector { .. },
+                PendingReplacementEvent::BattlefieldEntry(entry),
+            ) => (&entry.event, &entry.completion),
+            (
+                ResolutionContinuation::EntryCounterReplacement { resume },
+                PendingReplacementEvent::Counters(batch),
+            ) => {
+                let crate::state::EntryCounterReplacementResume::Single {
+                    event, completion, ..
+                } = resume.as_ref()
+                else {
+                    return None;
+                };
+                if batch.events.is_empty() || batch.event_index >= batch.events.len()
+                    || !batch.events.iter().all(|proposal| {
+                        matches!(&proposal.recipient, CounterPlacementRecipient::EnteringObject {
+                            object_id, zone_change_generation,
+                        } if *object_id == observed.object_id && *zone_change_generation == observed.zone_change_generation)
+                        && proposal.entry_context.as_ref().is_some_and(|context|
+                            context.source_zone == Zone::Exile
+                                && context.source_zone_change_generation == observed.zone_change_generation
+                                && context.destination_controller == event.destination_controller)
+                    }) {
+                    return None;
+                }
+                (event.as_ref(), completion)
+            }
+            _ => return None,
+        };
+        let BattlefieldEntryCompletion::ResolutionEffect {
+            owner,
+            from_zone,
+            triggered_return_generation,
+            ..
+        } = completion
+        else {
+            return None;
+        };
+        (event.object_id == observed.object_id
+            && *from_zone == Zone::Exile
+            && *triggered_return_generation == Some(observed.zone_change_generation)
+            && event.destination_controller == *owner
+            && event.deciding_player == *owner
+            && pending.deciding_player == *owner)
+            .then_some(observed)
+    }
+
+    fn exact_owner_return_entrant_is_current(
+        &self,
+        observed: TriggerObjectRef,
+        owner: PlayerId,
+    ) -> bool {
+        self.state
+            .objects
+            .get(&observed.object_id)
+            .is_some_and(|object| object.owner == owner && object.zone == Zone::Exile)
+            && self
+                .state
+                .zone_change_generation
+                .get(&observed.object_id)
+                .copied()
+                .unwrap_or(0)
+                == observed.zone_change_generation
+            && self
+                .state
+                .player_idx(owner)
+                .is_some_and(|index| !self.state.players[index].has_lost)
+    }
+
+    /// Reconcile a single entry-counter transaction without restarting already-applied
+    /// replacements. This also runs when an independent observer restores the saved prompt.
+    pub(super) fn refresh_exact_return_entry_counters(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.clone() else {
+            return Ok(false);
+        };
+        let Some(replacement) = self.state.pending_replacement_event.clone() else {
+            return Ok(false);
+        };
+        let Some(observed) = self.begun_exact_owner_exile_return(&pending, Some(&replacement))
+        else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::EntryCounterReplacement { resume } = &pending.continuation
+        else {
+            return Ok(false);
+        };
+        let crate::state::EntryCounterReplacementResume::Single {
+            stack,
+            event,
+            completion,
+        } = resume.as_ref()
+        else {
+            return Ok(false);
+        };
+        let PendingReplacementEvent::Counters(mut batch) = replacement else {
+            return Ok(false);
+        };
+        let stack = stack.clone();
+        let mut event = (**event).clone();
+        let completion = completion.clone();
+        let owner = event.destination_controller;
+        if !self.exact_owner_return_entrant_is_current(observed, owner) {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            // A newer incarnation must never receive this old entry's provisional copy state.
+            event.pending_copy_candidate = None;
+            event.pending_aura_recipient = None;
+            event.accepted_aura_recipient = None;
+            let completed =
+                self.finish_entry_copy_without_recipient(stack, event, completion, Vec::new())?;
+            events.extend(completed.events);
+            return Ok(true);
+        }
+
+        let candidates = self.counter_replacement_candidates(&batch.events[batch.event_index]);
+        let old: Vec<_> = batch
+            .applications
+            .iter()
+            .filter(|application| application.event_index == batch.event_index)
+            .map(|application| application.replacement.clone())
+            .collect();
+        let current: Vec<_> = candidates
+            .iter()
+            .map(|(candidate, _)| candidate.clone())
+            .collect();
+        if old == current {
+            return Ok(false);
+        }
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        batch.applications.clear();
+        if let Some(candidates) = self.advance_counter_placement_batch(&mut batch)? {
+            self.park_entry_counter_placement_choice(
+                *batch,
+                candidates,
+                crate::state::EntryCounterReplacementResume::Single {
+                    stack,
+                    event: Box::new(event),
+                    completion,
+                },
+                events,
+            );
+        } else {
+            Self::apply_entry_counter_placement_results(&mut event, &batch.events)?;
+            let completed =
+                self.complete_pending_battlefield_entry(pending, event, completion, Vec::new())?;
+            events.extend(completed.events);
+        }
+        Ok(true)
+    }
+
     pub(super) fn proposed_object_counter_placement(
         &self,
         actor: PlayerId,
@@ -3481,6 +3725,10 @@ impl GameEngine {
         let Some(pending) = self.state.pending_resolution.clone() else {
             return Ok(());
         };
+        let exact_return = self.begun_exact_owner_exile_return(
+            &pending,
+            self.state.pending_replacement_event.as_ref(),
+        );
         let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
             self.state.pending_replacement_event.clone()
         else {
@@ -3507,7 +3755,8 @@ impl GameEngine {
                 if pending
                     .continuation
                     .stack()
-                    .is_some_and(|stack| stack.program.is_some()) => {}
+                    .is_some_and(|stack| stack.program.is_some())
+                    || exact_return.is_some() => {}
             _ => return Ok(()),
         }
         let stack = pending
@@ -3544,7 +3793,11 @@ impl GameEngine {
             }
         }
         let entrant_live = self.state.objects.contains_key(&entry.event.object_id) && decider_live;
-        if !entrant_live {
+        let exact_return_stale = exact_return.is_some_and(|observed| {
+            !self
+                .exact_owner_return_entrant_is_current(observed, entry.event.destination_controller)
+        });
+        if !entrant_live || exact_return_stale {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
             if !departed_objects.contains(&entry.event.object_id)
@@ -3555,9 +3808,9 @@ impl GameEngine {
             {
                 return self.abandon_participating_resolution(Some(stack), events);
             }
-            if departed_objects.contains(&entry.event.object_id) {
-                // CR 800.4a removed this entrant. There is no provisional object to restore.
-                // This exemption does not cover a stale surviving incarnation.
+            if departed_objects.contains(&entry.event.object_id) || exact_return_stale {
+                // The old entry was removed or its exact incarnation is stale. Never restore
+                // provisional copy or Aura state onto a different object incarnation.
                 entry.event.pending_copy_candidate = None;
                 entry.event.pending_aura_recipient = None;
                 entry.event.accepted_aura_recipient = None;
@@ -3579,7 +3832,19 @@ impl GameEngine {
                 .copy_source_candidates
                 .iter()
                 .copied()
-                .filter(|(oid, _)| self.state.objects.contains_key(oid))
+                .filter(|(oid, generation)| {
+                    self.state.objects.get(oid).is_some_and(|object| {
+                        exact_return.is_none()
+                            || (object.zone == Zone::Battlefield
+                                && self
+                                    .state
+                                    .zone_change_generation
+                                    .get(oid)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == *generation)
+                    })
+                })
                 .collect();
             if retained != entry.copy_source_candidates {
                 let effect_id = entry
@@ -6626,6 +6891,7 @@ impl GameEngine {
                 spell_label,
                 object_label,
                 from_zone,
+                ..
             } => {
                 let object_id = event.object_id;
                 let entry_controller = event.destination_controller;
@@ -8119,6 +8385,182 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_owner_return_preservation_requires_matching_leaf_and_completion_receipts() {
+        use tricerules_card_model::primitives::{EventZone, TriggeredCardDestination};
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_219,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        // Synthetic parked entry isolates the structural guard, independently of whether the
+        // entrant still exists; live reconciliation is covered by the Oath scenarios.
+        let observed = TriggerObjectRef {
+            object_id: u32::MAX,
+            zone_change_generation: 7,
+            controller_at_event: 1,
+        };
+        let mut ability = engine
+            .registry
+            .get("oath_of_teferi")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.program = None;
+        ability.targeting = None;
+        ability.trigger = TriggerCondition::AtBeginningOfNextEndStep;
+        ability.effect = vec![SpellEffectKind::ReturnTriggeredCard {
+            reference: TriggeredCardReference::ExactTriggerObject,
+            from: vec![EventZone::Exile],
+            destination: TriggeredCardDestination::Battlefield,
+            tapped: false,
+            controller: ReturnController::Owner,
+            entry_counters: Vec::new(),
+            set_types: None,
+        }];
+        let mut item = engine.observer_return_item(observed.object_id, 0);
+        item.card_id = "oath_of_teferi".into();
+        item.is_triggered = true;
+        item.triggered_ability = Some(ability);
+        item.trigger_context.observed_object = Some(observed);
+        let mut stack = ParkedStackResolution::new(item);
+        stack.resume_effect_index = Some(1);
+        let pending = PendingResolution {
+            deciding_player: 1,
+            presentation: PendingResolutionPresentation {
+                source_object_id: observed.object_id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt: String::new(),
+                choice_kind: rv1::ChoiceKind::CopySource,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryCopySource {
+                stack,
+                entering_zone: Zone::Exile,
+                entering_generation: 7,
+            },
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        };
+        let event = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
+            mana_colors_spent_to_cast: Default::default(),
+            object_id: observed.object_id,
+            deciding_player: 1,
+            destination_controller: 1,
+            battle_protector: None,
+            face_index: 0,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: BTreeMap::new(),
+            tapped: false,
+            prepared: false,
+            set_types: None,
+            chosen_basic_land_type: None,
+            chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
+            entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
+            entry_modifiers: Vec::new(),
+            entry_cause: None,
+            applied_effects: Vec::new(),
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
+            accepted_aura_recipient: None,
+            attached_to: None,
+        };
+        let replacement =
+            PendingReplacementEvent::BattlefieldEntry(Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
+                completion: BattlefieldEntryCompletion::ResolutionEffect {
+                    owner: 1,
+                    spell_label: String::new(),
+                    object_label: String::new(),
+                    from_zone: Zone::Exile,
+                    triggered_return_generation: Some(observed.zone_change_generation),
+                },
+            }));
+        assert_eq!(
+            engine.begun_exact_owner_exile_return(&pending, Some(&replacement)),
+            Some(observed)
+        );
+        let mut wrong_completion = replacement.clone();
+        let PendingReplacementEvent::BattlefieldEntry(entry) = &mut wrong_completion else {
+            unreachable!()
+        };
+        entry.completion = BattlefieldEntryCompletion::ObserverReturn {
+            owner: 1,
+            object_label: String::new(),
+            attached_to: None,
+            resume_original_stack: false,
+        };
+        assert!(engine
+            .begun_exact_owner_exile_return(&pending, Some(&wrong_completion))
+            .is_none());
+        let mut wrong_origin = replacement.clone();
+        let PendingReplacementEvent::BattlefieldEntry(entry) = &mut wrong_origin else {
+            unreachable!()
+        };
+        let BattlefieldEntryCompletion::ResolutionEffect { from_zone, .. } = &mut entry.completion
+        else {
+            unreachable!()
+        };
+        *from_zone = Zone::Graveyard;
+        assert!(engine
+            .begun_exact_owner_exile_return(&pending, Some(&wrong_origin))
+            .is_none());
+        let mut wrong_generation = replacement.clone();
+        let PendingReplacementEvent::BattlefieldEntry(entry) = &mut wrong_generation else {
+            unreachable!()
+        };
+        let BattlefieldEntryCompletion::ResolutionEffect {
+            triggered_return_generation,
+            ..
+        } = &mut entry.completion
+        else {
+            unreachable!()
+        };
+        *triggered_return_generation = Some(observed.zone_change_generation + 1);
+        assert!(engine
+            .begun_exact_owner_exile_return(&pending, Some(&wrong_generation))
+            .is_none());
+        let mut wrong_object = replacement.clone();
+        let PendingReplacementEvent::BattlefieldEntry(entry) = &mut wrong_object else {
+            unreachable!()
+        };
+        entry.event.object_id -= 1;
+        assert!(engine
+            .begun_exact_owner_exile_return(&pending, Some(&wrong_object))
+            .is_none());
+        let mut wrong_leaf = pending.clone();
+        wrong_leaf
+            .continuation
+            .stack_mut()
+            .unwrap()
+            .item
+            .triggered_ability
+            .as_mut()
+            .unwrap()
+            .effect = vec![SpellEffectKind::None];
+        assert!(engine
+            .begun_exact_owner_exile_return(&wrong_leaf, Some(&replacement))
+            .is_none());
+    }
 
     #[test]
     fn deploy_private_skip_fixture_bottoms_selected_card_that_never_entered() {

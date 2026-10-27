@@ -1,0 +1,50 @@
+// Oracle ee00a42d-6ee4-4e46-92d6-62e8e5910880; CR 603.3d, 603.7 and 400.7j.
+(
+    id: "oath_of_teferi",
+    name: "Oath of Teferi",
+    face_id: "oath_of_teferi",
+    mana_cost: "{3}{W}{U}",
+    supertypes: ["Legendary"],
+    types: ["Enchantment"],
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([2]),
+        definition: ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn,
+    )],
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
+        trigger: WhenSelfEntersBattlefield,
+        targeting: Some((groups: [(
+            min: 1,
+            max: 1,
+            prompt: "Choose another target permanent you control",
+            effect_indices: [],
+        )])),
+        program: Some((body: (steps: [
+            (id: "exile_target", bind: ["exiled"],
+                kind: Perform(Exile(subject: Chosen((
+                    kind: AnyPermanent,
+                    controller: You,
+                    excluded_objects: [Source],
+                ))))),
+            (id: "schedule_return", input: Some("exiled"),
+                kind: Perform(CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObject),
+                    ability: (
+                        ability_id: "delayed_01",
+                        presentation: OracleLines([1]),
+                        trigger: AtBeginningOfNextEndStep,
+                        effect: [ReturnTriggeredCard(
+                            reference: ExactTriggerObject,
+                            from: [Exile],
+                            destination: Battlefield,
+                            controller: Owner,
+                        )],
+                    ),
+                ))),
+        ]), target_bindings: [
+            (instruction_id: "exile_target", role: Subject, target_group_index: 0),
+        ])),
+    )],
+)

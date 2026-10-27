@@ -2986,6 +2986,8 @@ pub(crate) enum BattlefieldEntryCompletion {
         spell_label: String,
         object_label: String,
         from_zone: Zone,
+        /// Exact source incarnation captured by ReturnTriggeredCard before its entry parks.
+        triggered_return_generation: Option<u64>,
     },
     Ninjutsu {
         owner: PlayerId,

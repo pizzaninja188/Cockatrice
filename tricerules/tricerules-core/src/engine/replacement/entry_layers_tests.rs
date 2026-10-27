@@ -882,6 +882,7 @@ fn reanimated_multiversal_passage_as_enters_choice_belongs_to_its_controller() {
         spell_label: "Portal to Phyrexia".to_owned(),
         object_label: "Multiversal Passage".to_owned(),
         from_zone: Zone::Graveyard,
+        triggered_return_generation: None,
     };
 
     let progress = engine.advance_or_park_battlefield_entry(
@@ -924,6 +925,7 @@ fn reanimated_battle_protector_choice_belongs_to_its_controller() {
         spell_label: "Portal to Phyrexia".to_owned(),
         object_label: "Invasion of Ulgrotha".to_owned(),
         from_zone: Zone::Graveyard,
+        triggered_return_generation: None,
     };
     let mut events = Vec::new();
 
@@ -965,6 +967,7 @@ fn reanimated_aura_recipient_choice_belongs_to_its_controller() {
         spell_label: "Portal to Phyrexia".to_owned(),
         object_label: "Pacifism".to_owned(),
         from_zone: Zone::Graveyard,
+        triggered_return_generation: None,
     };
     let mut events = Vec::new();
 

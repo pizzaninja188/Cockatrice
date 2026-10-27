@@ -4878,6 +4878,7 @@ pub(super) fn return_triggered_card(
             owner,
             spell_label: cx.spell_label.to_string(),
             object_label: object_label.clone(),
+            triggered_return_generation: Some(current_generation),
             from_zone: match origin {
                 tricerules_card_model::primitives::EventZone::Graveyard => Zone::Graveyard,
                 tricerules_card_model::primitives::EventZone::Exile => Zone::Exile,
@@ -5081,6 +5082,7 @@ pub(super) fn put_ability_source_onto_battlefield(
             spell_label: cx.spell_label.to_string(),
             object_label: object_label.clone(),
             from_zone: Zone::Hand,
+            triggered_return_generation: None,
         },
         cx.events,
     )? {
@@ -5235,6 +5237,7 @@ pub(super) fn exile_source_then_return_transformed(
             spell_label: cx.spell_label.to_string(),
             object_label: object_label.clone(),
             from_zone: Zone::Exile,
+            triggered_return_generation: None,
         },
         cx.events,
     )? {

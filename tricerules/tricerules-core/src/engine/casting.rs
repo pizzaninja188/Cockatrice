@@ -3261,6 +3261,41 @@ impl GameEngine {
         uses
     }
 
+    /// Oath changes the ordinary allowance, not the separate as-though permissions that other
+    /// effects can create. Both source and planeswalker characteristics are evaluated live.
+    fn ordinary_loyalty_activation_allowance(&self, permanent_id: ObjectId) -> u32 {
+        let Some(object) = self.state.objects.get(&permanent_id) else {
+            return 1;
+        };
+        if object.zone != Zone::Battlefield {
+            return 1;
+        }
+        let Some(walker) = self
+            .characteristics(permanent_id)
+            .filter(|c| c.has_type("Planeswalker"))
+        else {
+            return 1;
+        };
+        let has_permission = self.state.objects.values().any(|source| {
+            source.zone == Zone::Battlefield
+                && self.controller_of(source.id) == Some(walker.controller)
+                && self
+                    .active_static_ability_definitions(source.id)
+                    .iter()
+                    .any(|ability| {
+                        matches!(
+                            ability,
+                            StaticAbilityDef::ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn
+                        )
+                    })
+        });
+        if has_permission {
+            2
+        } else {
+            1
+        }
+    }
+
     fn activation_limit_allows(
         &self,
         permanent_id: ObjectId,
@@ -3274,7 +3309,7 @@ impl GameEngine {
                 .get(&self.activation_use_key(permanent_id, ActivationUseIdentity::Loyalty))
                 .copied()
                 .unwrap_or(0)
-                >= 1
+                >= self.ordinary_loyalty_activation_allowance(permanent_id)
         {
             return false;
         }

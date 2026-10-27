@@ -2502,6 +2502,10 @@ pub enum LibraryDrawReplacement {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// Oath of Teferi changes the ordinary loyalty activation allowance for its controller's
+    /// planeswalkers to two. Multiple sources do not accumulate. This does not represent the
+    /// separate, consumable as-though permissions created by The Chain Veil.
+    ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn,
     /// Alhammarret's Archive, Rhox Faithmender and Boon Reflection replace their controller's
     /// individual incoming life-gain events with twice that amount (CR 119 / 614.5).
     DoubleControllerLifeGain,
