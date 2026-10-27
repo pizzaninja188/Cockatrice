@@ -1059,6 +1059,7 @@ impl GameEngine {
             continuous_effects: self.state.continuous_effects.clone(),
             static_emblems: self.state.static_emblems.clone(),
             activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
+            chain_veil_permissions: self.state.chain_veil_permissions.clone(),
             activation_uses_per_object: self.state.activation_uses_per_object.clone(),
             activated_ability_slots: self.state.activated_ability_slots.clone(),
             turn_history: self.state.turn_history.clone(),

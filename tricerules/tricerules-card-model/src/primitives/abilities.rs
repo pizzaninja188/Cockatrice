@@ -351,6 +351,19 @@ impl ActivatedAbilityDef {
         if self.effect.is_empty() && self.program.is_none() {
             return Err("activated ability must contain at least one effect".into());
         }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_chain_veil_permission)
+            && (self.effect.as_slice() != [SpellEffectKind::GrantChainVeilLoyaltyPermission]
+                || self.source_zone != AbilitySourceZone::Battlefield
+                || self.targeting.is_some()
+                || self.program.is_some())
+        {
+            return Err(
+                "Chain Veil permission requires a direct untargeted battlefield activation".into(),
+            );
+        }
         if !self.effect.is_empty() && self.program.is_some() {
             return Err("activated ability cannot combine a program with legacy effects".into());
         }
@@ -1794,6 +1807,12 @@ impl TriggeredAbilityDef {
                     .flat_map(|mode| &mode.effects),
             )
             .collect::<Vec<_>>();
+        if effects
+            .iter()
+            .any(|effect| effect.contains_chain_veil_permission())
+        {
+            return Err("Chain Veil permission requires an activated ability".into());
+        }
         if !allow_token_copy_cohort_exile {
             if let Some(_effect) = effects
                 .iter()
@@ -2084,6 +2103,13 @@ impl ReflexiveTriggeredAbilityDef {
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_chain_veil_permission)
+        {
+            return Err("Chain Veil permission requires an activated ability".into());
+        }
         if self
             .effect
             .iter()

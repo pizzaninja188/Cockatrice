@@ -1,6 +1,32 @@
 use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
 
+/// CR 606.3 and 609.4: a resolution grants its controller one independently usable permission
+/// for each planeswalker incarnation; the source need not remain on the battlefield.
+pub(super) fn grant_chain_veil_loyalty_permission(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    if cx
+        .engine
+        .state
+        .player_idx(cx.controller)
+        .is_none_or(|index| cx.engine.state.players[index].has_lost)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let state = &mut cx.engine.state;
+    let id = state.next_chain_veil_permission_id;
+    state.next_chain_veil_permission_id = id.checked_add(1).ok_or(
+        EngineError::ProgramInvariant("Chain Veil permission identity overflow"),
+    )?;
+    state.chain_veil_permissions.push(ChainVeilPermission {
+        id,
+        player: cx.controller,
+        used_walkers: Vec::new(),
+    });
+    Ok(EffectOutcome::Continue)
+}
+
 /// CR 716.2a: resolve the level-up ability against its exact source incarnation. The transition
 /// event also activates the matching bar ability before the settled public state is published.
 pub(super) fn set_class_level(

@@ -1855,6 +1855,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CopyTriggeringActivatedAbility
         | SpellEffectKind::MemoryJarExileHands
         | SpellEffectKind::ReturnMemoryJarHands
+        | SpellEffectKind::GrantChainVeilLoyaltyPermission
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::ExileAll { .. }

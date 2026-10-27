@@ -3648,6 +3648,8 @@ pub struct PlayerTurnRecord {
     pub mana_spent_casting_spells: u64,
     pub cards_drawn: u32,
     pub attacked: bool,
+    /// A committed loyalty activation of a planeswalker by this player during this turn.
+    pub activated_planeswalker_loyalty: bool,
     /// A permanent this player controlled immediately before departure left the battlefield.
     /// Identity and destination are intentionally not retained for this public boolean fact.
     pub permanent_left_battlefield: bool,
@@ -3754,6 +3756,15 @@ impl TurnHistory {
     pub fn finish_turn(&mut self) {
         self.previous = std::mem::take(&mut self.current);
     }
+}
+
+/// One resolved Chain Veil permission. The same permission is independently usable for each
+/// planeswalker incarnation, and belongs to its beneficiary even if the source leaves.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChainVeilPermission {
+    pub(crate) id: u64,
+    pub(crate) player: PlayerId,
+    pub(crate) used_walkers: Vec<(ObjectId, u64)>,
 }
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -3885,6 +3896,9 @@ pub struct GameState {
     /// Successful limited activations in the current turn, keyed to full object and ability
     /// identity. Control changes do not affect the key (CR 602.5b).
     pub activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
+    /// Resolved as-though permissions, expiring at the next cleanup step.
+    pub(crate) chain_veil_permissions: Vec<ChainVeilPermission>,
+    pub(crate) next_chain_veil_permission_id: u64,
     /// Successful once-per-object activations. Old-generation entries are inert after a zone
     /// change and remain deterministic replay evidence for the lifetime of the game.
     pub activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,

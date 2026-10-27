@@ -38,6 +38,9 @@ mod deck_coverage_onakke_oathkeeper;
 #[path = "scenario/deck_coverage_oath_of_teferi.rs"]
 mod deck_coverage_oath_of_teferi;
 
+#[path = "scenario/deck_coverage_the_chain_veil.rs"]
+mod deck_coverage_the_chain_veil;
+
 #[path = "scenario/deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
 

@@ -1175,6 +1175,14 @@ impl CharacteristicsEvaluator<'_> {
             | GameCondition::ObjectMatches { .. }
             | GameCondition::ObjectManaValue { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),
+            GameCondition::ControllerHasNotActivatedPlaneswalkerLoyaltyThisTurn => {
+                !self
+                    .state
+                    .turn_history
+                    .current
+                    .player(controller)
+                    .activated_planeswalker_loyalty
+            }
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
                 .state
                 .players

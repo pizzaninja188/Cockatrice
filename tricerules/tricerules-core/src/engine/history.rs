@@ -1125,6 +1125,14 @@ impl GameEngine {
                 })
             }
             GameCondition::Void => self.state.turn_history.current.void_holds(),
+            GameCondition::ControllerHasNotActivatedPlaneswalkerLoyaltyThisTurn => {
+                !self
+                    .state
+                    .turn_history
+                    .current
+                    .player(context.controller)
+                    .activated_planeswalker_loyalty
+            }
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
                 .state
                 .players

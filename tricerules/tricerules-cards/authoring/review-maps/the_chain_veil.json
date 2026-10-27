@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb88fb3d-6a85-4bb1-b316-7f759b45a0fa",
+  "spans": [
+    {"face_id": "the_chain_veil", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"]},
+    {"face_id": "the_chain_veil", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_the_chain_veil::chain_veil_exact_identity_and_end_step_ability", "covers": "Exact identity, mana cost, type, presentation and intervening-if trigger."},
+    {"test": "deck_registry::deck_coverage_the_chain_veil::chain_veil_exact_activated_permission_cost_and_presentation", "covers": "Exact mana and tap costs, activated permission and Oracle presentation."},
+    {"test": "deck_registry::deck_coverage_the_chain_veil::chain_veil_permission_is_restricted_to_a_flat_battlefield_activated_effect", "covers": "Flat activated permission profile rejects unsupported contexts and wrappers."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_paid_permission_allows_one_additional_loyalty_activation", "covers": "Paid permission allows one additional activation and publishes the changed ability flags."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_spent_permission_is_not_refunded_when_oath_enters_later", "covers": "A later Oath does not refund a spent Veil grant."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_adds_one_permission_after_oaths_two_ordinary_uses", "covers": "Oath's two ordinary uses precede the separate Veil grant."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_actual_rings_copy_grants_a_second_independent_permission", "covers": "A real Rings copy of the Veil ability grants another independent permission."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_permission_applies_separately_to_walkers_controlled_later", "covers": "One resolution applies separately to walkers controlled later."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_keeps_timing_costs_and_the_abilitys_own_limit", "covers": "Timing, costs and a synthetic individual ability limit remain in force."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_rechecks_its_intervening_condition_when_the_trigger_resolves", "covers": "A synthetic history change exercises the second intervening-if check."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_history_uses_the_sources_derived_type_before_costs_and_survives_sacrifice", "covers": "Synthetic type and cost changes verify pre-cost planeswalker qualification and post-cost history."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_preserves_spent_permission_on_control_and_face_change_but_not_blink", "covers": "Synthetic control and face changes preserve consumption; a zone change creates a new incarnation."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_rejects_unaffordable_and_tapped_activations_without_creating_grants", "covers": "Failed payment and a tapped source do not create extra grants."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_permission_survives_source_departure_after_activation", "covers": "The paid ability resolves and its grant survives Veil's departure."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_countered_activated_ability_creates_no_permission", "covers": "Actual Tidebinder counters the paid Veil ability before it grants permission."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_grants_belong_to_actors_and_are_not_refunded_by_control_changes", "covers": "Separate actor grants and synthetic away-and-back control changes preserve each actor's usage."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_history_resets_on_the_next_turn_and_penalty_can_trigger_again", "covers": "Actual priority and cleanup commands reset the actor's history for a later end step."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_permissions_expire_at_each_cleanup_including_a_repeated_cleanup", "covers": "Actual cleanup boundaries expire both grants; synthetic temporary creatures create repeated cleanup priority while timing gates remain enforced."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_parked_cost_cancellation_keeps_grant_and_replays_then_retry_consumes_it", "covers": "A synthetic mixed loyalty cost with real Lattice and replacement sources cancels atomically, replays, then consumes the grant on successful retry."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_activation_history_replays_from_accepted_wire_commands", "covers": "Accepted commands replay committed activation history and later source departure."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_loses_two_at_its_controllers_end_step_and_trigger_survives_source_departure", "covers": "Only the controller's end step triggers and the triggered loss survives source departure."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_remembers_a_prior_countered_loyalty_activation_after_its_walker_leaves", "covers": "A successful prior activation remains recorded after Tidebinder counters it and the walker leaves."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_does_not_count_another_players_loyalty_activation", "covers": "Another player's activation does not satisfy the controller's condition."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_does_not_count_a_rejected_loyalty_activation", "covers": "A rejected loyalty activation does not satisfy the condition."},
+    {"test": "scenario deck_coverage_the_chain_veil::veil_does_not_count_a_loyalty_ability_copy_as_its_controllers_activation", "covers": "A real Rings copy with labeled synthetic copy control is not an activation by the copy's controller."}
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1073,6 +1073,8 @@ pub enum SpellEffectKind {
     MemoryJarExileHands,
     /// Return the exact surviving face-down exile incarnations from that activation.
     ReturnMemoryJarHands,
+    /// The Chain Veil's one-per-planeswalker as-though permission for this turn.
+    GrantChainVeilLoyaltyPermission,
     /// CR 117.1d / 608.2g: starting with the resolving controller, each player may pay any
     /// amount of mana. The exact committed total is the immediate result consumed by the next
     /// effect, as in Minds Aglow.
@@ -3629,6 +3631,12 @@ impl SpellEffectKind {
         })
     }
 
+    pub(crate) fn contains_chain_veil_permission(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| {
+            matches!(leaf, Self::GrantChainVeilLoyaltyPermission)
+        })
+    }
+
     pub(crate) fn contains_counter_triggering_spell(&self) -> bool {
         self.contains_legacy_flat_signature(|leaf| matches!(leaf, Self::CounterTriggeringSpell))
     }
@@ -3859,6 +3867,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::MemoryJarExileHands
             | SpellEffectKind::ReturnMemoryJarHands
+            | SpellEffectKind::GrantChainVeilLoyaltyPermission
             | SpellEffectKind::JoinForces
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
             | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
@@ -4191,6 +4200,11 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects.iter().any(Self::contains_chain_veil_permission)
+            && effects != [Self::GrantChainVeilLoyaltyPermission]
+        {
+            return Err("Chain Veil permission requires one direct flat effect".into());
+        }
         let jar_parent = matches!(
             effects,
             [
@@ -4491,6 +4505,11 @@ impl SpellEffectKind {
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if matches!(self, Self::GrantChainVeilLoyaltyPermission)
+            && context != EffectContext::Ability
+        {
+            return Err("Chain Veil permission requires an activated ability".into());
+        }
         if matches!(self, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
             && context != EffectContext::Ability
         {

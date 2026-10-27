@@ -30,6 +30,9 @@ pub enum GameCondition {
     /// Plasma Bolt and Temporal Intervention: a nonland permanent left the battlefield or
     /// a spell was cast for its Warp cost this turn, by any player.
     Void,
+    /// The Chain Veil's intervening condition reads the controller's committed activations,
+    /// including those whose planeswalker has since left or changed characteristics.
+    ControllerHasNotActivatedPlaneswalkerLoyaltyThisTurn,
     /// Disappear (Insectoid Exterminator, Putrid Pals, and West Wind Avatar): whether any
     /// selected player controlled a permanent immediately before it left the battlefield this
     /// turn. Lands and tokens count; controller is captured from the committed departure event.
@@ -476,6 +479,7 @@ impl GameCondition {
             | GameCondition::CaseSolved { .. }
             | GameCondition::ControllerLibraryEmpty
             | GameCondition::Void
+            | GameCondition::ControllerHasNotActivatedPlaneswalkerLoyaltyThisTurn
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }
@@ -586,6 +590,7 @@ impl GameCondition {
             | GameCondition::AnyOf(_)
             | GameCondition::HasEnduringStory { .. }
             | GameCondition::Void
+            | GameCondition::ControllerHasNotActivatedPlaneswalkerLoyaltyThisTurn
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }

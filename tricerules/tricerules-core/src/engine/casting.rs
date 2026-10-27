@@ -22,6 +22,17 @@ pub(super) enum LimitedActivationUse {
     PerObject(PersistentActivationUseKey),
 }
 
+/// The permission selected at announcement, before paying costs can change the battlefield.
+#[derive(Clone, Copy)]
+enum LoyaltyActivationAuthorization {
+    Ordinary,
+    ChainVeil {
+        permission_id: u64,
+        walker: ObjectId,
+        generation: u64,
+    },
+}
+
 /// Announcement receipts captured before costs can remove sources, targets or grants.
 #[derive(Clone)]
 pub(super) struct AnnouncedAbilityActivation {
@@ -47,6 +58,10 @@ pub(super) struct AnnouncedAbilityActivation {
     crime_events: Vec<GameEvent>,
     target_triggers: Vec<super::triggers::CollectedTrigger>,
     activation_uses: Vec<LimitedActivationUse>,
+    loyalty_authorization: Option<LoyaltyActivationAuthorization>,
+    /// The actor activated a planeswalker loyalty ability at announcement time, before costs
+    /// can remove the source or alter its characteristics. Committed only after costs succeed.
+    planeswalker_loyalty_activation: bool,
     x_value: u32,
 }
 
@@ -2194,6 +2209,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your priority"));
         }
         if self.state.turn_step == TurnStep::Cleanup
+            && !self.state.cleanup_priority_active
             && !resolving_mana_payment
             && !attack_mana_payment
         {
@@ -2658,6 +2674,14 @@ impl GameEngine {
                 .unwrap_or_else(|| card_id.clone())
         };
         let ability = effective.definition.clone();
+        let loyalty_authorization = if ability.is_loyalty_ability() {
+            Some(
+                self.loyalty_activation_authorization(permanent_id, player)
+                    .ok_or(EngineError::Illegal("activation limit reached"))?,
+            )
+        } else {
+            None
+        };
         let ability_text = ability.fallback_text_with_path(&card_name, &effective.ability_path());
         let primary_presentation = (!concealed)
             .then_some(effective.presentation_definition.as_ref())
@@ -2701,6 +2725,12 @@ impl GameEngine {
                 &effective.occurrence,
                 &ability,
             ),
+            loyalty_authorization,
+            planeswalker_loyalty_activation: ability.is_loyalty_ability()
+                && object.zone == Zone::Battlefield
+                && self
+                    .characteristics(permanent_id)
+                    .is_some_and(|c| c.has_type("Planeswalker")),
             ability,
             x_value,
         };
@@ -2772,6 +2802,8 @@ impl GameEngine {
             crime_events,
             mut target_triggers,
             activation_uses,
+            loyalty_authorization,
+            planeswalker_loyalty_activation,
             x_value,
         } = announcement;
         let idx = self
@@ -2781,6 +2813,28 @@ impl GameEngine {
         let trefs: Vec<_> = targets.iter().map(|target| target.object_id).collect();
         self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses.clone());
+        if let Some(LoyaltyActivationAuthorization::ChainVeil {
+            permission_id,
+            walker,
+            generation,
+        }) = loyalty_authorization
+        {
+            let permission = self
+                .state
+                .chain_veil_permissions
+                .iter_mut()
+                .find(|permission| permission.id == permission_id && permission.player == player)
+                .expect("captured Chain Veil permission survives committed costs");
+            debug_assert!(!permission.used_walkers.contains(&(walker, generation)));
+            permission.used_walkers.push((walker, generation));
+        }
+        if planeswalker_loyalty_activation {
+            self.state
+                .turn_history
+                .current
+                .player_mut(player)
+                .activated_planeswalker_loyalty = true;
+        }
 
         // Allocate the ability's stack identity now that every cost has committed. Triggers
         // staged while paying consumed ids from the same stream, so the provisional reservation
@@ -3296,6 +3350,45 @@ impl GameEngine {
         }
     }
 
+    fn loyalty_activation_authorization(
+        &self,
+        permanent_id: ObjectId,
+        player: PlayerId,
+    ) -> Option<LoyaltyActivationAuthorization> {
+        let uses = self
+            .state
+            .activation_uses_this_turn
+            .get(&self.activation_use_key(permanent_id, ActivationUseIdentity::Loyalty))
+            .copied()
+            .unwrap_or(0);
+        if uses < self.ordinary_loyalty_activation_allowance(permanent_id) {
+            return Some(LoyaltyActivationAuthorization::Ordinary);
+        }
+        let object = self.state.objects.get(&permanent_id)?;
+        if object.zone != Zone::Battlefield {
+            return None;
+        }
+        let characteristics = self.characteristics(permanent_id)?;
+        if characteristics.controller != player || !characteristics.has_type("Planeswalker") {
+            return None;
+        }
+        let generation = self.payment_object_ref(permanent_id).zone_change_generation;
+        self.state
+            .chain_veil_permissions
+            .iter()
+            .find(|permission| {
+                permission.player == player
+                    && !permission
+                        .used_walkers
+                        .contains(&(permanent_id, generation))
+            })
+            .map(|permission| LoyaltyActivationAuthorization::ChainVeil {
+                permission_id: permission.id,
+                walker: permanent_id,
+                generation,
+            })
+    }
+
     fn activation_limit_allows(
         &self,
         permanent_id: ObjectId,
@@ -3304,12 +3397,9 @@ impl GameEngine {
     ) -> bool {
         if ability.is_loyalty_ability()
             && self
-                .state
-                .activation_uses_this_turn
-                .get(&self.activation_use_key(permanent_id, ActivationUseIdentity::Loyalty))
-                .copied()
-                .unwrap_or(0)
-                >= self.ordinary_loyalty_activation_allowance(permanent_id)
+                .controller_of(permanent_id)
+                .and_then(|player| self.loyalty_activation_authorization(permanent_id, player))
+                .is_none()
         {
             return false;
         }

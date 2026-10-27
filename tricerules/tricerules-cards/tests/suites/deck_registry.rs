@@ -95,6 +95,8 @@ mod deck_coverage_memory_jar;
 mod deck_coverage_oath_of_teferi;
 #[path = "../deck_coverage_onakke_oathkeeper.rs"]
 mod deck_coverage_onakke_oathkeeper;
+#[path = "../deck_coverage_the_chain_veil.rs"]
+mod deck_coverage_the_chain_veil;
 
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;

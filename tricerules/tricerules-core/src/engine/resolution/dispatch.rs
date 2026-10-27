@@ -90,6 +90,9 @@ pub(super) fn execute_effect(
         SpellEffectKind::ExileResolvingSpell => zones::exile_resolving_spell(cx)?,
         SpellEffectKind::MemoryJarExileHands => memory_jar::exile_hands(cx)?,
         SpellEffectKind::ReturnMemoryJarHands => memory_jar::return_hands(cx)?,
+        SpellEffectKind::GrantChainVeilLoyaltyPermission => {
+            misc::grant_chain_veil_loyalty_permission(cx)?
+        }
         effect @ SpellEffectKind::Discard { .. } => zones::discard(cx, effect)?,
         effect @ SpellEffectKind::Scry { .. } => zones::scry(cx, effect)?,
         effect @ SpellEffectKind::LibraryPartition { .. } => zones::library_partition(cx, effect)?,

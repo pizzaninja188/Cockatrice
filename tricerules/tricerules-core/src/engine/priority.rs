@@ -1050,6 +1050,9 @@ impl GameEngine {
             return Ok(());
         }
         let departed_set: HashSet<_> = departed.iter().copied().collect();
+        self.state
+            .chain_veil_permissions
+            .retain(|permission| !departed_set.contains(&permission.player));
         let newly_departed_cohorts = departed
             .iter()
             .filter_map(|&player_id| {
@@ -1895,6 +1898,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.cleanup_discard_player = None;
         self.cleanup_until_end_of_turn_effects();
+        self.state.chain_veil_permissions.clear();
         self.cleanup_temporary_copies();
         let ending_turn_instance = self.state.turn_instance;
         self.state
