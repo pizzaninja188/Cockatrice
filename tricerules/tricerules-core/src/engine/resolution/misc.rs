@@ -68,7 +68,7 @@ pub(super) fn solve_case(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
 use crate::engine::presentation::{
     stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };
-use crate::engine::{attempt_untap, set_tapped, UntapOutcome};
+use crate::engine::{prepare_and_commit_untaps, set_tapped};
 
 /// Mycosynth Gardens applies a layer-1 copy effect to its exact source incarnation. The target
 /// snapshot contains only copiable values; physical identity, counters, attachments, and tapped
@@ -428,18 +428,11 @@ pub(super) fn untap(
     let SpellEffectKind::Untap { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    for tid in cx.resolve_battlefield_subjects(&subject) {
-        let on_battlefield = cx
-            .engine
-            .state
-            .objects
-            .get(&tid)
-            .is_some_and(|object| object.zone == Zone::Battlefield);
-        if on_battlefield && attempt_untap(cx.engine, tid) == UntapOutcome::Untapped {
-            let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
-            cx.events
-                .push(ev_log(format!("{} untaps {subject_name}", cx.spell_label)));
-        }
+    let targets = cx.resolve_battlefield_subjects(&subject);
+    for tid in prepare_and_commit_untaps(cx.engine, &targets) {
+        let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+        cx.events
+            .push(ev_log(format!("{} untaps {subject_name}", cx.spell_label)));
     }
     Ok(EffectOutcome::Continue)
 }

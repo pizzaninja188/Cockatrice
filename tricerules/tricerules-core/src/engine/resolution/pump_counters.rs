@@ -153,6 +153,9 @@ pub(super) fn create_static_emblem(
                 });
             }
             StaticEmblemEffect::GrantSpellKeyword { .. } => {}
+            StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming => {
+                // The marker retains this permission for the loyalty-timing query.
+            }
             StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {
                 // The marker supplies lifetime identity, not a physical replacement source.
                 // The default empty presentation keeps replacement choices source-free.

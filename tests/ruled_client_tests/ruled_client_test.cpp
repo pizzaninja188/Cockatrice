@@ -4732,6 +4732,275 @@ TEST(RuledTargetGroupConfirmationTest, OptionalSingleTargetNeedsAnExplicitZeroTa
     EXPECT_TRUE(ruledPendingTargetSelectionCanConfirm(pending));
 }
 
+TEST(RuledActivatedTargetSelectionTest, TeferiOptionalFourStagesZeroThroughFourAndConfirmsOnlyOnce)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 7;
+    group.minTargets = 0;
+    group.maxTargets = 4;
+    RuledSpellTargetData data;
+    data.groups.append(group);
+
+    for (int targetCount = 0; targetCount <= 4; ++targetCount) {
+        PendingActivatedAbility ability;
+        ability.valid = true;
+        ability.waitingForTarget = true;
+        for (int index = 0; index < targetCount; ++index) {
+            PendingActivatedAbility::Target target;
+            target.ref.set_group_index(7);
+            target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+            target.ref.set_object_id(static_cast<quint32>(100 + index));
+            target.zoneChangeGeneration = static_cast<quint64>(10 + index);
+            EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, group, target),
+                      RuledActivatedTargetStageResult::Selected);
+        }
+        EXPECT_EQ(ruledActivatedTargetSelectionCount(ability, 7), targetCount);
+        EXPECT_TRUE(ruledPendingActivatedTargetGroupCanConfirm(ability, data));
+
+        if (targetCount == 4) {
+            PendingActivatedAbility::Target fifth;
+            fifth.ref.set_group_index(7);
+            fifth.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+            fifth.ref.set_object_id(104);
+            EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, group, fifth),
+                      RuledActivatedTargetStageResult::AtMaximum);
+            EXPECT_EQ(ruledActivatedTargetSelectionCount(ability, 7), 4);
+        }
+
+        int finalHandoffs = 0;
+        if (ruledAdvancePendingActivatedTargetGroup(ability, data, true) ==
+            RuledActivatedTargetAdvanceResult::Complete) {
+            ++finalHandoffs;
+        }
+        EXPECT_EQ(finalHandoffs, 1);
+        EXPECT_FALSE(ability.waitingForTarget);
+        EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(ability, data, true),
+                  RuledActivatedTargetAdvanceResult::Invalid);
+        EXPECT_EQ(finalHandoffs, 1);
+    }
+}
+
+TEST(RuledActivatedTargetSelectionTest, AjaniOptionalSingleTargetAllowsZeroOrOne)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.minTargets = 0;
+    group.maxTargets = 1;
+    RuledSpellTargetData data;
+    data.groups.append(group);
+
+    PendingActivatedAbility empty;
+    empty.valid = true;
+    empty.waitingForTarget = true;
+    EXPECT_TRUE(ruledPendingActivatedTargetGroupCanConfirm(empty, data));
+    EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(empty, data, true), RuledActivatedTargetAdvanceResult::Complete);
+
+    PendingActivatedAbility one;
+    one.valid = true;
+    one.waitingForTarget = true;
+    PendingActivatedAbility::Target target;
+    target.ref.set_group_index(0);
+    target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target.ref.set_object_id(501);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(one, group, target), RuledActivatedTargetStageResult::Selected);
+    EXPECT_EQ(ruledActivatedTargetSelectionCount(one, 0), 1);
+    EXPECT_TRUE(ruledPendingActivatedTargetGroupCanConfirm(one, data));
+    EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(one, data, true), RuledActivatedTargetAdvanceResult::Complete);
+}
+
+TEST(RuledActivatedTargetSelectionTest, RequiredSingleTargetStillAdvancesOnClick)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 3;
+    group.minTargets = 1;
+    group.maxTargets = 1;
+    RuledSpellTargetData data;
+    data.groups.append(group);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    PendingActivatedAbility::Target target;
+    target.ref.set_group_index(3);
+    target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target.ref.set_object_id(51);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, group, target), RuledActivatedTargetStageResult::Selected);
+    EXPECT_FALSE(ruledPendingActivatedTargetGroupCanConfirm(ability, data));
+    EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(ability, data, false), RuledActivatedTargetAdvanceResult::Complete);
+    EXPECT_FALSE(ability.waitingForTarget);
+}
+
+TEST(RuledActivatedTargetSelectionTest, DuplicateToggleTouchesOnlyTheActiveGroup)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 4;
+    group.minTargets = 0;
+    group.maxTargets = 4;
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.selectedTargets = {};
+
+    PendingActivatedAbility::Target active;
+    active.ref.set_group_index(4);
+    active.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    active.ref.set_object_id(90);
+    active.zoneChangeGeneration = 12;
+    PendingActivatedAbility::Target otherGroup = active;
+    otherGroup.ref.set_group_index(8);
+    ability.selectedTargets = {active, otherGroup};
+
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, group, active), RuledActivatedTargetStageResult::Deselected);
+    ASSERT_EQ(ability.selectedTargets.size(), 1);
+    EXPECT_EQ(ability.selectedTargets.first().ref.group_index(), 8u);
+    EXPECT_EQ(ability.selectedTargets.first().ref.object_id(), 90u);
+}
+
+TEST(RuledActivatedTargetSelectionTest, ClickEligibilityPreservesSameObjectSelectedInAnEarlierGroup)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledTargetGroupData prior;
+    prior.groupIndex = 0;
+    prior.minTargets = 1;
+    prior.maxTargets = 1;
+    prior.validPermanentIds.insert(90);
+    RuledTargetGroupData active;
+    active.groupIndex = 1;
+    active.minTargets = 0;
+    active.maxTargets = 4;
+    active.validPermanentIds.insert(90);
+    ruled::v1::TargetPairConstraint pairConstraint;
+    pairConstraint.set_prior_group_index(0);
+    auto *pair = pairConstraint.add_compatible_pairs();
+    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    pair->mutable_prior_target()->set_object_id(90);
+    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    pair->mutable_candidate()->set_object_id(90);
+    active.pairConstraint = pairConstraint;
+    RuledSpellTargetData data;
+    data.groups = {prior, active};
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(80, 1), data);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 80;
+    ability.abilityIndex = 1;
+    ability.activeTargetGroupPosition = 1;
+    PendingActivatedAbility::Target earlier;
+    earlier.ref.set_group_index(0);
+    earlier.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    earlier.ref.set_object_id(90);
+    ability.selectedTargets.append(earlier);
+    PendingActivatedAbility::Target activeDuplicate = earlier;
+    activeDuplicate.ref.set_group_index(1);
+    ability.selectedTargets.append(activeDuplicate);
+
+    EXPECT_EQ(ruledPendingAbilityTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield,
+                                                        90, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, active, activeDuplicate),
+              RuledActivatedTargetStageResult::Deselected);
+    ASSERT_EQ(ability.selectedTargets.size(), 1);
+    EXPECT_EQ(ability.selectedTargets.first().ref.group_index(), 0u);
+}
+
+TEST(RuledActivatedTargetSelectionTest, ConfirmingZeroTargetsAdvancesToTheNextGroup)
+{
+    RuledTargetGroupData first;
+    first.groupIndex = 5;
+    first.minTargets = 0;
+    first.maxTargets = 4;
+    RuledTargetGroupData second;
+    second.groupIndex = 11;
+    second.minTargets = 1;
+    second.maxTargets = 1;
+    RuledSpellTargetData data;
+    data.groups = {first, second};
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(ability, data, true), RuledActivatedTargetAdvanceResult::NextGroup);
+    EXPECT_EQ(ability.activeTargetGroupPosition, 1);
+    EXPECT_TRUE(ability.waitingForTarget);
+
+    PendingActivatedAbility::Target target;
+    target.ref.set_group_index(11);
+    target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target.ref.set_object_id(700);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, second, target), RuledActivatedTargetStageResult::Selected);
+    EXPECT_EQ(ruledAdvancePendingActivatedTargetGroup(ability, data, false), RuledActivatedTargetAdvanceResult::Complete);
+    EXPECT_EQ(ability.selectedTargets.size(), 1);
+    EXPECT_EQ(ability.selectedTargets.first().ref.group_index(), 11u);
+}
+
+TEST(RuledActivatedTargetSelectionTest, ReconcilePrunesStaleGenerationAndRefreshesAnEmptyOptionalGroup)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    RuledTargetGroupData group;
+    group.groupIndex = 2;
+    group.minTargets = 0;
+    group.maxTargets = 4;
+    group.validPermanentIds.insert(44);
+    group.hasXTargetChoices = true;
+    RuledXTargetChoiceData currentChoice;
+    currentChoice.xValue = 1;
+    currentChoice.candidateGenerations.insert(44, 9);
+    group.xTargetChoices.append(currentChoice);
+    data.groups.append(group);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(80, 1), data);
+    state.battlefieldGenerationByOid.insert(44, 9);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 80;
+    ability.abilityIndex = 1;
+    ability.xValue = 1;
+    PendingActivatedAbility::Target stale;
+    stale.ref.set_group_index(2);
+    stale.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    stale.ref.set_object_id(44);
+    stale.ref.set_expected_zone_change_generation(8);
+    stale.zoneChangeGeneration = 8;
+    ability.selectedTargets.append(stale);
+
+    PendingRuledSpellCast emptySpell;
+    EXPECT_TRUE(reconcileRuledPendingTargets(emptySpell, ability, state, kLocalPlayer));
+    EXPECT_TRUE(ability.selectedTargets.isEmpty());
+    EXPECT_TRUE(ability.waitingForTarget);
+
+    // Empty optional groups also cause a refresh on a new legal-actions snapshot.
+    EXPECT_TRUE(reconcileRuledPendingTargets(emptySpell, ability, state, kLocalPlayer));
+    EXPECT_TRUE(ruledPendingActivatedTargetGroupCanConfirm(ability, data));
+}
+
+TEST(RuledActivatedTargetSelectionTest, PlayerTargetIdentityDoesNotAliasAnObjectWithTheSameNumber)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.minTargets = 0;
+    group.maxTargets = 1;
+    group.canTargetOpponent = true;
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    PendingActivatedAbility::Target player;
+    player.ref.set_group_index(0);
+    player.ref.set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    player.ref.set_object_id(1);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(ability, group, player), RuledActivatedTargetStageResult::Selected);
+
+    RuledPendingCast pending;
+    pending.ability = ability;
+    EXPECT_TRUE(pending.isPlayerSelectedAsPendingAbilityTarget(1));
+    EXPECT_FALSE(pending.isTargetSelectedForPendingAbility(1));
+}
+
 TEST(RuledPendingTargetProgressionTest, DamageDisplaySurvivesPaymentAndRespectsAllocationCaps)
 {
     RuledPendingCast pending;

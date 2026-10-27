@@ -12,6 +12,96 @@
 
 #include <libcockatrice/utility/zone_names.h>
 
+void RuledTargetUi::emitPendingAbilityTargetSelectionCount(PlayerActions *actions, const RuledClientState &state)
+{
+    const auto &ability = actions->pendingActivatedAbility;
+    const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    if (!group) {
+        emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
+        return;
+    }
+    emit actions->ruledMultiTargetSelectionUpdated(
+        ruledActivatedTargetSelectionCount(ability, group->groupIndex), group->minTargets,
+        ruledTargetSelectionDisplayMaximum(*group));
+}
+
+/// Shared card/player click staging. Each surface has already resolved its ID domain and current
+/// incarnation before calling here; legality remains checked against the engine's current offer.
+bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
+                                                     RuledClientState *state,
+                                                     RuledTargetCandidateKind kind,
+                                                     quint32 targetOid,
+                                                     quint64 zoneChangeGeneration)
+{
+    auto &ability = actions->pendingActivatedAbility;
+    if (!ability.valid || !ability.waitingForTarget) {
+        return false;
+    }
+
+    const auto data = state->abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    if (!group) {
+        return true;
+    }
+
+    const int localPlayerId = actions->player->getPlayerInfo()->getId();
+    const auto refKind = ruledTargetCandidateRefKind(kind);
+    if (ruledPendingAbilityTargetClickEligibility(actions->pendingRuledSpellCast, ability, *state, kind, targetOid,
+                                                  localPlayerId) != RuledTargetClickEligibility::Legal) {
+        return true;
+    }
+
+    PendingActivatedAbility::Target target;
+    target.ref.set_object_id(targetOid);
+    target.ref.set_group_index(static_cast<quint32>(group->groupIndex));
+    target.ref.set_kind(refKind);
+    if (group->hasXTargetChoices) {
+        const auto generation = ruledXTargetCandidateGeneration(*group, ability.xValue, targetOid);
+        if (!generation) {
+            return true;
+        }
+        target.ref.set_expected_zone_change_generation(*generation);
+        target.zoneChangeGeneration = *generation;
+    } else {
+        target.zoneChangeGeneration = zoneChangeGeneration;
+    }
+
+    const auto staged = ruledStageActivatedAbilityTarget(ability, *group, target);
+    if (staged == RuledActivatedTargetStageResult::AtMaximum) {
+        state->emitLocalLog(PlayerActions::tr("That target group has reached its maximum of %1.")
+                                .arg(group->maxTargets));
+        return true;
+    }
+    if (staged == RuledActivatedTargetStageResult::Invalid) {
+        return true;
+    }
+
+    state->emitSpellTargetSelectionChanged();
+    if (staged == RuledActivatedTargetStageResult::Selected && group->minTargets == 1 && group->maxTargets == 1) {
+        const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, data, false);
+        if (advance == RuledActivatedTargetAdvanceResult::Invalid) {
+            return true;
+        }
+        if (advance == RuledActivatedTargetAdvanceResult::NextGroup) {
+            const QString prompt = ruledPendingAbilityTargetPrompt(ability, *state);
+            emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
+            emitPendingAbilityTargetSelectionCount(actions, *state);
+            state->emitLocalLog(prompt);
+        } else {
+            emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+            emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
+            actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
+        }
+        return true;
+    }
+
+    emit actions->ruledMultiTargetSelectionUpdated(
+        ruledActivatedTargetSelectionCount(ability, group->groupIndex), group->minTargets,
+        ruledTargetSelectionDisplayMaximum(*group));
+    return true;
+}
+
 void RuledTargetUi::ensureRefreshConnection(PlayerActions *actions)
 {
     if (!actions || !actions->player || !actions->player->getGame()) {
@@ -36,7 +126,9 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
     }
     const int localPlayerId = actions->player->getPlayerInfo()->getId();
     const bool spellHadTargets = !actions->pendingRuledSpellCast.selectedTargetOids.isEmpty();
-    const bool abilityHadTarget = !actions->pendingActivatedAbility.selectedTargets.isEmpty();
+    const int abilityTargetCountBefore = actions->pendingActivatedAbility.selectedTargets.size();
+    const bool abilityWasTargeting = actions->pendingActivatedAbility.valid &&
+                                     actions->pendingActivatedAbility.waitingForTarget;
     if (!reconcileRuledPendingTargets(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *state,
                                       localPlayerId)) {
         return;
@@ -62,12 +154,15 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
         }
     }
     auto &ability = actions->pendingActivatedAbility;
-    if (abilityHadTarget && ability.valid && ability.waitingForTarget) {
+    if (abilityWasTargeting && ability.valid && ability.waitingForTarget) {
         ability.waitingForTarget = true;
         ability.waitingForMana = false;
         const QString prompt = ruledPendingAbilityTargetPrompt(ability, *state);
         emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
-        state->emitLocalLog(actions->tr("The selected target is no longer legal. %1").arg(prompt));
+        emitPendingAbilityTargetSelectionCount(actions, *state);
+        if (ability.selectedTargets.size() < abilityTargetCountBefore) {
+            state->emitLocalLog(actions->tr("The selected target is no longer legal. %1").arg(prompt));
+        }
     }
     state->emitSpellTargetSelectionChanged();
     state->emitSpellDamageAllocationUiChanged();
@@ -125,7 +220,7 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *
             oid = state->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
         }
     }
-    const auto eligibility = ::ruledTargetClickEligibility(
+    const auto eligibility = ::ruledPendingAbilityTargetClickEligibility(
         actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *state, kind, oid,
         actions->player->getPlayerInfo()->getId());
     return oid == 0 && eligibility != RuledTargetClickEligibility::NotTargeting
@@ -149,7 +244,7 @@ RuledTargetClickEligibility RuledTargetUi::playerEligibility(const PlayerActions
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
-    const auto eligibility = ::ruledTargetClickEligibility(
+    const auto eligibility = ::ruledPendingAbilityTargetClickEligibility(
         actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *state, RuledTargetCandidateKind::Player,
         targetPlayerId >= 0 ? static_cast<quint32>(targetPlayerId) : 0,
         actions->player->getPlayerInfo()->getId());
@@ -274,10 +369,39 @@ bool RuledTargetUi::isPlayerSelectedAsPendingSpellTarget(const PlayerActions *ac
 
 void RuledTargetUi::confirmMultiTargetSelection(PlayerActions *actions)
 {
-    if (!ruledPendingTargetSelectionCanConfirm(actions->pendingRuledSpellCast)) {
+    if (ruledPendingTargetSelectionCanConfirm(actions->pendingRuledSpellCast)) {
+        RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
         return;
     }
-    RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
+    auto &ability = actions->pendingActivatedAbility;
+    if (!ability.valid || !ability.waitingForTarget || !actions->player || !actions->player->getGame()) {
+        return;
+    }
+    RuledClientState *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!state) {
+        return;
+    }
+    const auto data = state->abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    if (!ruledPendingActivatedTargetGroupCanConfirm(ability, data)) {
+        return;
+    }
+    const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, data, true);
+    if (advance == RuledActivatedTargetAdvanceResult::Invalid) {
+        return;
+    }
+    state->emitSpellTargetSelectionChanged();
+    if (advance == RuledActivatedTargetAdvanceResult::NextGroup) {
+        const QString prompt = ruledPendingAbilityTargetPrompt(ability, *state);
+        emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
+        emitPendingAbilityTargetSelectionCount(actions, *state);
+        state->emitLocalLog(prompt);
+        actions->player->getGameScene()->update();
+        return;
+    }
+    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+    emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
+    actions->player->getGameScene()->update();
+    actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
 }
 
 bool RuledTargetUi::isAwaitingRuledPlayerTargetSelection(const PlayerActions *actions)
@@ -741,43 +865,8 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
     const RuledTargetCandidateKind kind = isGraveyard                    ? RuledTargetCandidateKind::Graveyard
                                           : zoneName == ZoneNames::STACK ? RuledTargetCandidateKind::Stack
                                                                          : RuledTargetCandidateKind::Battlefield;
-    const auto targetData = handler->abilityTargetData(actions->pendingActivatedAbility.permanentOid,
-                                                       actions->pendingActivatedAbility.abilityIndex);
-    const auto group = targetData.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(targetData)
-                                                 : targetData.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
-    if (ruledTargetClickEligibility(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *handler,
-                                    kind, targetOid, actions->player->getPlayerInfo()->getId()) !=
-        RuledTargetClickEligibility::Legal) {
-        return true;
-    }
-
-    PendingActivatedAbility::Target selected;
-    selected.ref.set_object_id(targetOid);
-    selected.ref.set_group_index(static_cast<quint32>(group.groupIndex));
-    selected.ref.set_kind(ruledTargetRefKind(group, targetOid, actions->player->getPlayerInfo()->getId()));
-    if (group.hasXTargetChoices) {
-        const auto generation = ruledXTargetCandidateGeneration(
-            group, actions->pendingActivatedAbility.xValue, targetOid);
-        if (!generation) {
-            return true;
-        }
-        selected.ref.set_expected_zone_change_generation(*generation);
-        selected.zoneChangeGeneration = *generation;
-    } else {
-        selected.zoneChangeGeneration = handler->battlefieldGenerationByOid.value(targetOid);
-    }
-    actions->pendingActivatedAbility.selectedTargets.append(selected);
-    ++actions->pendingActivatedAbility.activeTargetGroupPosition;
-    actions->pendingActivatedAbility.waitingForTarget =
-        actions->pendingActivatedAbility.activeTargetGroupPosition < targetData.groups.size() &&
-        !targetData.groups.at(actions->pendingActivatedAbility.activeTargetGroupPosition).chosenByOpponent;
-    if (actions->pendingActivatedAbility.waitingForTarget) {
-        emit actions->ruledActivatedAbilityTargetPendingChanged(true, ruledPendingAbilityTargetPrompt(actions->pendingActivatedAbility, *handler));
-        return true;
-    }
-    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
-    actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
-    return true;
+    const quint64 generation = handler->battlefieldGenerationByOid.value(targetOid, 0);
+    return RuledTargetUi::stageActivatedAbilityTargetClick(actions, handler, kind, targetOid, generation);
 }
 
 bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *actions, Player *targetPlayer)
@@ -872,23 +961,6 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         return false;
     }
     const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-    const quint32 permOid = actions->pendingActivatedAbility.permanentOid;
-    const int abilityIdx = actions->pendingActivatedAbility.abilityIndex;
-    const auto data = handler->abilityTargetData(permOid, abilityIdx);
-    const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
-                                          : data.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
-    if (ruledTargetClickEligibility(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *handler,
-                                    RuledTargetCandidateKind::Player, targetOid,
-                                    actions->player->getPlayerInfo()->getId()) != RuledTargetClickEligibility::Legal) {
-        return true;
-    }
-    PendingActivatedAbility::Target selected;
-    selected.ref.set_object_id(targetOid);
-    selected.ref.set_group_index(static_cast<quint32>(group.groupIndex));
-    selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
-    actions->pendingActivatedAbility.selectedTargets.append(selected);
-    actions->pendingActivatedAbility.waitingForTarget = false;
-    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
-    actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
-    return true;
+    return RuledTargetUi::stageActivatedAbilityTargetClick(actions, handler, RuledTargetCandidateKind::Player,
+                                                           targetOid, 0);
 }

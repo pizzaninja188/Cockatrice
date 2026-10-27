@@ -1359,6 +1359,7 @@ struct BattlefieldViewSnapshot {
     turn_history: TurnHistory,
     active_player: PlayerId,
     turn_step: TurnStep,
+    cleanup_priority_active: bool,
     stack_empty: bool,
     combat: Option<BattlefieldCombatSnapshot>,
 }
@@ -1591,6 +1592,30 @@ pub(super) fn prepare_untap(engine: &GameEngine, oid: ObjectId) -> Option<Prepar
             .unwrap_or(0),
         remaining_stun: (stun > 0).then(|| stun - 1),
     })
+}
+
+/// Prepare an entire rules-driven untap cohort before committing any member.
+///
+/// The caller supplies only objects it has already selected, including any receipt-generation
+/// checks required by that effect. Preparation snapshots current prohibitions and stun
+/// replacements for the full cohort; commits still enforce each plan's exact object generation.
+pub(super) fn prepare_and_commit_untaps(
+    engine: &mut GameEngine,
+    object_ids: &[ObjectId],
+) -> Vec<ObjectId> {
+    let plans = object_ids
+        .iter()
+        .copied()
+        .filter_map(|oid| prepare_untap(engine, oid))
+        .collect::<Vec<_>>();
+
+    plans
+        .into_iter()
+        .filter_map(|plan| {
+            let oid = plan.object_id;
+            (commit_untap(engine, plan) == UntapOutcome::Untapped).then_some(oid)
+        })
+        .collect()
 }
 
 /// Commit the prepared event for its exact incarnation without re-reading live rule conditions.

@@ -1067,6 +1067,7 @@ impl GameEngine {
             turn_history: self.state.turn_history.clone(),
             active_player: self.state.active_player_id(),
             turn_step: self.state.turn_step,
+            cleanup_priority_active: self.state.cleanup_priority_active,
             stack_empty: self.state.stack.is_empty(),
             combat: self.state.combat.as_ref().map(|combat| {
                 let mut blockers: Vec<_> = combat

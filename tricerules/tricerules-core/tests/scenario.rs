@@ -235,6 +235,18 @@ mod deck_coverage_beacon_chandra;
 #[path = "scenario/deck_coverage_teferi_temporal_pilgrim.rs"]
 mod deck_coverage_teferi_temporal_pilgrim;
 
+#[path = "scenario/deck_coverage_teferi_temporal_archmage.rs"]
+mod deck_coverage_teferi_temporal_archmage;
+
+#[path = "scenario/deck_coverage_teferi_temporal_archmage_commander.rs"]
+mod deck_coverage_teferi_temporal_archmage_commander;
+
+#[path = "scenario/deck_coverage_teferi_temporal_archmage_minus_ten.rs"]
+mod deck_coverage_teferi_temporal_archmage_minus_ten;
+
+#[path = "scenario/deck_coverage_teferi_temporal_archmage_minus_one.rs"]
+mod deck_coverage_teferi_temporal_archmage_minus_one;
+
 #[path = "scenario/deck_coverage_wizard_class.rs"]
 mod deck_coverage_wizard_class;
 

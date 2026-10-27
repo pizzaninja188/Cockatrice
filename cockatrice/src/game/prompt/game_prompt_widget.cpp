@@ -922,7 +922,8 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         }
         // Variable and optional target ranges need confirmation; required exactly-one groups
         // complete directly on the target click.
-        confirmTargetsButton->setVisible(targetingSources.testFlag(TargetingSource::SpellTargetSelection) &&
+        confirmTargetsButton->setVisible((targetingSources.testFlag(TargetingSource::SpellTargetSelection) ||
+                                          targetingSources.testFlag(TargetingSource::AbilityTargetPending)) &&
                                          multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 0);
         confirmTargetsButton->setEnabled(multiTargetSelectedCount >= multiTargetMinCount &&
                                          multiTargetSelectedCount <= multiTargetMaxCount);

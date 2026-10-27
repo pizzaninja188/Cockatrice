@@ -700,7 +700,7 @@ bool isSingleClickPlayLegal(const CardItem *card)
 bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
 {
     PlayerActions *actions = localPlayerActions(game);
-    if (actions && actions->isTargetSelectedForPendingSpell(oid)) {
+    if (actions && (actions->isTargetSelectedForPendingSpell(oid) || actions->isTargetSelectedForPendingAbility(oid))) {
         return true;
     }
     const RuledClientState *state = stateFor(game);
@@ -748,7 +748,8 @@ bool isSelectedPermanentChoiceObject(const AbstractGame *game, quint32 oid)
 bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId)
 {
     PlayerActions *actions = localPlayerActions(game);
-    return actions && actions->isPlayerSelectedAsPendingSpellTarget(playerId);
+    return actions && (actions->isPlayerSelectedAsPendingSpellTarget(playerId) ||
+                       actions->isPlayerSelectedAsPendingAbilityTarget(playerId));
 }
 
 bool isSpellDamageAllocationMode(const AbstractGame *game)

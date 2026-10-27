@@ -562,6 +562,23 @@ enum class RuledTargetCandidateKind
     Player,
 };
 
+/// Preserve the clicked surface's identity domain even when a player ID and ObjectId have the same
+/// integer representation in a synthetic or malformed client view.
+[[nodiscard]] inline ruled::v1::TargetRefKind ruledTargetCandidateRefKind(RuledTargetCandidateKind kind)
+{
+    switch (kind) {
+        case RuledTargetCandidateKind::Battlefield:
+            return ruled::v1::TARGET_REF_KIND_PERMANENT;
+        case RuledTargetCandidateKind::Stack:
+            return ruled::v1::TARGET_REF_KIND_STACK;
+        case RuledTargetCandidateKind::Graveyard:
+            return ruled::v1::TARGET_REF_KIND_GRAVEYARD;
+        case RuledTargetCandidateKind::Player:
+            return ruled::v1::TARGET_REF_KIND_PLAYER;
+    }
+    return ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
+}
+
 /// Tri-state result lets normal/freeform handling continue when no target choice exists, while an
 /// illegal candidate consumes the click before CardItem/PlayerTarget can perform another action.
 enum class RuledTargetClickEligibility
@@ -829,9 +846,138 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                                                              const RuledClientState &state)
 {
     const RuledSpellTargetData data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    const RuledTargetGroupData group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
-                                                             : data.groups.value(ability.activeTargetGroupPosition);
-    return formatRuledTargetPrompt(ability.abilityText, group, ability.activeTargetGroupPosition, data.groups.size());
+    const RuledTargetGroupData *group = nullptr;
+    if (data.groups.isEmpty()) {
+        group = ability.activeTargetGroupPosition == 0 ? &static_cast<const RuledTargetGroupData &>(data) : nullptr;
+    } else if (ability.activeTargetGroupPosition >= 0 && ability.activeTargetGroupPosition < data.groups.size()) {
+        group = &data.groups.at(ability.activeTargetGroupPosition);
+    }
+    const RuledTargetGroupData fallbackGroup;
+    return formatRuledTargetPrompt(ability.abilityText, group ? *group : fallbackGroup,
+                                   ability.activeTargetGroupPosition, data.groups.size());
+}
+
+/// The activated ability target picker stages one engine-authored group at a time. Its zero-based
+/// active position is distinct from the opaque group_index stored on each submitted TargetRef.
+[[nodiscard]] inline const RuledTargetGroupData *ruledPendingAbilityTargetGroup(
+    const PendingActivatedAbility &ability, const RuledSpellTargetData &data)
+{
+    if (ability.activeTargetGroupPosition < 0) {
+        return nullptr;
+    }
+    if (data.groups.isEmpty()) {
+        return ability.activeTargetGroupPosition == 0 ? &static_cast<const RuledTargetGroupData &>(data) : nullptr;
+    }
+    return ability.activeTargetGroupPosition < data.groups.size() ? &data.groups.at(ability.activeTargetGroupPosition)
+                                                                  : nullptr;
+}
+
+[[nodiscard]] inline int ruledPendingAbilityTargetGroupCount(const RuledSpellTargetData &data)
+{
+    return data.groups.isEmpty() ? 1 : data.groups.size();
+}
+
+[[nodiscard]] inline int ruledActivatedTargetSelectionCount(const PendingActivatedAbility &ability, int groupIndex)
+{
+    return static_cast<int>(std::count_if(ability.selectedTargets.cbegin(), ability.selectedTargets.cend(),
+                                          [groupIndex](const auto &target) {
+                                              return static_cast<int>(target.ref.group_index()) == groupIndex;
+                                          }));
+}
+
+[[nodiscard]] inline int ruledActivatedTargetSelectionIndex(const PendingActivatedAbility &ability,
+                                                              int groupIndex,
+                                                              ruled::v1::TargetRefKind kind,
+                                                              quint32 oid)
+{
+    for (int index = 0; index < ability.selectedTargets.size(); ++index) {
+        const auto &target = ability.selectedTargets.at(index).ref;
+        if (static_cast<int>(target.group_index()) == groupIndex && target.kind() == kind &&
+            target.object_id() == oid) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+enum class RuledActivatedTargetStageResult
+{
+    Invalid,
+    Selected,
+    Deselected,
+    AtMaximum,
+};
+
+/// Shared pure transition used after either a CardItem or Player click has passed the current
+/// engine-authored target and generation checks. Duplicate toggles are limited to the active group.
+[[nodiscard]] inline RuledActivatedTargetStageResult
+ruledStageActivatedAbilityTarget(PendingActivatedAbility &ability,
+                                 const RuledTargetGroupData &group,
+                                 const PendingActivatedAbility::Target &target)
+{
+    if (!ability.valid || !ability.waitingForTarget || target.ref.group_index() != static_cast<quint32>(group.groupIndex)) {
+        return RuledActivatedTargetStageResult::Invalid;
+    }
+    const int selected = ruledActivatedTargetSelectionIndex(ability, group.groupIndex, target.ref.kind(),
+                                                            target.ref.object_id());
+    if (selected >= 0) {
+        ability.selectedTargets.removeAt(selected);
+        return RuledActivatedTargetStageResult::Deselected;
+    }
+    if (group.maxTargets >= 0 && ruledActivatedTargetSelectionCount(ability, group.groupIndex) >= group.maxTargets) {
+        return RuledActivatedTargetStageResult::AtMaximum;
+    }
+    ability.selectedTargets.append(target);
+    return RuledActivatedTargetStageResult::Selected;
+}
+
+enum class RuledActivatedTargetAdvanceResult
+{
+    Invalid,
+    NextGroup,
+    Complete,
+};
+
+[[nodiscard]] inline bool ruledPendingActivatedTargetGroupCanConfirm(const PendingActivatedAbility &ability,
+                                                                      const RuledSpellTargetData &data)
+{
+    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    if (!ability.valid || !ability.waitingForTarget || !group || !ruledTargetGroupUsesExplicitConfirmation(*group)) {
+        return false;
+    }
+    const int selected = ruledActivatedTargetSelectionCount(ability, group->groupIndex);
+    return selected >= group->minTargets && selected <= group->maxTargets;
+}
+
+/// Advance after either explicit confirmation or a required exactly-one click. Requiring an exact
+/// confirmation kind here keeps zero/multiple ranges explicit and makes the final handoff one-shot.
+[[nodiscard]] inline RuledActivatedTargetAdvanceResult
+ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
+                                       const RuledSpellTargetData &data,
+                                       bool explicitConfirmation)
+{
+    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    if (!ability.valid || !ability.waitingForTarget || !group) {
+        return RuledActivatedTargetAdvanceResult::Invalid;
+    }
+    const int selected = ruledActivatedTargetSelectionCount(ability, group->groupIndex);
+    const bool requiredSingle = group->minTargets == 1 && group->maxTargets == 1 && selected == 1;
+    if (selected < group->minTargets || selected > group->maxTargets ||
+        explicitConfirmation != ruledTargetGroupUsesExplicitConfirmation(*group) ||
+        (!explicitConfirmation && !requiredSingle)) {
+        return RuledActivatedTargetAdvanceResult::Invalid;
+    }
+
+    ++ability.activeTargetGroupPosition;
+    const int groupCount = ruledPendingAbilityTargetGroupCount(data);
+    const auto *next = ability.activeTargetGroupPosition < groupCount
+                           ? (data.groups.isEmpty()
+                                  ? &static_cast<const RuledTargetGroupData &>(data)
+                                  : &data.groups.at(ability.activeTargetGroupPosition))
+                           : nullptr;
+    ability.waitingForTarget = next && !next->chosenByOpponent;
+    return ability.waitingForTarget ? RuledActivatedTargetAdvanceResult::NextGroup
+                                    : RuledActivatedTargetAdvanceResult::Complete;
 }
 
 [[nodiscard]] inline int ruledTargetSelectionDisplayMaximum(const RuledTargetGroupData &group)
@@ -914,17 +1060,19 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
     }
     if (ability.valid && ability.waitingForTarget) {
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-        const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
-                                                 : data.groups.value(ability.activeTargetGroupPosition);
-        if (group.hasXTargetChoices) {
-            const auto candidateGeneration = ruledXTargetCandidateGeneration(group, ability.xValue, oid);
+        const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+        if (!group) {
+            return RuledTargetClickEligibility::Illegal;
+        }
+        if (group->hasXTargetChoices) {
+            const auto candidateGeneration = ruledXTargetCandidateGeneration(*group, ability.xValue, oid);
             if (kind != RuledTargetCandidateKind::Battlefield || !candidateGeneration ||
                 *candidateGeneration != state.battlefieldGenerationByOid.value(oid, 0)) {
                 return RuledTargetClickEligibility::Illegal;
             }
         }
-        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId) &&
-                       ruledTargetPairCompatible(group, ruledTargetRefKind(group, oid, localPlayerId), oid,
+        return !group->chosenByOpponent && ruledTargetDataContains(*group, kind, oid, localPlayerId) &&
+                       ruledTargetPairCompatible(*group, ruledTargetCandidateRefKind(kind), oid,
                                                    ruledSelectedTargetRefs(ability))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
@@ -942,6 +1090,33 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
     return RuledTargetClickEligibility::NotTargeting;
 }
 
+/// Keep an already staged target clickable for the active ability group so the click can remove it.
+/// All other staged targets remain in the compatibility check, including targets from earlier groups.
+[[nodiscard]] inline RuledTargetClickEligibility ruledPendingAbilityTargetClickEligibility(
+    const PendingRuledSpellCast &spell,
+    const PendingActivatedAbility &ability,
+    const RuledClientState &state,
+    RuledTargetCandidateKind kind,
+    quint32 oid,
+    int localPlayerId)
+{
+    if (!ability.valid || !ability.waitingForTarget) {
+        return ruledTargetClickEligibility(spell, ability, state, kind, oid, localPlayerId);
+    }
+    const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    if (!group) {
+        return ruledTargetClickEligibility(spell, ability, state, kind, oid, localPlayerId);
+    }
+    PendingActivatedAbility eligibilityAbility = ability;
+    const int existing = ruledActivatedTargetSelectionIndex(ability, group->groupIndex,
+                                                            ruledTargetCandidateRefKind(kind), oid);
+    if (existing >= 0) {
+        eligibilityAbility.selectedTargets.removeAt(existing);
+    }
+    return ruledTargetClickEligibility(spell, eligibilityAbility, state, kind, oid, localPlayerId);
+}
+
 [[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledTargetGroupData &data, quint32 oid, int localPlayerId)
 {
     return data.validPermanentIds.contains(oid) || data.validStackIds.contains(oid) ||
@@ -949,9 +1124,9 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
            (oid == static_cast<quint32>(localPlayerId) ? data.canTargetSelf : data.canTargetOpponent);
 }
 
-/// Remove locally staged targets that disappeared from the newest LegalActions snapshot. Parallel
-/// damage vectors are pruned at the same indices so a later command cannot pair damage with the
-/// wrong object.
+/// Remove locally staged targets that disappeared from the newest LegalActions snapshot. An empty
+/// active ability group also requests a UI refresh so its confirmation bounds remain current. Parallel
+/// damage vectors are pruned at the same indices so a later command cannot pair damage with the wrong object.
 [[nodiscard]] inline bool reconcileRuledPendingTargets(PendingRuledSpellCast &spell,
                                                        PendingActivatedAbility &ability,
                                                        const RuledClientState &state,
@@ -1094,6 +1269,15 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                 ability.waitingForMana = false;
                 changed = true;
             }
+        }
+    }
+    if (ability.valid && ability.waitingForTarget) {
+        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+        const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+        // An empty active group still owns the target prompt. Refresh its bounds after every
+        // LegalActions snapshot so optional zero-target groups keep a usable confirm affordance.
+        if (group && ruledActivatedTargetSelectionCount(ability, group->groupIndex) == 0) {
+            changed = true;
         }
     }
     return changed;
@@ -1247,6 +1431,8 @@ public:
     int spellDamageAllocationMaxTotal() const;
     bool spellDamageAllocationIsLegal() const;
     bool isTargetSelectedForPendingSpell(quint32 oid) const;
+    bool isTargetSelectedForPendingAbility(quint32 oid) const;
+    bool isPlayerSelectedAsPendingAbilityTarget(int playerId) const;
     bool isCastCostPermanentSelected(quint32 oid) const;
     void loadCurrentTargetGroup(const RuledClientState &state);
     bool storeCurrentTargetGroupAndAdvance(const RuledClientState &state);
@@ -1263,6 +1449,14 @@ private:
 /// surfaces. PlayerActions exposes only thin wrappers and one friend declaration.
 class RuledTargetUi
 {
+private:
+    static void emitPendingAbilityTargetSelectionCount(PlayerActions *actions, const RuledClientState &state);
+    static bool stageActivatedAbilityTargetClick(PlayerActions *actions,
+                                                 RuledClientState *state,
+                                                 RuledTargetCandidateKind kind,
+                                                 quint32 targetOid,
+                                                 quint64 zoneChangeGeneration);
+
 public:
     static bool tryHandleRuledSpellTargetClick(PlayerActions *actions, CardItem *card);
     static bool isPlayerSelectedAsPendingSpellTarget(const PlayerActions *actions, int playerId);

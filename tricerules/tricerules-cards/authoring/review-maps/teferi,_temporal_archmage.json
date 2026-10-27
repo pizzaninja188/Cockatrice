@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "oracle_id": "07d0b06b-80cb-4518-92c9-84ea87a7e08a",
+  "spans": [
+    {"face_id": "teferi_temporal_archmage", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "teferi_temporal_archmage", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"]},
+    {"face_id": "teferi_temporal_archmage", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/2"]},
+    {"face_id": "teferi_temporal_archmage", "start_line": 4, "end_line": 4, "typed_paths": ["/id", "/faces/0/types/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_teferi_temporal_archmage::teferi_exact_identity_and_plus_one_flat_effect_are_registered", "covers": "Exact card identity, face, starting loyalty, and the registered +1 cost and private look effect."},
+    {"test": "deck_registry::deck_coverage_teferi_temporal_archmage::teferi_minus_ten_creates_the_planeswalker_instant_timing_emblem", "covers": "Registered -10 cost and instant-timing emblem effect."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage::paid_plus_one_with_an_empty_library_does_not_draw_or_open_a_choice", "covers": "An empty library does not draw or open a choice after the paid +1."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage::paid_plus_one_with_one_library_card_still_requires_its_mandatory_selection", "covers": "A one-card library still requires the mandatory private selection."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage::paid_plus_one_selects_one_of_two_private_cards_without_draw_search_or_reveal", "covers": "Private selection from two cards, no reveal or search, and physical zone-generation changes."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage::paid_plus_one_resolves_after_synthetic_source_departure_and_replays_recorded_commands", "covers": "The paid ability survives synthetic source departure and replays its accepted commands."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage::private_plus_one_choice_survives_source_owner_concession_and_wire_replay", "covers": "Four-player source-owner departure preserves P10's private mandatory choice and explicit-ID wire replay."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_one::teferi_minus_one_accepts_zero_one_and_four_any_permanent_targets", "covers": "The actual -1 accepts zero, one, or four any-permanent targets."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_one::teferi_minus_one_rejects_five_or_duplicate_targets_without_paying", "covers": "Five and duplicate targets are rejected before the loyalty cost is paid."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_one::teferi_minus_one_skips_partial_and_all_stale_target_generations", "covers": "Stale target generations do not untap a new object incarnation."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_one::teferi_minus_one_stun_and_prohibition_do_not_emit_false_untap_edges", "covers": "Stun counters and an untap prohibition do not publish false untap events."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_one::teferi_minus_one_prepares_synthetic_conditional_prohibition_cohort_in_both_orders", "covers": "A simultaneous synthetic cohort resolves conditional untap prohibitions in both orders."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_minus_ten_uses_a_paid_cast_and_leaves_a_controller_scoped_marker", "covers": "Paid -10 activation, zero-loyalty source state action, and controller-scoped marker creation."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_offers_one_offturn_jace_activation_above_a_bolt", "covers": "The emblem permits one actual off-turn Jace activation above an unresolved Bolt."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_does_not_grant_offturn_timing_without_its_controller_marker", "covers": "Off-turn loyalty timing requires the controller's emblem."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_cleanup_priority_flag_refreshes_the_cached_loyalty_offer", "covers": "A cleanup-priority timing offer is refreshed from current engine state."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_does_not_allow_loyalty_activation_outside_instant_timing_steps", "covers": "The emblem does not allow activation outside modeled instant-timing steps."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_does_not_bypass_explicit_sorcery_speed_on_jace", "covers": "The emblem does not override an ability's explicit sorcery-speed restriction."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_uses_jaces_current_controller_and_planeswalker_type", "covers": "Timing permission follows the current controller and current planeswalker type."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_survives_departure_of_its_creating_sources_owner", "covers": "The controller's emblem survives departure of the Teferi owner's game objects."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::teferi_emblem_and_stolen_jace_leave_with_the_emblem_controller", "covers": "The emblem leaves and Jace's control reverts to its surviving owner when the emblem controller concedes."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::multiple_teferi_emblems_do_not_bypass_jaces_per_turn_limit_and_reset", "covers": "Multiple emblems do not bypass the per-turn count, which resets on a later turn."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_minus_ten::oath_veil_carth_and_emblem_allow_three_then_reject_a_fourth_offturn_jace_use", "covers": "Actual Oath, Chain Veil, Carth, and Teferi emblem interactions permit three off-turn uses at +2 loyalty each and reject the fourth."},
+    {"test": "scenario deck_coverage_teferi_temporal_archmage_commander::teferi_is_a_declared_blue_commander_and_a_separate_mainboard_card", "covers": "Engine setup declares the exact Teferi card ID with blue identity and a command-zone object, then tests a separate ordinary mainboard object."}
+  ],
+  "complete_definition_review_confirmed": true
+}

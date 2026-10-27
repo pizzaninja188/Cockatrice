@@ -15,6 +15,7 @@ use super::targeting::{
 use super::*;
 use crate::engine::events::ev_log_ability;
 use prost::Message;
+use tricerules_card_model::ActivationTiming;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum LimitedActivationUse {
@@ -2349,6 +2350,7 @@ impl GameEngine {
         // sorcery-speed window.
         if ability.requires_sorcery_speed()
             && !super::priority::sorcery_speed_available(&self.state, player)
+            && !self.planeswalker_loyalty_instant_timing_allowed(permanent_id, player, &ability)
         {
             return Err(EngineError::Illegal("ability only at sorcery speed"));
         }
@@ -2985,6 +2987,42 @@ impl GameEngine {
         batch
     }
 
+    /// Teferi's static emblem waives only the default sorcery timing of loyalty abilities.
+    /// Explicit SorcerySpeed and Equip instructions retain their own timing restriction.
+    fn planeswalker_loyalty_instant_timing_allowed(
+        &self,
+        permanent_id: ObjectId,
+        actor: PlayerId,
+        ability: &tricerules_card_model::ActivatedAbilityDef,
+    ) -> bool {
+        if !ability.is_loyalty_ability()
+            || ability.timing == ActivationTiming::SorcerySpeed
+            || ability.is_equip()
+            || !super::priority::instant_timing_step_allowed(&self.state)
+        {
+            return false;
+        }
+        if !self
+            .state
+            .objects
+            .get(&permanent_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return false;
+        }
+        let Some(characteristics) = self.characteristics(permanent_id) else {
+            return false;
+        };
+        characteristics.controller == actor
+            && characteristics.has_type("Planeswalker")
+            && self.state.static_emblems.iter().any(|emblem| {
+                emblem.controller == actor
+                    && emblem
+                        .effects
+                        .contains(&StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming)
+            })
+    }
+
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
     /// out instead of opening a menu and collecting mana for an activation the engine will reject.
     ///
@@ -3021,8 +3059,19 @@ impl GameEngine {
         } else {
             object.owner
         };
+        let timing_actor = if ability.source_zone == AbilitySourceZone::Battlefield {
+            self.controller_of(permanent_id)
+                .unwrap_or(activating_player)
+        } else {
+            activating_player
+        };
         if ability.requires_sorcery_speed()
             && !super::priority::sorcery_speed_available(&self.state, activating_player)
+            && !self.planeswalker_loyalty_instant_timing_allowed(
+                permanent_id,
+                timing_actor,
+                ability,
+            )
         {
             return false;
         }

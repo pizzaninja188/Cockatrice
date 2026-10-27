@@ -135,6 +135,23 @@ bool RuledPendingCast::isTargetSelectedForPendingSpell(quint32 oid) const
                        [oid](const auto &group) { return group.contains(oid); });
 }
 
+bool RuledPendingCast::isTargetSelectedForPendingAbility(quint32 oid) const
+{
+    return ability.valid &&
+           std::any_of(ability.selectedTargets.cbegin(), ability.selectedTargets.cend(), [oid](const auto &target) {
+               return target.ref.kind() != ruled::v1::TARGET_REF_KIND_PLAYER && target.ref.object_id() == oid;
+           });
+}
+
+bool RuledPendingCast::isPlayerSelectedAsPendingAbilityTarget(int playerId) const
+{
+    return ability.valid &&
+           std::any_of(ability.selectedTargets.cbegin(), ability.selectedTargets.cend(), [playerId](const auto &target) {
+               return target.ref.kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                      target.ref.object_id() == static_cast<quint32>(playerId);
+           });
+}
+
 bool RuledPendingCast::isCastCostPermanentSelected(quint32 oid) const
 {
     return spell.valid &&

@@ -1876,6 +1876,23 @@ fn planeswalker_counter_subtype_rejects_invalid_and_unsupported_names() {
 }
 
 #[test]
+fn static_emblem_planeswalker_loyalty_instant_timing_is_parameter_free_and_round_trips() {
+    let source = "PlaneswalkerLoyaltyInstantTiming";
+    let effect = ron::from_str::<super::StaticEmblemEffect>(source)
+        .expect("the parameter-free Teferi emblem timing effect parses");
+    let encoded = ron::to_string(&effect).expect("serialize the emblem timing effect");
+    assert_eq!(
+        encoded, source,
+        "the timing permission is represented by one parameter-free variant"
+    );
+    assert_eq!(
+        ron::from_str::<super::StaticEmblemEffect>(&encoded)
+            .expect("round-trip the emblem timing effect"),
+        effect
+    );
+}
+
+#[test]
 fn static_emblem_creature_keyword_admits_earlier_layer_filters_only() {
     let allowed: super::SpellEffectKind = ron::from_str(
         r#"CreateStaticEmblem(

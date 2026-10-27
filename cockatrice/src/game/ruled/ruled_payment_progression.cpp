@@ -2565,6 +2565,12 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         // Target first, then mana payment after target is chosen.
         const QString prompt = ruledPendingAbilityTargetPrompt(actions->pendingActivatedAbility, *handler);
         emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
+        const auto *activeGroup = ruledPendingAbilityTargetGroup(actions->pendingActivatedAbility, activationTargets);
+        emit actions->ruledMultiTargetSelectionUpdated(
+            activeGroup ? ruledActivatedTargetSelectionCount(actions->pendingActivatedAbility, activeGroup->groupIndex)
+                        : 0,
+            activeGroup ? activeGroup->minTargets : 0,
+            activeGroup ? ruledTargetSelectionDisplayMaximum(*activeGroup) : -1);
         handler->emitLocalLog(prompt);
     } else {
         continuePendingActivatedAbilityAfterChoice();

@@ -67,6 +67,10 @@ pub enum StaticEmblemEffect {
     },
     /// Ajani Steadfast's emblem protects its controller and their controlled planeswalkers.
     PreventAllButOneDamageToYouAndYourPlaneswalkers,
+    /// Teferi, Temporal Archmage and Teferi's Talent grant their controller the permission to
+    /// activate planeswalker loyalty abilities at instant timing. The permission lives on the
+    /// controller-owned command-zone emblem marker.
+    PlaneswalkerLoyaltyInstantTiming,
 }
 /// A kind of counter that can sit on a permanent or player (CR 122.1). `Ord` is required so
 /// [`crate`] consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
@@ -4777,6 +4781,7 @@ impl SpellEffectKind {
                     }
                     StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
                     StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {}
+                    StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming => {}
                 }
             }
         }

@@ -323,6 +323,46 @@ TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetingDisplaysPreformattedPrompt
               QString::fromUtf8("Choose a target for “{T}: Tap target permanent.”\nChoose target creature."));
 }
 
+TEST_F(GamePromptWidgetTest, ActivatedAbilityOptionalFourTargetGroupCanConfirmWithNoSelections)
+{
+    widget->setActivatedAbilityTargetPending(
+        true,
+        QString::fromUtf8("Choose targets for “Teferi, Temporal Archmage”.\nUntap up to four target permanents."));
+    widget->setMultiTargetSelectionCount(0, 0, 4);
+
+    QSignalSpy spy(widget.get(), &GamePromptWidget::confirmTargetsRequested);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
+    btn("confirmTargetsButton")->click();
+    EXPECT_EQ(spy.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetBoundsUpdateAndClearConfirmation)
+{
+    const QString prompt = QString::fromUtf8(
+        "Choose targets for “Teferi, Temporal Archmage”.\nUntap up to four target permanents.");
+    widget->setActivatedAbilityTargetPending(true, prompt);
+
+    widget->setMultiTargetSelectionCount(1, 1, 4);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
+    EXPECT_TRUE(label("promptLabel")->text().contains(QString::fromUtf8("Selected: 1 (1–4).")));
+
+    widget->setMultiTargetSelectionCount(4, 0, 4);
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
+    EXPECT_TRUE(label("promptLabel")->text().contains(QString::fromUtf8("Selected: 4 (0–4).")));
+
+    widget->setMultiTargetSelectionCount(0, 1, 4);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isEnabled());
+
+    widget->setMultiTargetSelectionCount(1, 1, -1);
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_FALSE(label("promptLabel")->text().contains(QStringLiteral("Selected:")));
+
+    widget->setActivatedAbilityTargetPending(false, {});
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, VariableTargetingShowsSelectionRangeWithoutLosingContext)
 {
     const QString prompt = QString::fromUtf8(

@@ -844,6 +844,11 @@ bool PlayerActions::isTargetSelectedForPendingSpell(quint32 oid) const
     return ruledPendingCast->isTargetSelectedForPendingSpell(oid);
 }
 
+bool PlayerActions::isTargetSelectedForPendingAbility(quint32 oid) const
+{
+    return ruledPendingCast->isTargetSelectedForPendingAbility(oid);
+}
+
 bool PlayerActions::isCastCostPermanentSelected(quint32 oid) const
 {
     return ruledPendingCast->isCastCostPermanentSelected(oid);
@@ -852,6 +857,11 @@ bool PlayerActions::isCastCostPermanentSelected(quint32 oid) const
 bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
 {
     return RuledTargetUi::isPlayerSelectedAsPendingSpellTarget(this, playerId);
+}
+
+bool PlayerActions::isPlayerSelectedAsPendingAbilityTarget(int playerId) const
+{
+    return ruledPendingCast->isPlayerSelectedAsPendingAbilityTarget(playerId);
 }
 
 void PlayerActions::confirmMultiTargetSelection()

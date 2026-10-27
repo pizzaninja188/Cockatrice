@@ -109,8 +109,10 @@ public:
     [[nodiscard]] RuledTargetClickEligibility ruledCardTargetEligibility(CardItem *card) const;
     [[nodiscard]] RuledTargetClickEligibility ruledPlayerTargetEligibility(Player *targetPlayer) const;
     [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
+    [[nodiscard]] bool isTargetSelectedForPendingAbility(quint32 oid) const;
     [[nodiscard]] bool isCastCostPermanentSelected(quint32 oid) const;
     [[nodiscard]] bool isPlayerSelectedAsPendingSpellTarget(int playerId) const;
+    [[nodiscard]] bool isPlayerSelectedAsPendingAbilityTarget(int playerId) const;
     void confirmMultiTargetSelection();
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
