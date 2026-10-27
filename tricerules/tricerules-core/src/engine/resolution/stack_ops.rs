@@ -1,5 +1,19 @@
 use super::*;
 
+pub(super) fn counter_triggering_spell(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let occurrence =
+        cx.top
+            .trigger_context
+            .triggering_spell
+            .ok_or(EngineError::ProgramInvariant(
+                "countering a triggering spell requires its cast occurrence",
+            ))?;
+    counter_stack_object_ref(cx.engine, occurrence, cx.spell_label, cx.events)?;
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn counter_target_spell(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -169,6 +183,67 @@ fn counter_target_refs_are_current(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counter_triggering_spell_without_a_cast_receipt_is_an_invariant_error() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            261_027_125,
+            &[0, 1],
+            20,
+            Some(vec![vec!["opt".into(); 20], vec!["island".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        engine.state.players[0].mana_pool.blue = 1;
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("cast a synthetic wrong-context stack fixture");
+        let top = engine.state.stack.last().unwrap().clone();
+        assert!(top.trigger_context.triggering_spell.is_none());
+        let before = engine.diagnostic_snapshot().unwrap();
+        let prior = EffectResult::default();
+        let mut result = EffectResult::default();
+        let mut events = Vec::new();
+        let outcome = {
+            let mut cx = EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &[],
+                targets_by_role: &[],
+                target_receipts: &[],
+                target_role_group_indices: &[],
+                top: &top,
+                controller: top.controller,
+                affected_player: top.controller,
+                spell_label: "wrong-context fixture",
+                previous_effect_result: &prior,
+                effect_result: &mut result,
+                effect_index: 0,
+                resume_previous_result: None,
+                program_state: None,
+            };
+            counter_triggering_spell(&mut cx)
+        };
+        assert!(matches!(outcome, Err(EngineError::ProgramInvariant(_))));
+        assert!(events.is_empty());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    }
 
     #[test]
     fn soft_counter_does_not_offer_to_same_object_id_with_newer_generation() {

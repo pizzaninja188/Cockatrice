@@ -2184,6 +2184,9 @@ impl Compiler<'_> {
                     ));
                 }
                 InstructionKind::Perform(effect) => {
+                    if effect.contains_counter_triggering_spell() {
+                        return Err("CounterTriggeringSpell is not admitted in a Program".into());
+                    }
                     if effect.contains_memory_jar_leaf() {
                         return Err("Memory Jar hand cohorts cannot occur in a Program".into());
                     }

@@ -72,6 +72,90 @@ fn trigger_ability_path(
 }
 
 impl GameEngine {
+    /// Build a captured emblem trigger without inventing a permanent source fact. Both zone and
+    /// cast observers use the same immutable child definition and presentation provenance.
+    pub(super) fn captured_emblem_trigger(
+        &self,
+        emblem: &StaticEmblemInstance,
+        trigger_context: TriggerContext,
+    ) -> Option<CollectedTrigger> {
+        let captured = emblem.triggered_ability.as_ref()?;
+        let face = self
+            .registry
+            .get(&captured.card_id)?
+            .face(captured.face_index)?;
+        let ability_text = captured.ability.fallback_text(&emblem.display_name);
+        let presentation = super::presentation::presentation_ref(
+            self.registry,
+            &captured.card_id,
+            &face.face_id,
+            [
+                PresentationPath::Ability(&captured.parent_ability_id),
+                PresentationPath::Ability(&captured.ability.ability_id),
+            ],
+            &captured.ability.presentation,
+            ability_text.clone(),
+        );
+        Some(CollectedTrigger {
+            captured_spell: None,
+            source_id: emblem.object_id,
+            card_id: captured.card_id.clone(),
+            source_label: emblem.display_name.clone(),
+            face_index: captured.face_index,
+            source_zone_change: 0,
+            source_face_change: 0,
+            source_fact: None,
+            additional_instances: 0,
+            controller: emblem.controller,
+            ability_index: 0,
+            ability_origin: None,
+            presentation: Some(presentation),
+            ability: captured.ability.clone(),
+            ability_text,
+            trigger_context,
+        })
+    }
+
+    fn spell_cast_trigger_matches(
+        &self,
+        condition: &TriggerCondition,
+        fact: &crate::state::SpellCastFact,
+        controller: PlayerId,
+    ) -> bool {
+        let TriggerCondition::WheneverPlayerCastsSpell {
+            caster,
+            filter,
+            ordinal,
+            ordinal_scope,
+        } = condition
+        else {
+            return false;
+        };
+        if !self.relative_player_matches(*caster, fact.caster, controller)
+            || !super::history::spell_cast_matches(filter, fact)
+        {
+            return false;
+        }
+        ordinal.is_none_or(|expected| {
+            let actual = match ordinal_scope {
+                CastOrdinalScope::AllSpells => fact.ordinal,
+                CastOrdinalScope::MatchingFilter => self
+                    .state
+                    .turn_history
+                    .current
+                    .spell_casts
+                    .iter()
+                    .filter(|prior| {
+                        prior.caster == fact.caster
+                            && prior.ordinal <= fact.ordinal
+                            && super::history::spell_cast_matches(filter, prior)
+                    })
+                    .count() as u32,
+            };
+            expected == actual
+        })
+    }
+
     /// Freeze the latest copyable values before an observed activated ability leaves the stack.
     /// Each observing trigger owns a distinct receipt; a still-live original takes precedence.
     pub(super) fn refresh_captured_activated_ability(&mut self, item: &StackItem) {
@@ -607,6 +691,18 @@ impl GameEngine {
                 _ => &sources,
             };
             let mut event_triggers = self.collect_triggers(event, event_sources);
+            if let GameEvent::SpellCast { fact } = event {
+                event_triggers.extend(self.state.static_emblems.iter().filter_map(|emblem| {
+                    let captured = emblem.triggered_ability.as_ref()?;
+                    self.spell_cast_trigger_matches(
+                        &captured.ability.trigger,
+                        fact,
+                        emblem.controller,
+                    )
+                    .then(|| self.captured_emblem_trigger(emblem, TriggerContext::default()))
+                    .flatten()
+                }));
+            }
             if let GameEvent::BecameTapped { action, .. } = event {
                 event_triggers.retain(|trigger| {
                     !matches!(
@@ -645,6 +741,7 @@ impl GameEngine {
                 };
                 if let GameEvent::SpellCast { fact } = event {
                     trigger.trigger_context.triggering_spell_mana_spent = Some(fact.mana_spent);
+                    trigger.trigger_context.triggering_spell = Some(fact.occurrence);
                 }
                 // Rampaging Ferocidon needs the entering creature's controller, and Aether
                 // Flash needs the creature itself. Reuse the generation-bound reference so
@@ -2309,42 +2406,7 @@ impl GameEngine {
                 .iter()
                 .flat_map(|source| {
                     self.matching_snapshot_abilities(source, |tc| {
-                        let TriggerCondition::WheneverPlayerCastsSpell {
-                            caster: caster_filter,
-                            filter,
-                            ordinal,
-                            ordinal_scope,
-                        } = tc
-                        else {
-                            return false;
-                        };
-                        if !self.relative_player_matches(
-                            *caster_filter,
-                            fact.caster,
-                            source.controller,
-                        ) || !super::history::spell_cast_matches(filter, fact)
-                        {
-                            return false;
-                        }
-                        ordinal.is_none_or(|expected| {
-                            let actual = match ordinal_scope {
-                                CastOrdinalScope::AllSpells => fact.ordinal,
-                                CastOrdinalScope::MatchingFilter => {
-                                    self.state
-                                        .turn_history
-                                        .current
-                                        .spell_casts
-                                        .iter()
-                                        .filter(|prior| {
-                                            prior.caster == fact.caster
-                                                && prior.ordinal <= fact.ordinal
-                                                && super::history::spell_cast_matches(filter, prior)
-                                        })
-                                        .count() as u32
-                                }
-                            };
-                            expected == actual
-                        })
+                        self.spell_cast_trigger_matches(tc, fact, source.controller)
                     })
                 })
                 .collect(),

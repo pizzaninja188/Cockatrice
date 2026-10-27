@@ -469,6 +469,9 @@ pub struct TriggerContext {
     /// Actual mana paid for the spell whose CR 601.2i cast event created this trigger.
     /// `None` for every other trigger event and for spell copies that were not cast.
     pub triggering_spell_mana_spent: Option<u64>,
+    /// Exact committed spell occurrence whose cast created this trigger. It remains captured
+    /// even if that occurrence leaves the stack before the triggered ability resolves.
+    pub(crate) triggering_spell: Option<StackObjectRef>,
     /// Chosen X retained only for a permanent spell's own ETB trigger. Other permanents observing
     /// that entry do not inherit the entrant's X.
     pub entering_chosen_x: Option<u32>,

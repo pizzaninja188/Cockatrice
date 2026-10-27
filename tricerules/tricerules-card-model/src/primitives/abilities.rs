@@ -1747,6 +1747,15 @@ impl TriggeredAbilityDef {
                 .modes
                 .iter()
                 .flat_map(|mode| &mode.effects)
+                .any(SpellEffectKind::contains_counter_triggering_spell)
+        }) {
+            return Err("CounterTriggeringSpell requires a flat cast-triggered ability".into());
+        }
+        if self.modal.as_ref().is_some_and(|modal| {
+            modal
+                .modes
+                .iter()
+                .flat_map(|mode| &mode.effects)
                 .any(SpellEffectKind::contains_memory_jar_leaf)
         }) {
             return Err("Memory Jar hand cohorts do not support modal triggers".into());

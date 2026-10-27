@@ -29,6 +29,9 @@ mod deck_coverage_flux_abundance;
 #[path = "scenario/deck_coverage_daretti.rs"]
 mod deck_coverage_daretti;
 
+#[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
+mod deck_coverage_jace_unraveler_of_secrets;
+
 #[path = "scenario/deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
 

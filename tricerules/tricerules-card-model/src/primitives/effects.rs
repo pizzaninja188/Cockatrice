@@ -992,7 +992,7 @@ pub enum SpellEffectKind {
         effects: Vec<StaticEmblemEffect>,
     },
     /// A persistent command-zone emblem carrying one event-triggered ability.
-    /// Admission is limited to the artifact-to-owner-graveyard delayed return profile.
+    /// Admission is limited to the artifact-return and first-opponent-spell counter profiles.
     CreateTriggeredEmblem {
         emblem_id: String,
         display_name: String,
@@ -1342,6 +1342,9 @@ pub enum SpellEffectKind {
     CounterTriggeringStackObjectUnlessPays {
         cost: ResolutionCost,
     },
+    /// CR 603.2 / 701.6: counter the exact spell whose cast created this untargeted trigger.
+    /// Jace, Unraveler of Secrets and Jin-Gitaxias, Progress Tyrant share this instruction.
+    CounterTriggeringSpell,
     /// Copy the exact nonmana activated ability that caused the owning trigger. Rings of
     /// Brighthearth and Locus of Enlightenment use this resultless trigger-only instruction.
     CopyTriggeringActivatedAbility,
@@ -3626,6 +3629,10 @@ impl SpellEffectKind {
         })
     }
 
+    pub(crate) fn contains_counter_triggering_spell(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| matches!(leaf, Self::CounterTriggeringSpell))
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3859,6 +3866,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+            | SpellEffectKind::CounterTriggeringSpell
             | SpellEffectKind::CopyTriggeringActivatedAbility
             | SpellEffectKind::RevealCohort
             | SpellEffectKind::MoveCohortPartition { .. }
@@ -4635,6 +4643,18 @@ impl SpellEffectKind {
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
         }
+        let wrapped_counter = match self {
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_counter_triggering_spell()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_counter_triggering_spell),
+            _ => false,
+        };
+        if wrapped_counter {
+            return Err("CounterTriggeringSpell requires a flat cast-triggered ability".into());
+        }
         if context == EffectContext::Spell && self.uses_trigger_object_reference() {
             return Err("spells cannot reference a trigger object".into());
         }
@@ -4744,15 +4764,23 @@ impl SpellEffectKind {
                 }
                 _ => false,
             };
-            if ability.trigger != expected_trigger
+            let first_opponent_spell = TriggerCondition::WheneverPlayerCastsSpell {
+                caster: super::CastTriggerPlayer::Opponent,
+                filter: super::SpellCastFilter::default(),
+                ordinal: Some(1),
+                ordinal_scope: super::CastOrdinalScope::AllSpells,
+            };
+            let supported_profile = (ability.trigger == expected_trigger && child_is_valid)
+                || (ability.trigger == first_opponent_spell
+                    && ability.effect.as_slice() == [SpellEffectKind::CounterTriggeringSpell]);
+            if !supported_profile
                 || ability.targeting.is_some()
                 || ability.may
                 || ability.intervening_if.is_some()
                 || ability.triggers_only_once
                 || ability.max_triggers_per_turn.is_some()
-                || !child_is_valid
             {
-                return Err("triggered emblem supports only the per-artifact graveyard delayed return profile".into());
+                return Err("triggered emblem supports only the artifact-return and first-opponent-spell counter profiles".into());
             }
             for effect in &ability.effect {
                 effect.validate(EffectContext::Ability)?;
@@ -6564,6 +6592,7 @@ impl SpellEffectKind {
 
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
         match self {
+            Self::CounterTriggeringSpell => true,
             Self::DamageTarget { amount, .. }
             | Self::DamageAll { amount, .. }
             | Self::Scry { count: amount }

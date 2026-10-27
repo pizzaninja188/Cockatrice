@@ -1851,6 +1851,7 @@ fn validate_effect_targets(
         // `spell_target_legality_error`).
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+        | SpellEffectKind::CounterTriggeringSpell
         | SpellEffectKind::CopyTriggeringActivatedAbility
         | SpellEffectKind::MemoryJarExileHands
         | SpellEffectKind::ReturnMemoryJarHands

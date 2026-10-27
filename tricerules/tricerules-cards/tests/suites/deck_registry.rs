@@ -73,6 +73,8 @@ mod deck_coverage_graveyard_return;
 mod deck_coverage_gruul_war_chant;
 #[path = "../deck_coverage_ichor_wellspring.rs"]
 mod deck_coverage_ichor_wellspring;
+#[path = "../deck_coverage_jace_unraveler_of_secrets.rs"]
+mod deck_coverage_jace_unraveler_of_secrets;
 #[path = "../deck_coverage_khalni_ambush.rs"]
 mod deck_coverage_khalni_ambush;
 #[path = "../deck_coverage_koya.rs"]

@@ -1241,13 +1241,6 @@ impl GameEngine {
             else {
                 continue;
             };
-            let Some(face) = self
-                .registry
-                .get(&captured.card_id)
-                .and_then(|card| card.face(captured.face_index))
-            else {
-                continue;
-            };
             for movement in &batch.moves {
                 let fact = &movement.before;
                 if movement.origin != Zone::Battlefield
@@ -1274,37 +1267,9 @@ impl GameEngine {
                 {
                     continue;
                 }
-                let ability_text = captured.ability.fallback_text(&emblem.display_name);
-                let presentation = super::presentation::presentation_ref(
-                    self.registry,
-                    &captured.card_id,
-                    &face.face_id,
-                    [
-                        super::presentation::PresentationPath::Ability(&captured.parent_ability_id),
-                        super::presentation::PresentationPath::Ability(
-                            &captured.ability.ability_id,
-                        ),
-                    ],
-                    &captured.ability.presentation,
-                    ability_text.clone(),
-                );
-                out.push(triggers::CollectedTrigger {
-                    captured_spell: None,
-                    source_id: emblem.object_id,
-                    card_id: captured.card_id.clone(),
-                    source_label: emblem.display_name.clone(),
-                    face_index: captured.face_index,
-                    source_zone_change: 0,
-                    source_face_change: 0,
-                    source_fact: None,
-                    additional_instances: 0,
-                    controller: emblem.controller,
-                    ability_index: 0,
-                    ability_origin: None,
-                    presentation: Some(presentation),
-                    ability: captured.ability.clone(),
-                    ability_text,
-                    trigger_context: TriggerContext {
+                if let Some(trigger) = self.captured_emblem_trigger(
+                    emblem,
+                    TriggerContext {
                         observed_object: Some(TriggerObjectRef {
                             object_id: fact.object_id,
                             zone_change_generation: fact.zone_change_generation,
@@ -1317,7 +1282,9 @@ impl GameEngine {
                         }),
                         ..TriggerContext::default()
                     },
-                });
+                ) {
+                    out.push(trigger);
+                }
             }
         }
         out

@@ -198,6 +198,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. } => {
             stack_ops::counter_triggering_stack_object_unless_pays(cx, effect)?
         }
+        SpellEffectKind::CounterTriggeringSpell => stack_ops::counter_triggering_spell(cx)?,
         effect @ SpellEffectKind::CopyTargetSpell { .. } => {
             stack_ops::copy_target_spell(cx, effect)?
         }
