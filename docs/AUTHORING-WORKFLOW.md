@@ -49,7 +49,8 @@ incomplete and retain review sentinels until reviewed.
    Formatting, clerical fixes and a planned passing final gate do not trigger another review;
    defer optional polish. Changes affecting semantics or required evidence need delta review.
    Preserve one evidence record; follow-up requests reference the existing contract.
-5. Run the full affected-side gate on stable reviewed content, record acceptance, and deliver under
+5. Run the applicable final gate on stable reviewed content (full affected-side, or the verification
+   guide's eligible routine RON gate), record acceptance, and deliver under
    existing authorization before another code increment. Do not ask again for an authorized
    scope/destination. Actual sandbox rejection remains an access boundary.
 

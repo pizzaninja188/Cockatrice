@@ -9,7 +9,7 @@ The active agent workflow assumes Windows and PowerShell. Existing Linux/macOS s
 1. **Red:** add and run the smallest focused regression. Record that it fails for the intended missing or broken behavior.
 2. **Green:** make one coherent implementation increment and rerun the regression.
 3. **Stabilize:** run the affected package or targeted CTest group after each subsequent coherent increment.
-4. **Finish:** once stable, run the full build and full suite for every affected side. Run lint, format, generated-data gates, and `git diff --check` as applicable.
+4. **Finish:** once stable, run the full build and full suite for every affected side, or the explicitly eligible routine RON gate below. Run lint, format, generated-data gates, and `git diff --check` as applicable.
 5. **Manual:** give the user concise real two-client steps and expected results when behavior depends on Qt interaction, networking, hidden information, or physical identity. User-operated GUI acceptance is the default; run it as an agent only when explicitly requested.
 
 Keep manual acceptance pending until the user confirms the applicable checks, or record their explicit
@@ -66,8 +66,8 @@ Use `-ShowLogOnSuccess` only when the successful output itself is required evide
 
 ## Final verification entry point
 
-Choose the affected side after tracing the actual producers and consumers; the script does not
-infer scope from filenames. From the repository root:
+Choose the affected side after tracing the actual producers and consumers; filenames alone do not
+establish semantic scope. From the repository root:
 
 ```powershell
 ./scripts/verify.ps1 -Side Rust
@@ -123,8 +123,8 @@ Every selection ends with `git diff --check`. Preview prints argument arrays and
 directories without running commands or creating artifacts.
 With `-CardData`, the complete read-only card check follows preflight, before the full suites.
 It rejects invalid evidence/presentation metadata and generated-data drift early; its own
-referenced-target compilation/listing still runs. All affected-side tests and lint remain
-mandatory afterward. Do not add a second routine standalone Check before this final gate.
+referenced-target compilation/listing still runs. The selected final tests and lint run afterward.
+Do not add a second routine standalone Check before this final gate.
 
 Each run retains logs and `summary.json` in a unique directory under `build/verification-logs`.
 The summary records selected gates, commands, working directories, exit codes, and log paths.
@@ -135,6 +135,51 @@ relevant environment remain unchanged. Rerun affected gates when changes, failur
 concerns invalidate that evidence. A commit request alone does not require another invocation.
 Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
+
+### Opt-in routine RON gate
+
+Use this only after the normal source/rulings research, intended red/green, independent frozen
+semantic review, and required acceptance decisions. The reviewer must establish that each card
+uses existing admitted semantics and that its reviewed fixtures exercise the actual card and all
+relevant clauses and illegal paths. A reused finite Program can qualify; a new capability or
+changed engine, schema, generator, shared test infrastructure, protocol, relay or client contract
+requires the normal full affected-side gate. The file check cannot decide these semantic facts or
+waive applicable GUI, privacy, networking, or physical-identity acceptance.
+
+First record a baseline with a successful **full** Rust/CardData or Both/CardData run on stable
+content. Its input snapshot must match before and after that run. Keep its summary and logs:
+
+```powershell
+./scripts/verify.ps1 -Side Rust -CardData -RecordRoutineBaseline
+# Or, when both sides are affected:
+./scripts/verify.ps1 -Side Both -CardData -RecordRoutineBaseline
+# After a later eligible card batch and independent review:
+./scripts/verify.ps1 -Side Rust -CardData -RoutineRonBaseline build/verification-logs/verify-<id>/summary.json
+```
+
+The recorded summary must have the complete passing full-gate plan and retained logs. The snapshot
+compares the working files (including committed changes, nonignored untracked files, embedded RON
+even if ignored, source/test inputs, clean submodule identities, Cargo configuration, tool versions and relevant environment)
+with the baseline. All changes since that baseline are considered, so subsequent batches also run
+the tests for earlier changed cards. Engine/tooling or unrelated changes, input changes during the
+run, missing/modified baseline artifacts, or a changed environment reject the narrow run. Use the
+full gate and record a new baseline when needed. Baselines are local to the same checkout and
+environment. Preview does not support baseline recording or routine selection.
+
+Eligible changes are restricted to existing or added handwritten top-level `data/*.ron`, their
+matching reviewed maps, checklist/presentation tracking files, and existing leaf scenario or card
+test modules referenced by those maps. A new test module that needs harness registration, changes
+to shared helpers/fixtures/harnesses, deletions, generated or multiface RON, tokens or a map with
+token dependencies require the full gate. Every changed card needs a confirmed map with at least
+one actual-card `scenario` reference. Ignored changed inputs are rejected. These restrictions are
+deliberately conservative; an unsupported case does not become eligible by omitting evidence.
+
+The gate retains environment preflight, complete CardData Check, dependency-boundary validation,
+the entire card-package test suite, the entire core conformance target, every exact semantic test
+referenced by every changed card, workspace Clippy, all package formatting checks, and diff check.
+An exact semantic selection must execute one non-ignored test. It omits unrelated workspace test
+execution, not the source review or card evidence. Keep full Rust/CardData regression coverage in
+CI or scheduled runs; the narrow gate does not replace it. The normal full gate remains the default.
 
 Card registry regressions share five explicit integration-test suites in
 `tricerules/tricerules-cards/tests/suites/`. Their source modules and assertions stay separate;
@@ -232,7 +277,7 @@ test references with `scripts/check-card-evidence.ps1`. The checker builds refer
 once per package using Cargo JSON artifacts, then lists normal and ignored tests directly from
 those exact executables. It never searches for old binaries or persists a test inventory cache;
 missing or ambiguous artifacts and failed listings fail the gate. Listing is not execution evidence;
-the full Rust suite must also pass on the same content. It checks source metadata, bulk SHA and
+the applicable final gate must also pass on the same content. It checks source metadata, bulk SHA and
 presentation fingerprints through `card-author`, then validates a temporary checklist and compares
 it with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It writes only build artifacts.
 Refresh updates presentation fingerprints, validates and replaces `CARDS.md`, and never rewrites
@@ -260,6 +305,8 @@ powershell.exe -NoProfile -File tests/scripts/prepare_card_batch_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
+powershell.exe -NoProfile -File tests/scripts/routine_ron_verification_test.ps1
+powershell.exe -NoProfile -File tests/scripts/routine_ron_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verification_environment_test.ps1
 powershell.exe -NoProfile -File tests/scripts/rust_format_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
@@ -369,7 +416,7 @@ unchanged fixture regressions need no separate pilot workflow.
 
 | Change touches | Iteration build | Focused tests | Final gate |
 |---|---|---|---|
-| `tricerules/**/*.rs` or card RON only | No C++ build | Matching scenario or `tricerules-cards` registry test | Full Rust test, clippy, fmt; checklist for card data |
+| `tricerules/**/*.rs` or card RON only | No C++ build | Matching scenario or `tricerules-cards` registry test | Full Rust gate and CardData when applicable; eligible routine RON may use the opt-in gate above |
 | `ruled_v1.proto` | Rust and C++ | Relevant Rust scenario, relay/client tests, E2E | Full Rust plus full Ninja build and CTest |
 | Server or relay | `servatrice` and touched tests | `ruled_batch_test`, `ruled_utils_test`, `ruled_e2e_smoke_test` | Full affected build and CTest |
 | Client only | `cockatrice` and touched tests | `ruled_client_test`, `game_prompt_widget_test`, and touched client test | Full affected build and CTest |
@@ -377,4 +424,4 @@ unchanged fixture regressions need no separate pilot workflow.
 
 `ruled_e2e_smoke_test` drives a real Servatrice and sidecar session. Run it after relay, protobuf, or ruled `server_game` changes and around extraction work. It skips when required binaries are absent; a skip is not proof of the end-to-end contract.
 
-Before a commit, ensure passing full-gate evidence for each affected side, even when focused iteration stayed green. Reuse valid final evidence under the rule above; otherwise run the affected full gates. Report command exit codes in the final summary.
+Before a commit, ensure passing applicable final-gate evidence for each affected side, even when focused iteration stayed green. Reuse valid final evidence under the rule above; otherwise run the required gate. Report command exit codes in the final summary.

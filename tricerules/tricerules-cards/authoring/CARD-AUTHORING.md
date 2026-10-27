@@ -1781,7 +1781,7 @@ For already registered definitions, `card-author review --existing` permits insp
 it never replaces the checked-in RON or stable IDs. The checked-in Divination and Elvish Visionary
 maps are examples. Promotion remains an explicit authored-card change: save reviewed RON under
 `data/`, preserve stable IDs, refresh and inspect source fingerprints and `CARDS.md`, add
-registry and applicable semantic/presentation evidence, then run the full Rust and card-data gate.
+registry and applicable semantic/presentation evidence, then run the applicable final card-data gate.
 Refresh changes metadata and the checklist only; it never rewrites card RON.
 
 ### Preflight and blocker lane
@@ -1806,7 +1806,7 @@ presentation metadata does not make missing mechanics complete.
 Follow the [execution path](../../../docs/AUTHORING-WORKFLOW.md) for preparation, frozen semantic
 review and delivery. Commands, worker settings, metadata Refresh/Check and final affected-side
 gates are owned by [AGENT-VERIFICATION.md](../../../docs/AGENT-VERIFICATION.md).
-Use focused red/green checks during iteration and one final full gate on stable reviewed content;
+Use focused red/green checks during iteration and the applicable final gate on stable reviewed content;
 reuse valid evidence. Reusing mechanics does not waive actual-card semantics or applicable acceptance.
 
 ### Reusable semantic evidence
@@ -1959,8 +1959,8 @@ New token definitions and replacements for already-implemented IDs are outside t
 path; use normal authoring/testing for those cases.
 
 After review, promote the finished RON/map, add its independently reviewed rows to the checked-in
-matrix (or dedicated scenarios), and run preparation plus the ordinary full embedded Rust/CardData
-gate. A draft-only pass never substitutes for that gate or independent semantic review.
+matrix (or dedicated scenarios), and run preparation plus the applicable embedded Rust/CardData
+final gate. A draft-only pass never substitutes for that gate or independent semantic review.
 
 #### Small research queue
 
@@ -2038,15 +2038,15 @@ declaring `mod common` repeatedly inside the same executable.
 For example, run one exact registry regression with
 `cargo test -p tricerules-cards --test deck_registry deck_coverage_duplicant::duplicant_has_its_exact_printed_identity -- --exact`.
 The gate resolves exact Cargo identifiers and rejects missing or ignored
-tests. Canonical CardData Check includes it. Listing is not proof of execution: the full Rust suite
-must pass on the same content, and review must confirm the cases exercise the named cards and
+tests. Canonical CardData Check includes it. Listing is not proof of execution: the applicable final
+gate must pass on the same content, and review must confirm the cases exercise the named cards and
 clauses. Draft packets may still describe planned fixtures before tests exist.
 
 Use the current campaign model/effort policy for implementation and independent review. Run formatting and focused lint before freezing the patch.
-Resolve blocking defects and missing required evidence before the final full gate. Optional polish
+Resolve blocking defects and missing required evidence before the final gate. Optional polish
 may be deferred without another review cycle. Changes after a passing gate require affected
 reverification; avoid optional changes after that gate. Reuse unchanged passing evidence.
-Use focused/package checks during iteration, then the full affected-side gate on stable content.
+Use focused/package checks during iteration, then the applicable final gate on stable content.
 Do not routinely run the full suite before review and again inside the final gate. Broaden testing
 early only when failures, changed contracts or concrete unresolved risks justify it. Keep all
 required final checks; a later delivery request alone does not invalidate passing evidence.

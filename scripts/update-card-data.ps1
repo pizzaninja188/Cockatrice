@@ -89,7 +89,7 @@ try {
         )
         if ($code -ne 0) { exit $code }
         Copy-Item -LiteralPath $candidate -Destination $checklist -Force
-        Write-Host 'Prepared card data. Review the diff, then run verify.ps1 -Side Rust -CardData (Both if C++ is affected). Refresh is not a verification gate.'
+        Write-Host 'Prepared card data. Review the diff, then run the applicable final CardData gate (see docs/AGENT-VERIFICATION.md). Refresh is not a verification gate.'
         exit 0
     }
     exit (Test-CanonicalCardData)

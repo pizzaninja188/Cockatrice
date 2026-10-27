@@ -7,7 +7,8 @@ current request; carry forward authorization and acceptance deferrals. Planning 
 
 - Preserve unrelated edits. Keep one coherent outcome; avoid unrelated cleanup or optional polish.
 - Use Windows/PowerShell. For testable behavior, prove an intended focused red before implementation,
-  then focused green after each coherent increment. Once stable, run the full affected-side gate.
+  then focused green after each coherent increment. Once stable, run the full affected-side gate,
+  except for the explicitly eligible routine RON gate in the verification guide.
   Check exit codes. Documentation and mechanical changes need their actual contract checks, not
   manufactured executable tests.
 - Trace changed ruled contracts through engine, protobuf, relay and client. Change and verify every

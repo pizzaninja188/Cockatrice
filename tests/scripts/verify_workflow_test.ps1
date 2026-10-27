@@ -51,12 +51,12 @@ try {
     foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {
         Assert-Workflow (@($formatCalls | Where-Object { ($_.Arguments -join ' ') -match $package }).Count -eq 1) "Formatting did not cover exactly one $package package."
     }
-    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') "Wrong combined gate order: $($trace.Tool -join ',')"
-    foreach ($call in $trace[3..14]) {
+    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') "Wrong combined gate order: $($trace.Tool -join ',')"
+    foreach ($call in $trace[2..13]) {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
-    Assert-Workflow ($trace[16].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
-    Assert-Workflow ($trace[16].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    Assert-Workflow ($trace[15].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    Assert-Workflow ($trace[15].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json
