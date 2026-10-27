@@ -1,0 +1,25 @@
+// Oracle 080df9eb-c26b-494a-96b4-d7e47e501866; CR 508.1d/h, 602, 608, and 306.5b.
+(
+    id: "onakke_oathkeeper",
+    name: "Onakke Oathkeeper",
+    face_id: "onakke_oathkeeper",
+    mana_cost: "{1}{W}",
+    types: ["Creature", "Ogre", "Spirit"],
+    power: 0,
+    toughness: 4,
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: AttackTax(generic_per_attacker: 1, defender: ControllerPlaneswalkers),
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
+        source_zone: Graveyard,
+        costs: [Mana("{4}{W}{W}"), ExileSelf],
+        effect: [MoveGraveyardCards(
+            filter: (card: Some((card_type: Some(Planeswalker)))),
+            destination: Battlefield(),
+        )],
+    )],
+)

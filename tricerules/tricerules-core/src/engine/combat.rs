@@ -1,6 +1,7 @@
 mod attacking;
 mod blocking;
 use blocking::BlockGraph;
+use tricerules_card_model::primitives::AttackTaxDefender;
 
 use super::damage::{DamageEvent, DamageRecipient};
 use super::events::{ev_log, ev_phase, ev_priority_changed, object_display_name};
@@ -281,11 +282,37 @@ fn mana_sources_consumed_by_cost(
 }
 
 impl GameEngine {
-    /// Add the generic attack cost contributed by active battlefield statics controlled by a
-    /// directly attacked player. A planeswalker or Battle edge is never taxed by this primitive.
+    /// Add the generic attack cost from active statics matching the current defender and its
+    /// controller. A permanent defender must still be the captured battlefield incarnation.
     pub(super) fn attack_tax_per_attacker(&self, defender: CombatDefenderTarget) -> u128 {
-        let CombatDefenderTarget::Player(defending_player) = defender else {
-            return 0;
+        let (defending_player, scope) = match defender {
+            CombatDefenderTarget::Player(player) => (player, AttackTaxDefender::ControllerPlayer),
+            CombatDefenderTarget::Permanent(permanent) => {
+                let Some(object) = self.state.objects.get(&permanent.object_id) else {
+                    return 0;
+                };
+                if object.zone != Zone::Battlefield
+                    || self
+                        .state
+                        .zone_change_generation
+                        .get(&permanent.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        != permanent.zone_change_generation
+                {
+                    return 0;
+                }
+                let Some(values) = self.characteristics(permanent.object_id) else {
+                    return 0;
+                };
+                if !values.has_type("Planeswalker") {
+                    return 0;
+                }
+                (
+                    values.controller,
+                    AttackTaxDefender::ControllerPlaneswalkers,
+                )
+            }
         };
         let mut total = 0u128;
         for object in self.state.objects.values() {
@@ -297,9 +324,12 @@ impl GameEngine {
             for ability in self.active_static_ability_definitions(object.id) {
                 if let StaticAbilityDef::AttackTax {
                     generic_per_attacker,
+                    defender,
                 } = ability
                 {
-                    total = total.saturating_add(u128::from(generic_per_attacker));
+                    if defender == scope {
+                        total = total.saturating_add(u128::from(generic_per_attacker));
+                    }
                 }
             }
         }

@@ -91,6 +91,8 @@ mod deck_coverage_lotus_petal;
 mod deck_coverage_manifold_key;
 #[path = "../deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
+#[path = "../deck_coverage_onakke_oathkeeper.rs"]
+mod deck_coverage_onakke_oathkeeper;
 
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;

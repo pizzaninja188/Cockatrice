@@ -1285,6 +1285,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
         }
         if let StaticAbilityDef::AttackTax {
             generic_per_attacker,
+            ..
         } = ability
         {
             if *generic_per_attacker == 0 {

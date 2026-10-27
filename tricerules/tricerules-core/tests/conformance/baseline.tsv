@@ -2198,6 +2198,7 @@ omni-cheese_pizza	0	ability:0	exercised
 omni-cheese_pizza	0	ability:1	exercised
 omni-cheese_pizza	0	cast	exercised
 on_the_job	0	cast	exercised
+onakke_oathkeeper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 onakke_ogre	0	cast	exercised
 ooze_patrol	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture

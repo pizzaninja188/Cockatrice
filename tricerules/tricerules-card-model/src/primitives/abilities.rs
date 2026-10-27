@@ -2472,6 +2472,15 @@ pub enum AttackLimitAffected {
     AttackingController,
 }
 
+/// Defender scope for a per-attacker tax: Propaganda applies to its controller as a player,
+/// while Onakke Oathkeeper applies to planeswalkers that controller currently controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum AttackTaxDefender {
+    #[default]
+    ControllerPlayer,
+    ControllerPlaneswalkers,
+}
+
 /// The two mandatory draw-doubling applicability rules (CR 121, 614.11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DrawReplacementCondition {
@@ -2816,12 +2825,13 @@ pub enum StaticAbilityDef {
         maximum: u32,
         affected: AttackLimitAffected,
     },
-    /// CR 508.1h: the attacking player pays this mana cost for each creature assigned to attack
-    /// this permanent's controller as a player. Propaganda, Ghostly Prison, and Windborn Muse share
-    /// this narrow player-only attack-cost behavior; attacks on that player's planeswalkers or
-    /// Battles do not use it.
+    /// CR 508.1h: the attacking player pays this mana cost for each creature assigned to the
+    /// indicated defender. Propaganda taxes its controller as a player; Onakke Oathkeeper taxes
+    /// planeswalkers that controller controls. Non-planeswalker Battles are not included.
     AttackTax {
         generic_per_attacker: u32,
+        #[serde(default)]
+        defender: AttackTaxDefender,
     },
     /// CR 502.3: this permanent untaps during every other player's untap step, at the same
     /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed

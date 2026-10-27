@@ -1,6 +1,6 @@
 //! Exact Propaganda card definition and static attack-cost mapping.
 
-use tricerules_cards::primitives::StaticAbilityDef;
+use tricerules_cards::primitives::{AttackTaxDefender, StaticAbilityDef};
 use tricerules_cards::{AbilityPresentation, ManaCost};
 
 #[test]
@@ -20,9 +20,11 @@ fn propaganda_registers_its_complete_card_definition() {
     );
     let StaticAbilityDef::AttackTax {
         generic_per_attacker,
+        defender,
     } = &face.static_abilities[0].definition
     else {
         panic!("Propaganda carries its typed attack tax");
     };
     assert_eq!(*generic_per_attacker, 2);
+    assert_eq!(*defender, AttackTaxDefender::ControllerPlayer);
 }

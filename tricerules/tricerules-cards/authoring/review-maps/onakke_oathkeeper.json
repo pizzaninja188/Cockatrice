@@ -1,0 +1,27 @@
+{
+  "format_version": 1,
+  "oracle_id": "080df9eb-c26b-494a-96b4-d7e47e501866",
+  "spans": [
+    {"face_id": "onakke_oathkeeper", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "onakke_oathkeeper", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "deck_registry::deck_coverage_onakke_oathkeeper::onakke_exact_identity_and_both_abilities", "covers": "Exact identity, cost, types, power and toughness, presentations, scoped attack tax and graveyard ability."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_charges_per_attacker_and_copy_only_for_its_controllers_walkers", "covers": "Two actual Onakkes charge for each attacker assigned to their controller's planeswalkers in a mixed multiplayer declaration."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_tax_uses_current_controllers_instead_of_card_owners", "covers": "Synthetic owner and source-control changes distinguish current control from ownership."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_tax_tracks_suppression_and_restoration_of_its_ability", "covers": "Synthetic layer-six suppression and restoration change the active tax."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_attack_requirements_use_untaxed_edges", "covers": "A must-attack requirement remains for an untaxed player edge, but not when real Propaganda and Onakke tax all available edges."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_locked_tax_rejects_stale_payers_and_can_be_paid_or_cancelled_after_suppression", "covers": "Wrong payer and stale revision reject; a locked tax can be paid or cancelled after synthetic suppression and a real mana activation."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_tax_stays_locked_when_a_mana_ability_restores_another_source", "covers": "Real Ironworks sacrifice ends synthetic source-linked suppression; the old tax stays locked while a new declaration sees both Onakkes."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_attack_tax_does_not_accept_spell_only_restricted_mana", "covers": "Chandra's Embercat's spell-only mana cannot pay the attack cost."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_attack_tax_replays_accepted_wire_commands", "covers": "Accepted wire-encoded declaration, mana, payment and subsequent pass replay deterministically."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_graveyard_activation_pays_exact_cost_and_returns_own_planeswalker_at_instant_speed", "covers": "The offered graveyard ability uses the exact source and payment, rejects invalid targets and costs, and returns an untapped planeswalker with printed loyalty."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_does_not_refund_costs_when_the_target_leaves_and_returns", "covers": "Real zone changes make the targeted card's later graveyard incarnation illegal without refunding costs."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_does_not_refund_costs_when_its_ability_is_countered", "covers": "Tishana's Tidebinder counters the activation without refunding mana or the exiled source."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_replays_a_parked_loyalty_entry_after_another_player_departs", "covers": "Two real Doubling Seasons pause entry; a surviving controller's choice, exactly-once completion and accepted-wire replay survive another player's departure."},
+    {"test": "scenario deck_coverage_onakke_oathkeeper::onakke_parked_entry_is_cleaned_up_when_its_owner_and_controller_depart", "covers": "The departed owner's cards and parked choice are removed so survivors can continue."}
+  ],
+  "complete_definition_review_confirmed": true
+}
