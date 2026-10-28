@@ -185,17 +185,20 @@ std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
                                                           const QString &cardName,
                                                           const QVector<RuledModalSpellOption> &modes,
                                                           int minModes,
-                                                          int maxModes)
+                                                          int maxModes,
+                                                          ModeChoicePurpose purpose)
 {
     QMenu menu(parent);
-    menu.setTitle(cardName);
+    const bool activatingAbility = purpose == ModeChoicePurpose::ActivatedAbility;
+    menu.setTitle(activatingAbility ? QObject::tr("Activate %1").arg(cardName) : cardName);
 
     if (minModes == 1 && maxModes == 1) {
         QVector<QAction *> actions;
         actions.reserve(modes.size());
         for (const auto &mode : modes) {
-            auto *action = menu.addAction(
-                QObject::tr("Cast %1 — %2").arg(cardName, mode.label));
+            const QString label = activatingAbility ? QObject::tr("Activate %1 — %2").arg(cardName, mode.label)
+                                                    : QObject::tr("Cast %1 — %2").arg(cardName, mode.label);
+            auto *action = menu.addAction(label);
             action->setEnabled(mode.selectable);
             actions.append(action);
         }
@@ -223,7 +226,9 @@ std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
     }
 
     auto *buttons = new QHBoxLayout;
-    auto *confirm = new QPushButton(QObject::tr("Cast with selected modes"), panel);
+    auto *confirm = new QPushButton(activatingAbility ? QObject::tr("Activate with selected modes")
+                                                      : QObject::tr("Cast with selected modes"),
+                                    panel);
     auto *cancel = new QPushButton(QObject::tr("Cancel"), panel);
     buttons->addWidget(confirm);
     buttons->addWidget(cancel);

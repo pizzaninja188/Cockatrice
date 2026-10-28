@@ -5,7 +5,8 @@ use super::payment::PaidCardCost;
 #[cfg(test)]
 use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
 use super::presentation::{
-    ability_presentation, child_presentation_ref, spell_stack_presentation, PresentationPath,
+    ability_presentation, activated_stack_mode_presentation, child_presentation_ref,
+    spell_stack_presentation, PresentationPath,
 };
 use super::targeting::{
     capture_stack_target, face_mode_program, face_program, target_filter_legal_at_resolution,
@@ -55,6 +56,7 @@ pub(super) struct AnnouncedAbilityActivation {
     primary_presentation: Option<rv1::PresentationRef>,
     targets: Vec<rv1::TargetRef>,
     stack_targets: Vec<StackTarget>,
+    chosen_modes: Vec<ChosenMode>,
     reserved_virtual_id: ObjectId,
     crime_events: Vec<GameEvent>,
     target_triggers: Vec<super::triggers::CollectedTrigger>,
@@ -285,6 +287,41 @@ pub(in crate::engine) fn announcement_from_cast(
         casting_permission_id: cast.casting_permission_id,
         prototyped: cast.prototyped,
     }
+}
+
+fn validate_modal_permanent_target_generations(
+    engine: &GameEngine,
+    targets: &[rv1::TargetRef],
+) -> Result<(), EngineError> {
+    for target in targets {
+        let kind = rv1::TargetRefKind::try_from(target.kind).ok();
+        let is_permanent = kind == Some(rv1::TargetRefKind::Permanent)
+            || (kind == Some(rv1::TargetRefKind::Unspecified)
+                && engine
+                    .state
+                    .objects
+                    .get(&target.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield));
+        if !is_permanent {
+            continue;
+        }
+        let expected = target
+            .expected_zone_change_generation
+            .ok_or(EngineError::Illegal(
+                "modal permanent target generation is required",
+            ))?;
+        if engine
+            .state
+            .zone_change_generation
+            .get(&target.object_id)
+            .copied()
+            .unwrap_or(0)
+            != expected
+        {
+            return Err(EngineError::Illegal("target generation is stale"));
+        }
+    }
+    Ok(())
 }
 
 impl GameEngine {
@@ -2176,6 +2213,73 @@ impl GameEngine {
         result
     }
 
+    /// Validate and capture one modal activation declaration without mutating engine state.
+    pub(in crate::engine) fn validate_and_capture_modal_activation(
+        &self,
+        player: PlayerId,
+        target_source: TargetSourceIdentity,
+        modal: &ModalDef,
+        command: &rv1::ActivateAbility,
+    ) -> Result<(Vec<rv1::TargetRef>, Vec<ChosenMode>), EngineError> {
+        if !command.targets.is_empty() {
+            return Err(EngineError::Illegal(
+                "modal activated abilities use selected_modes targets",
+            ));
+        }
+        let mut seen = HashSet::new();
+        for selection in &command.selected_modes {
+            if !seen.insert(selection.mode_index) {
+                return Err(EngineError::Illegal("a mode may be selected only once"));
+            }
+        }
+        if command.selected_modes.len() < modal.min_modes as usize
+            || command.selected_modes.len() > modal.max_modes as usize
+        {
+            return Err(EngineError::Illegal("illegal number of selected modes"));
+        }
+        let mut ordered: Vec<_> = command.selected_modes.iter().collect();
+        ordered.sort_by_key(|selection| selection.mode_index);
+        let mut public_targets = Vec::new();
+        let mut captured_modes = Vec::with_capacity(ordered.len());
+        for selection in ordered {
+            let mode = modal
+                .modes
+                .get(selection.mode_index as usize)
+                .ok_or(EngineError::Illegal("bad activated ability mode index"))?;
+            validate_modal_permanent_target_generations(self, &selection.targets)?;
+            validate_ability_targets_with_context_and_program(
+                self,
+                player,
+                target_source,
+                &selection.targets,
+                TargetResolutionContext {
+                    effects: &mode.effects,
+                    targeting: mode.targeting.as_ref(),
+                    trigger_context: TriggerContext::default(),
+                    program: None,
+                },
+            )?;
+            validate_x_target_mana_value(
+                self,
+                &mode.effects,
+                mode.targeting.as_ref(),
+                &selection.targets,
+                command.x_value,
+                None,
+            )?;
+            public_targets.extend(selection.targets.iter().cloned());
+            captured_modes.push(ChosenMode {
+                mode_id: mode.mode_id.clone(),
+                targets: selection
+                    .targets
+                    .iter()
+                    .map(|target| capture_stack_target(self, target))
+                    .collect(),
+            });
+        }
+        Ok((public_targets, captured_modes))
+    }
+
     pub(super) fn activate_ability(
         &mut self,
         player: PlayerId,
@@ -2197,6 +2301,7 @@ impl GameEngine {
         let restricted_mana = command.restricted_mana.as_slice();
         let x_value = command.x_value;
         let mana_split_first_color_count = command.mana_split_first_color_count;
+        let selected_modes = command.selected_modes.as_slice();
         let resolving_mana_payment = self.resolving_mana_payment_for(player);
         let attack_mana_payment = self
             .state
@@ -2297,6 +2402,11 @@ impl GameEngine {
             }
         };
         let ability = effective.definition.clone();
+        if ability.modal.is_none() && !selected_modes.is_empty() {
+            return Err(EngineError::Illegal(
+                "selected_modes given for a nonmodal activated ability",
+            ));
+        }
         if source_zone == AbilitySourceZone::Hand
             && ability.costs.contains(&AbilityCost::ReturnTappedCreature)
         {
@@ -2385,42 +2495,58 @@ impl GameEngine {
             return Ok(batch);
         }
 
-        // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
-        // same multi-target handling — so it goes through the list-level entry point.
+        // CR 602.2b / 700.2: modal activated abilities choose a mode as part of activation.
+        // Resolve the positional wire coordinate to its stable authored identity before costs,
+        // and keep each mode's targets separate from the other mode bodies.
         let target_source =
             TargetSourceIdentity::captured_for_ability(permanent_id, source_zone_change, &ability);
         let program = self.program_for_activation_occurrence(&effective.occurrence);
-        validate_ability_targets_with_context_and_program(
-            self,
-            player,
-            target_source,
-            targets,
-            TargetResolutionContext {
-                effects: &ability.effect,
-                targeting: ability.targeting.as_ref(),
-                trigger_context: TriggerContext::default(),
+        let (activation_targets, chosen_modes) = if let Some(modal) = ability.modal.as_ref() {
+            self.validate_and_capture_modal_activation(player, target_source, modal, command)?
+        } else {
+            if !selected_modes.is_empty() {
+                return Err(EngineError::Illegal(
+                    "selected_modes given for a nonmodal activated ability",
+                ));
+            }
+            // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
+            // same multi-target handling — so it goes through the list-level entry point.
+            validate_ability_targets_with_context_and_program(
+                self,
+                player,
+                target_source,
+                targets,
+                TargetResolutionContext {
+                    effects: &ability.effect,
+                    targeting: ability.targeting.as_ref(),
+                    trigger_context: TriggerContext::default(),
+                    program,
+                },
+            )?;
+            validate_x_target_mana_value(
+                self,
+                &ability.effect,
+                ability.targeting.as_ref(),
+                targets,
+                x_value,
                 program,
-            },
-        )?;
-        validate_x_target_mana_value(
-            self,
-            &ability.effect,
-            ability.targeting.as_ref(),
-            targets,
-            x_value,
-            program,
-        )?;
+            )?;
+            (targets.to_vec(), Vec::new())
+        };
 
         let announcement = self.capture_ability_announcement(
             player,
             permanent_id,
             &effective,
-            targets,
+            &activation_targets,
             x_value,
             (card_id.clone(), face_up_index),
         )?;
-        let targeting_cost =
-            self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
+        let targeting_cost = self.targeting_cost_increase(
+            player,
+            TargetingCostAction::ActivatedAbilities,
+            &activation_targets,
+        );
         let mana_reduction = self.activated_mana_reduction(player, permanent_id, &ability)?;
         let prepared_payment = self.prepare_ability_costs(
             player,
@@ -2440,6 +2566,11 @@ impl GameEngine {
             prepared_payment,
             command.payment.as_ref(),
         )?;
+        let mut announcement = announcement;
+        announcement.chosen_modes = chosen_modes;
+        if !announcement.chosen_modes.is_empty() {
+            announcement.stack_targets.clear();
+        }
         let replay = crate::state::ActivationCostReplay {
             actor: player,
             source_object_id: permanent_id,
@@ -2719,6 +2850,7 @@ impl GameEngine {
             primary_presentation,
             targets: Vec::new(),
             stack_targets: Vec::new(),
+            chosen_modes: Vec::new(),
             reserved_virtual_id: self.state.next_object_id,
             crime_events: Vec::new(),
             target_triggers: Vec::new(),
@@ -2800,6 +2932,7 @@ impl GameEngine {
             primary_presentation,
             targets,
             stack_targets,
+            chosen_modes,
             reserved_virtual_id,
             crime_events,
             mut target_triggers,
@@ -2813,6 +2946,14 @@ impl GameEngine {
             .player_idx(player)
             .expect("validated activation actor");
         let trefs: Vec<_> = targets.iter().map(|target| target.object_id).collect();
+        let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
+            activated_stack_mode_presentation(
+                &ability,
+                &ability_text,
+                &chosen_modes,
+                primary_presentation.as_ref(),
+            )
+            .expect("announced activated modes remain in their captured definition");
         self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses.clone());
         if let Some(LoyaltyActivationAuthorization::ChainVeil {
@@ -2860,6 +3001,7 @@ impl GameEngine {
                 source_label: Some(card_name.clone()),
                 activation_reveal_id,
                 primary: primary_presentation.clone(),
+                chosen_modes: chosen_mode_presentations.clone(),
                 source_token_identity: source_token_identity.clone(),
                 ..Default::default()
             },
@@ -2885,7 +3027,7 @@ impl GameEngine {
             is_copy: false,
             chosen_x: x_value,
             face_index: face_up_index,
-            chosen_modes: vec![],
+            chosen_modes,
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
             cast_by: None,
@@ -2953,12 +3095,12 @@ impl GameEngine {
                 is_copy: false,
                 is_triggered: false,
                 copy_source_object_id: 0,
-                chosen_mode_indices: vec![],
-                chosen_mode_labels: vec![],
+                chosen_mode_indices,
+                chosen_mode_labels,
                 chosen_cast_cost_labels: vec![],
                 source_token_identity,
                 primary_presentation,
-                chosen_mode_presentations: vec![],
+                chosen_mode_presentations,
                 chosen_cast_cost_presentations: vec![],
                 prototyped: false,
                 ability_controller_player_id: Some(player),
@@ -6110,6 +6252,7 @@ mod mana_payment_tests {
                 count: Amount::Fixed(1),
             }],
             program: None,
+            modal: None,
             targeting: None,
             timing: ActivationTiming::Normal,
             conditions: vec![],

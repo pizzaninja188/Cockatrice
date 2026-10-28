@@ -1099,8 +1099,11 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
     if (!actions->pendingActivatedAbility.targetingCostApplied &&
         !actions->pendingActivatedAbility.selectedTargets.isEmpty()) {
         RuledClientState *const state = actions->player->getGame()->getGameEventHandler()->ruled();
-        const auto data = state->abilityTargetData(actions->pendingActivatedAbility.permanentOid,
-                                                   actions->pendingActivatedAbility.abilityIndex);
+        const auto data = currentRuledPendingAbilityTargetData(actions->pendingActivatedAbility, *state);
+        if (!data) {
+            cancelPendingActivatedAbility();
+            return;
+        }
         QVector<QVector<quint32>> grouped;
         for (const auto &target : actions->pendingActivatedAbility.selectedTargets) {
             while (grouped.size() <= static_cast<int>(target.ref.group_index()))
@@ -1108,7 +1111,7 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
             grouped[static_cast<int>(target.ref.group_index())].append(target.ref.object_id());
         }
         const int increase =
-            ruledTargetingCostForSelection(data, grouped, {}, actions->player->getPlayerInfo()->getId());
+            ruledTargetingCostForSelection(*data, grouped, {}, actions->player->getPlayerInfo()->getId());
         if (increase > 0) {
             actions->pendingActivatedAbility.remainingCost[QChar('X')] += increase;
         }
@@ -2442,10 +2445,64 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true;
     }
     const int abilityIndex = selectedOption.index;
+    std::optional<RuledModalSpellOption> selectedMode;
+    const quint64 abilityKey = RuledClientState::abilityTargetKey(oid, abilityIndex);
+    const auto offeredModePosition = handler->activatedAbilityModesByAbility.constFind(abilityKey);
+    if (offeredModePosition != handler->activatedAbilityModesByAbility.cend()) {
+        const auto offeredModes = offeredModePosition.value();
+        const auto sourceZone = handler->abilitySourceZone(oid);
+        const quint64 sourceGeneration = handler->abilitySourceGeneration(oid);
+        if (offeredModes.minModes != 1 || offeredModes.maxModes != 1 || offeredModes.modes.isEmpty()) {
+            handler->emitLocalLog(actions->tr("This ability's current mode choices cannot be activated."));
+            return true;
+        }
+        const auto modeSelection = RuledPendingCast::chooseModes(
+            actions->player->getGame()->getTab(), card->getName(), offeredModes.modes, 1, 1,
+            RuledPendingCast::ModeChoicePurpose::ActivatedAbility);
+        if (!modeSelection) {
+            return true;
+        }
+        if (modeSelection->size() != 1 || handler->abilitySourceZone(oid) != sourceZone ||
+            handler->abilitySourceGeneration(oid) != sourceGeneration ||
+            !handler->activatedAbilityIndicesForOid(oid).contains(abilityIndex) ||
+            !handler->abilityActivatable(oid, abilityIndex)) {
+            handler->emitLocalLog(
+                actions->tr("The ability's mode choices changed before activation. Choose the ability again."));
+            return true;
+        }
+
+        const auto currentOffer = handler->activatedAbilityModesByAbility.constFind(abilityKey);
+        if (currentOffer == handler->activatedAbilityModesByAbility.cend() || currentOffer->minModes != 1 ||
+            currentOffer->maxModes != 1) {
+            handler->emitLocalLog(
+                actions->tr("The ability's mode choices changed before activation. Choose the ability again."));
+            return true;
+        }
+        const RuledModalSpellOption *currentMode = nullptr;
+        bool duplicateModeIndex = false;
+        for (const auto &candidate : currentOffer->modes) {
+            if (candidate.modeIndex != modeSelection->first()) {
+                continue;
+            }
+            if (currentMode) {
+                duplicateModeIndex = true;
+                break;
+            }
+            currentMode = &candidate;
+        }
+        if (duplicateModeIndex || !currentMode || !currentMode->selectable ||
+            std::any_of(currentMode->targets.groups.cbegin(), currentMode->targets.groups.cend(),
+                        [](const auto &group) { return group.chosenByOpponent; })) {
+            handler->emitLocalLog(
+                actions->tr("The ability's selected mode is no longer available. Choose the ability again."));
+            return true;
+        }
+        selectedMode = *currentMode;
+    }
     suspendForManaAbility(oid, abilityIndex);
 
     // Engine-authoritative: ability slot key present in valid_targets_by_ability means it needs a target.
-    const bool needsTarget = handler->abilityNeedsTarget(oid, abilityIndex);
+    const bool needsTarget = selectedMode ? selectedMode->needsTarget : handler->abilityNeedsTarget(oid, abilityIndex);
 
     // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
     // This comes directly from AbilityCost in the tricerules registry — no text parsing.
@@ -2472,10 +2529,12 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.manaOptionIndex = selectedOption.manaOptionIndex;
     actions->pendingActivatedAbility.abilityText = chosen->text();
     actions->pendingActivatedAbility.cardName = card->getName();
+    actions->pendingActivatedAbility.selectedMode = selectedMode;
     actions->pendingActivatedAbility.needsTarget = needsTarget;
     actions->pendingActivatedAbility.waitingForTarget = needsTarget;
     actions->pendingActivatedAbility.selectedTargets.clear();
-    const auto activationTargets = handler->abilityTargetData(oid, abilityIndex);
+    const RuledSpellTargetData activationTargets =
+        selectedMode ? selectedMode->targets : handler->abilityTargetData(oid, abilityIndex);
     actions->pendingActivatedAbility.costChoices = handler->abilityCostChoices(oid, abilityIndex);
     actions->pendingActivatedAbility.deferredReturnTappedCreature =
         actions->pendingActivatedAbility.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND &&

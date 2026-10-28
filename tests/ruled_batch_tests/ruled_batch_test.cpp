@@ -1663,6 +1663,25 @@ TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipie
     latest.mutable_batch()->add_events()->mutable_priority_changed()->set_player_id(p2->getPlayerId());
     auto &first = (*latest.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
     first.add_labels("first seat only");
+    constexpr quint64 modeOfferKey = (quint64{802} << 32) | 1u;
+    auto &modeOffer = (*first.mutable_activated_ability_modes())[modeOfferKey];
+    modeOffer.set_min_modes(1);
+    modeOffer.set_max_modes(1);
+    auto *targetMode = modeOffer.add_modes();
+    targetMode->set_mode_index(0);
+    targetMode->set_selectable(true);
+    targetMode->set_needs_target(true);
+    auto *targetGroup = targetMode->mutable_targets()->add_groups();
+    targetGroup->set_group_index(0);
+    targetGroup->set_min(1);
+    targetGroup->set_max(1);
+    targetGroup->add_valid_permanent_ids(803u);
+    auto *targetCandidate = targetGroup->add_valid_permanent_targets();
+    targetCandidate->set_object_id(803u);
+    targetCandidate->set_zone_change_generation(5u);
+    auto *selfMode = modeOffer.add_modes();
+    selfMode->set_mode_index(1);
+    selfMode->set_selectable(true);
     auto &second = (*latest.mutable_batch()->mutable_legal_by_player())[p2->getPlayerId()];
     second.add_labels("second seat only");
     auto *offered = second.add_zone_ability_actions();
@@ -1693,6 +1712,16 @@ TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipie
             if (own->second.labels_size() == 1)
                 EXPECT_EQ(own->second.labels(0), recipient == p1 ? "first seat only" : "second seat only");
             EXPECT_EQ(own->second.zone_ability_actions_size(), recipient == p2 ? 1 : 0);
+            EXPECT_EQ(own->second.activated_ability_modes().size(), recipient == p1 ? 1u : 0u);
+            if (recipient == p1) {
+                const auto offer = own->second.activated_ability_modes().find(modeOfferKey);
+                ASSERT_NE(offer, own->second.activated_ability_modes().end());
+                ASSERT_EQ(offer->second.modes_size(), 2);
+                ASSERT_EQ(offer->second.modes(0).targets().groups_size(), 1);
+                const auto &candidate = offer->second.modes(0).targets().groups(0).valid_permanent_targets(0);
+                EXPECT_EQ(candidate.object_id(), 803u);
+                EXPECT_EQ(candidate.zone_change_generation(), 5u);
+            }
         }
     }
 
@@ -1711,6 +1740,8 @@ TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipie
     ASSERT_TRUE(terminalSnapshot.ParseFromString(
         terminalContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
     EXPECT_TRUE(terminalSnapshot.legal_by_player().empty());
+    EXPECT_TRUE(std::none_of(terminalSnapshot.legal_by_player().begin(), terminalSnapshot.legal_by_player().end(),
+                             [](const auto &entry) { return !entry.second.activated_ability_modes().empty(); }));
     EXPECT_TRUE(std::none_of(terminalSnapshot.events().begin(), terminalSnapshot.events().end(),
                              [](const auto &event) { return event.has_priority_changed(); }));
 }
@@ -9791,6 +9822,152 @@ TEST_F(RuledBatchTest, AliasedPackedMapsMixedTargetsAndCombatEdgesRoundTrip)
     EXPECT_EQ(returnedSentinel.defender().object_id(), 0u);
     EXPECT_EQ(returnedSentinel.defender().expected_zone_change_generation(), 0u);
     EXPECT_EQ(returnedSentinel.defender_zone_change_generation(), 0u);
+}
+
+TEST_F(RuledBatchTest, ActivatedAbilityModeOffersProjectPackedKeyAndTargetGenerationForActorOnly)
+{
+    constexpr quint32 sourceId = 11050;
+    constexpr quint32 actorTargetId = 11051;
+    constexpr quint32 opponentTargetId = 11052;
+    constexpr quint64 sourceGeneration = 13;
+    constexpr quint64 actorTargetGeneration = 17;
+    constexpr quint64 opponentTargetGeneration = 19;
+    const quint64 engineKey = (quint64{sourceId} << 32) | 1u;
+
+    ruled::v1::RuledEventBatch batch;
+    for (const auto &[id, generation] : {
+             std::pair<quint32, quint64>{sourceId, sourceGeneration},
+             {actorTargetId, actorTargetGeneration},
+             {opponentTargetId, opponentTargetGeneration}}) {
+        auto *boundary = batch.add_events()->mutable_presentation_identity_break();
+        boundary->set_object_id(id);
+        boundary->set_zone_change_generation(generation);
+    }
+
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *actorView = view->add_per_player();
+    actorView->set_player_id(p1->getPlayerId());
+    auto *source = actorView->add_battlefield_objects();
+    source->set_object_id(sourceId);
+    source->set_zone_change_generation(sourceGeneration);
+    auto *actorTarget = actorView->add_battlefield_objects();
+    actorTarget->set_object_id(actorTargetId);
+    actorTarget->set_zone_change_generation(actorTargetGeneration);
+    auto *opponentView = view->add_per_player();
+    opponentView->set_player_id(p2->getPlayerId());
+    auto *opponentTarget = opponentView->add_battlefield_objects();
+    opponentTarget->set_object_id(opponentTargetId);
+    opponentTarget->set_zone_change_generation(opponentTargetGeneration);
+
+    auto &legal = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto &modeOffers = (*legal.mutable_activated_ability_modes())[engineKey];
+    modeOffers.set_min_modes(1);
+    modeOffers.set_max_modes(1);
+    auto *targetMode = modeOffers.add_modes();
+    targetMode->set_mode_index(0);
+    targetMode->set_selectable(true);
+    targetMode->set_needs_target(true);
+    auto *group = targetMode->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_min(1);
+    group->set_max(1);
+    for (const auto &[id, generation] : {
+             std::pair<quint32, quint64>{actorTargetId, actorTargetGeneration},
+             {opponentTargetId, opponentTargetGeneration}}) {
+        group->add_valid_permanent_ids(id);
+        auto *candidate = group->add_valid_permanent_targets();
+        candidate->set_object_id(id);
+        candidate->set_zone_change_generation(generation);
+    }
+    auto *selfMode = modeOffers.add_modes();
+    selfMode->set_mode_index(1);
+    selfMode->set_selectable(true);
+
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto actorProjection = redactFor(batch, p1);
+    ASSERT_EQ(actorProjection.legal_by_player_size(), 1);
+    ASSERT_TRUE(actorProjection.legal_by_player().contains(p1->getPlayerId()));
+    const auto &actorLegal = actorProjection.legal_by_player().at(p1->getPlayerId());
+
+    auto zoneViewEvent = std::find_if(actorProjection.events().begin(), actorProjection.events().end(),
+                                      [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(zoneViewEvent, actorProjection.events().end());
+    const auto findPlayerView = [&](int playerId) -> const ruled::v1::RuledPerPlayerView * {
+        for (const auto &playerView : zoneViewEvent->zone_view().per_player())
+            if (playerView.player_id() == playerId)
+                return &playerView;
+        return nullptr;
+    };
+    const auto *projectedActorView = findPlayerView(p1->getPlayerId());
+    const auto *projectedOpponentView = findPlayerView(p2->getPlayerId());
+    ASSERT_NE(projectedActorView, nullptr);
+    ASSERT_NE(projectedOpponentView, nullptr);
+    ASSERT_EQ(projectedActorView->battlefield_objects_size(), 2);
+    ASSERT_EQ(projectedOpponentView->battlefield_objects_size(), 1);
+    const auto &projectedSource = projectedActorView->battlefield_objects(0);
+    const auto &projectedActorTarget = projectedActorView->battlefield_objects(1);
+    const auto &projectedOpponentTarget = projectedOpponentView->battlefield_objects(0);
+    EXPECT_NE(projectedSource.object_id(), sourceId);
+    EXPECT_NE(projectedActorTarget.object_id(), actorTargetId);
+    EXPECT_NE(projectedOpponentTarget.object_id(), opponentTargetId);
+    EXPECT_NE(projectedSource.zone_change_generation(), sourceGeneration);
+    EXPECT_NE(projectedActorTarget.zone_change_generation(), actorTargetGeneration);
+    EXPECT_NE(projectedOpponentTarget.zone_change_generation(), opponentTargetGeneration);
+
+    const quint64 presentedKey = (quint64{projectedSource.object_id()} << 32) | 1u;
+    EXPECT_TRUE(actorLegal.activated_ability_modes().contains(presentedKey))
+        << "the activated-mode map key must use the same presented source handle as the battlefield view";
+    EXPECT_FALSE(actorLegal.activated_ability_modes().contains(engineKey));
+    const quint64 inspectKey = actorLegal.activated_ability_modes().contains(presentedKey) ? presentedKey : engineKey;
+    ASSERT_TRUE(actorLegal.activated_ability_modes().contains(inspectKey));
+    const auto &projectedModes = actorLegal.activated_ability_modes().at(inspectKey);
+    ASSERT_EQ(projectedModes.min_modes(), 1u);
+    ASSERT_EQ(projectedModes.max_modes(), 1u);
+    ASSERT_EQ(projectedModes.modes_size(), 2);
+    ASSERT_EQ(projectedModes.modes(0).targets().groups_size(), 1);
+    const auto &projectedGroup = projectedModes.modes(0).targets().groups(0);
+    ASSERT_EQ(projectedGroup.valid_permanent_ids_size(), 2);
+    ASSERT_EQ(projectedGroup.valid_permanent_targets_size(), 2);
+    for (int i = 0; i < projectedGroup.valid_permanent_targets_size(); ++i) {
+        const auto &candidate = projectedGroup.valid_permanent_targets(i);
+        const auto &expected = i == 0 ? projectedActorTarget : projectedOpponentTarget;
+        EXPECT_EQ(projectedGroup.valid_permanent_ids(i), expected.object_id());
+        EXPECT_EQ(candidate.object_id(), expected.object_id());
+        EXPECT_EQ(candidate.zone_change_generation(), expected.zone_change_generation());
+    }
+    EXPECT_FALSE(projectedModes.modes(1).needs_target());
+    EXPECT_EQ(projectedModes.modes(1).targets().groups_size(), 0);
+
+    // The target receipt is copied from the actor's projected legal offer, then canonicalized
+    // through the same relay path used for an inbound ActivateAbility command.
+    ruled::v1::RuledCommand command;
+    auto *activation = command.mutable_activate_ability();
+    activation->set_source_object_id(projectedSource.object_id());
+    activation->set_ability_index(1);
+    activation->set_expected_zone_change_generation(projectedSource.zone_change_generation());
+    auto *selectedMode = activation->add_selected_modes();
+    selectedMode->set_mode_index(0);
+    auto *selectedTarget = selectedMode->add_targets();
+    selectedTarget->set_object_id(projectedGroup.valid_permanent_targets(0).object_id());
+    selectedTarget->set_group_index(0);
+    selectedTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selectedTarget->set_expected_zone_change_generation(
+        projectedGroup.valid_permanent_targets(0).zone_change_generation());
+    EXPECT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(command.activate_ability().source_object_id(), sourceId);
+    EXPECT_EQ(command.activate_ability().expected_zone_change_generation(), sourceGeneration);
+    ASSERT_EQ(command.activate_ability().selected_modes_size(), 1);
+    ASSERT_EQ(command.activate_ability().selected_modes(0).targets_size(), 1);
+    EXPECT_EQ(command.activate_ability().selected_modes(0).targets(0).object_id(), actorTargetId);
+    EXPECT_EQ(command.activate_ability().selected_modes(0).targets(0).expected_zone_change_generation(),
+              actorTargetGeneration);
+
+    const auto opponentProjection = redactFor(batch, p2);
+    EXPECT_TRUE(opponentProjection.legal_by_player().empty());
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    const auto spectatorProjection = redactFor(batch, spectator);
+    EXPECT_TRUE(spectatorProjection.legal_by_player().empty());
 }
 
 TEST_F(RuledBatchTest, FaceDownExileSnapshotMustMatchPhysicalAndEngineProvenance)

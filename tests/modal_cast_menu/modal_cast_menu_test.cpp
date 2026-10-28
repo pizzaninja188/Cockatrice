@@ -80,6 +80,53 @@ TEST(ModalCastMenuTest, ChooseOneUsesOrdinaryActionsAndDisablesUnavailableMode)
     EXPECT_EQ(*result, QVector<int>({1}));
 }
 
+TEST(ModalCastMenuTest, ActivatedAbilityModeUsesActivationWording)
+{
+    bool menuWasInspected = false;
+    bool actionWasTriggered = false;
+    QTimer closePopup;
+    closePopup.setSingleShot(true);
+    QObject::connect(&closePopup, &QTimer::timeout, &closePopup, []() {
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (auto *menu = qobject_cast<QMenu *>(widget)) {
+                menu->close();
+            }
+        }
+    });
+    closePopup.start(1000);
+    QTimer::singleShot(0, [&menuWasInspected, &actionWasTriggered]() {
+        QMenu *menu = activeMenu();
+        if (!menu) {
+            for (QWidget *widget : QApplication::topLevelWidgets()) {
+                if (auto *popup = qobject_cast<QMenu *>(widget)) {
+                    popup->close();
+                }
+            }
+            return;
+        }
+        menuWasInspected = menu->actions().size() == 1 &&
+                           menu->actions().at(0)->text() ==
+                               QStringLiteral("Activate Test Artifact — Untap this artifact");
+        if (!menuWasInspected) {
+            menu->close();
+            return;
+        }
+        const QRect actionRect = menu->actionGeometry(menu->actions().at(0));
+        QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, actionRect.center());
+        actionWasTriggered = true;
+    });
+    const QVector<RuledModalSpellOption> modes = {
+        {2, QStringLiteral("Untap this artifact"), true, false, {}},
+    };
+    const auto result = RuledPendingCast::chooseModes(nullptr, QStringLiteral("Test Artifact"), modes, 1, 1,
+                                                       RuledPendingCast::ModeChoicePurpose::ActivatedAbility);
+    closePopup.stop();
+    EXPECT_TRUE(menuWasInspected);
+    EXPECT_TRUE(actionWasTriggered);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(*result, QVector<int>({2}));
+}
+
 TEST(ModalCastMenuTest, ChooseMultipleKeepsCheckboxesOpenAndEnforcesExactCount)
 {
     QTimer::singleShot(0, []() {

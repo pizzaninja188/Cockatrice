@@ -74,6 +74,10 @@ pub struct ActivatedAbilityDef {
     /// the legacy effect list; target roles bind through the owner's authored target groups.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program: Option<crate::CardProgram>,
+    /// CR 602.2b / 700.2: a modal activated ability chooses one mode as it is activated.
+    /// The initial activated-modal subset accepts one-of-N legacy effect modes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modal: Option<ModalDef>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     /// Additional timing instruction printed after the ability's effect (CR 602.1b). Normal
@@ -143,7 +147,10 @@ impl ActivatedAbilityDef {
         face_name: &str,
         ability_path: &[crate::AbilityId],
     ) -> String {
-        if self.conditions.is_empty() && self.cost_modifiers.is_empty() && self.targeting.is_none()
+        if self.modal.is_none()
+            && self.conditions.is_empty()
+            && self.cost_modifiers.is_empty()
+            && self.targeting.is_none()
         {
             if let (Some(costs), Some(effects)) = (
                 super::presentation::simple_costs(&self.costs, face_name),
@@ -345,9 +352,96 @@ impl ActivatedAbilityDef {
         Ok(())
     }
 
+    fn validate_modal_shape(&self, modal: &ModalDef) -> Result<(), String> {
+        if !self.effect.is_empty() || self.program.is_some() || self.targeting.is_some() {
+            return Err(
+                "activated ability modal is mutually exclusive with flat effects, program, and targeting".into(),
+            );
+        }
+        if self.source_zone != AbilitySourceZone::Battlefield {
+            return Err("activated modal abilities currently require a battlefield source".into());
+        }
+        if modal.min_modes != 1 || modal.max_modes != 1 || modal.modes.len() < 2 {
+            return Err(
+                "activated modal abilities require at least two modes and exactly one selected mode".into(),
+            );
+        }
+        if modal.all_modes_cast_cost.is_some() {
+            return Err("activated ability modes cannot use all-modes cast costs".into());
+        }
+        if modal.trigger_mode_selection_restriction.is_some() {
+            return Err("trigger mode selection restrictions require a triggered ability".into());
+        }
+        for mode in &modal.modes {
+            if mode.linked_cast_cost.is_some() {
+                return Err("activated ability modes cannot have linked cast costs".into());
+            }
+            if mode.program.is_some() {
+                return Err("activated ability modes currently require legacy effect lists".into());
+            }
+            if mode
+                .targeting
+                .as_ref()
+                .is_some_and(TargetingDef::requires_opponent_choice)
+            {
+                return Err(
+                    "activated ability modes cannot use opponent-chosen target groups".into(),
+                );
+            }
+            if mode.targeting.as_ref().is_some_and(|targeting| {
+                targeting
+                    .groups
+                    .iter()
+                    .any(|group| group.cast_cost_expansion.is_some())
+            }) {
+                return Err(
+                    "activated ability modes cannot use spell cast-cost target expansions".into(),
+                );
+            }
+        }
+
+        modal.validate_for_activated_modal_owner()?;
+        for mode in &modal.modes {
+            // Validate each selected body exactly like an ordinary activation, while removing
+            // the modal owner before recursing so nested modal definitions cannot bypass shape
+            // validation.
+            let mut mode_ability = self.clone();
+            mode_ability.effect.clone_from(&mode.effects);
+            mode_ability.program = None;
+            mode_ability.modal = None;
+            mode_ability.targeting.clone_from(&mode.targeting);
+            if mode_ability
+                .effect
+                .iter()
+                .any(SpellEffectKind::could_add_mana_to_pool)
+            {
+                return Err("activated modal abilities cannot be mana abilities".into());
+            }
+            mode_ability.validate_activated_modal_mode_shape()?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        self.validate_shape_inner(false)
+    }
+
+    fn validate_activated_modal_mode_shape(&self) -> Result<(), String> {
+        if self.modal.is_some() || self.program.is_some() {
+            return Err(
+                "activated modal modes require a direct legacy effect list without a nested modal or program"
+                    .into(),
+            );
+        }
+        self.validate_shape_inner(true)
+    }
+
+    fn validate_shape_inner(&self, allow_activated_modal_mode_effect: bool) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        if let Some(modal) = &self.modal {
+            return self.validate_modal_shape(modal);
+        }
         if self.effect.is_empty() && self.program.is_none() {
             return Err("activated ability must contain at least one effect".into());
         }
@@ -651,7 +745,11 @@ impl ActivatedAbilityDef {
             return Err("Memory Jar hand return requires its delayed trigger".into());
         }
         for effect in &self.effect {
-            effect.validate(EffectContext::Ability)?;
+            if allow_activated_modal_mode_effect {
+                effect.validate_activated_modal_mode_effect()?;
+            } else {
+                effect.validate(EffectContext::Ability)?;
+            }
         }
         SpellEffectKind::validate_list(&self.effect)?;
         if self

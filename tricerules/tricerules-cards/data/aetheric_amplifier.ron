@@ -1,0 +1,44 @@
+// Oracle 295cd8e1-0830-46c1-9957-556afd4bcee6; DRC #018 printing 21c33a91-b02c-43ec-a385-aa0349928f9c.
+// Oracle text and its counter-placement ruling: https://magic.wizards.com/en/news/feature/aetherdrift-release-notes (Aetheric Amplifier).
+// CR 602.2a-b, 602.5d, 605.1a, 605.3b, and 701.10e govern activation, sorcery timing, the mana ability, and doubling counters.
+(
+    id: "aetheric_amplifier",
+    name: "Aetheric Amplifier",
+    face_id: "aetheric_amplifier",
+    mana_cost: "{3}",
+    types: ["Artifact"],
+    activated_abilities: [
+        (
+            ability_id: "activated_01",
+            presentation: OracleLines([1]),
+            costs: [Tap],
+            effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+        ),
+        (
+            ability_id: "activated_02",
+            presentation: OracleLines([2, 3, 4]),
+            costs: [Mana("{4}"), Tap],
+            effect: [],
+            timing: SorcerySpeed,
+            modal: Some((
+                min_modes: 1,
+                max_modes: 1,
+                modes: [
+                    (
+                        mode_id: "double_any_permanent",
+                        presentation: OracleLines([3]),
+                        effects: [DoubleCounters(target: (kind: AnyPermanent))],
+                        targeting: Some((groups: [
+                            (min: 1, max: 1, prompt: "Choose a permanent", effect_indices: [0]),
+                        ])),
+                    ),
+                    (
+                        mode_id: "double_your_counters",
+                        presentation: OracleLines([4]),
+                        effects: [DoubleYourCounters],
+                    ),
+                ],
+            )),
+        ),
+    ],
+)

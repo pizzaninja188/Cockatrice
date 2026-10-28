@@ -154,6 +154,7 @@ struct RuledTargetGroupData
 {
     int groupIndex = 0;
     QSet<quint32> validPermanentIds;
+    QHash<quint32, quint64> validPermanentGenerations;
     QSet<quint32> validStackIds;
     QSet<quint32> validGraveyardIds;
     bool canTargetSelf = false;
@@ -448,6 +449,13 @@ struct RuledModalSpellOption
     RuledSpellTargetData targets;
     int linkedCastCostGroupIndex = -1;
     int linkedCastCostOptionIndex = -1;
+};
+
+struct RuledActivatedAbilityModeOffer
+{
+    int minModes = 0;
+    int maxModes = 0;
+    QVector<RuledModalSpellOption> modes;
 };
 
 enum class RuledCastSource : int
@@ -891,6 +899,9 @@ public:
     QHash<quint64, SpellTargetData> validTargetsByZoneObject;
     // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
     QHash<quint64, SpellTargetData> validTargetsByAbility;
+    // Key = (permanentOid << 32 | abilityIndex); the recipient-private mode offer and each
+    // mode's target groups are rebuilt from LegalActions for this ability.
+    QHash<quint64, RuledActivatedAbilityModeOffer> activatedAbilityModesByAbility;
     QHash<quint64, RuledCostData> abilityCostData;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;

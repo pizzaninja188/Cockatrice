@@ -2188,6 +2188,16 @@ pub(crate) enum CounterPlacementCompletion {
     StackEffect {
         spell_label: String,
     },
+    /// One direct legacy activated-modal instruction that places equal counters on the ability
+    /// controller. The captured frame and positive counter snapshot bind the pending batch to its
+    /// exact stack occurrence while replacement ordering is suspended.
+    DoubleYourCounters {
+        stack_id: ObjectId,
+        mode_id: ModeId,
+        leaf_index: u32,
+        controller: PlayerId,
+        snapshot: BTreeMap<CounterKind, u32>,
+    },
     Proliferate {
         player_id: PlayerId,
     },

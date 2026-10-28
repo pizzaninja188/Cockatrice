@@ -463,6 +463,16 @@ impl GameEngine {
                         self.state.pending_replacement_event.as_ref(),
                     )
                 });
+        let begun_self_counters = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                self.begun_self_counter_placement(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                )
+            });
         let begun_wolf_counters = self
             .state
             .pending_resolution
@@ -589,8 +599,8 @@ impl GameEngine {
                     preserve = true;
                 }
                 ResolutionContinuation::CounterReplacement { .. }
-                    if begun_combined_counters || begun_wolf_counters => {
-                    // These exact flat instructions have begun. Surviving recipients keep
+                    if begun_combined_counters || begun_wolf_counters || begun_self_counters => {
+                    // These validated counter instructions have begun. Surviving recipients keep
                     // accepted replacements and the original cursor after controller departure.
                     preserve = true;
                 }

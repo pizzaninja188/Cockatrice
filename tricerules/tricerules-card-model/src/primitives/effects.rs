@@ -2004,6 +2004,9 @@ pub enum SpellEffectKind {
     DoubleCounters {
         target: TargetFilter,
     },
+    /// Aetheric Amplifier doubles counters on the player controlling the resolving ability.
+    /// Model admission is limited to a direct legacy leaf in the supported activated-modal owner.
+    DoubleYourCounters,
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -3937,6 +3940,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
             | SpellEffectKind::PutCountersOnCreaturesAndOtherPlaneswalkers
             | SpellEffectKind::Proliferate
+            | SpellEffectKind::DoubleYourCounters
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
@@ -4399,6 +4403,15 @@ impl SpellEffectKind {
         self.validate_inner(context, false)
     }
 
+    /// Validation entry used only after an activated modal owner has established that this is a
+    /// direct legacy mode effect. Nested effects still go through ordinary `validate` calls.
+    pub(crate) fn validate_activated_modal_mode_effect(&self) -> Result<(), String> {
+        match self {
+            Self::DoubleYourCounters => Ok(()),
+            _ => self.validate(EffectContext::Ability),
+        }
+    }
+
     pub fn typed_resultful_battlefield_search_result_type(&self) -> Option<ResultType> {
         let Self::SearchLibrary {
             who,
@@ -4539,6 +4552,12 @@ impl SpellEffectKind {
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if matches!(self, Self::DoubleYourCounters) {
+            return Err(
+                "DoubleYourCounters is valid only as a direct effect in an activated modal mode"
+                    .into(),
+            );
+        }
         if matches!(self, Self::GrantChainVeilLoyaltyPermission)
             && context != EffectContext::Ability
         {
@@ -7313,6 +7332,7 @@ mod pupu_ufo_effect_validation_tests {
             cost_modifiers: vec![],
             effect: vec![effect],
             program: None,
+            modal: None,
             targeting: None,
             timing: Default::default(),
             conditions: vec![],
@@ -7416,6 +7436,7 @@ mod pupu_ufo_effect_validation_tests {
             cost_modifiers: vec![],
             effect: vec![event_count_effect.clone()],
             program: None,
+            modal: None,
             targeting: None,
             timing: Default::default(),
             conditions: vec![],

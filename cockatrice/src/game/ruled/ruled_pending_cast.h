@@ -192,6 +192,7 @@ struct PendingActivatedAbility
     quint64 castingPermissionId = 0;
     QString abilityText;
     QString cardName;
+    std::optional<RuledModalSpellOption> selectedMode;
     bool needsTarget = false;
     bool waitingForTarget = false;
     struct Target
@@ -214,7 +215,7 @@ struct PendingActivatedAbility
     bool targetingCostApplied = false;
     bool restartAfterTargetInvalidation = false;
 
-    /// Shared activation identity and choice header; target and payment cohorts are appended by the host.
+    /// Shared activation identity and selected target payload; payment cohorts are appended by the host.
     void writeActivationHeader(ruled::v1::ActivateAbility &command) const
     {
         command.set_source_object_id(permanentOid);
@@ -224,6 +225,21 @@ struct PendingActivatedAbility
         command.set_mana_option_index(static_cast<quint32>(manaOptionIndex));
         command.set_x_value(xValue);
         command.set_mana_split_first_color_count(manaSplitFirstColorCount);
+        if (selectedMode) {
+            auto *mode = command.add_selected_modes();
+            mode->set_mode_index(static_cast<quint32>(selectedMode->modeIndex));
+            for (const auto &target : selectedTargets) {
+                auto *targetRef = mode->add_targets();
+                *targetRef = target.ref;
+                if (target.ref.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+                    targetRef->set_expected_zone_change_generation(target.zoneChangeGeneration);
+                }
+            }
+            return;
+        }
+        for (const auto &target : selectedTargets) {
+            *command.add_targets() = target.ref;
+        }
     }
 };
 
@@ -369,15 +385,42 @@ template <typename PendingPayment>
                        });
 }
 
+/// A selected activated mode remains valid only while the same selectable one-mode offer is
+/// present for the source's current incarnation. The state view owns the latest target data.
+[[nodiscard]] inline const RuledModalSpellOption *ruledCurrentActivatedAbilityMode(
+    const RuledClientState &state, const PendingActivatedAbility &pending)
+{
+    if (!pending.selectedMode) {
+        return nullptr;
+    }
+    const auto offer = state.activatedAbilityModesByAbility.constFind(
+        RuledClientState::abilityTargetKey(pending.permanentOid, pending.abilityIndex));
+    if (offer == state.activatedAbilityModesByAbility.cend() || offer->minModes != 1 || offer->maxModes != 1) {
+        return nullptr;
+    }
+    const RuledModalSpellOption *selected = nullptr;
+    for (const auto &mode : offer->modes) {
+        if (mode.modeIndex != pending.selectedMode->modeIndex) {
+            continue;
+        }
+        if (selected) {
+            return nullptr;
+        }
+        selected = &mode;
+    }
+    return selected && selected->selectable ? selected : nullptr;
+}
+
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
 /// permanent actions deliberately carry no activated-ability index, so they must be matched
 /// against the engine's typed action list instead.
 [[nodiscard]] inline bool ruledPendingAbilitySourceStillCurrent(const RuledClientState &state,
                                                                 const PendingActivatedAbility &pending)
 {
-    // The engine owns an accepted announcement even when its live ability/grant is no longer
-    // published. Begin also survives the short gap before its authoritative reply arrives.
-    if (pending.stage == PendingActivatedAbility::Stage::BeginPending)
+    // The engine owns a submitted announcement or commit even when its live ability/grant is no
+    // longer published. Each stage survives the short gap before its authoritative reply arrives.
+    if (pending.stage == PendingActivatedAbility::Stage::BeginPending ||
+        (pending.stage == PendingActivatedAbility::Stage::CommitPending && pending.engineTransactionId == 0))
         return true;
     if (pending.engineTransactionId != 0) {
         return state.pendingAbilityActivation &&
@@ -394,7 +437,8 @@ template <typename PendingPayment>
             .has_value();
     }
     return state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
-           state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex);
+           state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex) &&
+           (!pending.selectedMode || ruledCurrentActivatedAbilityMode(state, pending));
 }
 
 struct PendingRuledSpellCast
@@ -842,19 +886,33 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                                    data.has_value() ? data->groups.size() : 0);
 }
 
+[[nodiscard]] inline std::optional<RuledSpellTargetData>
+currentRuledPendingAbilityTargetData(const PendingActivatedAbility &ability, const RuledClientState &state)
+{
+    if (!ability.selectedMode) {
+        return state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    }
+    const auto *mode = ruledCurrentActivatedAbilityMode(state, ability);
+    return mode ? std::optional<RuledSpellTargetData>(mode->targets) : std::nullopt;
+}
+
 [[nodiscard]] inline QString ruledPendingAbilityTargetPrompt(const PendingActivatedAbility &ability,
                                                              const RuledClientState &state)
 {
-    const RuledSpellTargetData data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    const auto data = currentRuledPendingAbilityTargetData(ability, state);
+    const RuledSpellTargetData emptyData;
+    const auto &targetData = data ? *data : emptyData;
     const RuledTargetGroupData *group = nullptr;
-    if (data.groups.isEmpty()) {
-        group = ability.activeTargetGroupPosition == 0 ? &static_cast<const RuledTargetGroupData &>(data) : nullptr;
-    } else if (ability.activeTargetGroupPosition >= 0 && ability.activeTargetGroupPosition < data.groups.size()) {
-        group = &data.groups.at(ability.activeTargetGroupPosition);
+    if (targetData.groups.isEmpty()) {
+        group = ability.activeTargetGroupPosition == 0 ? &static_cast<const RuledTargetGroupData &>(targetData) : nullptr;
+    } else if (ability.activeTargetGroupPosition >= 0 && ability.activeTargetGroupPosition < targetData.groups.size()) {
+        group = &targetData.groups.at(ability.activeTargetGroupPosition);
     }
     const RuledTargetGroupData fallbackGroup;
-    return formatRuledTargetPrompt(ability.abilityText, group ? *group : fallbackGroup,
-                                   ability.activeTargetGroupPosition, data.groups.size());
+    const auto *mode = ability.selectedMode ? ruledCurrentActivatedAbilityMode(state, ability) : nullptr;
+    const QString sourceContext = mode ? mode->label : ability.abilityText;
+    return formatRuledTargetPrompt(sourceContext, group ? *group : fallbackGroup,
+                                   ability.activeTargetGroupPosition, targetData.groups.size());
 }
 
 /// The activated ability target picker stages one engine-authored group at a time. Its zero-based
@@ -1059,8 +1117,11 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         }
     }
     if (ability.valid && ability.waitingForTarget) {
-        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-        const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+        const auto data = currentRuledPendingAbilityTargetData(ability, state);
+        if (!data) {
+            return RuledTargetClickEligibility::Illegal;
+        }
+        const auto *group = ruledPendingAbilityTargetGroup(ability, *data);
         if (!group) {
             return RuledTargetClickEligibility::Illegal;
         }
@@ -1068,6 +1129,14 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             const auto candidateGeneration = ruledXTargetCandidateGeneration(*group, ability.xValue, oid);
             if (kind != RuledTargetCandidateKind::Battlefield || !candidateGeneration ||
                 *candidateGeneration != state.battlefieldGenerationByOid.value(oid, 0)) {
+                return RuledTargetClickEligibility::Illegal;
+            }
+        }
+        if (ability.selectedMode && kind == RuledTargetCandidateKind::Battlefield && !group->hasXTargetChoices) {
+            const auto generation = group->validPermanentGenerations.constFind(oid);
+            if (generation == group->validPermanentGenerations.cend() ||
+                !state.battlefieldGenerationByOid.contains(oid) ||
+                state.battlefieldGenerationByOid.value(oid) != generation.value()) {
                 return RuledTargetClickEligibility::Illegal;
             }
         }
@@ -1103,8 +1172,11 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
     if (!ability.valid || !ability.waitingForTarget) {
         return ruledTargetClickEligibility(spell, ability, state, kind, oid, localPlayerId);
     }
-    const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    const auto data = currentRuledPendingAbilityTargetData(ability, state);
+    if (!data) {
+        return RuledTargetClickEligibility::Illegal;
+    }
+    const auto *group = ruledPendingAbilityTargetGroup(ability, *data);
     if (!group) {
         return ruledTargetClickEligibility(spell, ability, state, kind, oid, localPlayerId);
     }
@@ -1234,9 +1306,22 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             }
         }
     }
+    if (ability.valid && ability.selectedMode && ability.engineTransactionId == 0 &&
+        ability.stage == PendingActivatedAbility::Stage::Announcing &&
+        !ruledPendingAbilitySourceStillCurrent(state, ability)) {
+        ability.restartAfterTargetInvalidation = true;
+        return true;
+    }
     if (ability.valid && ability.engineTransactionId == 0 &&
         ability.stage == PendingActivatedAbility::Stage::Announcing && !ability.selectedTargets.isEmpty()) {
-        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+        const auto dataValue = currentRuledPendingAbilityTargetData(ability, state);
+        if (!dataValue) {
+            if (ability.selectedMode) {
+                ability.restartAfterTargetInvalidation = true;
+            }
+            return true;
+        }
+        const auto &data = *dataValue;
         for (int index = ability.selectedTargets.size() - 1; index >= 0; --index) {
             const auto &target = ability.selectedTargets.at(index);
             const auto group = std::find_if(data.groups.cbegin(), data.groups.cend(), [&target](const auto &entry) {
@@ -1254,13 +1339,28 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
                  target.ref.expected_zone_change_generation() == *xTargetGeneration &&
                  target.zoneChangeGeneration == *xTargetGeneration &&
                  state.battlefieldGenerationByOid.value(target.ref.object_id(), 0) == *xTargetGeneration);
+            bool modeTargetIncarnationMatches = true;
+            if (ability.selectedMode && target.ref.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+                const auto generation = candidates.validPermanentGenerations.constFind(target.ref.object_id());
+                modeTargetIncarnationMatches = generation != candidates.validPermanentGenerations.cend() &&
+                                               target.ref.has_expected_zone_change_generation() &&
+                                               target.ref.expected_zone_change_generation() == generation.value() &&
+                                               target.zoneChangeGeneration == generation.value() &&
+                                               state.battlefieldGenerationByOid.contains(target.ref.object_id()) &&
+                                               state.battlefieldGenerationByOid.value(target.ref.object_id()) ==
+                                                   generation.value();
+            }
             if (candidates.hasXTargetChoices && !xTargetIncarnationMatches && ability.targetingCostApplied) {
                 ability.restartAfterTargetInvalidation = true;
             }
-            if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) ||
-                !xTargetIncarnationMatches ||
-                !ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
-                                           ruledSelectedTargetRefs(ability))) {
+            const bool targetStillLegal = ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) &&
+                                          xTargetIncarnationMatches && modeTargetIncarnationMatches &&
+                                          ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
+                                                                   ruledSelectedTargetRefs(ability));
+            if (ability.selectedMode && !targetStillLegal) {
+                ability.restartAfterTargetInvalidation = true;
+            }
+            if (!targetStillLegal) {
                 const int position =
                     group == data.groups.cend() ? 0 : static_cast<int>(std::distance(data.groups.cbegin(), group));
                 ability.selectedTargets.resize(index);
@@ -1272,8 +1372,8 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         }
     }
     if (ability.valid && ability.waitingForTarget) {
-        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-        const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+        const auto data = currentRuledPendingAbilityTargetData(ability, state);
+        const auto *group = data ? ruledPendingAbilityTargetGroup(ability, *data) : nullptr;
         // An empty active group still owns the target prompt. Refresh its bounds after every
         // LegalActions snapshot so optional zero-target groups keep a usable confirm affordance.
         if (group && ruledActivatedTargetSelectionCount(ability, group->groupIndex) == 0) {
@@ -1281,6 +1381,13 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         }
     }
     return changed;
+}
+
+/// A rejected direct activation can be resubmitted only while its staged target receipt still
+/// satisfies the current offer. Retargeting is a fresh user decision, not an automatic retry.
+[[nodiscard]] inline bool ruledRejectedActivationCanRetry(const PendingActivatedAbility &ability)
+{
+    return !ability.restartAfterTargetInvalidation && !ability.waitingForTarget;
 }
 
 /// Identify a locally staged spell or ability whose last mana pip was consumed while another
@@ -1312,6 +1419,12 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
 class RuledPendingCast
 {
 public:
+    enum class ModeChoicePurpose
+    {
+        SpellCast,
+        ActivatedAbility,
+    };
+
     enum class InteractionKind
     {
         None,
@@ -1373,7 +1486,8 @@ public:
                                                    const QString &cardName,
                                                    const QVector<RuledModalSpellOption> &modes,
                                                    int minModes,
-                                                   int maxModes);
+                                                   int maxModes,
+                                                   ModeChoicePurpose purpose = ModeChoicePurpose::SpellCast);
 
     /// Pick one engine-authoritative castable face. The physical CardItem may expose only its
     /// front display name (Adventure), so menu entries come exclusively from `faces`.

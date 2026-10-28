@@ -2418,6 +2418,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         pendingAbilityActivation.reset();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();
+        activatedAbilityModesByAbility.clear();
         openingUiKind = RuledOpeningUiKind::None;
         openingMulliganCount = 0;
         openingBottomRemaining = 0;

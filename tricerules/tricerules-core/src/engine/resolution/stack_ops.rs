@@ -900,6 +900,16 @@ pub(super) fn copy_triggering_activated_ability(
         cx.engine
             .public_stack_ability_source(source_id, copy.source_zone_change)
     });
+    let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
+        super::super::presentation::activated_stack_mode_presentation(
+            copy.activated_ability
+                .as_ref()
+                .expect("captured activated ability copy retains its definition"),
+            copy.ability_text.as_deref().unwrap_or("Ability"),
+            &copy.chosen_modes,
+            presentation.primary.as_ref(),
+        )
+        .map_err(EngineError::ProgramInvariant)?;
     cx.engine.state.stack.push(copy);
     cx.engine.state.passes_since_stack_change = 0;
     cx.events.push(rv1::RuledEvent {
@@ -914,12 +924,12 @@ pub(super) fn copy_triggering_activated_ability(
             is_copy: true,
             is_triggered: false,
             copy_source_object_id: original.id,
-            chosen_mode_indices: Vec::new(),
-            chosen_mode_labels: Vec::new(),
+            chosen_mode_indices,
+            chosen_mode_labels,
             chosen_cast_cost_labels: Vec::new(),
             source_token_identity: presentation.source_token_identity,
             primary_presentation: presentation.primary,
-            chosen_mode_presentations: presentation.chosen_modes,
+            chosen_mode_presentations,
             chosen_cast_cost_presentations: presentation.chosen_cast_costs,
             prototyped: false,
             ability_controller_player_id: Some(cx.controller),

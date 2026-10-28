@@ -2,7 +2,9 @@ use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::payment::components::ObjectPaymentComponent;
-use super::presentation::{presentation_ref, PresentationPath};
+use super::presentation::{
+    ability_presentation, child_presentation_ref, presentation_ref, PresentationPath,
+};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     ability_program, compute_ability_targets_with_context_and_program,
@@ -54,6 +56,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
+        let mut activated_ability_modes = BTreeMap::new();
         let mut cost_choices_by_ability = BTreeMap::new();
         let mut mana_payment_by_ability = BTreeMap::new();
         let mut mana_ability_keys = HashSet::new();
@@ -116,7 +119,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 }
                 for effective in eng.effective_activated_abilities(poid) {
                     let ai = effective.slot as usize;
-                    let ability = effective.definition;
+                    let ability = effective.definition.clone();
                     let key = (poid as u64) << 32 | ai as u64;
                     if ability.is_mana_ability() {
                         mana_ability_keys.insert(key);
@@ -136,6 +139,79 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         key,
                         legal_ability_cost_choices(eng, p.id, poid, ai, &ability),
                     );
+                    if let Some(modal) = &ability.modal {
+                        let ability_text = ability.fallback_text_with_path(
+                            &object_display_name(&eng.state, eng.registry, poid),
+                            &effective.ability_path(),
+                        );
+                        let parent_presentation =
+                            effective
+                                .presentation_definition
+                                .as_ref()
+                                .map(|definition| {
+                                    ability_presentation(
+                                        eng.registry,
+                                        definition,
+                                        &ability.presentation,
+                                        ability_text.clone(),
+                                    )
+                                });
+                        let modes = modal
+                            .modes
+                            .iter()
+                            .enumerate()
+                            .map(|(mode_index, mode)| {
+                                let needs_target = target_schema_with_program(
+                                    &mode.effects,
+                                    mode.targeting.as_ref(),
+                                    None,
+                                )
+                                .has_targets();
+                                let mut targets = if needs_target {
+                                    compute_ability_targets_with_program(
+                                        eng,
+                                        p.id,
+                                        TargetSourceIdentity::current(eng, poid),
+                                        &mode.effects,
+                                        mode.targeting.as_ref(),
+                                        None,
+                                    )
+                                } else {
+                                    rv1::SpellTargets::default()
+                                };
+                                publish_modal_permanent_target_generations(eng, &mut targets);
+                                let label = tricerules_card_model::mode_fallback(
+                                    &ability_text,
+                                    &mode.mode_id,
+                                );
+                                rv1::LegalSpellMode {
+                                    mode_index: mode_index as u32,
+                                    label: label.clone(),
+                                    selectable: !needs_target
+                                        || spell_target_groups_are_selectable(&targets),
+                                    needs_target,
+                                    targets: Some(targets),
+                                    presentation: parent_presentation.as_ref().map(|parent| {
+                                        child_presentation_ref(
+                                            parent,
+                                            PresentationPath::Mode(&mode.mode_id),
+                                            &mode.presentation,
+                                            label,
+                                        )
+                                    }),
+                                    linked_cast_cost: None,
+                                }
+                            })
+                            .collect();
+                        activated_ability_modes.insert(
+                            key,
+                            rv1::LegalActivatedAbilityModes {
+                                min_modes: modal.min_modes,
+                                max_modes: modal.max_modes,
+                                modes,
+                            },
+                        );
+                    }
                     let program = effective_ability_program(eng, &effective.occurrence);
                     if target_schema_with_program(
                         &ability.effect,
@@ -401,6 +477,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             required_blocker_ids.clear();
             valid_targets_by_hand_slot.clear();
             valid_targets_by_zone_object.clear();
+            activated_ability_modes.clear();
             if paying_cast {
                 valid_targets_by_ability.retain(|key, _| mana_ability_keys.contains(key));
                 cost_choices_by_ability.retain(|key, _| mana_ability_keys.contains(key));
@@ -518,6 +595,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 selectable_attacker_ids,
                 zone_cast_actions,
                 valid_targets_by_zone_object,
+                activated_ability_modes,
                 cost_choices_by_ability,
                 legal_block_pairs,
                 mana_payment_by_ability,
@@ -546,6 +624,27 @@ fn effective_ability_program<'a>(
         _ => return None,
     };
     ability_program(engine, definition)
+}
+
+fn publish_modal_permanent_target_generations(
+    engine: &GameEngine,
+    targets: &mut rv1::SpellTargets,
+) {
+    for group in &mut targets.groups {
+        group.valid_permanent_targets = group
+            .valid_permanent_ids
+            .iter()
+            .map(|&object_id| rv1::LegalPermanentTargetCandidate {
+                object_id,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+            })
+            .collect();
+    }
 }
 
 fn trigger_origin_definition(origin: &TriggerAbilityOrigin) -> Option<&AbilityDefinitionId> {

@@ -262,6 +262,9 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         for (const quint32 oid : group.valid_permanent_ids()) {
             parsed.validPermanentIds.insert(oid);
         }
+        for (const auto &candidate : group.valid_permanent_targets()) {
+            parsed.validPermanentGenerations.insert(candidate.object_id(), candidate.zone_change_generation());
+        }
         for (const quint32 oid : group.valid_stack_ids()) {
             parsed.validStackIds.insert(oid);
         }
@@ -549,6 +552,24 @@ parseSpellModes(const google::protobuf::RepeatedPtrField<ruled::v1::LegalSpellMo
     return modes;
 }
 
+RuledActivatedAbilityModeOffer
+parseActivatedAbilityModeOffer(const ruled::v1::LegalActivatedAbilityModes &source,
+                               const RuledPresentationResolver &resolver)
+{
+    RuledActivatedAbilityModeOffer offer;
+    const auto representable = static_cast<quint32>(std::numeric_limits<int>::max());
+    if (source.min_modes() > representable) {
+        // An unrepresentable minimum stays unreachable; never relax the engine's mode requirement.
+        offer.minModes = 1;
+        offer.maxModes = 0;
+    } else {
+        offer.minModes = static_cast<int>(source.min_modes());
+        offer.maxModes = static_cast<int>(std::min(source.max_modes(), representable));
+    }
+    offer.modes = parseSpellModes(source.modes(), resolver);
+    return offer;
+}
+
 bool engineFallbackHasCompleteCostPrefix(const ruled::v1::AbilityInfo &ability)
 {
     const QString fallback = QString::fromStdString(ability.text());
@@ -687,6 +708,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->validTargetsByHandSlot.clear();
     state->validTargetsByZoneObject.clear();
     state->validTargetsByAbility.clear();
+    state->activatedAbilityModesByAbility.clear();
     state->abilityCostData.clear();
     state->eligibleRestrictedManaByAbility.clear();
     state->waterbendAbilities.clear();
@@ -2710,6 +2732,11 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->validTargetsByAbility.clear();
     for (const auto &entry : actions.valid_targets_by_ability()) {
         state->validTargetsByAbility.insert(static_cast<quint64>(entry.first), parseSpellTargets(entry.second));
+    }
+    state->activatedAbilityModesByAbility.clear();
+    for (const auto &entry : actions.activated_ability_modes()) {
+        state->activatedAbilityModesByAbility.insert(
+            static_cast<quint64>(entry.first), parseActivatedAbilityModeOffer(entry.second, presentationResolver));
     }
     state->abilityCostData.clear();
     for (const auto &entry : actions.cost_choices_by_ability()) {

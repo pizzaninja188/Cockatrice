@@ -824,6 +824,137 @@ impl GameEngine {
         }
     }
 
+    fn validate_counter_placement_completion_scope(
+        &self,
+        events: &[ProposedCounterPlacement],
+        completion: &crate::state::CounterPlacementCompletion,
+        parked_stack: Option<&ParkedStackResolution>,
+    ) -> Result<(), EngineError> {
+        let crate::state::CounterPlacementCompletion::DoubleYourCounters {
+            stack_id,
+            mode_id,
+            leaf_index,
+            controller,
+            snapshot,
+        } = completion
+        else {
+            return Ok(());
+        };
+        let frame = parked_stack.ok_or(EngineError::Illegal(
+            "DoubleYourCounters requires its actual parked stack frame",
+        ))?;
+        let selected_mode_matches = frame
+            .item
+            .chosen_modes
+            .as_slice()
+            .first()
+            .is_some_and(|chosen| frame.item.chosen_modes.len() == 1 && chosen.mode_id == *mode_id);
+        let supported_frame = frame.item.id == *stack_id
+            && frame.item.controller == *controller
+            && !frame.item.is_triggered
+            && frame.program.is_none()
+            && frame.resume_effect_index == leaf_index.checked_add(1)
+            && selected_mode_matches
+            && frame
+                .item
+                .activated_ability
+                .as_ref()
+                .is_some_and(|ability| {
+                    ability.program.is_none()
+                        && ability.effect.is_empty()
+                        && ability.modal.as_ref().is_some_and(|modal| {
+                            modal.mode_by_id(mode_id).is_some_and(|mode| {
+                                mode.program.is_none()
+                                    && mode.effects.get(*leaf_index as usize)
+                                        == Some(&SpellEffectKind::DoubleYourCounters)
+                            })
+                        })
+                });
+        if !supported_frame {
+            return Err(EngineError::Illegal(
+                "DoubleYourCounters completion does not match its captured activated-mode frame",
+            ));
+        }
+
+        let player_index = self
+            .state
+            .player_idx(*controller)
+            .ok_or(EngineError::Illegal(
+                "DoubleYourCounters controller is missing",
+            ))?;
+        let player = &self.state.players[player_index];
+        let is_live = !player.has_lost;
+        if is_live {
+            let current_snapshot = player
+                .counters
+                .iter()
+                .filter_map(|(&kind, &count)| (count > 0).then_some((kind, count)))
+                .collect::<BTreeMap<_, _>>();
+            if current_snapshot != *snapshot {
+                return Err(EngineError::Illegal(
+                    "DoubleYourCounters counter snapshot became stale",
+                ));
+            }
+        }
+        let expected_event_count = if snapshot.is_empty() { 0 } else { 1 };
+        if events.len() > expected_event_count || (is_live && events.len() != expected_event_count)
+        {
+            return Err(EngineError::Illegal(
+                "DoubleYourCounters counter batch does not match its snapshot",
+            ));
+        }
+        for event in events {
+            if !matches!(
+                &event.recipient,
+                CounterPlacementRecipient::Player { player_id } if *player_id == *controller
+            ) || event.actor != *controller
+                || event.origin != super::continuous::CounterPlacementOrigin::Effect
+                || event.original_counters != *snapshot
+                || event
+                    .counters
+                    .keys()
+                    .any(|kind| !snapshot.contains_key(kind))
+                || snapshot
+                    .keys()
+                    .any(|kind| !event.counters.contains_key(kind))
+                || event.entry_source.is_some()
+                || event.entry_context.is_some()
+                || event.counter_move_context.is_some()
+                || event.cost_debit_index.is_some()
+            {
+                return Err(EngineError::Illegal(
+                    "DoubleYourCounters counter batch has an invalid actor, recipient, or origin",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Recognize a begun self-counter modal from its captured frame and validated proposal batch.
+    /// Departure cleanup uses this before it prunes the departed player's counter recipient.
+    pub(super) fn begun_self_counter_placement(
+        &self,
+        pending: &PendingResolution,
+        replacement: Option<&PendingReplacementEvent>,
+    ) -> bool {
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion:
+                completion @ crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
+        } = &pending.continuation
+        else {
+            return false;
+        };
+        let Some(PendingReplacementEvent::Counters(batch)) = replacement else {
+            return false;
+        };
+        pending.presentation.source_object_id == stack.item.id
+            && batch.event_index < batch.events.len()
+            && self
+                .validate_counter_placement_completion_scope(&batch.events, completion, Some(stack))
+                .is_ok()
+    }
+
     /// Resolve a parent batch of ordinary counter events. The return value is `None` when the
     /// affected player must choose a replacement order; no counter is committed in that case.
     pub(super) fn begin_counter_placement_batch(
@@ -833,6 +964,7 @@ impl GameEngine {
         completion: crate::state::CounterPlacementCompletion,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<Vec<CounterPlacementReceipt>>, EngineError> {
+        self.validate_counter_placement_completion_scope(&events, &completion, Some(&stack))?;
         events.sort_by_key(|event| {
             let affected = match &event.recipient {
                 CounterPlacementRecipient::Object { object_id, .. } => {
@@ -855,7 +987,7 @@ impl GameEngine {
                 Ok(None)
             }
             None => self
-                .commit_counter_placement_batch(&batch.events, &completion, out)
+                .commit_counter_placement_batch(&batch.events, &completion, Some(&stack), out)
                 .map(Some),
         }
     }
@@ -896,7 +1028,7 @@ impl GameEngine {
             self.park_counter_placement_choice(batch, candidates, None, completion, out);
             Ok(true)
         } else {
-            self.commit_counter_placement_batch(&batch.events, &completion, out)?;
+            self.commit_counter_placement_batch(&batch.events, &completion, None, out)?;
             Ok(false)
         }
     }
@@ -1960,8 +2092,10 @@ impl GameEngine {
         &mut self,
         events: &[ProposedCounterPlacement],
         completion: &crate::state::CounterPlacementCompletion,
+        parked_stack: Option<&ParkedStackResolution>,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Vec<CounterPlacementReceipt>, EngineError> {
+        self.validate_counter_placement_completion_scope(events, completion, parked_stack)?;
         if matches!(
             completion,
             crate::state::CounterPlacementCompletion::SagaLore { .. }
@@ -2241,6 +2375,14 @@ impl GameEngine {
             match (&event.recipient, completion) {
                 (
                     CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
+                ) => {
+                    return Err(EngineError::Illegal(
+                        "DoubleYourCounters cannot place counters on a permanent",
+                    ));
+                }
+                (
+                    CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::StackEffect { .. },
                 )
                 | (
@@ -2291,6 +2433,10 @@ impl GameEngine {
                 (
                     CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::Proliferate { .. },
+                ) => {}
+                (
+                    CounterPlacementRecipient::Player { .. },
+                    crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
                 ) => {}
                 (
                     CounterPlacementRecipient::Player { .. },
@@ -2599,8 +2745,11 @@ impl GameEngine {
         let Some(original_replacement) = self.state.pending_replacement_event.clone() else {
             return Ok(());
         };
-        let begun_flat = self
-            .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
+        let begun_self_counter =
+            self.begun_self_counter_placement(&original_pending, Some(&original_replacement));
+        let begun_flat = begun_self_counter
+            || self
+                .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
             || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement));
         let (stack, completion) = match &original_pending.continuation {
             ResolutionContinuation::CounterReplacement {
@@ -2613,11 +2762,17 @@ impl GameEngine {
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::StackEffect { .. },
             } if begun_flat => (stack.clone(), completion.clone()),
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
+            } => (stack.clone(), completion.clone()),
             _ => return Ok(()),
         };
         let PendingReplacementEvent::Counters(batch) = &original_replacement else {
             return Ok(());
         };
+        self.validate_counter_placement_completion_scope(&batch.events, &completion, Some(&stack))?;
         let mut batch = (**batch).clone();
         let old_decider = original_pending.deciding_player;
         let old_event_index = batch.event_index;
@@ -2701,6 +2856,7 @@ impl GameEngine {
             .retain(|event| recipient_is_current(self, event));
         batch.event_index = completed_count.min(batch.events.len());
         batch.applications.clear();
+        self.validate_counter_placement_completion_scope(&batch.events, &completion, Some(&stack))?;
 
         if let Some(candidates) = self.advance_counter_placement_batch(&mut batch)? {
             let event = batch
@@ -2764,7 +2920,12 @@ impl GameEngine {
         let original_event_count = out.len();
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        let receipts = match self.commit_counter_placement_batch(&batch.events, &completion, out) {
+        let receipts = match self.commit_counter_placement_batch(
+            &batch.events,
+            &completion,
+            Some(&stack),
+            out,
+        ) {
             Ok(receipts) => receipts,
             Err(error) => {
                 out.truncate(original_event_count);
@@ -2815,6 +2976,16 @@ impl GameEngine {
                 return Err(EngineError::Illegal("counter-replacement choice is stale"));
             }
         };
+        if let Err(error) = self.validate_counter_placement_completion_scope(
+            &batch.events,
+            &completion,
+            stack.as_ref(),
+        ) {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(error);
+        }
         if let crate::state::CounterPlacementCompletion::CounterMove {
             source_target,
             destination_target,
@@ -2885,6 +3056,16 @@ impl GameEngine {
             &application.replacement,
         );
         batch.applications.clear();
+        if let Err(error) = self.validate_counter_placement_completion_scope(
+            &batch.events,
+            &completion,
+            stack.as_ref(),
+        ) {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(error);
+        }
 
         let mut events = Vec::new();
         if let Some(candidates) = self.advance_counter_placement_batch(&mut batch)? {
@@ -2919,7 +3100,8 @@ impl GameEngine {
             if !self.saga_lore_counter_batch_is_current(&batch.events, &completion) {
                 return self.finish_unstacked_saga_lore_action(events);
             }
-            match self.commit_counter_placement_batch(&batch.events, &completion, &mut events) {
+            match self.commit_counter_placement_batch(&batch.events, &completion, None, &mut events)
+            {
                 Ok(_) => return self.finish_unstacked_saga_lore_action(events),
                 Err(error) => {
                     self.state.pending_replacement_event =
@@ -2960,6 +3142,7 @@ impl GameEngine {
             return match self.commit_counter_placement_batch(
                 &batch.events,
                 &completion,
+                None,
                 &mut events,
             ) {
                 Ok(receipts) => self.finish_counter_replaced_damage_batch(
@@ -3063,16 +3246,20 @@ impl GameEngine {
                 "counter-replacement stack continuation is missing",
             ));
         };
-        let receipts =
-            match self.commit_counter_placement_batch(&batch.events, &completion, &mut events) {
-                Ok(receipts) => receipts,
-                Err(error) => {
-                    self.state.pending_replacement_event =
-                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
-                    self.state.pending_resolution = Some(pending);
-                    return Err(error);
-                }
-            };
+        let receipts = match self.commit_counter_placement_batch(
+            &batch.events,
+            &completion,
+            Some(&stack),
+            &mut events,
+        ) {
+            Ok(receipts) => receipts,
+            Err(error) => {
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
         if let crate::state::CounterPlacementCompletion::BlightEffect {
             player,
             count,
@@ -9818,7 +10005,7 @@ mod tests {
         let mut out = Vec::new();
 
         assert!(engine
-            .commit_counter_placement_batch(&[proposal], &completion, &mut out)
+            .commit_counter_placement_batch(&[proposal], &completion, None, &mut out)
             .is_err());
         assert_eq!(
             engine.diagnostic_snapshot().expect("after snapshot"),
@@ -9932,7 +10119,7 @@ mod tests {
         };
         let mut rejected = Vec::new();
         assert!(engine
-            .commit_counter_placement_batch(&[stale_destination], &completion, &mut rejected,)
+            .commit_counter_placement_batch(&[stale_destination], &completion, None, &mut rejected,)
             .is_err());
         assert_eq!(
             engine.diagnostic_snapshot().expect("unchanged snapshot"),
@@ -9942,7 +10129,7 @@ mod tests {
 
         let mut events = Vec::new();
         engine
-            .commit_counter_placement_batch(&[proposal], &completion, &mut events)
+            .commit_counter_placement_batch(&[proposal], &completion, None, &mut events)
             .expect("authenticated half-replacement receipt survives source departure");
         assert_eq!(
             engine.state.objects[&source].counter_count(CounterKind::Quest),

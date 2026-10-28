@@ -1993,6 +1993,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileGraveyards { .. }
         | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
         | SpellEffectKind::Proliferate
+        | SpellEffectKind::DoubleYourCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
         | SpellEffectKind::RevealCohort
         | SpellEffectKind::MoveCohortPartition { .. }
@@ -2984,6 +2985,7 @@ fn compute_targets_with_context(
                 can_target_self: self_legal,
                 can_target_opponent: opponent_legal,
                 valid_graveyard_ids: graveyard_ids,
+                valid_permanent_targets: Vec::new(),
                 distinct_from_group_indices: group.distinct_from.to_vec(),
                 same_graveyard: group.same_graveyard,
                 pair_constraint: None,

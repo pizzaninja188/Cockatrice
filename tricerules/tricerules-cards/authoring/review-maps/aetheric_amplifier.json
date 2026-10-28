@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "295cd8e1-0830-46c1-9957-556afd4bcee6",
+  "spans": [
+    {
+      "face_id": "aetheric_amplifier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "aetheric_amplifier",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    },
+    {
+      "face_id": "aetheric_amplifier",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/1/modal/modes/0/effects/0"]
+    },
+    {
+      "face_id": "aetheric_amplifier",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/activated_abilities/1/modal/modes/1/effects/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DoubleCounters",
+      "typed_path": "/faces/0/activated_abilities/1/modal/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DoubleYourCounters",
+      "typed_path": "/faces/0/activated_abilities/1/modal/modes/1/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_tap_mana_ability_produces_each_color_without_a_stack_item",
+      "covers": "the mana ability has each of the five single-color outputs, taps once, and resolves without a stack item"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_permanent_mode_doubles_every_counter_and_accepts_counterless_target",
+      "covers": "the permanent mode targets exactly one permanent, doubles every current kind, and accepts a target with no counters"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_player_mode_doubles_only_its_ability_controller",
+      "covers": "the player mode affects only the player who activated it"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_rejects_bad_modes_targets_generations_actor_and_revision_before_payment",
+      "covers": "invalid mode and ability indices, mode and target counts, stale source/target generations, stale revision, and wrong actor leave payment and state untouched"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_sorcery_mode_rejects_a_nonmain_phase_without_paying",
+      "covers": "the modal ability obeys its sorcery timing restriction and rejects before paying"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_uses_current_counter_bags_captured_controller_and_replacement",
+      "covers": "resolution uses current permanent/player counters, retains the activation controller, and applies Doubling Season counter replacement"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_actual_targeted_mode_is_copied_by_rings_with_a_new_target",
+      "covers": "the actual modal activation is observed and copied by actual Rings of Brighthearth, preserving its mode and independently retargeting"
+    },
+    {
+      "test": "scenario deck_coverage_aetheric_amplifier::aetheric_amplifier_activation_and_resolution_replay_from_protobuf_wire",
+      "covers": "accepted activation and priority commands survive protobuf encode/decode replay with identical batches and diagnostic state"
+    },
+    {
+      "test": "deck_registry::deck_coverage_aetheric_amplifier::aetheric_amplifier_registers_exact_activated_mana_and_modal_counter_modes",
+      "covers": "exact printed identity, mana cost, five separate mana choices, activation cost/timing, and both modal effect shapes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

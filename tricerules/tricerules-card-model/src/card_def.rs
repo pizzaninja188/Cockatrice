@@ -87,6 +87,19 @@ impl ModalDef {
     }
 
     pub(crate) fn validate(&self, context: EffectContext) -> Result<(), String> {
+        self.validate_inner(context, false)
+    }
+
+    /// Only the activated-ability validator may call this after its owner shape gates pass.
+    pub(crate) fn validate_for_activated_modal_owner(&self) -> Result<(), String> {
+        self.validate_inner(EffectContext::Ability, true)
+    }
+
+    fn validate_inner(
+        &self,
+        context: EffectContext,
+        allow_activated_modal_mode_effect: bool,
+    ) -> Result<(), String> {
         if self.min_modes == 0
             || self.max_modes < self.min_modes
             || self.max_modes as usize > self.modes.len()
@@ -128,7 +141,11 @@ impl ModalDef {
             }
             if mode.program.is_none() {
                 for effect in &mode.effects {
-                    effect.validate(context)?;
+                    if allow_activated_modal_mode_effect {
+                        effect.validate_activated_modal_mode_effect()?;
+                    } else {
+                        effect.validate(context)?;
+                    }
                 }
                 SpellEffectKind::validate_list(&mode.effects)?;
                 TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)?;
@@ -1829,6 +1846,7 @@ mod tests {
             cost_modifiers: Vec::new(),
             effect: vec![SpellEffectKind::None],
             program: None,
+            modal: None,
             targeting: None,
             timing: Default::default(),
             conditions: Vec::new(),
@@ -1898,6 +1916,7 @@ mod tests {
             cost_modifiers: Vec::new(),
             effect: vec![SpellEffectKind::None],
             program: None,
+            modal: None,
             targeting: None,
             timing: Default::default(),
             conditions: Vec::new(),

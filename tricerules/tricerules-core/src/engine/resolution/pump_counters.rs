@@ -1212,6 +1212,100 @@ pub(super) fn protect_all_permanents_you_control_with_counters(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn double_your_counters(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let selected_mode = match cx.top.chosen_modes.as_slice() {
+        [mode] => mode,
+        _ => {
+            return Err(EngineError::Illegal(
+                "DoubleYourCounters requires one captured activated mode",
+            ));
+        }
+    };
+    let ability = cx
+        .top
+        .activated_ability
+        .as_ref()
+        .filter(|_| !cx.top.is_triggered)
+        .ok_or(EngineError::Illegal(
+            "DoubleYourCounters requires a captured activated ability",
+        ))?;
+    let direct_legacy_leaf = ability
+        .modal
+        .as_ref()
+        .and_then(|modal| modal.mode_by_id(&selected_mode.mode_id))
+        .is_some_and(|mode| {
+            ability.program.is_none()
+                && ability.effect.is_empty()
+                && mode.program.is_none()
+                && mode.effects.get(cx.effect_index as usize)
+                    == Some(&SpellEffectKind::DoubleYourCounters)
+        });
+    if !direct_legacy_leaf {
+        return Err(EngineError::Illegal(
+            "DoubleYourCounters requires a direct legacy activated-modal leaf",
+        ));
+    }
+    if cx.program_state.is_some() || cx.controller != cx.top.controller {
+        return Err(EngineError::Illegal(
+            "DoubleYourCounters requires its captured activated controller",
+        ));
+    }
+
+    let player_index = cx
+        .engine
+        .state
+        .player_idx(cx.controller)
+        .ok_or(EngineError::Illegal(
+            "DoubleYourCounters controller is missing",
+        ))?;
+    let snapshot = if cx.engine.state.players[player_index].has_lost {
+        std::collections::BTreeMap::new()
+    } else {
+        cx.engine.state.players[player_index]
+            .counters
+            .iter()
+            .filter_map(|(&kind, &count)| (count > 0).then_some((kind, count)))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let mut placements = Vec::new();
+    if !snapshot.is_empty() {
+        placements.push(
+            cx.engine
+                .proposed_player_counter_placement(
+                    cx.controller,
+                    cx.controller,
+                    snapshot.iter().map(|(&kind, &count)| (kind, count)),
+                    super::super::continuous::CounterPlacementOrigin::Effect,
+                )
+                .ok_or(EngineError::Illegal(
+                    "DoubleYourCounters player became unavailable",
+                ))?,
+        );
+    }
+
+    let leaf_index = cx.effect_index;
+    let mut stack = cx.parked_stack();
+    let resume_index = leaf_index.checked_add(1).ok_or(EngineError::Illegal(
+        "DoubleYourCounters effect cursor overflow",
+    ))?;
+    stack.resume_effect_index = Some(resume_index);
+    let completion = crate::state::CounterPlacementCompletion::DoubleYourCounters {
+        stack_id: cx.top.id,
+        mode_id: selected_mode.mode_id.clone(),
+        leaf_index,
+        controller: cx.controller,
+        snapshot,
+    };
+    let result = cx
+        .engine
+        .begin_counter_placement_batch(placements, stack, completion, cx.events)?;
+    if result.is_some() {
+        Ok(EffectOutcome::Continue)
+    } else {
+        Ok(EffectOutcome::Suspended)
+    }
+}
+
 pub(super) fn double_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

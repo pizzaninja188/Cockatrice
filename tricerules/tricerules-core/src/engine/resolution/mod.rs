@@ -1453,6 +1453,15 @@ impl GameEngine {
                 .triggered_ability
                 .as_ref()
                 .and_then(|ability| ability.modal.as_ref())
+                .or_else(|| {
+                    (top.ability_text.is_some() && !top.is_triggered)
+                        .then(|| {
+                            top.activated_ability
+                                .as_ref()
+                                .and_then(|ability| ability.modal.as_ref())
+                        })
+                        .flatten()
+                })
                 .or_else(|| face.and_then(|face| face.modal_spell.as_ref()))
             else {
                 return false;
@@ -2200,6 +2209,10 @@ impl GameEngine {
         if !top.chosen_modes.is_empty() {
             let modal = if top.is_triggered {
                 top.triggered_ability
+                    .as_ref()
+                    .and_then(|ability| ability.modal.as_ref())
+            } else if is_ability {
+                top.activated_ability
                     .as_ref()
                     .and_then(|ability| ability.modal.as_ref())
             } else if !is_ability {

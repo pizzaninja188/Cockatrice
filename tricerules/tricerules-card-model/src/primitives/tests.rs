@@ -4012,6 +4012,7 @@ fn trigger_object_copy_is_trigger_context_scoped() {
         cost_modifiers: vec![],
         effect: vec![effect.clone()],
         program: None,
+        modal: None,
         targeting: None,
         timing: Default::default(),
         conditions: vec![],
@@ -4131,6 +4132,381 @@ fn graveyard_trigger_object_mana_value_predicate_is_context_scoped() {
             "unsupported event source accepted: {trigger}"
         );
     }
+}
+
+#[test]
+fn activated_ability_accepts_activation_time_modal_modes() {
+    let parsed = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON);
+    assert!(
+        parsed.is_ok(),
+        "valid activated modal RON should parse; current unknown-field error for `modal`: {}",
+        parsed
+            .as_ref()
+            .expect_err("failed parse includes its error")
+    );
+    let ability = parsed.expect("activated modal RON parsed above");
+    let modal = ability.modal.as_ref().expect("parsed modal owner");
+    assert_eq!(modal.min_modes, 1);
+    assert_eq!(modal.max_modes, 1);
+    assert_eq!(modal.modes.len(), 2);
+    ability
+        .validate_shape()
+        .expect("the selected mode owns the activated ability's resolution effect");
+    assert_eq!(
+        ability.fallback_text("Source"),
+        "Source — activated ability (activated_01)",
+        "modal modes must not enter the flat simple-effect fallback path"
+    );
+
+    let legacy = ron::from_str::<super::ActivatedAbilityDef>(
+        r#"(ability_id: "legacy_activated", presentation: Fallback,
+            costs: [Tap], effect: [Draw(who: Controller, count: 1)])"#,
+    )
+    .expect("legacy activated RON without modal remains readable");
+    assert!(legacy.modal.is_none());
+    assert!(
+        !ron::ser::to_string(&legacy)
+            .expect("legacy activated RON serializes")
+            .contains("modal:"),
+        "None modal remains omitted during serialization"
+    );
+}
+
+const ACTIVATED_MODAL_RON: &str = r#"(ability_id: "activated_01", presentation: Fallback,
+    costs: [Mana("{4}"), Tap], effect: [], timing: SorcerySpeed,
+    modal: Some((min_modes: 1, max_modes: 1, modes: [
+        (mode_id: "mode_01", presentation: Fallback,
+            effects: [Draw(who: Controller, count: 1)]),
+        (mode_id: "mode_02", presentation: Fallback,
+            effects: [Draw(who: Controller, count: 2)])
+    ])))"#;
+
+#[test]
+fn activated_modal_accepts_direct_double_your_counters_leaf() {
+    let parsed = ron::from_str::<super::ActivatedAbilityDef>(
+        r#"(ability_id: "double_your_counters_modal", presentation: Fallback,
+            costs: [Mana("{4}"), Tap], effect: [], timing: SorcerySpeed,
+            modal: Some((min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "double_counters", presentation: Fallback,
+                    effects: [DoubleYourCounters]),
+                (mode_id: "draw", presentation: Fallback,
+                    effects: [Draw(who: Controller, count: 1)])
+            ])))"#,
+    );
+    assert!(
+        parsed.is_ok(),
+        "direct parameterless DoubleYourCounters modal RON should parse: {}",
+        parsed
+            .as_ref()
+            .expect_err("parse failure should include its diagnostic")
+    );
+    let ability = parsed.expect("activated modal RON parsed above");
+    let shape = ability.validate_shape();
+    assert!(
+        shape.is_ok(),
+        "direct parameterless DoubleYourCounters mode should pass shape validation: {}",
+        shape.expect_err("shape failure should include its diagnostic")
+    );
+}
+
+#[test]
+fn double_your_counters_is_limited_to_direct_activated_modal_modes() {
+    use crate::primitives::{EffectContext, PlayerRecipient, SpellEffectKind};
+
+    let effect = SpellEffectKind::DoubleYourCounters;
+    assert!(effect.validate(EffectContext::Spell).is_err());
+    assert!(
+        effect.validate(EffectContext::Ability).is_err(),
+        "generic Ability context must not admit this specialized effect"
+    );
+
+    let direct_activated = ron::from_str::<super::ActivatedAbilityDef>(
+        r#"(ability_id: "direct_self_counter_fixture", presentation: Fallback,
+            costs: [Mana("{4}"), Tap], effect: [DoubleYourCounters])"#,
+    )
+    .expect("direct nonmodal activated RON parses");
+    assert!(
+        direct_activated.validate_shape().is_err(),
+        "nonmodal activated owners cannot use DoubleYourCounters"
+    );
+
+    let mut modal_activated = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+        .expect("activated modal fixture parses");
+    modal_activated.modal.as_mut().unwrap().modes[0].effects =
+        vec![SpellEffectKind::DoubleYourCounters];
+    assert!(
+        modal_activated
+            .modal
+            .as_ref()
+            .unwrap()
+            .validate(EffectContext::Ability)
+            .is_err(),
+        "generic modal Ability validation cannot admit the specialized effect"
+    );
+    assert!(
+        modal_activated
+            .modal
+            .as_ref()
+            .unwrap()
+            .validate(EffectContext::Spell)
+            .is_err(),
+        "spell modal owners cannot admit the specialized effect"
+    );
+    modal_activated
+        .validate_shape()
+        .expect("the bounded activated-modal owner admits the direct legacy leaf");
+
+    let mut nested = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+        .expect("activated modal fixture parses");
+    nested.modal.as_mut().unwrap().modes[0].effects = vec![SpellEffectKind::MayBehold {
+        who: PlayerRecipient::Controller,
+        choice_id: crate::ChoiceId::new("behold").unwrap(),
+        criterion: crate::primitives::BeholdCriterion {
+            required_subtype: "Elf".into(),
+        },
+        if_beheld: vec![SpellEffectKind::DoubleYourCounters],
+    }];
+    let nested_error = nested
+        .validate_shape()
+        .expect_err("a nested wrapper cannot inherit the direct-leaf admission");
+    assert!(
+        nested_error.contains("DoubleYourCounters is valid only as a direct effect"),
+        "nested self-counter rejection should come from ordinary effect validation: {nested_error}"
+    );
+}
+
+#[test]
+fn activated_modal_double_your_counters_allows_ordinary_tail_and_keeps_legacy_abilities_valid() {
+    use crate::primitives::{Amount, PlayerRecipient, SpellEffectKind};
+
+    let mut modal = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+        .expect("activated modal fixture parses");
+    modal.modal.as_mut().unwrap().modes[0].effects = vec![
+        SpellEffectKind::DoubleYourCounters,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    ];
+    modal
+        .validate_shape()
+        .expect("ordinary legacy effects may follow the direct self-counter leaf");
+
+    let legacy = ron::from_str::<super::ActivatedAbilityDef>(
+        r#"(ability_id: "legacy_activated", presentation: Fallback,
+            costs: [Tap], effect: [Draw(who: Controller, count: 1)])"#,
+    )
+    .expect("legacy activated RON without modal remains readable");
+    legacy
+        .validate_shape()
+        .expect("ordinary legacy activated effects remain valid");
+}
+
+#[test]
+fn activated_modal_rejects_direct_and_nested_mana_production() {
+    use crate::primitives::{
+        BeholdCriterion, EffectContext, ManaAmount, ManaRetention, PlayerRecipient, SpellEffectKind,
+    };
+
+    let add_mana = SpellEffectKind::AddMana {
+        amount: ManaAmount {
+            g: 1,
+            ..Default::default()
+        },
+        retention: ManaRetention::EndOfStep,
+    };
+    let cases = [
+        ("direct AddMana", add_mana),
+        (
+            "MayBehold ProduceMana",
+            SpellEffectKind::MayBehold {
+                who: PlayerRecipient::Controller,
+                choice_id: crate::ChoiceId::new("behold_mana").unwrap(),
+                criterion: BeholdCriterion {
+                    required_subtype: "Elf".into(),
+                },
+                if_beheld: vec![SpellEffectKind::ProduceMana {
+                    commander_color_identity: false,
+                    options: vec![ManaAmount {
+                        g: 1,
+                        ..Default::default()
+                    }],
+                    restriction: None,
+                    conditional: None,
+                }],
+            },
+        ),
+    ];
+
+    for (label, effect) in cases {
+        effect
+            .validate(EffectContext::Ability)
+            .unwrap_or_else(|error| {
+                panic!("{label} must be valid as an ordinary ability effect: {error}")
+            });
+
+        let mut ability = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+            .expect("valid activated modal fixture parses");
+        ability.modal.as_mut().unwrap().modes[0].effects = vec![effect];
+        assert!(
+            ability.validate_shape().is_err(),
+            "activated modal mode must reject {label}"
+        );
+    }
+}
+
+#[test]
+fn double_your_counters_is_rejected_in_spell_program_owners() {
+    let card = r#"(id: "double_your_counters_program_fixture",
+        name: "Double Your Counters Program Fixture",
+        face_id: "double_your_counters_program_fixture", types: ["Sorcery"],
+        spell_effect: [], spell_program: Some((body: (steps: [
+            (id: "double_counters", kind: Perform(DoubleYourCounters))
+        ], yields: []))))"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_err(),
+        "a spell Program cannot admit the owner-specific direct effect"
+    );
+}
+
+#[test]
+fn activated_modal_shape_rejects_unsupported_owners_and_cost_contexts() {
+    let valid = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+        .expect("activated modal fixture parses");
+
+    let mut flat_effect = valid.clone();
+    flat_effect
+        .effect
+        .push(crate::primitives::SpellEffectKind::Draw {
+            who: crate::primitives::PlayerRecipient::Controller,
+            count: crate::primitives::Amount::Fixed(1),
+        });
+    assert!(flat_effect.validate_shape().is_err());
+
+    let flat_program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: []))"#,
+    )
+    .expect("a flat program fixture parses");
+    let mut flat_program_ability = valid.clone();
+    flat_program_ability.program = Some(flat_program.clone());
+    assert!(flat_program_ability.validate_shape().is_err());
+
+    let mut flat_targeting = valid.clone();
+    flat_targeting.targeting = Some(crate::primitives::TargetingDef { groups: vec![] });
+    assert!(flat_targeting.validate_shape().is_err());
+
+    let mut program_mode = valid.clone();
+    let mode = &mut program_mode.modal.as_mut().unwrap().modes[0];
+    mode.effects.clear();
+    mode.program = Some(flat_program);
+    assert!(program_mode.validate_shape().is_err());
+
+    let mut multiple_selected = valid.clone();
+    multiple_selected.modal.as_mut().unwrap().max_modes = 2;
+    assert!(multiple_selected.validate_shape().is_err());
+
+    let mut zero_selected = valid.clone();
+    zero_selected.modal.as_mut().unwrap().min_modes = 0;
+    assert!(zero_selected.validate_shape().is_err());
+
+    let mut one_option = valid.clone();
+    one_option.modal.as_mut().unwrap().modes.pop();
+    assert!(one_option.validate_shape().is_err());
+
+    let cost_ref = crate::CastCostOptionRef {
+        group_id: crate::ChoiceId::new("group").unwrap(),
+        option_id: crate::ChoiceId::new("option").unwrap(),
+    };
+    let mut all_modes_cost = valid.clone();
+    all_modes_cost.modal.as_mut().unwrap().all_modes_cast_cost = Some(cost_ref.clone());
+    assert!(all_modes_cost.validate_shape().is_err());
+
+    let mut linked_mode_cost = valid.clone();
+    linked_mode_cost.modal.as_mut().unwrap().modes[0].linked_cast_cost = Some(cost_ref);
+    assert!(linked_mode_cost.validate_shape().is_err());
+
+    let mut trigger_restriction = valid.clone();
+    trigger_restriction
+        .modal
+        .as_mut()
+        .unwrap()
+        .trigger_mode_selection_restriction =
+        Some(crate::TriggerModeSelectionRestriction::OnlyModesNotChosenEarlierThisTurn);
+    assert!(trigger_restriction.validate_shape().is_err());
+
+    let chosen_opponent_targeting: crate::primitives::TargetingDef = ron::from_str(
+        r#"(groups: [(min: 1, max: 1, prompt: "Choose target", effect_indices: [], chooser: ChosenOpponent)])"#,
+    )
+    .expect("chosen-opponent targeting parses");
+    let mut chosen_opponent = valid.clone();
+    chosen_opponent.modal.as_mut().unwrap().modes[0].targeting = Some(chosen_opponent_targeting);
+    assert!(chosen_opponent.validate_shape().is_err());
+
+    let mut cast_cost_expansion = valid.clone();
+    cast_cost_expansion.modal.as_mut().unwrap().modes[0].targeting =
+        Some(crate::primitives::TargetingDef {
+            groups: vec![crate::primitives::TargetGroupDef {
+                chooser: crate::primitives::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target".into(),
+                effect_indices: vec![0],
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: Some(crate::primitives::CastCostTargetExpansion {
+                    condition: crate::primitives::CastCostReceiptCondition {
+                        group_id: crate::ChoiceId::new("cast_cost_group").unwrap(),
+                        option_id: crate::ChoiceId::new("cast_cost_option").unwrap(),
+                        expected_selected: true,
+                    },
+                    without_cost: crate::primitives::TargetFilter::default(),
+                }),
+            }],
+        });
+    assert!(cast_cost_expansion
+        .validate_shape()
+        .expect_err("activated modes cannot expand targets from spell cast costs")
+        .contains("spell cast-cost target expansions"));
+
+    let mut hand_source = valid;
+    hand_source.source_zone = crate::primitives::AbilitySourceZone::Hand;
+    assert!(hand_source.validate_shape().is_err());
+}
+
+#[test]
+fn activated_modal_modes_reuse_ability_context_and_mana_classification() {
+    let valid = ron::from_str::<super::ActivatedAbilityDef>(ACTIVATED_MODAL_RON)
+        .expect("activated modal fixture parses");
+
+    let mut trigger_context = valid.clone();
+    trigger_context.modal.as_mut().unwrap().modes[0].effects =
+        vec![crate::primitives::SpellEffectKind::Draw {
+            who: crate::primitives::PlayerRecipient::TriggeringAttackingPlayer,
+            count: crate::primitives::Amount::Fixed(1),
+        }];
+    assert!(trigger_context.validate_shape().is_err());
+
+    let mut memory_jar_context = valid.clone();
+    memory_jar_context.modal.as_mut().unwrap().modes[0].effects =
+        vec![crate::primitives::SpellEffectKind::MemoryJarExileHands];
+    assert!(memory_jar_context.validate_shape().is_err());
+
+    let mut mana_mode = valid.clone();
+    mana_mode.modal.as_mut().unwrap().modes[0].effects =
+        mana_then_controller_damage_ability().effect;
+    assert!(mana_mode
+        .validate_shape()
+        .expect_err("activated modal mana modes are outside the initial subset")
+        .contains("cannot be mana abilities"));
+
+    let storage_shape = storage_counter_split_ability("{1}");
+    let mut storage_mana_mode = valid;
+    storage_mana_mode.costs = storage_shape.costs;
+    storage_mana_mode.modal.as_mut().unwrap().modes[0].effects = storage_shape.effect;
+    assert!(storage_mana_mode
+        .validate_shape()
+        .expect_err("storage-counter modal mana is also outside the initial subset")
+        .contains("cannot be mana abilities"));
 }
 
 #[test]
@@ -5450,6 +5826,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         cost_modifiers: vec![],
         effect: vec![],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::SorcerySpeed,
         conditions: vec![],
@@ -5468,6 +5845,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
             target: TargetFilter::default(),
         }],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5500,6 +5878,7 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
             conditional: None,
         }],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5533,6 +5912,7 @@ fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
             conditional: None,
         }],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5577,6 +5957,7 @@ fn storage_counter_split_ability(mana_cost: &str) -> ActivatedAbilityDef {
             },
         ],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5647,6 +6028,7 @@ fn mana_then_controller_damage_ability() -> super::ActivatedAbilityDef {
             },
         ],
         program: None,
+        modal: None,
         targeting: None,
         timing: super::ActivationTiming::Normal,
         conditions: vec![],
@@ -5744,6 +6126,7 @@ fn opponent_land_mana_is_restricted_to_the_tap_activated_ability_shape() {
         cost_modifiers: vec![],
         effect: vec![opponent_land_mana_effect()],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5798,6 +6181,7 @@ fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
         cost_modifiers: vec![],
         effect: vec![source_counter_scaled_mana_effect()],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5828,6 +6212,7 @@ fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
             },
         ],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -5856,6 +6241,7 @@ fn source_counter_scaled_mana_rejects_nested_activated_effects() {
             effect: Box::new(source_counter_scaled_mana_effect()),
         }],
         program: None,
+        modal: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],

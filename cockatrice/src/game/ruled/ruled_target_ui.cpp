@@ -15,8 +15,8 @@
 void RuledTargetUi::emitPendingAbilityTargetSelectionCount(PlayerActions *actions, const RuledClientState &state)
 {
     const auto &ability = actions->pendingActivatedAbility;
-    const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    const auto data = currentRuledPendingAbilityTargetData(ability, state);
+    const auto *group = data ? ruledPendingAbilityTargetGroup(ability, *data) : nullptr;
     if (!group) {
         emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
         return;
@@ -39,8 +39,8 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
         return false;
     }
 
-    const auto data = state->abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    const auto *group = ruledPendingAbilityTargetGroup(ability, data);
+    const auto data = currentRuledPendingAbilityTargetData(ability, *state);
+    const auto *group = data ? ruledPendingAbilityTargetGroup(ability, *data) : nullptr;
     if (!group) {
         return true;
     }
@@ -63,6 +63,15 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
         }
         target.ref.set_expected_zone_change_generation(*generation);
         target.zoneChangeGeneration = *generation;
+    } else if (ability.selectedMode && refKind == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+        const auto generation = group->validPermanentGenerations.constFind(targetOid);
+        if (generation == group->validPermanentGenerations.cend() ||
+            generation.value() != zoneChangeGeneration || !state->battlefieldGenerationByOid.contains(targetOid) ||
+            state->battlefieldGenerationByOid.value(targetOid) != generation.value()) {
+            return true;
+        }
+        target.ref.set_expected_zone_change_generation(generation.value());
+        target.zoneChangeGeneration = generation.value();
     } else {
         target.zoneChangeGeneration = zoneChangeGeneration;
     }
@@ -79,7 +88,7 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
 
     state->emitSpellTargetSelectionChanged();
     if (staged == RuledActivatedTargetStageResult::Selected && group->minTargets == 1 && group->maxTargets == 1) {
-        const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, data, false);
+        const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, *data, false);
         if (advance == RuledActivatedTargetAdvanceResult::Invalid) {
             return true;
         }
@@ -381,11 +390,11 @@ void RuledTargetUi::confirmMultiTargetSelection(PlayerActions *actions)
     if (!state) {
         return;
     }
-    const auto data = state->abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    if (!ruledPendingActivatedTargetGroupCanConfirm(ability, data)) {
+    const auto data = currentRuledPendingAbilityTargetData(ability, *state);
+    if (!data || !ruledPendingActivatedTargetGroupCanConfirm(ability, *data)) {
         return;
     }
-    const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, data, true);
+    const auto advance = ruledAdvancePendingActivatedTargetGroup(ability, *data, true);
     if (advance == RuledActivatedTargetAdvanceResult::Invalid) {
         return;
     }

@@ -642,7 +642,8 @@ impl GameEngine {
             self.park_counter_placement_choice(batch, candidates, None, completion, events);
             return Ok(None);
         }
-        let receipts = self.commit_counter_placement_batch(&batch.events, &completion, events)?;
+        let receipts =
+            self.commit_counter_placement_batch(&batch.events, &completion, None, events)?;
         Self::attach_counter_placement_receipts(&mut completed, receipts);
         Ok(Some(completed))
     }

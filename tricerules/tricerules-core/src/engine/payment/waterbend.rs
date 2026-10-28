@@ -161,18 +161,38 @@ impl GameEngine {
         if !self.ability_activatable(source, command.ability_index as usize, &ability) {
             return Err(EngineError::Illegal("activation restrictions not met"));
         }
-        validate_ability_targets_with_context_and_program(
-            self,
-            player,
-            TargetSourceIdentity::captured(source, command.expected_zone_change_generation),
-            &command.targets,
-            TargetResolutionContext {
-                effects: &ability.effect,
-                targeting: ability.targeting.as_ref(),
-                trigger_context: TriggerContext::default(),
-                program,
-            },
-        )?;
+        let activation_targets = if let Some(modal) = ability.modal.as_ref() {
+            self.validate_and_capture_modal_activation(
+                player,
+                TargetSourceIdentity::captured_for_ability(
+                    source,
+                    command.expected_zone_change_generation,
+                    &ability,
+                ),
+                modal,
+                command,
+            )?
+            .0
+        } else {
+            if !command.selected_modes.is_empty() {
+                return Err(EngineError::Illegal(
+                    "selected_modes given for a nonmodal activated ability",
+                ));
+            }
+            validate_ability_targets_with_context_and_program(
+                self,
+                player,
+                TargetSourceIdentity::captured(source, command.expected_zone_change_generation),
+                &command.targets,
+                TargetResolutionContext {
+                    effects: &ability.effect,
+                    targeting: ability.targeting.as_ref(),
+                    trigger_context: TriggerContext::default(),
+                    program,
+                },
+            )?;
+            command.targets.clone()
+        };
         let prepared = self.prepare_ability_costs(
             player,
             idx,
@@ -185,7 +205,7 @@ impl GameEngine {
             self.targeting_cost_increase(
                 player,
                 TargetingCostAction::ActivatedAbilities,
-                &command.targets,
+                &activation_targets,
             ),
             self.activated_mana_reduction(player, source, &ability)?,
         )?;

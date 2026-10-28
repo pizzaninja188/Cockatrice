@@ -618,7 +618,7 @@ void RuledPaymentUi::received()
         const auto transaction = model.transaction();
         if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
             actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::CommitPending;
-        if (submittingContext == Context::Ability && actions->pendingActivatedAbility.chosenOpponentTargets)
+        if (submittingContext == Context::Ability && actions->pendingActivatedAbility.valid)
             actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::CommitPending;
         RuledActions::sendRuledCommandExpectingAck(
             game, *command, [this, transaction, submittingContext](bool accepted) {
@@ -644,9 +644,35 @@ void RuledPaymentUi::received()
                 } else if (current.active) {
                     if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
                         actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::Paying;
-                    if (submittingContext == Context::Ability && actions->pendingActivatedAbility.chosenOpponentTargets)
-                        actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::Paying;
                     current.submitting = false;
+                    if (submittingContext == Context::Ability) {
+                        auto &ability = actions->pendingActivatedAbility;
+                        if (!ability.valid)
+                            return;
+                        auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+                        if (!state)
+                            return;
+                        if (ability.chosenOpponentTargets) {
+                            ability.stage = PendingActivatedAbility::Stage::Paying;
+                            if (!ruledPendingAbilitySourceStillCurrent(*state, ability)) {
+                                cancelPendingActivatedAbility();
+                                return;
+                            }
+                        } else {
+                            ability.stage = PendingActivatedAbility::Stage::Announcing;
+                            if (!ruledPendingAbilitySourceStillCurrent(*state, ability)) {
+                                cancelPendingActivatedAbility();
+                                return;
+                            }
+                            reconcilePendingRuledTargetSelections();
+                            if (!ability.valid)
+                                return;
+                            if (!ruledRejectedActivationCanRetry(ability)) {
+                                cancelPendingActivatedAbility();
+                                return;
+                            }
+                        }
+                    }
                     schedule();
                 }
             });
@@ -1175,9 +1201,6 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         aa = cmd.mutable_activate_ability();
         pendingActivatedAbility.writeActivationHeader(*aa);
     }
-    if (aa)
-        for (const auto &target : pendingActivatedAbility.selectedTargets)
-            *aa->add_targets() = target.ref;
     // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
     for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
         auto *flex = permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments();

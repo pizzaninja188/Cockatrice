@@ -1,9 +1,11 @@
 use tricerules_card_model::{
-    AbilityId, AbilityPresentation, CardFaceId, CardRegistry, ChoiceId, ModeId,
+    AbilityId, AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoiceId, ModeId,
 };
 use tricerules_proto::ruled::v1 as rv1;
 
 use crate::state::{AbilityDefinitionId, CastCostReceipt, ChosenMode, StackPresentation};
+
+type ActivatedModePresentation = (Vec<u32>, Vec<String>, Vec<rv1::PresentationRef>);
 
 #[derive(Clone, Copy)]
 pub(super) enum PresentationPath<'a> {
@@ -61,6 +63,44 @@ pub(super) fn child_presentation_ref(
         external_face_name: parent.external_face_name.clone(),
         oracle_text_sha256: parent.oracle_text_sha256.clone(),
     }
+}
+
+pub(super) fn activated_stack_mode_presentation(
+    ability: &ActivatedAbilityDef,
+    ability_text: &str,
+    chosen_modes: &[ChosenMode],
+    parent: Option<&rv1::PresentationRef>,
+) -> Result<ActivatedModePresentation, &'static str> {
+    if chosen_modes.is_empty() {
+        return Ok((Vec::new(), Vec::new(), Vec::new()));
+    }
+    let modal = ability
+        .modal
+        .as_ref()
+        .ok_or("captured activated mode has no modal definition")?;
+    let mut indices = Vec::with_capacity(chosen_modes.len());
+    let mut labels = Vec::with_capacity(chosen_modes.len());
+    let mut presentations = Vec::with_capacity(chosen_modes.len());
+    for chosen in chosen_modes {
+        let (mode_index, mode) = modal
+            .modes
+            .iter()
+            .enumerate()
+            .find(|(_, mode)| mode.mode_id == chosen.mode_id)
+            .ok_or("captured activated mode is absent from its modal definition")?;
+        let label = tricerules_card_model::mode_fallback(ability_text, &mode.mode_id);
+        indices.push(mode_index as u32);
+        labels.push(label.clone());
+        if let Some(parent) = parent {
+            presentations.push(child_presentation_ref(
+                parent,
+                PresentationPath::Mode(&mode.mode_id),
+                &mode.presentation,
+                label,
+            ));
+        }
+    }
+    Ok((indices, labels, presentations))
 }
 
 /// Builds presentation for a node owned by a stack item. Activated and triggered abilities

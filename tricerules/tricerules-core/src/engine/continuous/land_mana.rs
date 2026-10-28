@@ -62,6 +62,7 @@ pub(super) fn derived_intrinsic_land_mana(
                 conditional: None,
             }],
             program: None,
+            modal: None,
             targeting: None,
             timing: Default::default(),
             conditions: Vec::new(),

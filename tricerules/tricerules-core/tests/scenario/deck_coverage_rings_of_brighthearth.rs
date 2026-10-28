@@ -20,6 +20,26 @@ const OBSERVER_FIXTURE: &str = r#"(
     )],
 )"#;
 
+const TARGETED_MODAL_ACTIVATED_COPY_FIXTURE: &str = r#"(
+    id: "targeted_modal_activated_copy", name: "Targeted Modal Activated Copy",
+    face_id: "targeted_modal_activated_copy", types: ["Artifact"],
+    activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+        costs: [Mana("{4}"), Tap], effect: [], timing: SorcerySpeed,
+        modal: Some((min_modes: 1, max_modes: 1, modes: [
+            (mode_id: "double_any_permanent", presentation: Fallback,
+                effects: [DoubleCounters(target: (kind: AnyPermanent))],
+                targeting: Some((groups: [
+                    (min: 1, max: 1, prompt: "Choose a permanent", effect_indices: [0])
+                ]))
+            ),
+            (mode_id: "draw_one", presentation: Fallback,
+                effects: [Draw(who: Controller, count: 1)]),
+            (mode_id: "draw_two", presentation: Fallback,
+                effects: [Draw(who: Controller, count: 2)])
+        ]))
+    )],
+)"#;
+
 fn observer_fixture_game(seed: u64) -> GameEngine {
     let registry = Box::leak(Box::new(
         tricerules_cards::CardRegistry::from_chunks_and_tokens(
@@ -150,6 +170,34 @@ fn game(seed: u64) -> GameEngine {
         true,
     )
     .expect("create game");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn targeted_modal_copy_game(seed: u64) -> GameEngine {
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                TARGETED_MODAL_ACTIVATED_COPY_FIXTURE,
+                include_str!("../../../tricerules-cards/data/rings_of_brighthearth.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/sol_ring.ron"),
+                include_str!("../../../tricerules-cards/data/mind_stone.ron"),
+            ],
+            &[],
+        )
+        .expect("targeted modal copy fixture registry compiles"),
+    ));
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("mountain", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .expect("create targeted modal copy fixture game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -381,6 +429,318 @@ fn rings_copies_key_with_original_or_changed_target() {
         );
         assert!(engine.state.stack.is_empty());
     }
+}
+
+#[test]
+fn rings_copies_targeted_activated_modal_mode_and_allows_retargeting() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let mut engine = targeted_modal_copy_game(261_027_146);
+
+    inject_permanent_on_battlefield(&mut engine, 0, RINGS);
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "targeted_modal_activated_copy");
+    let original_target = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
+    let copy_target = inject_permanent_on_battlefield(&mut engine, 1, "mind_stone");
+    engine
+        .state
+        .objects
+        .get_mut(&original_target)
+        .unwrap()
+        .set_counter(CounterKind::Charge, 2);
+    engine
+        .state
+        .objects
+        .get_mut(&copy_target)
+        .unwrap()
+        .set_counter(CounterKind::Charge, 3);
+
+    let original_generation = engine
+        .state
+        .zone_change_generation
+        .get(&original_target)
+        .copied()
+        .unwrap_or(0);
+    let copy_generation = engine
+        .state
+        .zone_change_generation
+        .get(&copy_target)
+        .copied()
+        .unwrap_or(0);
+    let source_ref = rv1::CostObjectRef {
+        object_id: source,
+        zone_change_generation: engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0),
+    };
+    let source_generation = source_ref.zone_change_generation;
+    give_colorless(&mut engine, 6);
+    let activation = rv1::ActivateAbility {
+        source_object_id: source,
+        ability_index: 0,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        selected_modes: vec![rv1::SelectedSpellMode {
+            mode_index: 0,
+            targets: vec![rv1::TargetRef {
+                object_id: original_target,
+                group_index: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                expected_zone_change_generation: Some(original_generation),
+                ..Default::default()
+            }],
+        }],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana {
+                c: 4,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(activation)),
+            },
+        )
+        .expect("pay {4} and activate the targeted modal mode");
+
+    assert!(engine.state.objects[&source].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    let original_stack_id = engine.state.stack[0].id;
+    let original_stack = &engine.state.stack[0];
+    assert!(original_stack.targets.is_empty());
+    assert_eq!(original_stack.chosen_modes.len(), 1);
+    assert_eq!(
+        original_stack.chosen_modes[0].mode_id,
+        tricerules_card_model::ModeId::new("double_any_permanent").unwrap()
+    );
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].object_id,
+        original_target
+    );
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].zone_change_generation,
+        Some(original_generation)
+    );
+
+    let batch = pay_for_copy(&mut engine);
+    let choice = find_resolution_choice(&batch).expect("copy target choice");
+    assert_eq!(choice.choice_kind(), ChoiceKind::TargetObjects);
+    assert!(choice.candidate_object_ids.contains(&original_target));
+    assert!(choice.candidate_object_ids.contains(&copy_target));
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+
+    // The copy prompt and owner come from the captured activation, even after the source leaves.
+    engine.state.players[0]
+        .battlefield
+        .retain(|&object_id| object_id != source);
+    engine.state.players[0].graveyard.push(source);
+    engine.state.objects.get_mut(&source).unwrap().zone = Zone::Graveyard;
+    engine
+        .state
+        .zone_change_generation
+        .insert(source, source_generation.saturating_add(1));
+
+    // A delayed selection against the prior incarnation is reoffered without placing a copy or
+    // changing the original activation. The next response uses the newly offered generation.
+    let new_copy_generation = copy_generation.saturating_add(1);
+    engine
+        .state
+        .zone_change_generation
+        .insert(copy_target, new_copy_generation);
+    let refreshed = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy_target]))
+        .expect("stale target receipt is reoffered");
+    let refreshed_choice = find_resolution_choice(&refreshed).expect("refreshed target choice");
+    assert!(refreshed_choice.candidate_object_ids.contains(&copy_target));
+    assert!(!refreshed.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::StackPushed(push)) if push.is_copy)));
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the original remains the only stack item"
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert!(engine.state.objects[&source].tapped);
+    assert!(!engine.state.players[0].battlefield.contains(&source));
+    assert_eq!(
+        engine.state.objects[&copy_target].counter_count(CounterKind::Charge),
+        3
+    );
+    let original_stack = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == original_stack_id)
+        .expect("original activation remains unchanged");
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].object_id,
+        original_target
+    );
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].zone_change_generation,
+        Some(original_generation)
+    );
+
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy_target]))
+        .expect("retarget the modal copy to another permanent");
+    let copy_id = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::StackPushed(push)) if push.is_copy => Some(push.object_id),
+            _ => None,
+        })
+        .expect("Rings places the modal copy on the stack");
+    let original_stack = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == original_stack_id)
+        .expect("original activation remains on the stack");
+    assert_eq!(
+        original_stack.chosen_modes[0].mode_id,
+        tricerules_card_model::ModeId::new("double_any_permanent").unwrap()
+    );
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].object_id, original_target,
+        "retargeting the copy leaves the original target unchanged"
+    );
+    assert_eq!(
+        original_stack.chosen_modes[0].targets[0].zone_change_generation,
+        Some(original_generation)
+    );
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == copy_id)
+        .expect("copy is present on the stack");
+    assert_eq!(copy.chosen_modes.len(), 1);
+    assert_eq!(
+        copy.chosen_modes[0].mode_id,
+        tricerules_card_model::ModeId::new("double_any_permanent").unwrap(),
+        "retargeting preserves the captured mode"
+    );
+    assert_eq!(copy.chosen_modes[0].targets[0].object_id, copy_target);
+    assert_eq!(
+        copy.chosen_modes[0].targets[0].zone_change_generation,
+        Some(new_copy_generation)
+    );
+
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&copy_target].counter_count(CounterKind::Charge),
+        6,
+        "the retargeted copy doubles only its independently selected target"
+    );
+    assert_eq!(
+        engine.state.objects[&original_target].counter_count(CounterKind::Charge),
+        2,
+        "resolving the copy does not alter the original target"
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.objects[&original_target].counter_count(CounterKind::Charge),
+        4,
+        "the original activation later doubles its original target"
+    );
+    assert_eq!(
+        engine.state.objects[&copy_target].counter_count(CounterKind::Charge),
+        6
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert!(engine.state.objects[&source].tapped);
+}
+
+#[test]
+fn rings_copies_targetless_activated_modal_mode_with_captured_presentation() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let mut engine = targeted_modal_copy_game(261_027_147);
+    inject_permanent_on_battlefield(&mut engine, 0, RINGS);
+    let source = inject_permanent_on_battlefield(&mut engine, 0, "targeted_modal_activated_copy");
+    let source_ref = rv1::CostObjectRef {
+        object_id: source,
+        zone_change_generation: engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0),
+    };
+    give_colorless(&mut engine, 6);
+    let hand_before = engine.state.players[0].hand.len();
+    let library_before = engine.state.players[0].library.len();
+    let activation = rv1::ActivateAbility {
+        source_object_id: source,
+        ability_index: 0,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        selected_modes: vec![rv1::SelectedSpellMode {
+            mode_index: 1,
+            targets: Vec::new(),
+        }],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana {
+                c: 4,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(activation)),
+            },
+        )
+        .expect("pay {4} and activate draw_one");
+
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    assert!(engine.state.stack[0].chosen_modes[0].targets.is_empty());
+    let batch = pay_for_copy(&mut engine);
+    assert!(find_resolution_choice(&batch).is_none());
+    let copy = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::StackPushed(push)) if push.is_copy => Some(push),
+            _ => None,
+        })
+        .expect("targetless modal copy is placed immediately");
+    assert_eq!(copy.chosen_mode_indices, vec![1]);
+    assert_eq!(copy.chosen_mode_labels.len(), 1);
+    let mode_presentation = copy
+        .chosen_mode_presentations
+        .first()
+        .expect("copied mode keeps its public presentation");
+    assert!(!mode_presentation.fallback_text.trim().is_empty());
+    assert!(mode_presentation.path.last().is_some_and(|component| {
+        component.kind == rv1::PresentationPathKind::Mode as i32 && component.id == "draw_one"
+    }));
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(engine.state.players[0].library.len(), library_before - 1);
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.players[0].hand.len(), hand_before + 2);
+    assert_eq!(engine.state.players[0].library.len(), library_before - 2);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert!(engine.state.objects[&source].tapped);
 }
 
 #[test]

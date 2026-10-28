@@ -202,6 +202,15 @@ pub(crate) fn activation(
             activation_targets = targets(e, actor, Some(offer))?;
         }
     }
+    let (activation_targets, selected_modes) =
+        if let Some(mode_offer) = legal.activated_ability_modes.get(&key) {
+            (
+                Vec::new(),
+                modes(e, actor, mode_offer.min_modes, &mode_offer.modes)?,
+            )
+        } else {
+            (activation_targets, Vec::new())
+        };
     let mut command = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
             source_object_id: object,
@@ -209,6 +218,7 @@ pub(crate) fn activation(
             expected_zone_change_generation: generation,
             ability_index: index,
             targets: activation_targets,
+            selected_modes,
             x_value,
             cost_selections: costs,
             ..Default::default()

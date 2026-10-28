@@ -506,7 +506,11 @@ mod tests {
         commander_setup,
         diagnostics::Record,
         ipc_envelope::Msg,
-        ruled::v1::{dev_command, ActivateAbility, DevCommand, DevMoveCard, DevZone, PassPriority},
+        ruled::v1::{
+            dev_command, ActivateAbility, CostObjectRef, DevAddMana, DevCommand, DevMoveCard,
+            DevPutCardInZone, DevZone, PassPriority, PaymentMana, PaymentSelection,
+            SelectedSpellMode, TargetRef, TargetRefKind,
+        },
         ruled_command::Cmd,
         CommanderSetup, MulliganDecision, PlayerCommand, PlayerDeck, RuledCommand,
     };
@@ -714,6 +718,30 @@ mod tests {
         response
     }
 
+    fn record_accepted_player_command(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        player_id: i32,
+        command: RuledCommand,
+        label: &str,
+    ) {
+        let response = record_player_command(session, directory, rows, player_id, command);
+        assert!(response.ok, "{label} rejected: {}", response.error);
+    }
+
+    fn captured_generation(session: &EngineSession, object_id: u32) -> u64 {
+        session
+            .engine
+            .as_ref()
+            .expect("started engine session")
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
     #[test]
     fn resume_plan_preserves_declared_commander_and_no_commander_setups() {
         let decks = vec![
@@ -785,6 +813,466 @@ mod tests {
         assert!(plan.effective_dev_commands_enabled);
         assert_eq!(plan.display_decks, decks);
         assert_eq!(plan.session_start.unwrap().player_decks, decks);
+    }
+
+    #[test]
+    fn aetheric_activated_modes_replay_from_explicit_id_session_capture() {
+        const CONTROLLER: i32 = 17;
+        const OPPONENT: i32 = 29;
+
+        let decks = [CONTROLLER, OPPONENT]
+            .into_iter()
+            .map(|player_id| PlayerDeck {
+                player_id,
+                mainboard_card_name: vec!["Forest".into(); 8],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            })
+            .collect();
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("raw")).unwrap();
+        let mut session = EngineSession::new(true);
+        let start = IpcEnvelope {
+            msg: Some(Msg::SessionStart(tricerules_proto::SessionStart {
+                game_id: 7,
+                seed: 26_102_813,
+                player_ids: vec![CONTROLLER, OPPONENT],
+                player_decks: decks,
+                dev_commands_enabled: true,
+                diagnostic_capture_enabled: true,
+                ..Default::default()
+            })),
+        };
+        let start_response = session.process(&start).expect("session start response");
+        assert!(
+            start_response.ok,
+            "session start rejected: {}",
+            start_response.error
+        );
+        let manifest = serde_json::json!({
+            "format_version": 1,
+            "source": "server",
+            "privacy": "server_only",
+            "capture_id": "00000000-0000-4000-8000-000000000008",
+            "engine_build": ENGINE_BUILD,
+            "card_data_hash": start_response.card_data_hash.clone(),
+            "effective_dev_commands_enabled": true,
+            "complete": false
+        });
+        fs::write(root.path().join("manifest.json"), manifest.to_string()).unwrap();
+        let mut rows = Vec::new();
+        pair(root.path(), &mut rows, &start, &start_response);
+
+        let chooser = session
+            .engine
+            .as_ref()
+            .expect("started engine")
+            .state
+            .opening
+            .as_ref()
+            .expect("opening state")
+            .chooser;
+        record_accepted_player_command(
+            &mut session,
+            root.path(),
+            &mut rows,
+            chooser,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(
+                    tricerules_proto::ChooseStartingPlayer {
+                        starting_player_id: CONTROLLER,
+                    },
+                )),
+            },
+            "choose starting player",
+        );
+        for _ in 0..2 {
+            let actor = session
+                .engine
+                .as_ref()
+                .expect("started engine")
+                .state
+                .opening
+                .as_ref()
+                .expect("opening state")
+                .mulligan_actor
+                .expect("mulligan actor");
+            record_accepted_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                actor,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+                "keep opening hand",
+            );
+        }
+        for _ in 0..4 {
+            let actor = session
+                .engine
+                .as_ref()
+                .expect("started engine")
+                .state
+                .priority_player_id();
+            record_accepted_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                actor,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                "advance to main phase",
+            );
+        }
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.turn_step,
+            tricerules_core::TurnStep::Main1
+        );
+
+        for card_name in ["Aetheric Amplifier", "Aetheric Amplifier", "Mind Stone"] {
+            let actor = session
+                .engine
+                .as_ref()
+                .expect("started engine")
+                .state
+                .priority_player_id();
+            record_accepted_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                actor,
+                RuledCommand {
+                    cmd: Some(Cmd::DevCommand(DevCommand {
+                        target_player_id: CONTROLLER,
+                        dev: Some(dev_command::Dev::PutCardInZone(DevPutCardInZone {
+                            card_name: card_name.into(),
+                            zone: DevZone::Battlefield as i32,
+                            ready: true,
+                        })),
+                    })),
+                },
+                "build logged Aetheric board state",
+            );
+        }
+        let actor = session
+            .engine
+            .as_ref()
+            .expect("started engine")
+            .state
+            .priority_player_id();
+        record_accepted_player_command(
+            &mut session,
+            root.path(),
+            &mut rows,
+            actor,
+            RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: CONTROLLER,
+                    dev: Some(dev_command::Dev::AddMana(DevAddMana {
+                        c: 8,
+                        ..Default::default()
+                    })),
+                })),
+            },
+            "add logged activation mana",
+        );
+
+        let (first_source, second_source, target) = {
+            let engine = session.engine.as_ref().unwrap();
+            let sources: Vec<_> = engine.state.players[0]
+                .battlefield
+                .iter()
+                .copied()
+                .filter(|object_id| engine.state.objects[object_id].card_id == "aetheric_amplifier")
+                .collect();
+            assert_eq!(sources.len(), 2);
+            let target = engine.state.players[0]
+                .battlefield
+                .iter()
+                .copied()
+                .find(|object_id| engine.state.objects[object_id].card_id == "mind_stone")
+                .expect("logged Mind Stone target");
+            (sources[0], sources[1], target)
+        };
+        assert_ne!(first_source, second_source);
+
+        let first_source_generation = captured_generation(&session, first_source);
+        let target_generation = captured_generation(&session, target);
+        let first_revision = session.engine.as_ref().unwrap().state.command_index;
+        let first_activation = RuledCommand {
+            cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                source_object_id: first_source,
+                ability_index: 1,
+                expected_zone_change_generation: first_source_generation,
+                selected_modes: vec![SelectedSpellMode {
+                    mode_index: 0,
+                    targets: vec![TargetRef {
+                        object_id: target,
+                        group_index: 0,
+                        kind: TargetRefKind::Permanent as i32,
+                        expected_zone_change_generation: Some(target_generation),
+                        ..Default::default()
+                    }],
+                }],
+                payment: Some(PaymentSelection {
+                    expected_state_revision: first_revision,
+                    source: Some(CostObjectRef {
+                        object_id: first_source,
+                        zone_change_generation: first_source_generation,
+                    }),
+                    mana: Some(PaymentMana {
+                        c: 4,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        };
+        let first_activation_bytes = first_activation.encode_to_vec();
+        let actor = session.engine.as_ref().unwrap().state.priority_player_id();
+        record_accepted_player_command(
+            &mut session,
+            root.path(),
+            &mut rows,
+            actor,
+            first_activation,
+            "activate the targeted mode",
+        );
+        {
+            let engine = session.engine.as_ref().unwrap();
+            let item = engine.state.stack.last().expect("ability on stack");
+            assert!(item.targets.is_empty(), "modal targets stay on their mode");
+            assert_eq!(item.chosen_modes.len(), 1);
+            assert_eq!(
+                item.chosen_modes[0].mode_id.as_str(),
+                "double_any_permanent"
+            );
+            assert_eq!(item.chosen_modes[0].targets.len(), 1);
+            assert_eq!(item.chosen_modes[0].targets[0].object_id, target);
+            assert_eq!(
+                item.chosen_modes[0].targets[0].zone_change_generation,
+                Some(target_generation)
+            );
+        }
+        for _ in 0..2 {
+            let actor = session.engine.as_ref().unwrap().state.priority_player_id();
+            record_accepted_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                actor,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                "resolve the targeted mode",
+            );
+        }
+        assert!(session.engine.as_ref().unwrap().state.stack.is_empty());
+        assert!(session.engine.as_ref().unwrap().state.objects[&target]
+            .counters
+            .is_empty());
+
+        let second_source_generation = captured_generation(&session, second_source);
+        let second_revision = session.engine.as_ref().unwrap().state.command_index;
+        let second_activation = RuledCommand {
+            cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                source_object_id: second_source,
+                ability_index: 1,
+                expected_zone_change_generation: second_source_generation,
+                selected_modes: vec![SelectedSpellMode {
+                    mode_index: 1,
+                    targets: Vec::new(),
+                }],
+                payment: Some(PaymentSelection {
+                    expected_state_revision: second_revision,
+                    source: Some(CostObjectRef {
+                        object_id: second_source,
+                        zone_change_generation: second_source_generation,
+                    }),
+                    mana: Some(PaymentMana {
+                        c: 4,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        };
+        let second_activation_bytes = second_activation.encode_to_vec();
+        let actor = session.engine.as_ref().unwrap().state.priority_player_id();
+        record_accepted_player_command(
+            &mut session,
+            root.path(),
+            &mut rows,
+            actor,
+            second_activation,
+            "activate the nontargeted mode",
+        );
+        {
+            let engine = session.engine.as_ref().unwrap();
+            let item = engine.state.stack.last().expect("ability on stack");
+            assert!(item.targets.is_empty());
+            assert_eq!(item.chosen_modes.len(), 1);
+            assert_eq!(
+                item.chosen_modes[0].mode_id.as_str(),
+                "double_your_counters"
+            );
+            assert!(item.chosen_modes[0].targets.is_empty());
+            assert!(engine.state.players[0].counters.is_empty());
+        }
+        for _ in 0..2 {
+            let actor = session.engine.as_ref().unwrap().state.priority_player_id();
+            record_accepted_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                actor,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                "resolve the nontargeted mode",
+            );
+        }
+        let live = session.engine.as_ref().unwrap();
+        assert!(live.state.stack.is_empty());
+        assert!(live.state.objects[&target].counters.is_empty());
+        assert!(live.state.players[0].counters.is_empty());
+        assert_eq!(live.state.players[0].mana_pool.colorless, 0);
+        let expected_state = live.diagnostic_snapshot().unwrap();
+
+        fs::write(root.path().join("timeline.jsonl"), rows.join("\n") + "\n").unwrap();
+        let capture = load_capture(root.path()).unwrap();
+        assert!(capture.warnings.is_empty());
+
+        let mut activation_requests = Vec::new();
+        for exchange in &capture.exchanges {
+            let Some(Msg::PlayerCommand(player_command)) = &exchange.request.msg else {
+                continue;
+            };
+            let command = RuledCommand::decode(player_command.ruled_command.as_slice())
+                .expect("decode captured activation command");
+            if matches!(&command.cmd, Some(Cmd::ActivateAbility(_))) {
+                activation_requests.push((
+                    exchange.sequence,
+                    player_command.player_id,
+                    player_command.ruled_command.clone(),
+                    command,
+                    exchange,
+                ));
+            }
+        }
+        assert_eq!(activation_requests.len(), 2);
+        for (index, (sequence, player_id, raw_command, command, exchange)) in
+            activation_requests.iter().enumerate()
+        {
+            let expected_bytes = if index == 0 {
+                &first_activation_bytes
+            } else {
+                &second_activation_bytes
+            };
+            assert_eq!(*player_id, CONTROLLER);
+            assert_eq!(
+                raw_command, expected_bytes,
+                "the command bytes stay unchanged"
+            );
+
+            let raw_request = Record::decode(
+                fs::read(capture.directory.join(format!("raw/{sequence:012}.pb")))
+                    .expect("read captured raw request record")
+                    .as_slice(),
+            )
+            .expect("decode captured raw request record");
+            assert_eq!(raw_request.kind, "engine_request");
+            assert_eq!(raw_request.message_type, "ruled.v1.IpcEnvelope");
+            assert_eq!(raw_request.payload, exchange.request.encode_to_vec());
+
+            let response = exchange.response.as_ref().expect("captured response");
+            let raw_response = Record::decode(
+                fs::read(
+                    capture
+                        .directory
+                        .join(format!("raw/{:012}.pb", sequence + 1)),
+                )
+                .expect("read captured raw response record")
+                .as_slice(),
+            )
+            .expect("decode captured raw response record");
+            assert_eq!(raw_response.kind, "engine_response");
+            assert_eq!(raw_response.message_type, "ruled.v1.IpcResponse");
+            assert_eq!(raw_response.correlation_id, raw_request.correlation_id);
+            assert_eq!(raw_response.payload, response.encode_to_vec());
+
+            let Some(Cmd::ActivateAbility(activation)) = &command.cmd else {
+                unreachable!("filtered activation request")
+            };
+            assert!(
+                activation.targets.is_empty(),
+                "no flattened target duplicate"
+            );
+            assert_eq!(
+                activation.expected_zone_change_generation,
+                if index == 0 {
+                    first_source_generation
+                } else {
+                    second_source_generation
+                }
+            );
+            assert_eq!(activation.selected_modes.len(), 1);
+            let selected_mode = &activation.selected_modes[0];
+            assert_eq!(selected_mode.mode_index, if index == 0 { 0 } else { 1 });
+            let payment = activation.payment.as_ref().expect("explicit payment");
+            assert_eq!(
+                payment.expected_state_revision,
+                if index == 0 {
+                    first_revision
+                } else {
+                    second_revision
+                }
+            );
+            let source = payment
+                .source
+                .as_ref()
+                .expect("generation-bound payment source");
+            assert_eq!(
+                source.object_id,
+                if index == 0 {
+                    first_source
+                } else {
+                    second_source
+                }
+            );
+            assert_eq!(
+                source.zone_change_generation,
+                if index == 0 {
+                    first_source_generation
+                } else {
+                    second_source_generation
+                }
+            );
+            if index == 0 {
+                assert_eq!(selected_mode.targets.len(), 1);
+                assert_eq!(selected_mode.targets[0].object_id, target);
+                assert_eq!(
+                    selected_mode.targets[0].expected_zone_change_generation,
+                    Some(target_generation)
+                );
+            } else {
+                assert!(selected_mode.targets.is_empty());
+            }
+        }
+
+        let replayed = reconstruct(&capture, &ReplayOptions::default()).unwrap();
+        assert!(
+            replayed.differences.is_empty(),
+            "{:?}",
+            replayed.differences
+        );
+        assert_eq!(replayed.accepted_commands, 17);
+        assert_eq!(replayed.state, expected_state);
     }
 
     fn pair(root: &Path, rows: &mut Vec<String>, request: &IpcEnvelope, response: &IpcResponse) {

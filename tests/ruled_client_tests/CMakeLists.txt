@@ -21,6 +21,10 @@ add_executable(
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_token_display.cpp
 )
 
+if(MSVC)
+  target_compile_options(ruled_client_test PRIVATE /bigobj)
+endif()
+
 target_include_directories(ruled_client_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src)
 
 target_link_libraries(

@@ -256,6 +256,9 @@ mod deck_coverage_wizard_class;
 #[path = "scenario/deck_coverage_innkeepers_talent.rs"]
 mod deck_coverage_innkeepers_talent;
 
+#[path = "scenario/deck_coverage_aetheric_amplifier.rs"]
+mod deck_coverage_aetheric_amplifier;
+
 #[path = "scenario/deck_coverage_minds_aglow.rs"]
 mod deck_coverage_minds_aglow;
 

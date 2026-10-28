@@ -2649,6 +2649,176 @@ TEST(RuledXTargetChoiceTest, StaleTargetAfterTargetCostApplicationRequiresActiva
     EXPECT_EQ(ability.remainingCost.value(QChar('X')), 3);
 }
 
+TEST(RuledActivatedAbilityModeTest, TargetClicksUseTheSelectedModeOffer)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    constexpr quint32 sourceOid = 0x502u;
+    constexpr int abilityIndex = 1;
+    constexpr quint32 targetOid = 0x503u;
+    constexpr quint64 targetGeneration = 17;
+
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.minTargets = 1;
+    group.maxTargets = 1;
+    group.validPermanentIds.insert(targetOid);
+    group.validPermanentGenerations.insert(targetOid, targetGeneration);
+    RuledModalSpellOption mode;
+    mode.modeIndex = 2;
+    mode.label = QStringLiteral("Return a tapped creature");
+    mode.selectable = true;
+    mode.needsTarget = true;
+    mode.targets.groups.append(group);
+
+    RuledActivatedAbilityModeOffer offer;
+    offer.minModes = 1;
+    offer.maxModes = 1;
+    offer.modes.append(mode);
+    state.activatedAbilityModesByAbility.insert(RuledClientState::abilityTargetKey(sourceOid, abilityIndex), offer);
+    state.battlefieldGenerationByOid.insert(targetOid, targetGeneration);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = sourceOid;
+    ability.abilityIndex = abilityIndex;
+    ability.selectedMode = mode;
+
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, targetOid, 0),
+              RuledTargetClickEligibility::Legal);
+}
+
+TEST(RuledActivatedAbilityModeTest, PendingModeMustRemainInTheLatestOffer)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    constexpr quint32 sourceOid = 0x512u;
+    constexpr int abilityIndex = 2;
+    state.abilitySourceGenerationByOid.insert(sourceOid, 9);
+    state.zoneAbilityIndicesByOid[sourceOid].insert(abilityIndex);
+
+    RuledModalSpellOption mode;
+    mode.modeIndex = 1;
+    mode.label = QStringLiteral("Targetless mode");
+    mode.selectable = true;
+    RuledActivatedAbilityModeOffer offer;
+    offer.minModes = 1;
+    offer.maxModes = 1;
+    offer.modes.append(mode);
+    const quint64 abilityKey = RuledClientState::abilityTargetKey(sourceOid, abilityIndex);
+    state.activatedAbilityModesByAbility.insert(abilityKey, offer);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.permanentOid = sourceOid;
+    ability.abilityIndex = abilityIndex;
+    ability.expectedZoneChangeGeneration = 9;
+    ability.selectedMode = mode;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
+
+    state.activatedAbilityModesByAbility.remove(abilityKey);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(state, ability));
+}
+
+TEST(RuledActivatedAbilityModeTest, SubmittedActivationSurvivesReplacementOfTheLiveModeOffer)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    constexpr quint32 sourceOid = 0x517u;
+    constexpr int abilityIndex = 4;
+    constexpr quint64 sourceGeneration = 12;
+    RuledModalSpellOption mode;
+    mode.modeIndex = 2;
+    mode.label = QStringLiteral("Return a tapped creature");
+    mode.selectable = true;
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.stage = PendingActivatedAbility::Stage::CommitPending;
+    ability.permanentOid = sourceOid;
+    ability.abilityIndex = abilityIndex;
+    ability.expectedZoneChangeGeneration = sourceGeneration;
+    ability.selectedMode = mode;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
+
+    ruled::v1::PendingAbilityActivation pending;
+    pending.set_transaction_id(81);
+    pending.set_source_object_id(sourceOid);
+    pending.set_source_zone_change_generation(sourceGeneration);
+    pending.set_ability_index(abilityIndex);
+    state.pendingAbilityActivation = pending;
+    ability.engineTransactionId = 81;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
+
+    state.pendingAbilityActivation->set_transaction_id(82);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(state, ability));
+
+    state.pendingAbilityActivation->set_transaction_id(81);
+    ability.stage = PendingActivatedAbility::Stage::Paying;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
+}
+
+TEST(RuledActivatedAbilityModeTest, ChangedTargetGenerationInvalidatesTheCapturedModeReceipt)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    constexpr quint32 sourceOid = 0x522u;
+    constexpr int abilityIndex = 3;
+    constexpr quint32 targetOid = 0x523u;
+    constexpr quint64 capturedGeneration = 19;
+    constexpr quint64 latestGeneration = 20;
+    state.abilitySourceGenerationByOid.insert(sourceOid, 11);
+    state.zoneAbilityIndicesByOid[sourceOid].insert(abilityIndex);
+    state.battlefieldGenerationByOid.insert(targetOid, latestGeneration);
+
+    RuledTargetGroupData latestGroup;
+    latestGroup.groupIndex = 0;
+    latestGroup.minTargets = 1;
+    latestGroup.maxTargets = 1;
+    latestGroup.validPermanentIds.insert(targetOid);
+    latestGroup.validPermanentGenerations.insert(targetOid, latestGeneration);
+    RuledModalSpellOption latestMode;
+    latestMode.modeIndex = 2;
+    latestMode.label = QStringLiteral("Return a tapped creature");
+    latestMode.selectable = true;
+    latestMode.needsTarget = true;
+    latestMode.targets.groups.append(latestGroup);
+    RuledActivatedAbilityModeOffer offer;
+    offer.minModes = 1;
+    offer.maxModes = 1;
+    offer.modes.append(latestMode);
+    state.activatedAbilityModesByAbility.insert(RuledClientState::abilityTargetKey(sourceOid, abilityIndex), offer);
+
+    RuledModalSpellOption capturedMode = latestMode;
+    capturedMode.targets.groups[0].validPermanentGenerations.insert(targetOid, capturedGeneration);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.stage = PendingActivatedAbility::Stage::Announcing;
+    ability.waitingForTarget = false;
+    ability.targetingCostApplied = true;
+    ability.permanentOid = sourceOid;
+    ability.abilityIndex = abilityIndex;
+    ability.expectedZoneChangeGeneration = 11;
+    ability.selectedMode = capturedMode;
+    PendingActivatedAbility::Target selected;
+    selected.ref.set_object_id(targetOid);
+    selected.ref.set_group_index(0);
+    selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selected.ref.set_expected_zone_change_generation(capturedGeneration);
+    selected.zoneChangeGeneration = capturedGeneration;
+    ability.selectedTargets.append(selected);
+
+    PendingRuledSpellCast spell;
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
+    EXPECT_TRUE(ability.selectedTargets.isEmpty());
+    EXPECT_TRUE(ability.waitingForTarget);
+    EXPECT_TRUE(ability.restartAfterTargetInvalidation);
+    ASSERT_TRUE(ability.selectedMode.has_value());
+    EXPECT_EQ(ability.selectedMode->targets.groups[0].validPermanentGenerations.value(targetOid),
+              capturedGeneration);
+}
+
 TEST(RuledXTargetChoiceTest, AbilityMenuDisablesAnEnginePublishedEmptyChoiceSet)
 {
     FakeHost host;
@@ -3008,6 +3178,56 @@ TEST(RuledPendingTargetTest, AbilityTargetInvalidationRewindsItsRequiredGroup)
     EXPECT_EQ(
         ruledTargetClickEligibility(spell, ability, state, RuledTargetCandidateKind::Battlefield, 41, kLocalPlayer),
         RuledTargetClickEligibility::Legal);
+}
+
+TEST(RuledPendingTargetTest, RejectedNonModalActivationRetriesOnlyWhenRetargetingIsNotRequired)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    constexpr quint32 sourceOid = 30;
+    constexpr int abilityIndex = 1;
+    constexpr quint32 offeredTargetOid = 41;
+    state.abilitySourceGenerationByOid.insert(sourceOid, 7);
+    state.zoneAbilityIndicesByOid[sourceOid].insert(abilityIndex);
+
+    RuledSpellTargetData data;
+    data.groups.append(RuledTargetGroupData{});
+    data.groups[0].groupIndex = 0;
+    data.groups[0].minTargets = 1;
+    data.groups[0].maxTargets = 1;
+    data.groups[0].validPermanentIds.insert(offeredTargetOid);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(sourceOid, abilityIndex), data);
+
+    const auto pendingWithTarget = [&](quint32 targetOid) {
+        PendingActivatedAbility ability;
+        ability.valid = true;
+        ability.stage = PendingActivatedAbility::Stage::Announcing;
+        ability.permanentOid = sourceOid;
+        ability.expectedZoneChangeGeneration = 7;
+        ability.abilityIndex = abilityIndex;
+        ability.activeTargetGroupPosition = 0;
+        PendingActivatedAbility::Target target;
+        target.ref.set_object_id(targetOid);
+        target.ref.set_group_index(0);
+        target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        ability.selectedTargets.append(target);
+        return ability;
+    };
+
+    PendingRuledSpellCast spell;
+    auto stale = pendingWithTarget(offeredTargetOid + 1);
+    ASSERT_TRUE(reconcileRuledPendingTargets(spell, stale, state, kLocalPlayer));
+    ASSERT_TRUE(stale.waitingForTarget);
+    EXPECT_FALSE(ruledRejectedActivationCanRetry(stale));
+
+    auto stillLegal = pendingWithTarget(offeredTargetOid);
+    EXPECT_FALSE(reconcileRuledPendingTargets(spell, stillLegal, state, kLocalPlayer));
+    EXPECT_TRUE(ruledRejectedActivationCanRetry(stillLegal));
+
+    PendingActivatedAbility targetless;
+    targetless.valid = true;
+    targetless.stage = PendingActivatedAbility::Stage::Announcing;
+    EXPECT_TRUE(ruledRejectedActivationCanRetry(targetless));
 }
 
 TEST(RuledPendingTargetTest, ActivationOwnTargetEligibilityDoesNotUseTheOpponentsGroup)
@@ -3633,6 +3853,161 @@ TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
     EXPECT_EQ(modes[0].modeIndex, 0);
     EXPECT_TRUE(modes[0].targets.canTargetOpponent);
     EXPECT_FALSE(modes[1].selectable);
+}
+
+TEST_F(RuledClientTest, AppliesAuthoritativeActivatedAbilityModeDataPerAbility)
+{
+    constexpr quint32 sourceOid = 0x102u;
+    constexpr int abilityIndex = 3;
+    constexpr quint32 targetOid = 0x205u;
+    constexpr quint64 targetGeneration = 0x123456789abcdef0ull;
+    const quint64 abilityKey = RuledClientState::abilityTargetKey(sourceOid, abilityIndex);
+
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto &offer = (*actions.mutable_activated_ability_modes())[abilityKey];
+    offer.set_min_modes(1);
+    offer.set_max_modes(1);
+
+    auto *targetless = offer.add_modes();
+    targetless->set_mode_index(0);
+    targetless->set_label("Targetless mode");
+    targetless->set_selectable(true);
+    targetless->set_needs_target(false);
+
+    auto *targeted = offer.add_modes();
+    targeted->set_mode_index(2);
+    targeted->mutable_presentation()->set_fallback_text("Targeted mode");
+    targeted->set_selectable(true);
+    targeted->set_needs_target(true);
+    auto *group = targeted->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_min(1);
+    group->set_max(1);
+    group->add_valid_permanent_ids(targetOid);
+    auto *candidate = group->add_valid_permanent_targets();
+    candidate->set_object_id(targetOid);
+    candidate->set_zone_change_generation(targetGeneration);
+
+    apply(batch);
+
+    ASSERT_TRUE(state->activatedAbilityModesByAbility.contains(abilityKey));
+    const auto parsedOffer = state->activatedAbilityModesByAbility.value(abilityKey);
+    EXPECT_EQ(parsedOffer.minModes, 1);
+    EXPECT_EQ(parsedOffer.maxModes, 1);
+    ASSERT_EQ(parsedOffer.modes.size(), 2);
+    EXPECT_EQ(parsedOffer.modes[0].modeIndex, 0);
+    EXPECT_EQ(parsedOffer.modes[0].label, QStringLiteral("Targetless mode"));
+    EXPECT_TRUE(parsedOffer.modes[0].selectable);
+    EXPECT_FALSE(parsedOffer.modes[0].needsTarget);
+    EXPECT_TRUE(parsedOffer.modes[0].targets.groups.isEmpty());
+    EXPECT_EQ(parsedOffer.modes[1].modeIndex, 2);
+    EXPECT_EQ(parsedOffer.modes[1].label, QStringLiteral("Targeted mode"));
+    EXPECT_TRUE(parsedOffer.modes[1].selectable);
+    EXPECT_TRUE(parsedOffer.modes[1].needsTarget);
+    ASSERT_EQ(parsedOffer.modes[1].targets.groups.size(), 1);
+    const auto &parsedGroup = parsedOffer.modes[1].targets.groups[0];
+    EXPECT_TRUE(parsedGroup.validPermanentIds.contains(targetOid));
+    EXPECT_EQ(parsedGroup.validPermanentGenerations.value(targetOid), targetGeneration);
+
+    ruled::v1::RuledEventBatch refreshed;
+    (*refreshed.mutable_legal_by_player())[kLocalPlayer];
+    apply(refreshed);
+    EXPECT_FALSE(state->activatedAbilityModesByAbility.contains(abilityKey));
+}
+
+TEST_F(RuledClientTest, ActivatedAbilityModePreviewCarriesOnlyModeTargetsAndGeneration)
+{
+    constexpr quint32 sourceOid = 0x302u;
+    constexpr int abilityIndex = 4;
+    constexpr quint32 targetOid = 0x405u;
+    constexpr quint64 targetGeneration = 0x23456789abcdef01ull;
+    const quint64 abilityKey = RuledClientState::abilityTargetKey(sourceOid, abilityIndex);
+
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto &offer = (*actions.mutable_activated_ability_modes())[abilityKey];
+    offer.set_min_modes(1);
+    offer.set_max_modes(1);
+    auto *targeted = offer.add_modes();
+    targeted->set_mode_index(2);
+    targeted->set_label("Return a tapped creature");
+    targeted->set_selectable(true);
+    targeted->set_needs_target(true);
+    auto *group = targeted->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_min(1);
+    group->set_max(1);
+    group->add_valid_permanent_ids(targetOid);
+    auto *candidate = group->add_valid_permanent_targets();
+    candidate->set_object_id(targetOid);
+    candidate->set_zone_change_generation(targetGeneration);
+    apply(batch);
+
+    ASSERT_TRUE(state->activatedAbilityModesByAbility.contains(abilityKey));
+    const auto offerData = state->activatedAbilityModesByAbility.value(abilityKey);
+    ASSERT_EQ(offerData.modes.size(), 1);
+    const auto selectedMode = offerData.modes.first(); // Result of the shared one-mode picker.
+    ASSERT_EQ(selectedMode.targets.groups.size(), 1);
+    const auto &targetGroup = selectedMode.targets.groups.first();
+    ASSERT_EQ(targetGroup.validPermanentGenerations.value(targetOid), targetGeneration);
+
+    PendingActivatedAbility pending;
+    pending.permanentOid = sourceOid;
+    pending.abilityIndex = abilityIndex;
+    pending.expectedZoneChangeGeneration = 7;
+    pending.selectedMode = selectedMode;
+    pending.valid = true;
+    pending.waitingForTarget = true;
+    PendingActivatedAbility::Target selectedTarget;
+    selectedTarget.ref.set_group_index(static_cast<quint32>(targetGroup.groupIndex));
+    selectedTarget.ref.set_object_id(targetOid);
+    selectedTarget.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selectedTarget.ref.set_expected_zone_change_generation(targetGroup.validPermanentGenerations.value(targetOid));
+    selectedTarget.zoneChangeGeneration = targetGroup.validPermanentGenerations.value(targetOid);
+    EXPECT_EQ(ruledStageActivatedAbilityTarget(pending, targetGroup, selectedTarget),
+              RuledActivatedTargetStageResult::Selected);
+
+    ruled::v1::RuledCommand command;
+    pending.writeActivationHeader(*command.mutable_activate_ability());
+    RuledPayment payment;
+    payment.begin();
+    const auto preview = payment.requestAction(command);
+
+    ASSERT_TRUE(preview.has_activate_ability());
+    EXPECT_EQ(preview.transaction_id(), payment.transaction());
+    EXPECT_EQ(preview.revision(), 1u);
+    ASSERT_EQ(preview.activate_ability().selected_modes_size(), 1);
+    const auto &serializedMode = preview.activate_ability().selected_modes(0);
+    EXPECT_EQ(serializedMode.mode_index(), 2u);
+    ASSERT_EQ(serializedMode.targets_size(), 1);
+    EXPECT_EQ(serializedMode.targets(0).group_index(), 0u);
+    EXPECT_EQ(serializedMode.targets(0).object_id(), targetOid);
+    ASSERT_TRUE(serializedMode.targets(0).has_expected_zone_change_generation());
+    EXPECT_EQ(serializedMode.targets(0).expected_zone_change_generation(), targetGeneration);
+    EXPECT_EQ(preview.activate_ability().targets_size(), 0);
+
+    ruled::v1::PaymentPreview staleReply;
+    staleReply.set_transaction_id(preview.transaction_id());
+    staleReply.set_revision(preview.revision() + 1);
+    staleReply.set_valid(true);
+    staleReply.set_complete(true);
+    EXPECT_FALSE(payment.apply(staleReply));
+
+    ruled::v1::PaymentPreview acceptedReply;
+    acceptedReply.set_transaction_id(preview.transaction_id());
+    acceptedReply.set_revision(preview.revision());
+    acceptedReply.set_valid(true);
+    acceptedReply.set_complete(true);
+    EXPECT_TRUE(payment.apply(acceptedReply));
+    EXPECT_EQ(payment.nextPreviewAction(true), RuledPayment::PreviewAction::Submit);
+
+    ruled::v1::RuledCommand submitted;
+    *submitted.mutable_activate_ability() = command.activate_ability();
+    payment.writePayment(submitted);
+    ASSERT_TRUE(submitted.activate_ability().has_payment());
+    ASSERT_EQ(submitted.activate_ability().selected_modes_size(), 1);
+    EXPECT_EQ(submitted.activate_ability().selected_modes(0).mode_index(), 2u);
 }
 
 TEST_F(RuledClientTest, ModalDecodingPreservesPresentationTargetsAndCostLinksAcrossCastSources)

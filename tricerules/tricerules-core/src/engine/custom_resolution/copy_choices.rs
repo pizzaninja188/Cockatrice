@@ -220,14 +220,34 @@ impl GameEngine {
             .get(progress.cursor)
             .and_then(|occurrence| occurrence.mode_id.as_ref())
             .and_then(|mode_id| {
-                let face = self
-                    .registry
-                    .get(&progress.stack.item.card_id)?
-                    .face(progress.stack.item.face_index)?;
-                let modal = face.modal_spell.as_ref()?;
-                let mode = modal.mode_by_id(mode_id)?;
-                let mode_index = modal.mode_index(mode_id)?;
-                let fallback = mode_fallback(&face.name, &mode.mode_id);
+                let (mode_index, fallback) =
+                    if let Some(ability) = progress.stack.item.activated_ability.as_ref() {
+                        let modal = ability.modal.as_ref()?;
+                        let mode = modal.mode_by_id(mode_id)?;
+                        (
+                            modal.mode_index(mode_id)?,
+                            mode_fallback(
+                                progress
+                                    .stack
+                                    .item
+                                    .ability_text
+                                    .as_deref()
+                                    .unwrap_or("Ability"),
+                                &mode.mode_id,
+                            ),
+                        )
+                    } else {
+                        let face = self
+                            .registry
+                            .get(&progress.stack.item.card_id)?
+                            .face(progress.stack.item.face_index)?;
+                        let modal = face.modal_spell.as_ref()?;
+                        let mode = modal.mode_by_id(mode_id)?;
+                        (
+                            modal.mode_index(mode_id)?,
+                            mode_fallback(&face.name, &mode.mode_id),
+                        )
+                    };
                 self.state
                     .stack_presentations
                     .get(&progress.stack.item.id)?
@@ -292,10 +312,20 @@ impl GameEngine {
         mode_id: Option<&tricerules_card_model::ModeId>,
     ) -> Result<CopyTargetData<'a>, EngineError> {
         if let Some(ability) = item.activated_ability.as_ref() {
-            if mode_id.is_some() {
-                return Err(EngineError::ProgramInvariant(
-                    "activated abilities do not support modal target owners",
-                ));
+            if let Some(mode_id) = mode_id {
+                let mode = ability
+                    .modal
+                    .as_ref()
+                    .and_then(|modal| modal.mode_by_id(mode_id))
+                    .ok_or(EngineError::Illegal(
+                        "copied activated mode no longer exists",
+                    ))?;
+                if mode.program.is_some() {
+                    return Err(EngineError::ProgramInvariant(
+                        "copying activated modal Programs is unsupported",
+                    ));
+                }
+                return Ok((&mode.effects, mode.targeting.as_ref(), None));
             }
             let program = item
                 .ability_program_owner()
@@ -536,6 +566,16 @@ impl GameEngine {
                 != expected
         }) {
             return Err(EngineError::Illegal("copy target generation is stale"));
+        }
+        if item.activated_ability.is_some()
+            && occurrence.mode_id.is_some()
+            && matches!(
+                rv1::TargetRefKind::try_from(target.kind),
+                Ok(rv1::TargetRefKind::Permanent)
+            )
+            && target.zone_change_generation.is_none()
+        {
+            return Err(EngineError::Illegal("copy target generation is required"));
         }
         let source = TargetSourceIdentity::for_stack_item(self, item);
         for binding in &group.bindings {
@@ -800,39 +840,48 @@ impl GameEngine {
             .get(&copy_id)
             .cloned()
             .unwrap_or_default();
-        let (chosen_mode_indices, chosen_mode_labels) = if copy_item.chosen_modes.is_empty() {
-            (Vec::new(), Vec::new())
-        } else {
-            let modal = self
-                .registry
-                .get(&card_id)
-                .and_then(|definition| definition.face(face_index))
-                .and_then(|face| face.modal_spell.as_ref())
-                .ok_or(EngineError::Illegal(
-                    "copied modal spell has no mode definition",
-                ))?;
-            let indices = copy_item
-                .chosen_modes
-                .iter()
-                .map(|chosen| {
-                    modal
-                        .mode_index(&chosen.mode_id)
-                        .map(|index| index as u32)
-                        .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let labels = copy_item
-                .chosen_modes
-                .iter()
-                .map(|chosen| {
-                    modal
-                        .mode_by_id(&chosen.mode_id)
-                        .map(|mode| mode_fallback(&copied_name, &mode.mode_id))
-                        .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            (indices, labels)
-        };
+        let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
+            if let Some(ability) = copy_item.activated_ability.as_ref() {
+                super::super::presentation::activated_stack_mode_presentation(
+                    ability,
+                    copy_item.ability_text.as_deref().unwrap_or("Ability"),
+                    &copy_item.chosen_modes,
+                    copy_presentation.primary.as_ref(),
+                )
+                .map_err(EngineError::ProgramInvariant)?
+            } else if copy_item.chosen_modes.is_empty() {
+                (Vec::new(), Vec::new(), Vec::new())
+            } else {
+                let modal = self
+                    .registry
+                    .get(&card_id)
+                    .and_then(|definition| definition.face(face_index))
+                    .and_then(|face| face.modal_spell.as_ref())
+                    .ok_or(EngineError::Illegal(
+                        "copied modal spell has no mode definition",
+                    ))?;
+                let indices = copy_item
+                    .chosen_modes
+                    .iter()
+                    .map(|chosen| {
+                        modal
+                            .mode_index(&chosen.mode_id)
+                            .map(|index| index as u32)
+                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let labels = copy_item
+                    .chosen_modes
+                    .iter()
+                    .map(|chosen| {
+                        modal
+                            .mode_by_id(&chosen.mode_id)
+                            .map(|mode| mode_fallback(&copied_name, &mode.mode_id))
+                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                (indices, labels, copy_presentation.chosen_modes.clone())
+            };
         self.state.stack.push(copy_item);
         self.state.passes_since_stack_change = 0;
 
@@ -875,7 +924,7 @@ impl GameEngine {
                     chosen_cast_cost_labels,
                     source_token_identity: copy_presentation.source_token_identity,
                     primary_presentation: copy_presentation.primary,
-                    chosen_mode_presentations: copy_presentation.chosen_modes,
+                    chosen_mode_presentations,
                     chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
                     prototyped,
                     ability_controller_player_id: is_ability.then_some(controller),
@@ -1015,5 +1064,176 @@ fn copy_target_is_current(engine: &GameEngine, target: &StackTarget) -> bool {
                     .unwrap_or(0)
                     == generation
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TARGETED_MODAL_COPY_FIXTURE: &str = r#"(
+        id: "modal_copy_source", name: "Modal Copy Source", face_id: "modal_copy_source",
+        types: ["Artifact"],
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            costs: [Mana("{4}"), Tap], effect: [], timing: SorcerySpeed,
+            modal: Some((min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "double_any_permanent", presentation: Fallback,
+                    effects: [DoubleCounters(target: (kind: AnyPermanent))],
+                    targeting: Some((groups: [
+                        (min: 1, max: 1, prompt: "Choose a permanent", effect_indices: [0])
+                    ]))
+                ),
+                (mode_id: "draw_one", presentation: Fallback,
+                    effects: [Draw(who: Controller, count: 1)])
+            ]))
+        )],
+    )"#;
+
+    fn place_ready(engine: &mut GameEngine, player: PlayerId, name: &str) -> ObjectId {
+        engine
+            .apply_dev_command(
+                player,
+                &rv1::DevCommand {
+                    target_player_id: player,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: name.into(),
+                            zone: rv1::DevZone::Battlefield as i32,
+                            ready: true,
+                        },
+                    )),
+                },
+            )
+            .expect("place test permanent");
+        engine.reconcile_activated_ability_slots();
+        engine.state.next_object_id - 1
+    }
+
+    #[test]
+    fn activated_modal_copy_changed_permanent_requires_current_generation_without_mutation() {
+        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                TARGETED_MODAL_COPY_FIXTURE,
+                include_str!("../../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("modal copy validation registry compiles");
+        let decks = (0..2)
+            .map(|_| crate::engine::EngineDeck {
+                mainboard: vec!["forest".into(); 40],
+                commanders: Vec::new(),
+            })
+            .collect();
+        let mut engine = GameEngine::new_with_registry(
+            261_027_148,
+            &[10, 20],
+            20,
+            Some(decks),
+            true,
+            Box::leak(Box::new(registry)),
+        )
+        .expect("create modal copy validation game");
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        engine.enable_dev_commands();
+        let source = place_ready(&mut engine, 10, "Modal Copy Source");
+        let original = place_ready(&mut engine, 10, "Grizzly Bears");
+        let replacement = place_ready(&mut engine, 20, "Grizzly Bears");
+        engine.state.players[0].mana_pool.colorless = 4;
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let original_generation = engine
+            .state
+            .zone_change_generation
+            .get(&original)
+            .copied()
+            .unwrap_or(0);
+        let source_ref = rv1::CostObjectRef {
+            object_id: source,
+            zone_change_generation: source_generation,
+        };
+        let activation = rv1::ActivateAbility {
+            source_object_id: source,
+            ability_index: 0,
+            expected_zone_change_generation: source_generation,
+            selected_modes: vec![rv1::SelectedSpellMode {
+                mode_index: 0,
+                targets: vec![rv1::TargetRef {
+                    object_id: original,
+                    group_index: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    expected_zone_change_generation: Some(original_generation),
+                    ..Default::default()
+                }],
+            }],
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(source_ref),
+                mana: Some(rv1::PaymentMana {
+                    c: 4,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        engine
+            .apply_command(
+                10,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(activation)),
+                },
+            )
+            .expect("announce targeted modal activation");
+        let item = engine
+            .state
+            .stack
+            .last()
+            .expect("activation on stack")
+            .clone();
+        let occurrence = copy_target_occurrences(&item)
+            .into_iter()
+            .next()
+            .expect("captured mode target occurrence");
+        let replacement_generation = engine
+            .state
+            .zone_change_generation
+            .get(&replacement)
+            .copied()
+            .unwrap_or(0);
+
+        let cases = [
+            (None, "illegal command: copy target generation is required"),
+            (
+                Some(replacement_generation.saturating_add(1)),
+                "illegal command: copy target generation is stale",
+            ),
+        ];
+        for (generation, expected_error) in cases {
+            let target = StackTarget {
+                object_id: replacement,
+                required_controller: None,
+                group_index: occurrence.group_index,
+                damage_amount: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                zone_change_generation: generation,
+            };
+            let before = serde_json::to_value(&engine.state).expect("serialize before rejection");
+            let error = engine
+                .validate_copy_target_occurrence(&item, &occurrence, &target)
+                .expect_err("missing or stale changed-target generation must be rejected");
+            assert_eq!(error.to_string(), expected_error);
+            assert_eq!(
+                serde_json::to_value(&engine.state).expect("serialize after rejection"),
+                before,
+                "rejected target validation leaves activation, targets and payment unchanged"
+            );
+        }
     }
 }

@@ -73,7 +73,7 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        const QByteArray expected("1c564af2ac3897f85414eff56d940e7d7428da601f66e007659a2b2d438b9558");
+        const QByteArray expected("e785e138da2c38a94fc9c6264a95caa1eac64f1f12e370465b21b89ba3c0c9b6");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -558,6 +558,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         {"TargetRef.object_id", "expected_zone_change_generation"},
         {"AttackAssignment.attacker_object_id", "attacker_zone_change_generation"},
         {"XTargetCandidate.object_id", "zone_change_generation"},
+        {"LegalPermanentTargetCandidate.object_id", "zone_change_generation"},
         {"LegalZoneCastAction.object_id", "zone_change_generation"},
         {"CostObjectRef.object_id", "zone_change_generation"},
         {"LegalZoneLandAction.object_id", "zone_change_generation"},
@@ -585,7 +586,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         {"FaceDownObjectMap.Entry.engine_object_id", "zone_change_generation"}
     };
 
-    // These four maps pack a public object handle into the key; their low bits remain the
+    // These five maps pack a public object handle into the key; their low bits remain the
     // engine's ability or face index. Rebuild the map so protobuf's map index stays coherent.
     if (type == QLatin1String("LegalActions")) {
         auto *actions = static_cast<ruled::v1::LegalActions *>(message);
@@ -607,7 +608,8 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         if (!rekey(actions->mutable_valid_targets_by_ability(), 32) ||
             !rekey(actions->mutable_valid_targets_by_zone_object(), 8) ||
             !rekey(actions->mutable_cost_choices_by_ability(), 32) ||
-            !rekey(actions->mutable_mana_payment_by_ability(), 32))
+            !rekey(actions->mutable_mana_payment_by_ability(), 32) ||
+            !rekey(actions->mutable_activated_ability_modes(), 32))
             return false;
     }
 
