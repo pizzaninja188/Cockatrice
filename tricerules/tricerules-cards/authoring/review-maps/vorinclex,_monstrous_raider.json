@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a3fdf5a-bff8-4896-b288-3f43f9a72d9b",
+  "spans": [
+    {
+      "face_id": "vorinclex_monstrous_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0", "/faces/0/keywords/1"]
+    },
+    {
+      "face_id": "vorinclex_monstrous_raider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "vorinclex_monstrous_raider",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/static_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords/1"
+    },
+    {
+      "symbol": "StaticAbilityDef::DoubleCountersYouWouldPut",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::HalveCountersOpponentsWouldPut",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::vorinclex_actual_cast_enters_as_a_hasty_trampling_six_six",
+      "covers": "The actual cast enters as a 6/6 with haste and trample."
+    },
+    {
+      "test": "deck_registry::deck_coverage_vorinclex_monstrous_raider::vorinclex_exact_identity_body_keywords_and_static_lines_are_registered",
+      "covers": "Exact identity, printed characteristics, keywords, and both static ability definitions are registered."
+    },
+    {
+      "test": "deck_registry::deck_coverage_vorinclex_monstrous_raider::vorinclex_full_definition_is_admitted_for_ordinary_mainboard_use",
+      "covers": "The complete definition is admitted as an ordinary mainboard card."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::controlled_vorinclex_doubles_a_friendly_jaces_actual_plus_one_cost",
+      "covers": "Vorinclex doubles its controller's actual positive loyalty cost."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::friendly_vorinclex_doubles_jaces_actual_entry_loyalty",
+      "covers": "Friendly Vorinclex doubles Jace's entry loyalty counters."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::opposing_vorinclex_halves_jaces_actual_entry_loyalty",
+      "covers": "An opposing Vorinclex halves Jace's five entry counters to two."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::opposing_vorinclex_does_not_change_jaces_negative_loyalty_cost",
+      "covers": "Removing loyalty counters for a negative loyalty cost is unaffected."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::opponent_vorinclex_halves_jaces_plus_one_to_zero_and_still_consumes_one_use",
+      "covers": "A one-counter loyalty cost is halved to zero while the activation use is consumed."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::opposing_vorinclex_zeroes_proliferate_object_and_player_without_false_recipient_logs",
+      "covers": "Opposing Vorinclex leaves permanent and player counter totals unchanged when Proliferate's one counter is halved to zero."
+    },
+    {
+      "test": "scenario deck_coverage_vorinclex_monstrous_raider::laezel_then_opposing_vorinclex_replays_the_accepted_cost_choice",
+      "covers": "A real Lae'zel/Vorinclex replacement-order choice replays with matching events and snapshots."
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::opposing_vorinclex_half_to_zero_counter_move_debits_source_without_placement",
+      "covers": "Nesting Grounds completes a counter move after an opposing Vorinclex halves the moved counter to zero."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

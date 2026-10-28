@@ -2624,6 +2624,15 @@ pub enum StaticAbilityDef {
     /// Entry-counter replacement is applied to the completed entry event before commit; this
     /// variant's ordinary placement path excludes paid costs, turn-based actions, and damage.
     DoubleEffectCountersPlacedOnPermanentsYouControl,
+    /// CR 614.16: when this source's current controller would put counters, double each kind
+    /// regardless of placement origin or recipient; the recipient may be any permanent or player.
+    /// Vorinclex, Monstrous Raider and Innkeeper's Talent level 3 have this same active effect;
+    /// Talent only adds its Class level gate.
+    DoubleCountersYouWouldPut,
+    /// CR 614.16: when an opponent of this source's current controller would put counters on any
+    /// permanent or player, regardless of placement origin, halve each kind, rounding down. This
+    /// closed form captures Vorinclex's opponent scope and rounding without configurable parameters.
+    HalveCountersOpponentsWouldPut,
     /// Lae'zel's exact CR 614 replacement: when this ability's controller puts counters on
     /// themself or a creature/planeswalker they control, add one of each represented kind.
     /// Keep this specialized rather than introducing configurable replacement parameters for

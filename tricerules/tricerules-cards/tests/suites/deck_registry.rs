@@ -109,6 +109,8 @@ mod deck_coverage_teferi_temporal_archmage;
 mod deck_coverage_teferi_temporal_archmage_minus_one;
 #[path = "../deck_coverage_the_chain_veil.rs"]
 mod deck_coverage_the_chain_veil;
+#[path = "../deck_coverage_vorinclex_monstrous_raider.rs"]
+mod deck_coverage_vorinclex_monstrous_raider;
 
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;

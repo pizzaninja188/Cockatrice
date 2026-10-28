@@ -3886,6 +3886,32 @@ fn carth_loyalty_cost_static_is_parameter_free_and_round_trips() {
 }
 
 #[test]
+fn vorinclex_counter_replacements_are_closed_unit_statics_and_round_trip_exactly() {
+    for text in [
+        "DoubleCountersYouWouldPut",
+        "HalveCountersOpponentsWouldPut",
+    ] {
+        let ability: StaticAbilityDef = ron::from_str(text).unwrap();
+        let encoded = ron::to_string(&ability).unwrap();
+        assert_eq!(encoded, text);
+        assert_eq!(
+            ron::from_str::<StaticAbilityDef>(&encoded).unwrap(),
+            ability
+        );
+    }
+
+    for invalid in [
+        "DoubleCountersYouWouldPut(factor: 3)",
+        "HalveCountersOpponentsWouldPut(rounding: Up)",
+    ] {
+        assert!(
+            ron::from_str::<StaticAbilityDef>(invalid).is_err(),
+            "counter replacement statics are closed unit variants: {invalid}"
+        );
+    }
+}
+
+#[test]
 fn attack_declaration_limit_authoring_preserves_zero_and_scope_and_rejects_ambiguous_input() {
     for (text, maximum, affected) in [
         (

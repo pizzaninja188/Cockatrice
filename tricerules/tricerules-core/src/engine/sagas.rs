@@ -141,6 +141,52 @@ mod tests {
         object_id
     }
 
+    #[test]
+    fn opposing_vorinclex_zeroes_saga_lore_without_a_false_chapter_or_placement_log() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            185_099,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
+        engine.state.opening = None;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.command_index = 5;
+        let saga = copied_saga_into(&mut engine, 0, false);
+        let vorinclex = battlefield_card(&mut engine, 1, "vorinclex,_monstrous_raider");
+        engine.emit_static_abilities_on_enter(vorinclex);
+
+        let mut out = Vec::new();
+        engine
+            .perform_precombat_saga_lore_action(&mut out)
+            .expect("the active player performs the Saga lore action");
+
+        assert_eq!(
+            engine.state.objects[&saga].counter_count(CounterKind::Lore),
+            0
+        );
+        assert!(engine.state.pending_triggers.is_empty());
+        assert!(engine.state.stack.is_empty());
+        let logs = out
+            .iter()
+            .filter_map(|event| match event.ev.as_ref()? {
+                rv1::ruled_event::Ev::Log(log) => Some(log.text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !logs
+                .iter()
+                .any(|log| log.contains("puts a lore counter on")),
+            "a zero-result Saga placement must not be logged as a counter placement: {logs:?}"
+        );
+    }
+
     fn battlefield_card(engine: &mut GameEngine, controller: PlayerId, card_id: &str) -> ObjectId {
         let object_id = engine.state.players[controller as usize].hand.remove(0);
         engine.state.players[controller as usize]

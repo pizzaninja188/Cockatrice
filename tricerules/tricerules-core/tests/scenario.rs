@@ -247,6 +247,9 @@ mod deck_coverage_teferi_temporal_archmage_minus_ten;
 #[path = "scenario/deck_coverage_teferi_temporal_archmage_minus_one.rs"]
 mod deck_coverage_teferi_temporal_archmage_minus_one;
 
+#[path = "scenario/deck_coverage_vorinclex_monstrous_raider.rs"]
+mod deck_coverage_vorinclex_monstrous_raider;
+
 #[path = "scenario/deck_coverage_wizard_class.rs"]
 mod deck_coverage_wizard_class;
 

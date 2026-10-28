@@ -1,0 +1,30 @@
+// KHM199 printing 92613468-205e-488b-930d-11908477e9f8; Oracle ID
+// 5a3fdf5a-bff8-4896-b288-3f43f9a72d9b. Official Kaldheim card gallery:
+// https://magic.wizards.com/en/news/card-image-gallery/kaldheim
+// Rules references: Magic Comprehensive Rules (2026-09-25), 118.11, 122.5, 122.6a,
+// 614.12, 614.16, and 616.2. Vorinclex's current controller defines "you"; its first
+// replacement doubles counters that player would put on a permanent or player, and its
+// second halves opponents' placements per counter kind, rounded down (which can yield zero).
+(
+  id: "vorinclex,_monstrous_raider",
+  name: "Vorinclex, Monstrous Raider",
+  face_id: "vorinclex_monstrous_raider",
+  mana_cost: "{4}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Phyrexian", "Praetor"],
+  keywords: [Trample, Haste],
+  power: 6,
+  toughness: 6,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: DoubleCountersYouWouldPut,
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([3]),
+      definition: HalveCountersOpponentsWouldPut,
+    ),
+  ],
+)

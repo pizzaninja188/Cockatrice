@@ -992,6 +992,8 @@ impl GameEngine {
                 | StaticAbilityDef::ControllerPlaneswalkerLoyaltyCostsAdditionalOne
                 | StaticAbilityDef::OpponentsCannotCauseOwnLibrarySearch
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                | StaticAbilityDef::DoubleCountersYouWouldPut
+                | StaticAbilityDef::HalveCountersOpponentsWouldPut
                 | StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
                 | StaticAbilityDef::DoubleTokensCreatedUnderYourControl
                 | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {

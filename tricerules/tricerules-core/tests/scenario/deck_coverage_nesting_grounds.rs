@@ -16,6 +16,7 @@ use tricerules_proto::ruled::v1::{
 };
 
 const NESTING_GROUNDS: &str = "nesting_grounds";
+const VORINCLEX: &str = "vorinclex,_monstrous_raider";
 
 fn four_player_engine(seed: u64) -> GameEngine {
     let mut deck = std::iter::repeat_n("forest".to_string(), 30).collect::<Vec<_>>();
@@ -126,6 +127,84 @@ fn resolve_without_counter_choice(engine: &mut GameEngine) {
         }
     }
     panic!("the no-choice resolution should finish after one four-player priority round");
+}
+
+#[test]
+fn opposing_vorinclex_half_to_zero_counter_move_debits_source_without_placement() {
+    let mut engine = four_player_engine(202_610_120);
+    inject_permanent_on_battlefield(&mut engine, 0, VORINCLEX);
+    let grounds = inject_permanent_on_battlefield(&mut engine, 1, NESTING_GROUNDS);
+    let source = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let destination = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    engine.state.active_player_idx = 1;
+    engine.state.priority_idx = 1;
+    engine.state.turn_step = TurnStep::Main1;
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .set_counter(CounterKind::Quest, 1);
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    engine
+        .apply_scenario_command(
+            1,
+            &move_counter_command(&engine, grounds, source, destination),
+        )
+        .expect("activate Nesting Grounds on the actor's turn");
+    let choice = pass_until_choice(&mut engine);
+    assert_eq!(choice.deciding_player_id, 1);
+    assert_eq!(
+        choice.resolution_branches[0].label,
+        "Move one quest counter"
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Quest),
+        1,
+        "the source is unchanged before the selected move resolves"
+    );
+
+    let batch = engine
+        .apply_scenario_command(1, &select_branch(0))
+        .expect("the half-to-zero replacement still removes the moved source counter");
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Quest),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&destination].counter_count(CounterKind::Quest),
+        0,
+        "the zero-result replacement places no counter at the destination"
+    );
+    let logs = batch
+        .events
+        .iter()
+        .filter_map(|event| match event.ev.as_ref()? {
+            tricerules_proto::ruled::v1::ruled_event::Ev::Log(log) => Some(log.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !logs
+            .iter()
+            .any(|log| log.contains("moves one quest counter from")),
+        "a zero-result move must not log a destination placement: {logs:?}"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        engine.state.stack.is_empty(),
+        "the activated ability completes once"
+    );
+    assert!(engine.state.pending_triggers.is_empty());
 }
 
 fn move_owned_card(engine: &mut GameEngine, owner: i32, card_id: &str, destination: DevZone) {

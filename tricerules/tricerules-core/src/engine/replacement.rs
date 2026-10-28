@@ -162,6 +162,8 @@ pub(crate) enum PendingReplacementEvent {
 pub(crate) enum CounterReplacementKind {
     Laezel,
     DoublingSeason,
+    DoubleCountersYouWouldPut,
+    HalveCountersOpponentsWouldPut,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -1041,6 +1043,13 @@ impl GameEngine {
             if !self.state.objects.contains_key(&source_id) {
                 continue;
             }
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                source_id,
+            ) {
+                continue;
+            }
             let Some(source_controller) = self
                 .characteristics(source_id)
                 .map(|characteristics| characteristics.controller)
@@ -1069,6 +1078,16 @@ impl GameEngine {
                     {
                         CounterReplacementKind::Laezel
                     }
+                    StaticAbilityDef::DoubleCountersYouWouldPut
+                        if source_controller == event.actor =>
+                    {
+                        CounterReplacementKind::DoubleCountersYouWouldPut
+                    }
+                    StaticAbilityDef::HalveCountersOpponentsWouldPut
+                        if self.state.are_opponents(event.actor, source_controller) =>
+                    {
+                        CounterReplacementKind::HalveCountersOpponentsWouldPut
+                    }
                         StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
                         if (event.origin == super::continuous::CounterPlacementOrigin::Effect
                             || event.origin == super::continuous::CounterPlacementOrigin::Entry
@@ -1096,6 +1115,12 @@ impl GameEngine {
                 let summary = match kind {
                     CounterReplacementKind::Laezel => "adds one of each counter kind",
                     CounterReplacementKind::DoublingSeason => "doubles effect counters",
+                    CounterReplacementKind::DoubleCountersYouWouldPut => {
+                        "doubles counters this player would put"
+                    }
+                    CounterReplacementKind::HalveCountersOpponentsWouldPut => {
+                        "halves counters opponents would put, rounded down"
+                    }
                 };
                 let label = format!(
                     "{} {summary}",
@@ -1218,6 +1243,46 @@ impl GameEngine {
         Ok(())
     }
 
+    /// A replacement can reduce a moved counter to zero while the move still removes it from
+    /// its source. Admit that result only when replaying the engine-recorded replacement order
+    /// from the original one-counter instruction produces the exact committed proposal.
+    fn counter_move_zero_result_has_authenticated_replacement_history(
+        event: &ProposedCounterPlacement,
+    ) -> bool {
+        let Some((&kind, &original_count)) = event.original_counters.iter().next() else {
+            return false;
+        };
+        if event.original_counters.len() != 1
+            || original_count != 1
+            || event.applied_replacements.is_empty()
+            || event.counters != BTreeMap::from([(kind, 0)])
+        {
+            return false;
+        }
+
+        let mut replayed = event.clone();
+        replayed.counters = event.original_counters.clone();
+        replayed.effect_created_counters = false;
+        replayed.applied_replacements.clear();
+        let mut applied = BTreeSet::new();
+        for replacement in &event.applied_replacements {
+            if !replayed.counters.values().any(|count| *count > 0)
+                || replacement.ability_id.trim().is_empty()
+                || !applied.insert((
+                    replacement.source_object_id,
+                    replacement.source_zone_change_generation,
+                    replacement.ability_id.as_str(),
+                ))
+            {
+                return false;
+            }
+            Self::apply_counter_replacement(&mut replayed, replacement);
+        }
+        replayed.counters == event.counters
+            && replayed.effect_created_counters == event.effect_created_counters
+            && replayed.applied_replacements == event.applied_replacements
+    }
+
     fn apply_counter_replacement(
         event: &mut ProposedCounterPlacement,
         instance: &CounterReplacementInstance,
@@ -1235,6 +1300,18 @@ impl GameEngine {
                 for count in event.counters.values_mut() {
                     *count = count.saturating_mul(2);
                 }
+            }
+            CounterReplacementKind::DoubleCountersYouWouldPut => {
+                for count in event.counters.values_mut() {
+                    *count = count.saturating_mul(2);
+                }
+                event.effect_created_counters = true;
+            }
+            CounterReplacementKind::HalveCountersOpponentsWouldPut => {
+                for count in event.counters.values_mut() {
+                    *count /= 2;
+                }
+                event.effect_created_counters = true;
             }
         }
         event.applied_replacements.push(instance.clone());
@@ -2025,7 +2102,10 @@ impl GameEngine {
                 && events[0].origin == super::continuous::CounterPlacementOrigin::Effect
                 && events[0].original_counters.len() == 1
                 && events[0].original_counters.get(kind) == Some(&1)
-                && events[0].counters.values().any(|count| *count > 0)
+                && (events[0].counters.values().any(|count| *count > 0)
+                    || Self::counter_move_zero_result_has_authenticated_replacement_history(
+                        &events[0],
+                    ))
                 && events[0]
                     .counter_move_context
                     .as_ref()
@@ -2150,6 +2230,7 @@ impl GameEngine {
             out.push(ev_log(format!("P{player_id} proliferates.")));
         }
         for event in events {
+            let mut recipient_received_counters = false;
             for replacement in &event.applied_replacements {
                 let source_name =
                     self.replacement_object_display_name(replacement.source_object_id, None);
@@ -2192,6 +2273,14 @@ impl GameEngine {
                 )
                 | (
                     CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::Proliferate { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::SagaLore { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::CounterMove { .. },
                 ) => {}
                 (CounterPlacementRecipient::EnteringObject { .. }, _) => {
@@ -2200,31 +2289,9 @@ impl GameEngine {
                     ));
                 }
                 (
-                    CounterPlacementRecipient::Object { object_id, .. },
+                    CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::Proliferate { .. },
-                ) => {
-                    out.push(ev_log(format!(
-                        "{} gets one of each kind of counter on it.",
-                        self.replacement_object_display_name(*object_id, None),
-                    )));
-                }
-                (
-                    CounterPlacementRecipient::Object { object_id, .. },
-                    crate::state::CounterPlacementCompletion::SagaLore { active_player, .. },
-                ) => {
-                    out.push(ev_log(format!(
-                        "P{active_player} puts a lore counter on {}.",
-                        self.replacement_object_display_name(*object_id, None),
-                    )));
-                }
-                (
-                    CounterPlacementRecipient::Player { player_id },
-                    crate::state::CounterPlacementCompletion::Proliferate { .. },
-                ) => {
-                    out.push(ev_log(format!(
-                        "P{player_id} gets one of each kind of counter on them."
-                    )));
-                }
+                ) => {}
                 (
                     CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::StackEffect { .. }
@@ -2260,6 +2327,7 @@ impl GameEngine {
                         if placed == 0 {
                             continue;
                         }
+                        recipient_received_counters = true;
                         let controller = self.controller_of(*object_id).unwrap_or(event.actor);
                         let generation = self
                             .state
@@ -2315,7 +2383,35 @@ impl GameEngine {
                             .unwrap_or(0);
                         let after = before.saturating_add(count);
                         self.state.players[index].counters.insert(kind, after);
+                        recipient_received_counters |= after > before;
                     }
+                }
+            }
+            if recipient_received_counters {
+                match (&event.recipient, completion) {
+                    (
+                        CounterPlacementRecipient::Object { object_id, .. },
+                        crate::state::CounterPlacementCompletion::Proliferate { .. },
+                    ) => out.push(ev_log(format!(
+                        "{} gets one of each kind of counter on it.",
+                        self.replacement_object_display_name(*object_id, None),
+                    ))),
+                    (
+                        CounterPlacementRecipient::Object { object_id, .. },
+                        crate::state::CounterPlacementCompletion::SagaLore {
+                            active_player, ..
+                        },
+                    ) => out.push(ev_log(format!(
+                        "P{active_player} puts a lore counter on {}.",
+                        self.replacement_object_display_name(*object_id, None),
+                    ))),
+                    (
+                        CounterPlacementRecipient::Player { player_id },
+                        crate::state::CounterPlacementCompletion::Proliferate { .. },
+                    ) => out.push(ev_log(format!(
+                        "P{player_id} gets one of each kind of counter on them."
+                    ))),
+                    _ => {}
                 }
             }
         }
@@ -2365,12 +2461,18 @@ impl GameEngine {
             ..
         } = completion
         {
-            out.push(ev_log(format!(
-                "{ability_label} moves one {} counter from {} to {}.",
-                kind.label(),
-                self.replacement_object_display_name(source_target.object_id, None),
-                self.replacement_object_display_name(destination_target.object_id, None),
-            )));
+            if receipts.iter().any(|receipt| {
+                receipt.object.object_id == destination_target.object_id
+                    && receipt.counter == *kind
+                    && receipt.count > 0
+            }) {
+                out.push(ev_log(format!(
+                    "{ability_label} moves one {} counter from {} to {}.",
+                    kind.label(),
+                    self.replacement_object_display_name(source_target.object_id, None),
+                    self.replacement_object_display_name(destination_target.object_id, None),
+                )));
+            }
             if counter_move_siege_defeat {
                 self.stage_siege_defeat_trigger(source_target.object_id);
             }
@@ -9454,6 +9556,404 @@ mod tests {
         object_id
     }
 
+    fn four_player_counter_engine(seed: u64) -> GameEngine {
+        let deck = vec!["forest".to_owned(); 7];
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[10, 20, 30, 40],
+            20,
+            Some(vec![deck; 4]),
+            true,
+        )
+        .expect("four-player counter fixture")
+    }
+
+    fn replacement_instance_of_kind(
+        engine: &mut GameEngine,
+        event: &ProposedCounterPlacement,
+        source: ObjectId,
+        kind: CounterReplacementKind,
+    ) -> CounterReplacementInstance {
+        engine
+            .counter_replacement_candidates(event)
+            .into_iter()
+            .map(|(instance, _)| instance)
+            .find(|instance| instance.source_object_id == source && instance.kind == kind)
+            .expect("expected live counter replacement")
+    }
+
+    fn move_counter_fixture_control(
+        engine: &mut GameEngine,
+        object_id: ObjectId,
+        new_controller: PlayerId,
+    ) {
+        let old_controller = engine.state.objects[&object_id].controller;
+        let old_index = engine
+            .state
+            .player_idx(old_controller)
+            .expect("old controller");
+        let new_index = engine
+            .state
+            .player_idx(new_controller)
+            .expect("new controller");
+        engine.state.players[old_index]
+            .battlefield
+            .retain(|candidate| *candidate != object_id);
+        engine.state.players[new_index].battlefield.push(object_id);
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture permanent")
+            .base_controller = new_controller;
+        engine.reindex_battlefield_control(&mut Vec::new());
+    }
+
+    #[test]
+    fn removed_vorinclex_abilities_stop_counter_replacements_and_resume_when_restored() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_098,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 0, "vorinclex,_monstrous_raider");
+        let own_recipient = add_counter_fixture_permanent(&mut engine, 0, "grizzly_bears");
+        let opposing_recipient = add_counter_fixture_permanent(&mut engine, 1, "grizzly_bears");
+        let own_event = engine
+            .proposed_object_counter_placement(
+                0,
+                own_recipient,
+                [(CounterKind::Quest, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("own placement");
+        let opposing_event = engine
+            .proposed_object_counter_placement(
+                1,
+                opposing_recipient,
+                [(CounterKind::Quest, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("opponent placement");
+
+        assert!(engine
+            .counter_replacement_candidates(&own_event)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::DoubleCountersYouWouldPut));
+        assert!(engine
+            .counter_replacement_candidates(&opposing_event)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::HalveCountersOpponentsWouldPut));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(vorinclex),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        assert!(
+            engine.counter_replacement_candidates(&own_event).is_empty(),
+            "ability removal suppresses the printed double replacement source"
+        );
+        assert!(
+            engine
+                .counter_replacement_candidates(&opposing_event)
+                .is_empty(),
+            "ability removal suppresses the printed half replacement source"
+        );
+
+        engine.state.continuous_effects.clear();
+        assert!(engine
+            .counter_replacement_candidates(&own_event)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::DoubleCountersYouWouldPut));
+        assert!(engine
+            .counter_replacement_candidates(&opposing_event)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::HalveCountersOpponentsWouldPut));
+    }
+
+    #[test]
+    fn counter_move_zero_without_a_replacement_receipt_is_rejected_without_mutation() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_097,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let source = add_counter_fixture_permanent(&mut engine, 0, "grizzly_bears");
+        let destination = add_counter_fixture_permanent(&mut engine, 1, "grizzly_bears");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .set_counter(CounterKind::Quest, 1);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let destination_generation = engine
+            .state
+            .zone_change_generation
+            .get(&destination)
+            .copied()
+            .unwrap_or(0);
+        let target = |object_id, group_index, generation| crate::state::StackTarget {
+            object_id,
+            group_index,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(generation),
+            required_controller: None,
+        };
+        let proposal = ProposedCounterPlacement {
+            recipient: CounterPlacementRecipient::Object {
+                object_id: destination,
+                zone_change_generation: destination_generation,
+            },
+            actor: 1,
+            original_counters: BTreeMap::from([(CounterKind::Quest, 1)]),
+            counters: BTreeMap::from([(CounterKind::Quest, 0)]),
+            origin: super::super::continuous::CounterPlacementOrigin::Effect,
+            entry_source: None,
+            entry_context: None,
+            counter_move_context: Some(CounterMoveReplacementContext {
+                source_object_id: source,
+                source_zone_change_generation: source_generation,
+                kind: CounterKind::Quest,
+            }),
+            cost_debit_index: None,
+            effect_created_counters: false,
+            applied_replacements: Vec::new(),
+        };
+        let completion = crate::state::CounterPlacementCompletion::CounterMove {
+            source_target: target(source, 0, source_generation),
+            destination_target: target(destination, 1, destination_generation),
+            kind: CounterKind::Quest,
+            actor: 1,
+            ability_label: "Nesting Grounds".to_owned(),
+        };
+        assert!(
+            !GameEngine::counter_move_zero_result_has_authenticated_replacement_history(&proposal)
+        );
+
+        let half = CounterReplacementInstance {
+            source_object_id: u32::MAX - 3,
+            source_zone_change_generation: 13,
+            ability_id: "static_01".to_owned(),
+            kind: CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        };
+        let mut valid_zero = proposal.clone();
+        valid_zero.counters = valid_zero.original_counters.clone();
+        GameEngine::apply_counter_replacement(&mut valid_zero, &half);
+        assert!(
+            GameEngine::counter_move_zero_result_has_authenticated_replacement_history(&valid_zero)
+        );
+
+        let double = CounterReplacementInstance {
+            source_object_id: u32::MAX - 4,
+            source_zone_change_generation: 14,
+            ability_id: "static_02".to_owned(),
+            kind: CounterReplacementKind::DoubleCountersYouWouldPut,
+        };
+        let mut duplicate = proposal.clone();
+        duplicate.counters = duplicate.original_counters.clone();
+        GameEngine::apply_counter_replacement(&mut duplicate, &double);
+        GameEngine::apply_counter_replacement(&mut duplicate, &half);
+        GameEngine::apply_counter_replacement(&mut duplicate, &half);
+        assert_eq!(duplicate.counters[&CounterKind::Quest], 0);
+        assert!(
+            !GameEngine::counter_move_zero_result_has_authenticated_replacement_history(&duplicate)
+        );
+
+        let other_half = CounterReplacementInstance {
+            source_object_id: u32::MAX - 5,
+            source_zone_change_generation: 15,
+            ability_id: "static_01".to_owned(),
+            kind: CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        };
+        let mut after_zero = proposal.clone();
+        after_zero.counters = after_zero.original_counters.clone();
+        GameEngine::apply_counter_replacement(&mut after_zero, &half);
+        GameEngine::apply_counter_replacement(&mut after_zero, &other_half);
+        assert!(
+            !GameEngine::counter_move_zero_result_has_authenticated_replacement_history(
+                &after_zero
+            )
+        );
+
+        let mut bad_flag = valid_zero.clone();
+        bad_flag.effect_created_counters = false;
+        assert!(
+            !GameEngine::counter_move_zero_result_has_authenticated_replacement_history(&bad_flag)
+        );
+        let mut wrong_final_map = valid_zero;
+        wrong_final_map.counters.insert(CounterKind::Quest, 1);
+        assert!(
+            !GameEngine::counter_move_zero_result_has_authenticated_replacement_history(
+                &wrong_final_map
+            )
+        );
+
+        let before = engine.diagnostic_snapshot().expect("before snapshot");
+        let mut out = Vec::new();
+
+        assert!(engine
+            .commit_counter_placement_batch(&[proposal], &completion, &mut out)
+            .is_err());
+        assert_eq!(
+            engine.diagnostic_snapshot().expect("after snapshot"),
+            before
+        );
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::Quest),
+            1
+        );
+        assert_eq!(
+            engine.state.objects[&destination].counter_count(CounterKind::Quest),
+            0
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn counter_move_zero_accepts_a_departed_half_source_and_rejects_stale_destination() {
+        use super::super::continuous::CounterPlacementOrigin as Origin;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_107,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 0, "vorinclex,_monstrous_raider");
+        let source = add_counter_fixture_permanent(&mut engine, 0, "grizzly_bears");
+        let destination = add_counter_fixture_permanent(&mut engine, 1, "grizzly_bears");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .set_counter(CounterKind::Quest, 1);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let destination_generation = engine
+            .state
+            .zone_change_generation
+            .get(&destination)
+            .copied()
+            .unwrap_or(0);
+        let target = |object_id, group_index, generation| crate::state::StackTarget {
+            object_id,
+            group_index,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(generation),
+            required_controller: None,
+        };
+        let mut proposal = engine
+            .proposed_object_counter_placement(
+                1,
+                destination,
+                [(CounterKind::Quest, 1)],
+                Origin::Effect,
+            )
+            .expect("counter-move destination accepts counters");
+        proposal.counter_move_context = Some(CounterMoveReplacementContext {
+            source_object_id: source,
+            source_zone_change_generation: source_generation,
+            kind: CounterKind::Quest,
+        });
+        let half = replacement_instance_of_kind(
+            &mut engine,
+            &proposal,
+            vorinclex,
+            CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        );
+        GameEngine::apply_counter_replacement(&mut proposal, &half);
+        assert_eq!(proposal.counters[&CounterKind::Quest], 0);
+        assert!(
+            GameEngine::counter_move_zero_result_has_authenticated_replacement_history(&proposal)
+        );
+
+        let completion = crate::state::CounterPlacementCompletion::CounterMove {
+            source_target: target(source, 0, source_generation),
+            destination_target: target(destination, 1, destination_generation),
+            kind: CounterKind::Quest,
+            actor: 1,
+            ability_label: "Nesting Grounds".to_owned(),
+        };
+        let vorinclex_index = engine
+            .state
+            .player_idx(engine.state.objects[&vorinclex].controller)
+            .expect("Vorinclex controller");
+        engine.state.players[vorinclex_index]
+            .battlefield
+            .retain(|object_id| *object_id != vorinclex);
+        engine.state.players[vorinclex_index]
+            .graveyard
+            .push(vorinclex);
+        engine.state.objects.get_mut(&vorinclex).unwrap().zone = Zone::Graveyard;
+
+        let before = engine
+            .diagnostic_snapshot()
+            .expect("before stale destination");
+        let mut stale_destination = proposal.clone();
+        stale_destination.recipient = CounterPlacementRecipient::Object {
+            object_id: destination,
+            zone_change_generation: destination_generation.saturating_add(1),
+        };
+        let mut rejected = Vec::new();
+        assert!(engine
+            .commit_counter_placement_batch(&[stale_destination], &completion, &mut rejected,)
+            .is_err());
+        assert_eq!(
+            engine.diagnostic_snapshot().expect("unchanged snapshot"),
+            before
+        );
+        assert!(rejected.is_empty());
+
+        let mut events = Vec::new();
+        engine
+            .commit_counter_placement_batch(&[proposal], &completion, &mut events)
+            .expect("authenticated half-replacement receipt survives source departure");
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::Quest),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&destination].counter_count(CounterKind::Quest),
+            0
+        );
+    }
+
     #[test]
     fn cost_replacement_history_preserves_receipts_and_rejects_forgery() {
         let mut engine = GameEngine::new(
@@ -9751,6 +10251,425 @@ mod tests {
             1,
             "a live face-down source has no Lae'zel static ability"
         );
+    }
+
+    #[test]
+    fn vorinclex_counter_planner_covers_five_origins_objects_and_players() {
+        use super::super::continuous::CounterPlacementOrigin as Origin;
+
+        let mut engine = four_player_counter_engine(91_102);
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 10, "vorinclex,_monstrous_raider");
+        let object = add_counter_fixture_permanent(&mut engine, 40, "grizzly_bears");
+        let origins = [
+            Origin::Effect,
+            Origin::Cost,
+            Origin::TurnBased,
+            Origin::Entry,
+            Origin::Damage,
+        ];
+
+        // These are direct planner probes, including Damage; they do not claim that a
+        // Damage-origin placement producer for players is implemented.
+        for origin in origins {
+            for (actor, kind) in [
+                (10, CounterReplacementKind::DoubleCountersYouWouldPut),
+                (30, CounterReplacementKind::HalveCountersOpponentsWouldPut),
+            ] {
+                let mut proposal = engine
+                    .proposed_object_counter_placement(
+                        actor,
+                        object,
+                        [(CounterKind::PlusOnePlusOne, 3), (CounterKind::Quest, 1)],
+                        origin,
+                    )
+                    .expect("object recipient accepts the planner probe");
+                let replacement =
+                    replacement_instance_of_kind(&mut engine, &proposal, vorinclex, kind);
+                GameEngine::apply_counter_replacement(&mut proposal, &replacement);
+                let expected = match kind {
+                    CounterReplacementKind::DoubleCountersYouWouldPut => {
+                        BTreeMap::from([(CounterKind::PlusOnePlusOne, 6), (CounterKind::Quest, 2)])
+                    }
+                    CounterReplacementKind::HalveCountersOpponentsWouldPut => {
+                        BTreeMap::from([(CounterKind::PlusOnePlusOne, 1), (CounterKind::Quest, 0)])
+                    }
+                    _ => unreachable!("the matrix only covers Vorinclex replacements"),
+                };
+                assert_eq!(
+                    proposal.counters, expected,
+                    "object placement from {origin:?}"
+                );
+                assert!(proposal.effect_created_counters);
+            }
+
+            for (actor, recipient, kind) in [
+                (10, 40, CounterReplacementKind::DoubleCountersYouWouldPut),
+                (
+                    30,
+                    40,
+                    CounterReplacementKind::HalveCountersOpponentsWouldPut,
+                ),
+            ] {
+                let mut proposal = engine
+                    .proposed_player_counter_placement(
+                        actor,
+                        recipient,
+                        [(CounterKind::Poison, 3), (CounterKind::Time, 1)],
+                        origin,
+                    )
+                    .expect("player recipient accepts the planner probe");
+                let replacement =
+                    replacement_instance_of_kind(&mut engine, &proposal, vorinclex, kind);
+                GameEngine::apply_counter_replacement(&mut proposal, &replacement);
+                let expected = match kind {
+                    CounterReplacementKind::DoubleCountersYouWouldPut => {
+                        BTreeMap::from([(CounterKind::Poison, 6), (CounterKind::Time, 2)])
+                    }
+                    CounterReplacementKind::HalveCountersOpponentsWouldPut => {
+                        BTreeMap::from([(CounterKind::Poison, 1), (CounterKind::Time, 0)])
+                    }
+                    _ => unreachable!("the matrix only covers Vorinclex replacements"),
+                };
+                assert_eq!(
+                    proposal.counters, expected,
+                    "player placement from {origin:?}"
+                );
+                assert!(proposal.effect_created_counters);
+            }
+        }
+    }
+
+    #[test]
+    fn vorinclex_candidates_follow_live_source_control_and_recipient_generation() {
+        use super::super::continuous::CounterPlacementOrigin as Origin;
+
+        let mut engine = four_player_counter_engine(91_103);
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 10, "vorinclex,_monstrous_raider");
+        let recipient = add_counter_fixture_permanent(&mut engine, 40, "grizzly_bears");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&vorinclex)
+            .copied()
+            .unwrap_or(0);
+        let mut proposal = engine
+            .proposed_object_counter_placement(
+                10,
+                recipient,
+                [(CounterKind::Quest, 1)],
+                Origin::Effect,
+            )
+            .expect("recipient accepts a counter");
+        let old_receipt = replacement_instance_of_kind(
+            &mut engine,
+            &proposal,
+            vorinclex,
+            CounterReplacementKind::DoubleCountersYouWouldPut,
+        );
+        assert_eq!(old_receipt.source_zone_change_generation, source_generation);
+
+        engine.state.objects.get_mut(&vorinclex).unwrap().face_down = true;
+        assert!(engine.counter_replacement_candidates(&proposal).is_empty());
+        engine.state.objects.get_mut(&vorinclex).unwrap().face_down = false;
+
+        let source_index = engine.state.player_idx(10).unwrap();
+        engine.state.players[source_index]
+            .battlefield
+            .retain(|object_id| *object_id != vorinclex);
+        engine.state.players[source_index].graveyard.push(vorinclex);
+        engine.state.objects.get_mut(&vorinclex).unwrap().zone = Zone::Graveyard;
+        assert!(engine.counter_replacement_candidates(&proposal).is_empty());
+
+        let new_source_generation = source_generation.saturating_add(1);
+        engine.state.players[source_index]
+            .graveyard
+            .retain(|object_id| *object_id != vorinclex);
+        engine.state.players[source_index]
+            .battlefield
+            .push(vorinclex);
+        {
+            let source = engine.state.objects.get_mut(&vorinclex).unwrap();
+            source.zone = Zone::Battlefield;
+            source.base_controller = 10;
+        }
+        engine
+            .state
+            .zone_change_generation
+            .insert(vorinclex, new_source_generation);
+        engine.reindex_battlefield_control(&mut Vec::new());
+        move_counter_fixture_control(&mut engine, vorinclex, 20);
+
+        proposal.applied_replacements.push(old_receipt);
+        let current_opponent_effect = replacement_instance_of_kind(
+            &mut engine,
+            &proposal,
+            vorinclex,
+            CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        );
+        assert_eq!(
+            current_opponent_effect.source_zone_change_generation, new_source_generation,
+            "a re-entered source is a new replacement occurrence"
+        );
+        let new_controller_event = engine
+            .proposed_object_counter_placement(
+                20,
+                recipient,
+                [(CounterKind::Quest, 1)],
+                Origin::Effect,
+            )
+            .expect("recipient accepts a counter");
+        assert!(engine
+            .counter_replacement_candidates(&new_controller_event)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::DoubleCountersYouWouldPut));
+
+        let recipient_generation = engine
+            .state
+            .zone_change_generation
+            .get(&recipient)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .zone_change_generation
+            .insert(recipient, recipient_generation.saturating_add(1));
+        assert!(
+            engine
+                .counter_replacement_candidates(&new_controller_event)
+                .is_empty(),
+            "a stale object recipient generation has no replacement candidate"
+        );
+    }
+
+    #[test]
+    fn vorinclex_entry_candidate_exclusion_matches_source_generation() {
+        use super::super::continuous::CounterPlacementOrigin as Origin;
+
+        let mut engine = four_player_counter_engine(91_104);
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 10, "vorinclex,_monstrous_raider");
+        let entrant = engine.state.players[3].hand[0];
+        let entrant_generation = engine
+            .state
+            .zone_change_generation
+            .get(&entrant)
+            .copied()
+            .unwrap_or(0);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&vorinclex)
+            .copied()
+            .unwrap_or(0);
+        let mut proposal = ProposedCounterPlacement {
+            recipient: CounterPlacementRecipient::EnteringObject {
+                object_id: entrant,
+                zone_change_generation: entrant_generation,
+            },
+            actor: 30,
+            original_counters: BTreeMap::from([(CounterKind::Quest, 1)]),
+            counters: BTreeMap::from([(CounterKind::Quest, 1)]),
+            origin: Origin::Entry,
+            entry_source: None,
+            entry_context: Some(EntryCounterReplacementContext {
+                placement_index: 0,
+                destination_controller: 40,
+                recipient_is_creature_or_planeswalker: true,
+                recipient_can_receive_counters: true,
+                source_zone: Zone::Hand,
+                source_zone_change_generation: entrant_generation,
+                excluded_replacement_sources: Vec::new(),
+            }),
+            counter_move_context: None,
+            cost_debit_index: None,
+            effect_created_counters: false,
+            applied_replacements: Vec::new(),
+        };
+        assert!(engine
+            .counter_replacement_candidates(&proposal)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::HalveCountersOpponentsWouldPut));
+
+        proposal
+            .entry_context
+            .as_mut()
+            .unwrap()
+            .excluded_replacement_sources = vec![(vorinclex, source_generation)];
+        assert!(engine.counter_replacement_candidates(&proposal).is_empty());
+
+        proposal
+            .entry_context
+            .as_mut()
+            .unwrap()
+            .excluded_replacement_sources = vec![(vorinclex, source_generation.saturating_add(1))];
+        assert!(engine
+            .counter_replacement_candidates(&proposal)
+            .iter()
+            .any(|(instance, _)| instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::HalveCountersOpponentsWouldPut));
+    }
+
+    #[test]
+    fn counter_replacement_order_preserves_laezel_and_doubling_season_and_zero_stops() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_105,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 0, "vorinclex,_monstrous_raider");
+        let laezel = add_counter_fixture_permanent(&mut engine, 1, "laezel,_vlaakiths_champion");
+        let season = add_counter_fixture_permanent(&mut engine, 1, "doubling_season");
+        let jace = add_counter_fixture_permanent(&mut engine, 1, "jace,_unraveler_of_secrets");
+        let proposal = engine
+            .proposed_object_counter_placement(
+                1,
+                jace,
+                [(CounterKind::Loyalty, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("Jace accepts loyalty counters");
+
+        let mut laezel_then_season = proposal.clone();
+        let first = replacement_instance_of_kind(
+            &mut engine,
+            &laezel_then_season,
+            laezel,
+            CounterReplacementKind::Laezel,
+        );
+        GameEngine::apply_counter_replacement(&mut laezel_then_season, &first);
+        let second = replacement_instance_of_kind(
+            &mut engine,
+            &laezel_then_season,
+            season,
+            CounterReplacementKind::DoublingSeason,
+        );
+        GameEngine::apply_counter_replacement(&mut laezel_then_season, &second);
+        let third = replacement_instance_of_kind(
+            &mut engine,
+            &laezel_then_season,
+            vorinclex,
+            CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        );
+        GameEngine::apply_counter_replacement(&mut laezel_then_season, &third);
+        assert_eq!(laezel_then_season.counters[&CounterKind::Loyalty], 2);
+
+        let mut season_then_laezel = proposal.clone();
+        let first = replacement_instance_of_kind(
+            &mut engine,
+            &season_then_laezel,
+            season,
+            CounterReplacementKind::DoublingSeason,
+        );
+        GameEngine::apply_counter_replacement(&mut season_then_laezel, &first);
+        let second = replacement_instance_of_kind(
+            &mut engine,
+            &season_then_laezel,
+            laezel,
+            CounterReplacementKind::Laezel,
+        );
+        GameEngine::apply_counter_replacement(&mut season_then_laezel, &second);
+        let third = replacement_instance_of_kind(
+            &mut engine,
+            &season_then_laezel,
+            vorinclex,
+            CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        );
+        GameEngine::apply_counter_replacement(&mut season_then_laezel, &third);
+        assert_eq!(season_then_laezel.counters[&CounterKind::Loyalty], 1);
+
+        let mut halve_first = proposal;
+        let half = replacement_instance_of_kind(
+            &mut engine,
+            &halve_first,
+            vorinclex,
+            CounterReplacementKind::HalveCountersOpponentsWouldPut,
+        );
+        GameEngine::apply_counter_replacement(&mut halve_first, &half);
+        assert_eq!(halve_first.counters[&CounterKind::Loyalty], 0);
+        assert!(
+            engine
+                .counter_replacement_candidates(&halve_first)
+                .is_empty(),
+            "one counter halved to zero cannot be revived by Lae'zel or Doubling Season"
+        );
+    }
+
+    #[test]
+    fn vorinclex_cost_created_counters_enable_doubling_season_after_a_bare_cost() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_106,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let vorinclex =
+            add_counter_fixture_permanent(&mut engine, 0, "vorinclex,_monstrous_raider");
+        let season = add_counter_fixture_permanent(&mut engine, 0, "doubling_season");
+        let jace = add_counter_fixture_permanent(&mut engine, 0, "jace,_unraveler_of_secrets");
+        let plan = engine
+            .plan_ability_costs(0, 0, jace, &[AbilityCost::Loyalty(1)], &[], &[], &[], 0, 0)
+            .expect("positive loyalty cost plan");
+        let debit = plan.counter_placement_costs().into_iter().next().unwrap();
+        let mut bare_cost = engine
+            .proposed_object_counter_placement(
+                0,
+                jace,
+                [(CounterKind::Loyalty, 1)],
+                super::super::continuous::CounterPlacementOrigin::Cost,
+            )
+            .expect("positive loyalty cost placement");
+        bare_cost.cost_debit_index = Some(debit.debit_index);
+        let candidates = engine.counter_replacement_candidates(&bare_cost);
+        assert!(candidates.iter().any(|(instance, _)| {
+            instance.source_object_id == vorinclex
+                && instance.kind == CounterReplacementKind::DoubleCountersYouWouldPut
+        }));
+        assert!(
+            !candidates.iter().any(|(instance, _)| {
+                instance.source_object_id == season
+                    && instance.kind == CounterReplacementKind::DoublingSeason
+            }),
+            "Doubling Season does not change a bare cost placement"
+        );
+
+        let mut resolved = bare_cost.clone();
+        let double = replacement_instance_of_kind(
+            &mut engine,
+            &resolved,
+            vorinclex,
+            CounterReplacementKind::DoubleCountersYouWouldPut,
+        );
+        GameEngine::apply_counter_replacement(&mut resolved, &double);
+        assert!(resolved.effect_created_counters);
+        let season_effect = replacement_instance_of_kind(
+            &mut engine,
+            &resolved,
+            season,
+            CounterReplacementKind::DoublingSeason,
+        );
+        GameEngine::apply_counter_replacement(&mut resolved, &season_effect);
+        assert_eq!(resolved.counters[&CounterKind::Loyalty], 4);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[resolved.clone()])
+            .is_ok());
+
+        let mut season_first = bare_cost;
+        GameEngine::apply_counter_replacement(&mut season_first, &season_effect);
+        assert!(engine
+            .validate_resolved_cost_counter_placements(&plan, &[season_first])
+            .is_err());
     }
 
     #[test]
