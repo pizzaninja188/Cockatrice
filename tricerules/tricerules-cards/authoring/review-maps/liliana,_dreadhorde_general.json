@@ -1,0 +1,165 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e958212-6a5b-4288-8d31-f1572619d7dc",
+  "spans": [
+    {
+      "face_id": "liliana_dreadhorde_general",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "liliana_dreadhorde_general",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "liliana_dreadhorde_general",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    },
+    {
+      "face_id": "liliana_dreadhorde_general",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/effect/0",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/0",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/1",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/2",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/3",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/4",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/5",
+        "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/scope"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverCreatureDies/controller"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverCreatureDies/filter/permanent_type"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::EachPlayer",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ChooseAndSacrifice/players"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ChooseAndSacrifice/filter"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ChooseAndSacrifice/filter/kind"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::EachOpponent",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/players"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/1"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Enchantment",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/2"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/3"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Planeswalker",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/4"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Battle",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/types/5"
+    },
+    {
+      "symbol": "PermanentSacrificeScope::AllPermanents",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ChoosePermanentsByTypeAndSacrificeRest/scope"
+    }
+  ],
+  "tokens": [
+    "zombie_b_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_liliana_dreadhorde_general::liliana_dreadhorde_general_has_exact_identity_and_four_clauses",
+      "covers": "registered card identity, {4}{B}{B}, Legendary Planeswalker - Liliana, starting loyalty 6, one passive trigger, and loyalty costs +1, -4, and -9"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_dreadhorde_general::liliana_passive_draws_for_its_controller_when_source_and_creatures_die_together",
+      "covers": "a creature controlled by Liliana's controller dying simultaneously with Liliana draws one card; an opponent's simultaneous creature death does not draw"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_dreadhorde_general::liliana_plus_one_creates_one_black_two_two_zombie",
+      "covers": "+1 pays one loyalty and creates exactly one black 2/2 Zombie"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_dreadhorde_general::liliana_minus_four_with_four_loyalty_leaves_before_each_player_sacrifices",
+      "covers": "-4 at exactly four loyalty leaves before the ability resolves; each player chooses two or sacrifices all available creatures, and those later deaths do not draw from the departed source"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_dreadhorde_general::liliana_minus_nine_uses_all_six_types_and_resolves_after_exact_nine_source_leaves",
+      "covers": "an unpayable -9 at eight loyalty is atomic; at exactly nine loyalty the source leaves before resolution, the opponent completes Artifact, Creature, Enchantment, Land, Planeswalker, and Battle choices, reuses one multitype keep once, applies a finality replacement to an unchosen indestructible permanent, and triggers the opponent's surviving Liliana once for a creature sacrificed in the same batch"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

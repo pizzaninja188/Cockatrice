@@ -426,6 +426,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ChooseAndSacrifice { .. } => {
             mass::choose_and_sacrifice(cx, effect)?
         }
+        effect @ SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest { .. } => {
+            mass::choose_permanents_by_type_and_sacrifice_rest(cx, effect)?
+        }
         effect @ SpellEffectKind::CreateReflexiveTrigger { .. } => {
             choices::create_reflexive_trigger(cx, effect)?
         }

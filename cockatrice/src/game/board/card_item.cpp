@@ -179,7 +179,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (!renderedAnnotation.isEmpty()) {
                 renderedAnnotation += QLatin1Char('\n');
             }
-            renderedAnnotation += tr("Chosen for sacrifice by P%1").arg(chooser);
+            renderedAnnotation += tr("Selected by P%1").arg(chooser);
         }
     }
     if (prototyped && inTableZone && !renderedAnnotation.contains(QStringLiteral("Prototype"), Qt::CaseInsensitive)) {

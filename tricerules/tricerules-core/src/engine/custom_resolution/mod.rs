@@ -1084,6 +1084,12 @@ impl GameEngine {
             return self.finish_optional_triggered_ability_choice(pending, answer, decision);
         }
         if matches!(
+            pending.continuation,
+            ResolutionContinuation::TypeChoiceSacrifice { .. }
+        ) {
+            return self.finish_type_choice_sacrifice_choice(pending, answer, decision, player);
+        }
+        if matches!(
             &pending.continuation,
             ResolutionContinuation::ProgramCohortPartition {
                 stage: crate::state::PendingProgramCohortPartitionStage::ChoosingDelegate { .. },
@@ -1513,6 +1519,9 @@ impl GameEngine {
             }
             ResolutionContinuation::PlayerSetSacrifice { .. } => {
                 self.finish_player_set_sacrifice_choice(pending, chosen)
+            }
+            ResolutionContinuation::TypeChoiceSacrifice { .. } => {
+                unreachable!("type-choice sacrifice routed before generic object validation")
             }
             ResolutionContinuation::ChooseCard { .. } => self.finish_choose_card(pending, chosen),
             ResolutionContinuation::DifferentNamedGraveyardReturn { .. } => {

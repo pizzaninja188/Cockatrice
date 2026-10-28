@@ -173,6 +173,14 @@ pub enum EffectContext {
     Ability,
 }
 
+/// Battlefield scope for a choice operation that sacrifices the unchosen complement.
+/// Liliana, Dreadhorde General uses all permanents; Cataclysmic Gearhulk uses nonland permanents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermanentSacrificeScope {
+    AllPermanents,
+    NonlandPermanents,
+}
+
 /// The permanent affected by an effect that can either refer to its own source or target a
 /// chosen permanent. `Source` is auto-bound and does not target in the CR 115 sense;
 /// `Chosen` carries the filter for a genuine chosen target.
@@ -2212,6 +2220,16 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
+    /// Each affected player chooses one permanent for each listed type, then the unchosen
+    /// in-scope permanents are sacrificed simultaneously. Liliana, Dreadhorde General uses
+    /// EachOpponent/all six types/all permanents; Cataclysmic Gearhulk uses EachPlayer/four
+    /// types/nonland permanents. This stays separate from ChooseAndSacrifice because it keeps
+    /// choices and sacrifices the complement rather than the selected cohort.
+    ChoosePermanentsByTypeAndSacrificeRest {
+        players: PlayerRecipient,
+        types: Vec<PermanentTypeFilter>,
+        scope: PermanentSacrificeScope,
+    },
     /// CR 614.1a: place a prevention shield on the target (creature or player) that will absorb
     /// the next `amount` damage dealt to it this turn. Healing Salve mode 2 (`amount: 3,
     /// target: AnyTarget`); Circle of Protection variants use `amount: 1` and repeat.
@@ -3683,6 +3701,12 @@ impl SpellEffectKind {
         self.contains_legacy_flat_signature(|leaf| matches!(leaf, Self::CounterTriggeringSpell))
     }
 
+    pub(crate) fn contains_type_choice_sacrifice(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| {
+            matches!(leaf, Self::ChoosePermanentsByTypeAndSacrificeRest { .. })
+        })
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3926,6 +3950,7 @@ impl SpellEffectKind {
             | SpellEffectKind::SelectHandCards { .. }
             | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
             | SpellEffectKind::ChooseAndSacrifice { .. }
+            | SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
             | SpellEffectKind::LibraryPartition { .. }
@@ -4559,6 +4584,14 @@ impl SpellEffectKind {
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if self.contains_type_choice_sacrifice()
+            && !matches!(self, Self::ChoosePermanentsByTypeAndSacrificeRest { .. })
+        {
+            return Err(
+                "ChoosePermanentsByTypeAndSacrificeRest must be a direct legacy effect-list instruction"
+                    .into(),
+            );
+        }
         if matches!(self, Self::TakeExtraTurns { count: 0 }) {
             return Err("TakeExtraTurns count must be nonzero".into());
         }
@@ -5934,6 +5967,36 @@ impl SpellEffectKind {
                     return Err(
                         "ChooseAndSacrifice.filter cannot constrain controller, owner, or exclude objects"
                             .into(),
+                    );
+                }
+                Ok(())
+            }
+            SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest {
+                players,
+                types,
+                scope: _,
+            } => {
+                if !matches!(
+                    players,
+                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                ) {
+                    return Err(
+                        "ChoosePermanentsByTypeAndSacrificeRest.players must be EachOpponent or EachPlayer"
+                            .into(),
+                    );
+                }
+                if types.is_empty() {
+                    return Err(
+                        "ChoosePermanentsByTypeAndSacrificeRest.types must be nonempty".into(),
+                    );
+                }
+                let mut seen = std::collections::HashSet::with_capacity(types.len());
+                if types
+                    .iter()
+                    .any(|permanent_type| !seen.insert(*permanent_type))
+                {
+                    return Err(
+                        "ChoosePermanentsByTypeAndSacrificeRest.types must be distinct".into(),
                     );
                 }
                 Ok(())

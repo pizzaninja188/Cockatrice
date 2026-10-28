@@ -140,6 +140,9 @@ mod deck_coverage_audacious_reshapers;
 mod deck_coverage_laezel;
 #[path = "scenario/deck_coverage_liliana_vess.rs"]
 mod deck_coverage_liliana_vess;
+
+#[path = "scenario/deck_coverage_liliana_dreadhorde_general.rs"]
+mod deck_coverage_liliana_dreadhorde_general;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
 #[path = "scenario/myriad_search_prerequisites.rs"]

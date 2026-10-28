@@ -1823,8 +1823,9 @@ message ResolutionChoiceRequired {
   // A payer may select any affordable amount of mana. The accepted exact selection, not a
   // client-announced number, determines the contribution. Public so all clients render one prompt.
   bool variable_mana_contribution = 29 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // Cumulative public accepted selections for the multi-player sacrifice choice. Candidate
-  // identity metadata remains per-player; this list carries only chooser, ObjectId, and generation.
+  // Cumulative public accepted selections while a multi-player permanent choice is pending.
+  // Candidate identity metadata remains per-player; this list carries only chooser, ObjectId,
+  // and generation.
   repeated AcceptedPermanentSelection accepted_permanent_selections = 30
       [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Opaque identity of the final actionable offer, private to the deciding player. It is

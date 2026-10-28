@@ -2193,6 +2193,12 @@ impl Compiler<'_> {
                     if effect.contains_memory_jar_leaf() {
                         return Err("Memory Jar hand cohorts cannot occur in a Program".into());
                     }
+                    if effect.contains_type_choice_sacrifice() {
+                        return Err(
+                            "ChoosePermanentsByTypeAndSacrificeRest is not admitted in a CardProgram"
+                                .into(),
+                        );
+                    }
                     if let SpellEffectKind::GainLife { who, .. } = effect.as_ref() {
                         // Preserve the established ability-context recipient while keeping the
                         // new target-group recipient closed to the separately validated Swords

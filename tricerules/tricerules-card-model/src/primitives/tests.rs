@@ -7122,6 +7122,74 @@ fn portal_to_phyrexia_effects_are_representable() {
 }
 
 #[test]
+fn choose_permanents_by_type_and_sacrifice_rest_is_typed() {
+    const LILIANA: &str = "ChoosePermanentsByTypeAndSacrificeRest(players: EachOpponent, types: [Artifact, Creature, Enchantment, Land, Planeswalker, Battle], scope: AllPermanents)";
+    let liliana: crate::primitives::SpellEffectKind =
+        ron::from_str(LILIANA).expect("Liliana's six-type choice-and-sacrifice operation parses");
+    assert_eq!(
+        liliana.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
+
+    let gearhulk: crate::primitives::SpellEffectKind = ron::from_str(
+        "ChoosePermanentsByTypeAndSacrificeRest(players: EachPlayer, types: [Artifact, Creature, Enchantment, Planeswalker], scope: NonlandPermanents)",
+    )
+    .expect("Cataclysmic Gearhulk's nonland choice-and-sacrifice operation parses");
+    assert_eq!(
+        gearhulk.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
+
+    for (players, types, expected) in [
+        ("EachOpponent", "[]", "types must be nonempty"),
+        (
+            "EachPlayer",
+            "[Artifact, Artifact]",
+            "types must be distinct",
+        ),
+        (
+            "Controller",
+            "[Artifact]",
+            "players must be EachOpponent or EachPlayer",
+        ),
+    ] {
+        let authored = format!(
+            "ChoosePermanentsByTypeAndSacrificeRest(players: {players}, types: {types}, scope: AllPermanents)"
+        );
+        let effect: crate::primitives::SpellEffectKind =
+            ron::from_str(&authored).expect("invalid operation shape still parses");
+        assert!(
+            effect
+                .validate(crate::primitives::EffectContext::Ability)
+                .expect_err("invalid operation shape is rejected")
+                .contains(expected),
+            "unexpected validation result for {authored}"
+        );
+    }
+
+    let nested: crate::primitives::SpellEffectKind = ron::from_str(&format!(
+        "Conditional(condition: OpponentHasMoreThanYou(metric: LandCount), effect: {LILIANA})"
+    ))
+    .expect("wrapped operation parses before fail-closed validation");
+    assert!(nested
+        .validate(crate::primitives::EffectContext::Ability)
+        .expect_err("the suspension operation is not admitted through wrappers")
+        .contains("must be a direct legacy effect-list instruction"));
+
+    let program = program_fixture(&format!(
+        "(steps: [(id: \"sacrifice\", bind: [], input: None, kind: Perform({LILIANA}))], yields: [])"
+    ));
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&program], &[])
+        .expect_err("the suspension operation remains closed to CardProgram");
+    assert!(
+        error
+            .to_string()
+            .contains("ChoosePermanentsByTypeAndSacrificeRest is not admitted in a CardProgram"),
+        "unexpected program rejection: {error}"
+    );
+}
+
+#[test]
 fn chimil_discover_and_controller_spell_protection_are_typed() {
     assert!(
         ron::from_str::<super::StaticAbilityDef>(

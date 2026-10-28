@@ -2540,6 +2540,7 @@ impl GameEngine {
                     matches!(
                         pending.continuation,
                         ResolutionContinuation::PlayerSetSacrifice { .. }
+                            | ResolutionContinuation::TypeChoiceSacrifice { .. }
                     )
                 });
         if self.state.pending_observer_return_batch.is_some()
@@ -2887,8 +2888,10 @@ impl GameEngine {
                 .as_ref()
                 .map(|pending| &pending.continuation),
             Some(ResolutionContinuation::PlayerSetSacrifice { .. })
+                | Some(ResolutionContinuation::TypeChoiceSacrifice { .. })
         ) {
             self.refresh_player_set_sacrifice_departure(events)?;
+            self.refresh_type_choice_sacrifice_departure(events)?;
         }
         let exact_return = self
             .state

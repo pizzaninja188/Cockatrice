@@ -11157,7 +11157,7 @@ TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
     EXPECT_FALSE(state->isWaitingForChoice());
 }
 
-TEST_F(RuledClientTest, AcceptedSacrificeSelectionsArePublicAndGenerationBound)
+TEST_F(RuledClientTest, AcceptedPermanentSelectionsClearWithoutChangingTheKeptGeneration)
 {
     constexpr quint32 sourceOid = 7000;
     constexpr quint32 chosenOid = 8100;
@@ -11180,6 +11180,8 @@ TEST_F(RuledClientTest, AcceptedSacrificeSelectionsArePublicAndGenerationBound)
     EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), kLocalPlayer + 1);
     state->battlefieldGenerationByOid.insert(chosenOid, generation + 1);
     EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), -1);
+    state->battlefieldGenerationByOid.insert(chosenOid, generation);
+    EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), kLocalPlayer + 1);
 
     ruled::v1::RuledEventBatch completed;
     auto *progress = completed.add_events()->mutable_resolution_choice_progress();
@@ -11187,6 +11189,7 @@ TEST_F(RuledClientTest, AcceptedSacrificeSelectionsArePublicAndGenerationBound)
     apply(completed);
     EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), -1);
     EXPECT_EQ(state->acceptedSacrificeSelectionSourceOid, 0u);
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(chosenOid), generation);
 }
 
 TEST_F(RuledClientTest, AlternativeDiscardRequiresOneMatchingCardOrTwoCards)

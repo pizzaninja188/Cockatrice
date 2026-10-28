@@ -106,6 +106,48 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
+        let begun_type_choice = self.state.pending_resolution.as_ref().and_then(|pending| {
+            match &pending.continuation {
+                ResolutionContinuation::TypeChoiceSacrifice { stack, .. } => {
+                    is_departed(stack).then(|| stack.clone())
+                }
+                _ => None,
+            }
+        });
+        if let Some(stack) = begun_type_choice {
+            // CR 608.2m: once this effect has started resolving, a controller or source-owner
+            // departure does not cancel its parked type-choice sequence. CR 800.4a still removes
+            // the physical stack object, so mirror the ordinary outer-resolution removal path.
+            if !stack.item.is_copy && stack.item.ability_text.is_none() {
+                if let Some(object) = self
+                    .state
+                    .objects
+                    .get(&stack.item.id)
+                    .filter(|object| object.zone == Zone::Stack)
+                    .cloned()
+                {
+                    if departed.contains(&object.owner) {
+                        parked_stack_removal_ids.insert(stack.item.id);
+                    } else {
+                        move_object_to_zone(
+                            &mut self.state,
+                            self.registry,
+                            stack.item.id,
+                            Zone::Exile,
+                            None,
+                        )?;
+                        moved_stack_to_exile.insert(stack.item.id);
+                        events.push(permanent_moved_event(
+                            &self.state,
+                            stack.item.id,
+                            object.owner,
+                            rv1::permanent_moved::Destination::Exile,
+                        ));
+                    }
+                }
+            }
+            return Ok(());
+        }
         let pending_linked_program_choice =
             self.state.pending_resolution.as_ref().and_then(|pending| {
                 match &pending.continuation {
@@ -1256,6 +1298,7 @@ impl GameEngine {
             self.reconcile_pending_player_set_discard_departure(events, false)?;
             self.reconcile_memory_jar_discard_departure(events)?;
             self.refresh_player_set_sacrifice_departure(events)?;
+            self.refresh_type_choice_sacrifice_departure(events)?;
         }
         self.refresh_mass_sacrifice_departure(events)?;
         self.refresh_damage_departure(events)?;

@@ -7,9 +7,10 @@ use tricerules_card_model::primitives::{
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryLookRemainderPolicy, LibraryPlacement, LinkedExiledCardDestination,
     LinkedExiledCardPlayKind, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, ResultType,
-    SearchDestination, SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection,
-    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    PermanentChoiceConstraint, PermanentSacrificeScope, PermanentTypeFilter,
+    ResolvingPermanentModifier, ResultType, SearchDestination, SearchSelectionConstraint,
+    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
+    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
@@ -1907,6 +1908,13 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         sacrifice: PendingPlayerSetSacrifice,
     },
+    /// Sequential per-type keep choices for one original affected player set, followed by one
+    /// simultaneous sacrifice of the current in-scope complement. The subject slot survives
+    /// departure; its delegate and last-known cohort are separate continuation state.
+    TypeChoiceSacrifice {
+        stack: ParkedStackResolution,
+        sacrifice: PendingTypeChoiceSacrifice,
+    },
     ChooseCard {
         stack: ParkedStackResolution,
         chooser: PlayerId,
@@ -2326,6 +2334,7 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
+            | Self::TypeChoiceSacrifice { stack, .. }
             | Self::ChooseCard { stack, .. }
             | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }
@@ -2400,6 +2409,7 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
+            | Self::TypeChoiceSacrifice { stack, .. }
             | Self::ChooseCard { stack, .. }
             | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }
@@ -2652,6 +2662,43 @@ pub struct PendingPlayerSetSacrifice {
     pub accepted: Vec<AcceptedPermanentSelection>,
     pub count: u32,
     pub filter: TargetFilter,
+}
+
+/// Original player-set subject and the selected live player who answers any remaining choices.
+/// A departed subject's exact last-known battlefield cohort is captured from departure LKI.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingTypeChoiceSacrificeSubject {
+    pub player: PlayerId,
+    #[serde(default)]
+    pub departure_cohort: Option<Vec<(ObjectId, u64)>>,
+    #[serde(default)]
+    pub delegate: Option<PlayerId>,
+    #[serde(default)]
+    pub delegate_candidate_slots: Vec<Option<PlayerId>>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum PendingTypeChoiceSacrificeStage {
+    ChoosingPermanent,
+    ChoosingDelegate {
+        candidate_slots: Vec<Option<PlayerId>>,
+    },
+}
+
+/// Frozen APNAP subjects and requested type cursor for a keep-one-per-type, sacrifice-rest
+/// operation. Accepted keeps are public exact-incarnation references and remain eligible for
+/// later type prompts when a permanent has multiple types.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingTypeChoiceSacrifice {
+    pub subjects: Vec<PendingTypeChoiceSacrificeSubject>,
+    pub affected_players: Vec<PlayerId>,
+    pub current_subject: usize,
+    pub current_type: usize,
+    pub types: Vec<PermanentTypeFilter>,
+    pub scope: PermanentSacrificeScope,
+    pub accepted: Vec<AcceptedPermanentSelection>,
+    pub candidate_generations: Vec<(ObjectId, u64)>,
+    pub stage: PendingTypeChoiceSacrificeStage,
 }
 
 /// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering

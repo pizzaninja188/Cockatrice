@@ -1977,6 +1977,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Cascade { .. }
         | SpellEffectKind::ChoosePermanents { .. }
         | SpellEffectKind::ChooseAndSacrifice { .. }
+        | SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }

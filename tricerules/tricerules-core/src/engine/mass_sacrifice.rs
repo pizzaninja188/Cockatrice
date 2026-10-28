@@ -489,6 +489,739 @@ impl GameEngine {
         Ok(())
     }
 
+    fn type_choice_subject_is_live(&self, subject: PlayerId) -> bool {
+        self.state
+            .player_idx(subject)
+            .is_some_and(|index| !self.state.players[index].has_lost)
+    }
+
+    fn type_choice_sacrifice_candidates(
+        &self,
+        subject: &crate::state::PendingTypeChoiceSacrificeSubject,
+        permanent_type: PermanentTypeFilter,
+        scope: tricerules_card_model::primitives::PermanentSacrificeScope,
+    ) -> Result<Vec<(ObjectId, u64)>, EngineError> {
+        let subject_live = self.type_choice_subject_is_live(subject.player);
+        let objects = if subject_live {
+            self.state
+                .players
+                .iter()
+                .flat_map(|player| player.battlefield.iter().copied())
+                .map(|object_id| {
+                    (
+                        object_id,
+                        self.state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            subject
+                .departure_cohort
+                .as_deref()
+                .ok_or(EngineError::ProgramInvariant(
+                    "departed type-choice subject is missing its control cohort",
+                ))?
+                .to_vec()
+        };
+        let mut candidates = objects
+            .into_iter()
+            .filter(|(object_id, expected_generation)| {
+                self.state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == *expected_generation
+                    && self
+                        .state
+                        .objects
+                        .get(object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield)
+            })
+            .filter(|(object_id, _)| {
+                self.characteristics(*object_id).is_some_and(|characteristics| {
+                    (!subject_live || characteristics.controller == subject.player)
+                        && characteristics
+                            .types
+                            .iter()
+                            .any(|kind| kind == permanent_type.as_str())
+                        && (scope
+                            != tricerules_card_model::primitives::PermanentSacrificeScope::NonlandPermanents
+                            || !characteristics.types.iter().any(|kind| kind == "Land"))
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_unstable_by_key(|(object_id, _)| *object_id);
+        candidates.dedup_by_key(|(object_id, generation)| (*object_id, *generation));
+        Ok(candidates)
+    }
+
+    fn accept_type_choice_keep(
+        sacrifice: &mut crate::state::PendingTypeChoiceSacrifice,
+        subject: PlayerId,
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    ) {
+        if sacrifice.accepted.iter().any(|selection| {
+            selection.object_id == object_id
+                && selection.zone_change_generation == zone_change_generation
+        }) {
+            return;
+        }
+        sacrifice
+            .accepted
+            .push(crate::state::AcceptedPermanentSelection {
+                player: subject,
+                object_id,
+                zone_change_generation,
+            });
+    }
+
+    /// Skip missing types, auto-select a sole candidate, and stop at the next actual choice.
+    /// Delegation is only requested when a departed subject has a real multi-option choice.
+    pub(super) fn advance_type_choice_sacrifice(
+        &self,
+        stack: &ParkedStackResolution,
+        sacrifice: &mut crate::state::PendingTypeChoiceSacrifice,
+    ) -> Result<bool, EngineError> {
+        let mut seen = HashSet::new();
+        sacrifice.accepted.retain(|selection| {
+            let key = (selection.object_id, selection.zone_change_generation);
+            seen.insert(key)
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(&selection.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == selection.zone_change_generation
+                && self
+                    .state
+                    .objects
+                    .get(&selection.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+        });
+
+        loop {
+            if sacrifice.current_subject >= sacrifice.subjects.len() {
+                sacrifice.candidate_generations.clear();
+                sacrifice.stage = crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                return Ok(false);
+            }
+            if sacrifice.current_type >= sacrifice.types.len() {
+                sacrifice.current_subject += 1;
+                sacrifice.current_type = 0;
+                sacrifice.candidate_generations.clear();
+                sacrifice.stage = crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                continue;
+            }
+
+            let subject_index = sacrifice.current_subject;
+            let subject_id = sacrifice.subjects[subject_index].player;
+            let subject_live = self.type_choice_subject_is_live(subject_id);
+            if !subject_live && sacrifice.subjects[subject_index].departure_cohort.is_none() {
+                let cohort = self
+                    .state
+                    .departed_targeted_player_control_cohorts
+                    .get(&subject_id)
+                    .filter(|cohort| cohort.player_id == subject_id)
+                    .ok_or(EngineError::ProgramInvariant(
+                        "departed type-choice subject is missing its control cohort",
+                    ))?;
+                sacrifice.subjects[subject_index].departure_cohort = Some(
+                    cohort
+                        .permanents
+                        .iter()
+                        .map(|permanent| (permanent.object_id, permanent.zone_change_generation))
+                        .collect(),
+                );
+            }
+
+            let permanent_type = sacrifice.types[sacrifice.current_type];
+            let candidates = self.type_choice_sacrifice_candidates(
+                &sacrifice.subjects[subject_index],
+                permanent_type,
+                sacrifice.scope,
+            )?;
+            match candidates.as_slice() {
+                [] => {
+                    sacrifice.current_type += 1;
+                    sacrifice.candidate_generations.clear();
+                    sacrifice.stage =
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                }
+                [(object_id, generation)] => {
+                    Self::accept_type_choice_keep(sacrifice, subject_id, *object_id, *generation);
+                    sacrifice.current_type += 1;
+                    sacrifice.candidate_generations.clear();
+                    sacrifice.stage =
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                }
+                _ => {
+                    sacrifice.candidate_generations = candidates;
+                    if subject_live {
+                        sacrifice.subjects[subject_index].delegate = None;
+                        sacrifice.stage =
+                            crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                        return Ok(true);
+                    }
+
+                    let controller = stack.item.controller;
+                    let eligible = resolution::resolution_choice_delegate_candidates(
+                        &self.state,
+                        controller,
+                        subject_id,
+                    );
+                    let current_delegate = sacrifice.subjects[subject_index].delegate;
+                    let delegate_is_eligible =
+                        current_delegate.is_some_and(|delegate| eligible.contains(&delegate));
+                    let current_delegate_prompt = matches!(
+                        &sacrifice.stage,
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate { .. }
+                    );
+                    if delegate_is_eligible && !current_delegate_prompt {
+                        sacrifice.stage =
+                            crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                        return Ok(true);
+                    }
+                    if eligible.is_empty() {
+                        return Err(EngineError::ProgramInvariant(
+                            "no live player can make a departed type-choice subject's choice",
+                        ));
+                    }
+                    let previous_slots = match &sacrifice.stage {
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate {
+                            candidate_slots,
+                        } => candidate_slots.clone(),
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent => {
+                            sacrifice.subjects[subject_index]
+                                .delegate_candidate_slots
+                                .clone()
+                        }
+                    };
+                    let candidate_slots = resolution::reconcile_resolution_choice_delegate_slots(
+                        &previous_slots,
+                        &eligible,
+                    );
+                    sacrifice.subjects[subject_index].delegate = None;
+                    sacrifice.subjects[subject_index].delegate_candidate_slots =
+                        candidate_slots.clone();
+                    let was_delegate_prompt = matches!(
+                        &sacrifice.stage,
+                        crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate { .. }
+                    );
+                    if !was_delegate_prompt && eligible.len() == 1 {
+                        sacrifice.subjects[subject_index].delegate = eligible.first().copied();
+                        sacrifice.stage =
+                            crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                    } else {
+                        resolution::resolution_choice_selector(&self.state, controller).ok_or(
+                            EngineError::ProgramInvariant(
+                                "no live player can select a type-choice delegate",
+                            ),
+                        )?;
+                        sacrifice.stage =
+                            crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate {
+                                candidate_slots,
+                            };
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(super) fn park_type_choice_sacrifice_choice(
+        &mut self,
+        stack: ParkedStackResolution,
+        sacrifice: crate::state::PendingTypeChoiceSacrifice,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let subject = &sacrifice.subjects[sacrifice.current_subject];
+        let permanent_type = sacrifice.types[sacrifice.current_type];
+        let subject_live = self.type_choice_subject_is_live(subject.player);
+        let (
+            deciding_player,
+            choice_kind,
+            prompt,
+            candidates,
+            candidate_card_ids,
+            candidate_names,
+            candidate_selectable,
+            resolution_branches,
+        ) = match &sacrifice.stage {
+            crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent => {
+                let deciding_player = if subject_live {
+                    subject.player
+                } else {
+                    subject
+                        .delegate
+                        .expect("departed subject's live delegate is selected before parking")
+                };
+                let candidates = sacrifice
+                    .candidate_generations
+                    .iter()
+                    .map(|(object_id, _)| *object_id)
+                    .collect::<Vec<_>>();
+                let candidate_card_ids = candidates
+                    .iter()
+                    .map(|object_id| {
+                        self.state
+                            .objects
+                            .get(object_id)
+                            .filter(|object| !object.face_down)
+                            .map(|object| object.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>();
+                let candidate_names = candidates
+                    .iter()
+                    .map(|object_id| {
+                        self.state
+                            .objects
+                            .get(object_id)
+                            .filter(|object| object.face_down)
+                            .map(|_| "Face-down permanent".to_string())
+                            .unwrap_or_else(|| {
+                                super::events::object_display_name(
+                                    &self.state,
+                                    self.registry,
+                                    *object_id,
+                                )
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                let article = match permanent_type {
+                    PermanentTypeFilter::Artifact | PermanentTypeFilter::Enchantment => "an",
+                    _ => "a",
+                };
+                let prompt = format!(
+                    "P{deciding_player}: choose {article} {} permanent to keep for P{}.",
+                    permanent_type.as_str().to_ascii_lowercase(),
+                    subject.player
+                );
+                (
+                    deciding_player,
+                    rv1::ChoiceKind::PermanentObjects,
+                    prompt,
+                    candidates.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    vec![true; candidates.len()],
+                    Vec::new(),
+                )
+            }
+            crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate { candidate_slots } => {
+                let selector =
+                    resolution::resolution_choice_selector(&self.state, stack.item.controller)
+                        .expect("nonterminal game has a live type-choice delegate selector");
+                let eligible = resolution::resolution_choice_delegate_candidates(
+                    &self.state,
+                    stack.item.controller,
+                    subject.player,
+                );
+                let options = candidate_slots
+                    .iter()
+                    .enumerate()
+                    .map(|(index, candidate)| {
+                        let selectable = candidate.is_some_and(|candidate| {
+                            eligible.contains(&candidate)
+                                && self
+                                    .state
+                                    .player_idx(candidate)
+                                    .is_some_and(|player| !self.state.players[player].has_lost)
+                        });
+                        let label = candidate.map_or_else(
+                            || "Unavailable player".into(),
+                            |candidate| format!("P{candidate} makes P{}'s choice", subject.player),
+                        );
+                        rv1::ResolutionBranchOption {
+                            branch_index: index as u32,
+                            label: label.clone(),
+                            selectable,
+                            presentation: Some(rv1::PresentationRef {
+                                fallback_text: label,
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    selector,
+                    rv1::ChoiceKind::ResolutionBranch,
+                    format!(
+                        "P{selector}: choose a player to make P{}'s remaining type choices.",
+                        subject.player
+                    ),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    options,
+                )
+            }
+        };
+        let accepted_permanent_selections = sacrifice
+            .accepted
+            .iter()
+            .map(|selection| rv1::AcceptedPermanentSelection {
+                selecting_player_id: selection.player,
+                object_id: selection.object_id,
+                zone_change_generation: selection.zone_change_generation,
+            })
+            .collect();
+        let mut choice = rv1::ResolutionChoiceRequired {
+            resolution_prompt_id: 0,
+            deciding_player_id: deciding_player,
+            source_object_id: stack.item.id,
+            prompt_text: prompt.clone(),
+            choice_kind: choice_kind as i32,
+            candidate_object_ids: candidates.clone(),
+            candidate_card_ids,
+            candidate_names,
+            min: 1,
+            max: 1,
+            candidate_selectable,
+            accepted_permanent_selections,
+            resolution_branches,
+            ..Default::default()
+        };
+        if choice_kind == rv1::ChoiceKind::ResolutionBranch {
+            choice.candidate_object_ids.clear();
+        }
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)),
+        });
+        events.push(super::events::ev_log(prompt.clone()));
+        self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::TypeChoiceSacrifice { stack, sacrifice },
+        });
+    }
+
+    pub(super) fn type_choice_sacrifice_victims(
+        &self,
+        sacrifice: &crate::state::PendingTypeChoiceSacrifice,
+    ) -> Vec<ObjectId> {
+        let live_affected: HashSet<_> = sacrifice
+            .affected_players
+            .iter()
+            .copied()
+            .filter(|player| self.type_choice_subject_is_live(*player))
+            .collect();
+        let kept: HashSet<_> = sacrifice
+            .accepted
+            .iter()
+            .map(|selection| (selection.object_id, selection.zone_change_generation))
+            .collect();
+        let mut victims = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .filter(|object_id| {
+                self.state
+                    .objects
+                    .get(object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            })
+            .filter(|object_id| {
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                !kept.contains(&(*object_id, generation))
+                    && self
+                        .characteristics(*object_id)
+                        .is_some_and(|characteristics| {
+                            live_affected.contains(&characteristics.controller)
+                                && (sacrifice.scope
+                                    != tricerules_card_model::primitives::PermanentSacrificeScope::NonlandPermanents
+                                    || !characteristics.types.iter().any(|kind| kind == "Land"))
+                        })
+            })
+            .collect::<Vec<_>>();
+        victims.sort_unstable();
+        victims.dedup();
+        victims
+    }
+
+    fn finish_type_choice_sacrifice_after_choices(
+        &mut self,
+        stack: ParkedStackResolution,
+        sacrifice: &crate::state::PendingTypeChoiceSacrifice,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceProgress(
+                rv1::ResolutionChoiceProgress {
+                    source_object_id: stack.item.id,
+                    accepted_permanent_selections: Vec::new(),
+                },
+            )),
+        });
+        let victims = self.type_choice_sacrifice_victims(sacrifice);
+        let mut effect_result = EffectResult::default();
+        if self.commit_player_set_sacrifice(
+            stack.clone(),
+            &victims,
+            &mut effect_result,
+            &mut events,
+        )? {
+            return Ok(events::finish_with_events(self, events));
+        }
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            effect_result,
+            events,
+        )
+    }
+
+    pub(super) fn finish_type_choice_sacrifice_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+        deciding_player: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, mut sacrifice) = match &pending.continuation {
+            ResolutionContinuation::TypeChoiceSacrifice { stack, sacrifice } => {
+                (stack.clone(), sacrifice.clone())
+            }
+            _ => {
+                return Err(EngineError::Illegal(
+                    "type-choice sacrifice continuation missing",
+                ))
+            }
+        };
+        let Some(subject) = sacrifice.subjects.get(sacrifice.current_subject).cloned() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "type-choice sacrifice subject missing",
+            ));
+        };
+        if sacrifice.current_type >= sacrifice.types.len() {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("type-choice sacrifice type missing"));
+        }
+        let subject_id = subject.player;
+        let permanent_type = sacrifice.types[sacrifice.current_type];
+        let subject_live = self.type_choice_subject_is_live(subject_id);
+        let no_unrelated_data = answer.chosen_player_ids.is_empty()
+            && answer.cast_spell.is_none()
+            && answer.spell_cast_announcement.is_none()
+            && answer.chosen_combat_defender.is_none()
+            && answer.payment.is_none()
+            && answer.restricted_mana.is_empty();
+        match &sacrifice.stage {
+            crate::state::PendingTypeChoiceSacrificeStage::ChoosingDelegate { candidate_slots } => {
+                if decision != rv1::ResolutionChoiceDecision::SelectBranch
+                    || !answer.chosen_object_ids.is_empty()
+                    || !no_unrelated_data
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "replacement chooser must select one available player",
+                    ));
+                }
+                let delegate = candidate_slots
+                    .get(answer.selected_branch_index as usize)
+                    .copied()
+                    .flatten();
+                let eligible = resolution::resolution_choice_delegate_candidates(
+                    &self.state,
+                    stack.item.controller,
+                    subject_id,
+                );
+                let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "that replacement chooser is no longer available",
+                    ));
+                };
+                if !self.type_choice_subject_is_live(delegate) {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "that replacement chooser is no longer available",
+                    ));
+                }
+                sacrifice.subjects[sacrifice.current_subject].delegate = Some(delegate);
+                sacrifice.stage = crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                self.state.pending_resolution = None;
+                let mut events = vec![super::events::ev_log(format!(
+                    "P{deciding_player} chooses P{delegate} to make P{subject_id}'s remaining type choices."
+                ))];
+                if self.advance_type_choice_sacrifice(&stack, &mut sacrifice)? {
+                    self.park_type_choice_sacrifice_choice(stack, sacrifice, &mut events);
+                    return Ok(events::finish_with_events(self, events));
+                }
+                self.finish_type_choice_sacrifice_after_choices(stack, &sacrifice, events)
+            }
+            crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent => {
+                let expected_decider = if subject_live {
+                    Some(subject_id)
+                } else {
+                    subject
+                        .delegate
+                        .filter(|delegate| self.type_choice_subject_is_live(*delegate))
+                };
+                if decision != rv1::ResolutionChoiceDecision::Unspecified
+                    || answer.selected_branch_index != 0
+                    || !no_unrelated_data
+                    || expected_decider != Some(deciding_player)
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "type-choice permanent selection is stale or malformed",
+                    ));
+                }
+                let [object_id] = answer.chosen_object_ids.as_slice() else {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "choose exactly one permanent for this type",
+                    ));
+                };
+                let expected_generation =
+                    sacrifice
+                        .candidate_generations
+                        .iter()
+                        .find_map(|(candidate, generation)| {
+                            (candidate == object_id).then_some(*generation)
+                        });
+                let legal_candidates = self.type_choice_sacrifice_candidates(
+                    &subject,
+                    permanent_type,
+                    sacrifice.scope,
+                )?;
+                let Some(expected_generation) = expected_generation.filter(|generation| {
+                    legal_candidates
+                        .iter()
+                        .any(|(candidate, candidate_generation)| {
+                            candidate == object_id && candidate_generation == generation
+                        })
+                }) else {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "chosen permanent is stale or illegal for this type",
+                    ));
+                };
+                Self::accept_type_choice_keep(
+                    &mut sacrifice,
+                    subject_id,
+                    *object_id,
+                    expected_generation,
+                );
+                let name = self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .filter(|object| !object.face_down)
+                    .map(|_| {
+                        super::events::object_display_name(&self.state, self.registry, *object_id)
+                    })
+                    .unwrap_or_else(|| "a face-down permanent".into());
+                let mut events = vec![super::events::ev_log(format!(
+                    "P{deciding_player} selects {name} for P{subject_id}'s {} keep.",
+                    permanent_type.as_str()
+                ))];
+                sacrifice.current_type += 1;
+                sacrifice.candidate_generations.clear();
+                sacrifice.stage = crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent;
+                self.state.pending_resolution = None;
+                if self.advance_type_choice_sacrifice(&stack, &mut sacrifice)? {
+                    self.park_type_choice_sacrifice_choice(stack, sacrifice, &mut events);
+                    return Ok(events::finish_with_events(self, events));
+                }
+                self.finish_type_choice_sacrifice_after_choices(stack, &sacrifice, events)
+            }
+        }
+    }
+
+    pub(super) fn refresh_type_choice_sacrifice_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (stack, mut sacrifice) = match &pending.continuation {
+            ResolutionContinuation::TypeChoiceSacrifice { stack, sacrifice } => {
+                (stack.clone(), sacrifice.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        for subject in &mut sacrifice.subjects {
+            if self.type_choice_subject_is_live(subject.player)
+                || subject.departure_cohort.is_some()
+            {
+                continue;
+            }
+            let cohort = self
+                .state
+                .departed_targeted_player_control_cohorts
+                .get(&subject.player)
+                .filter(|cohort| cohort.player_id == subject.player)
+                .ok_or(EngineError::ProgramInvariant(
+                    "departed type-choice subject is missing its control cohort",
+                ))?;
+            subject.departure_cohort = Some(
+                cohort
+                    .permanents
+                    .iter()
+                    .map(|permanent| (permanent.object_id, permanent.zone_change_generation))
+                    .collect(),
+            );
+        }
+        if self.advance_type_choice_sacrifice(&stack, &mut sacrifice)? {
+            self.park_type_choice_sacrifice_choice(stack, sacrifice, events);
+            return Ok(());
+        }
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceProgress(
+                rv1::ResolutionChoiceProgress {
+                    source_object_id: stack.item.id,
+                    accepted_permanent_selections: Vec::new(),
+                },
+            )),
+        });
+        let victims = self.type_choice_sacrifice_victims(&sacrifice);
+        let mut effect_result = EffectResult::default();
+        if self.commit_player_set_sacrifice(stack.clone(), &victims, &mut effect_result, events)? {
+            return Ok(());
+        }
+        let completed = self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            effect_result,
+            std::mem::take(events),
+        )?;
+        events.extend(completed.events);
+        Ok(())
+    }
+
     fn advance_mass_sacrifice_order(
         &mut self,
         stack: Option<ParkedStackResolution>,

@@ -449,6 +449,61 @@ pub(super) fn choose_and_sacrifice(
     }
 }
 
+pub(super) fn choose_permanents_by_type_and_sacrifice_rest(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest {
+        players,
+        types,
+        scope,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let affected_players = super::player_recipients(cx, players);
+    let subjects = affected_players
+        .iter()
+        .copied()
+        .map(|player| crate::state::PendingTypeChoiceSacrificeSubject {
+            player,
+            departure_cohort: None,
+            delegate: None,
+            delegate_candidate_slots: Vec::new(),
+        })
+        .collect();
+    let mut sacrifice = crate::state::PendingTypeChoiceSacrifice {
+        subjects,
+        affected_players,
+        current_subject: 0,
+        current_type: 0,
+        types,
+        scope,
+        accepted: Vec::new(),
+        candidate_generations: Vec::new(),
+        stage: crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent,
+    };
+    let stack = ParkedStackResolution::new(cx.top.clone());
+    if cx
+        .engine
+        .advance_type_choice_sacrifice(&stack, &mut sacrifice)?
+    {
+        cx.engine
+            .park_type_choice_sacrifice_choice(stack, sacrifice, cx.events);
+        return Ok(EffectOutcome::Suspended);
+    }
+
+    let victims = cx.engine.type_choice_sacrifice_victims(&sacrifice);
+    if cx
+        .engine
+        .commit_player_set_sacrifice(stack, &victims, cx.effect_result, cx.events)?
+    {
+        Ok(EffectOutcome::Suspended)
+    } else {
+        Ok(EffectOutcome::Continue)
+    }
+}
+
 pub(super) fn tap_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
