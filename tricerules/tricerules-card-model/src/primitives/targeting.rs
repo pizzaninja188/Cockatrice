@@ -1784,6 +1784,10 @@ pub struct TargetFilter {
     /// Bounty Hunter-style targeting use the same physical counter predicate as event filters.
     #[serde(default)]
     pub required_counter: Option<super::CounterKind>,
+    /// A permanent must currently carry at least one physical counter of any kind. It is
+    /// mutually exclusive with `required_counter`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub requires_any_counter: bool,
 }
 
 impl TargetFilter {
@@ -1861,6 +1865,11 @@ impl TargetFilter {
     }
 
     fn validate_characteristic_leaf(&self) -> Result<(), String> {
+        if self.requires_any_counter && self.required_counter.is_some() {
+            return Err(
+                "target filter cannot combine any-counter and specific-counter requirements".into(),
+            );
+        }
         if self.owner != TargetOwner::Any
             && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
         {
@@ -1874,6 +1883,7 @@ impl TargetFilter {
                 || self.was_dealt_damage_this_turn.is_some()
                 || self.dealt_damage_this_turn.is_some()
                 || self.required_counter.is_some()
+                || self.requires_any_counter
                 || self
                     .excluded_objects
                     .contains(&TargetObjectExclusion::AttachedObject))
@@ -1976,6 +1986,7 @@ impl TargetFilter {
             || self.was_dealt_damage_this_turn.is_some()
             || self.dealt_damage_this_turn.is_some()
             || self.required_counter.is_some()
+            || self.requires_any_counter
             || self.tapped.is_some()
             || self.combat_role.is_some()
             || self.not_color.is_some()
@@ -2115,6 +2126,66 @@ mod tests {
         };
         let serialized = ron::to_string(&filter).expect("serialize source-damage filter");
         assert!(has_source_damage_field(&serialized));
+    }
+
+    #[test]
+    fn innkeepers_talent_any_counter_predicate_round_trips_and_omits_false() {
+        let with_any_counter = target_filter("(kind: AnyPermanent, requires_any_counter: true)");
+        let serialized =
+            ron::to_string(&with_any_counter).expect("serialize any-counter target filter");
+        assert!(
+            serialized.contains("requires_any_counter:true")
+                || serialized.contains("requires_any_counter: true"),
+            "the true predicate must survive RON serialization: {serialized}"
+        );
+
+        let legacy: TargetFilter =
+            ron::from_str("(kind: AnyPermanent)").expect("deserialize the legacy permanent filter");
+        let explicit_false = target_filter("(kind: AnyPermanent, requires_any_counter: false)");
+        let legacy_ron = ron::to_string(&legacy).expect("serialize legacy filter");
+        let false_ron = ron::to_string(&explicit_false).expect("serialize false predicate");
+        assert_eq!(
+            false_ron, legacy_ron,
+            "an absent or false predicate must preserve the legacy filter RON"
+        );
+        assert!(
+            !false_ron.contains("requires_any_counter"),
+            "the default false predicate must be omitted: {false_ron}"
+        );
+    }
+
+    #[test]
+    fn innkeepers_talent_any_counter_predicate_validates_permanent_filters_recursively() {
+        let valid = target_filter("(kind: AnyPermanent, requires_any_counter: true)");
+        assert!(valid.validate_target_constraints().is_ok());
+
+        for source in [
+            "(kind: AnyPermanent, requires_any_counter: true, required_counter: Some(PlusOnePlusOne))",
+            "(kind: AnyPlayer, requires_any_counter: true)",
+            "(kind: AnyTarget, requires_any_counter: true)",
+        ] {
+            let filter = target_filter(source);
+            assert!(
+                filter.validate_target_constraints().is_err(),
+                "invalid any-counter filter should be rejected: {source}"
+            );
+        }
+
+        let valid_recursive = target_filter(
+            "(any_of: Some([(any_of: Some([(kind: AnyPermanent, requires_any_counter: true), (kind: AnyPermanent, permanent_types: [Artifact])])), (kind: Creature)]))",
+        );
+        assert!(valid_recursive.validate_target_constraints().is_ok());
+
+        for source in [
+            "(any_of: Some([(kind: Creature), (any_of: Some([(kind: AnyPermanent), (kind: AnyPlayer, requires_any_counter: true)]))]))",
+            "(requires_any_counter: true, any_of: Some([(kind: AnyPermanent), (kind: Creature)]))",
+        ] {
+            let filter = target_filter(source);
+            assert!(
+                filter.validate_target_constraints().is_err(),
+                "invalid recursive any-counter filter should be rejected: {source}"
+            );
+        }
     }
 
     #[test]

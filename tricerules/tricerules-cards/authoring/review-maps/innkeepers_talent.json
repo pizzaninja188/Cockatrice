@@ -1,0 +1,149 @@
+{
+  "format_version": 1,
+  "oracle_id": "915b75d1-b5e3-4aca-a54c-beaccef0a2e4",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/types",
+        "/faces/0/class_level_bars/0",
+        "/faces/0/class_level_bars/1"
+      ]
+    },
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/class_level_bars/0/level_ability"]
+    },
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/class_level_bars/0/static_abilities/0/definition",
+        "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/filter/requires_any_counter",
+        "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/triggered_abilities/0/trigger",
+        "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+      ]
+    },
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": ["/faces/0/class_level_bars/1/level_ability"]
+    },
+    {
+      "face_id": "innkeepers_talent",
+      "start_line": 6,
+      "end_line": 6,
+      "typed_paths": ["/faces/0/class_level_bars/1/static_abilities/0/definition"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ClassLevelBar",
+      "typed_path": "/faces/0/class_level_bars/0"
+    },
+    {
+      "symbol": "ClassLevelBar",
+      "typed_path": "/faces/0/class_level_bars/1"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::SetClassLevel",
+      "typed_path": "/faces/0/class_level_bars/0/level_ability/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::GrantTriggeredAbilityToPermanents",
+      "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TargetFilter::requires_any_counter",
+      "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/filter/requires_any_counter"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+    },
+    {
+      "symbol": "SpellEffectKind::SetClassLevel",
+      "typed_path": "/faces/0/class_level_bars/1/level_ability/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::DoubleCountersYouWouldPut",
+      "typed_path": "/faces/0/class_level_bars/1/static_abilities/0/definition"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_paid_level_one_cast_puts_a_counter_at_its_combat",
+      "covers": "The paid level-I Class triggers only at its controller's beginning of combat and puts one +1/+1 counter on the chosen creature they control."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_pays_offered_level_two_and_three_then_doubles_combat_counter",
+      "covers": "Both Class level-up costs and designations work; level III doubles the actual beginning-of-combat counter."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_level_two_ward_covers_an_artifact_and_requires_exactly_one_mana",
+      "covers": "A countered noncreature artifact gets Ward from level II; declining counters the opponent's Disenchant, while paying exactly one mana lets it resolve."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_ward_tracks_level_physical_counters_and_control",
+      "covers": "Ward requires level II and a current physical counter on a permanent Talent's controller controls; counter gain/loss, opponent permanents, own spells, and counterless level-II/III Talent are distinguished."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_ward_trigger_survives_counter_loss_or_talent_bounce",
+      "covers": "Once triggered, Ward remains due after the last counter is removed or Talent leaves; declining counters the original targeting spell exactly once."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_class_actions_and_combat_target_legality_are_bounded",
+      "covers": "Wrong-actor and wrong-timing level-ups are immutable rejections; an opponent's combat does not trigger Talent, and illegal or no-longer-controlled targets get no counter."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_bounce_and_recast_resets_level_three_counter_doubling",
+      "covers": "Boomerang returns the Class, and recasting that physical card starts it at level I so level-III counter doubling is off."
+    },
+    {
+      "test": "scenario deck_coverage_innkeepers_talent::innkeepers_talent_ward_choice_replays_from_its_exact_wire_prompt",
+      "covers": "An accepted Ward payment uses its offered prompt ID and previewed one-mana selection, then replays with matching events, snapshots, and outcome."
+    },
+    {
+      "test": "deck_registry::deck_coverage_innkeepers_talent::innkeepers_talent_registers_exact_class_costs_combat_trigger_and_counter_scaled_ward",
+      "covers": "Exact identity, Class bars and costs, combat trigger, any-counter Ward grant, and level-III counter replacement are registered."
+    },
+    {
+      "test": "deck_registry::deck_coverage_innkeepers_talent::innkeepers_talent_is_admitted_for_ordinary_mainboard_use",
+      "covers": "The complete definition is admitted as an ordinary mainboard card."
+    }
+  ]
+}

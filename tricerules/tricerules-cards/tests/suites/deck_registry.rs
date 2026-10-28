@@ -112,6 +112,8 @@ mod deck_coverage_the_chain_veil;
 #[path = "../deck_coverage_vorinclex_monstrous_raider.rs"]
 mod deck_coverage_vorinclex_monstrous_raider;
 
+#[path = "../deck_coverage_innkeepers_talent.rs"]
+mod deck_coverage_innkeepers_talent;
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;
 #[path = "../deck_coverage_mh3_mdfcs_registry.rs"]

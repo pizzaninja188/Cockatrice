@@ -1,0 +1,67 @@
+// Pinned Oracle 915b75d1-b5e3-4aca-a54c-beaccef0a2e4; BLB 180 printing 941b0afc-0e8f-45f2-ae7f-07595e164611; official Bloomburrow release notes.
+// CR 716, 702.21a, 122.1, 122.5, 122.6a, and 616.1-616.2.
+(
+  id: "innkeepers_talent",
+  name: "Innkeeper's Talent",
+  face_id: "innkeepers_talent",
+  mana_cost: "{1}{G}",
+  types: ["Enchantment", "Class"],
+  triggered_abilities: [(
+    ability_id: "combat_counter",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfCombat(),
+    effect: [PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You)),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+  class_level_bars: [
+    (
+      level: 2,
+      level_ability: (
+        ability_id: "level_2",
+        presentation: OracleLines([3]),
+        costs: [Mana("{G}")],
+        effect: [SetClassLevel(level: 2)],
+        timing: SorcerySpeed,
+      ),
+      static_abilities: [(
+        ability_id: "countered_permanent_ward",
+        presentation: OracleLines([4]),
+        definition: GrantTriggeredAbilityToPermanents(
+          filter: (kind: AnyPermanent, controller: You, requires_any_counter: true),
+          triggered_abilities: [(
+            ability_id: "ward",
+            presentation: Fallback,
+            trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+            program: Some((body: (steps: [
+              (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}")))),
+            ]))),
+          )],
+        ),
+      )],
+    ),
+    (
+      level: 3,
+      level_ability: (
+        ability_id: "level_3",
+        presentation: OracleLines([5]),
+        costs: [Mana("{3}{G}")],
+        effect: [SetClassLevel(level: 3)],
+        timing: SorcerySpeed,
+      ),
+      static_abilities: [(
+        ability_id: "double_counters",
+        presentation: OracleLines([6]),
+        definition: DoubleCountersYouWouldPut,
+      )],
+    ),
+  ],
+)

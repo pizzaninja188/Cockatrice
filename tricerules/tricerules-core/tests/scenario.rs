@@ -253,6 +253,9 @@ mod deck_coverage_vorinclex_monstrous_raider;
 #[path = "scenario/deck_coverage_wizard_class.rs"]
 mod deck_coverage_wizard_class;
 
+#[path = "scenario/deck_coverage_innkeepers_talent.rs"]
+mod deck_coverage_innkeepers_talent;
+
 #[path = "scenario/deck_coverage_minds_aglow.rs"]
 mod deck_coverage_minds_aglow;
 

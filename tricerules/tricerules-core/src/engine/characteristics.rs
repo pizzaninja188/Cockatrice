@@ -2334,6 +2334,7 @@ pub(super) fn permanent_matches_filter_characteristics(
                 .contains(&(oid, generation))
                 != required
         })
+        || (filter.requires_any_counter && !object.has_any_counter())
         || filter
             .required_counter
             .is_some_and(|counter| object.counter_count(counter) == 0)
@@ -5066,6 +5067,44 @@ mod tests {
             engine.effective_power(source),
             Some(4),
             "opponents' permanents do not count"
+        );
+    }
+
+    #[test]
+    fn innkeepers_talent_any_counter_filter_matches_countered_noncreature_only() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            26_102_701,
+            &[0, 1],
+            20,
+        )
+        .expect("two-player counter-filter engine");
+        let countered_noncreature =
+            insert_fixture(&mut engine, 0, "everflowing_chalice", Zone::Battlefield);
+        let counterless_noncreature = insert_fixture(&mut engine, 0, "sol_ring", Zone::Battlefield);
+        engine
+            .state
+            .objects
+            .get_mut(&countered_noncreature)
+            .expect("Everflowing Chalice fixture")
+            .counters
+            .insert(CounterKind::Charge, 1);
+
+        let filter: TargetFilter =
+            ron::from_str("(kind: AnyPermanent, requires_any_counter: true)")
+                .expect("deserialize any-counter permanent filter");
+        assert!(super::super::targeting::filter_characteristics_match(
+            &engine,
+            &filter,
+            countered_noncreature,
+        ));
+        assert!(
+            !super::super::targeting::filter_characteristics_match(
+                &engine,
+                &filter,
+                counterless_noncreature,
+            ),
+            "a counterless noncreature permanent must not match"
         );
     }
 }
