@@ -1999,6 +1999,7 @@ fn validate_effect_targets(
         | SpellEffectKind::MoveCohortPartition { .. }
         | SpellEffectKind::ShuffleLibrary { .. }
         | SpellEffectKind::ExileResolvingSpell
+        | SpellEffectKind::TakeExtraTurns { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

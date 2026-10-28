@@ -237,6 +237,15 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Charge, 2);
     }
+    if card == "magistrates_scepter" && ability == 1 {
+        // The generic ability conformance fixture prepares Scepter's exact three-Charge cost;
+        // actual-card scenarios separately prove how Charge counters are earned.
+        e.state
+            .objects
+            .get_mut(&oid)
+            .unwrap()
+            .set_counter(tricerules_cards::CounterKind::Charge, 3);
+    }
     if card == "pentavus" {
         // Direct relocation skips entry. Actual-card scenarios independently prove entry.
         e.state

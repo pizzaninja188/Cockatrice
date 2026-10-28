@@ -1096,6 +1096,12 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
         count: Amount,
     },
+    /// Take additional turns after the current turn. The resolving stack item's controller
+    /// receives each one; Magistrate's Scepter and Ichormoon Gauntlet use one, while Teferi,
+    /// Master of Time demonstrates two.
+    TakeExtraTurns {
+        count: u32,
+    },
     /// Memory Jar's simultaneous hidden hand exile, retained for its delayed ability.
     MemoryJarExileHands,
     /// Return the exact surviving face-down exile incarnations from that activation.
@@ -3996,6 +4002,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CastMadness { .. }
             | SpellEffectKind::SiegeDefeat
             | SpellEffectKind::ExileGraveyards { .. }
+            | SpellEffectKind::TakeExtraTurns { .. }
             | SpellEffectKind::None => Vec::new(),
         }
     }
@@ -4552,6 +4559,9 @@ impl SpellEffectKind {
         context: EffectContext,
         allow_typed_search_result: bool,
     ) -> Result<(), String> {
+        if matches!(self, Self::TakeExtraTurns { count: 0 }) {
+            return Err("TakeExtraTurns count must be nonzero".into());
+        }
         if matches!(self, Self::DoubleYourCounters) {
             return Err(
                 "DoubleYourCounters is valid only as a direct effect in an activated modal mode"

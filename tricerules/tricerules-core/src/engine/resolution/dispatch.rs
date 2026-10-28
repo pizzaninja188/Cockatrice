@@ -80,6 +80,10 @@ pub(super) fn execute_effect(
             damage::damage_attacked_player_or_planeswalker(cx, effect)?
         }
         effect @ SpellEffectKind::Draw { .. } => zones::draw(cx, effect)?,
+        SpellEffectKind::TakeExtraTurns { count } => {
+            cx.engine.schedule_extra_turns(cx.controller, count);
+            EffectOutcome::Continue
+        }
         SpellEffectKind::JoinForces => join_forces::begin(cx)?,
         effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
             zones::target_player_draws(cx, effect)?
@@ -426,4 +430,94 @@ pub(super) fn execute_effect(
             choices::create_reflexive_trigger(cx, effect)?
         }
     })
+}
+
+#[cfg(test)]
+mod extra_turn_effect_tests {
+    use super::*;
+    use crate::state::{EffectResult, StackItem, TriggerContext};
+    use tricerules_card_model::primitives::SpellEffectKind;
+
+    #[test]
+    fn copied_ability_uses_its_captured_controller_for_each_turn() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            50_029,
+            &[10, 20, 30, 40],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        let definition = tricerules_cards::registry::global()
+            .get("magistrates_scepter")
+            .expect("actual Scepter definition");
+        let copied_ability = StackItem {
+            mana_colors_spent_to_cast: Default::default(),
+            id: 500,
+            controller: 30,
+            card_id: "magistrates_scepter".into(),
+            prototyped: false,
+            targets: Vec::new(),
+            ability_text: Some("Take an extra turn".into()),
+            source_permanent_id: Some(900),
+            source_owner: Some(10),
+            source_zone_change: 1,
+            trigger_use_key: None,
+            source_face_change: 0,
+            ability_index: Some(1),
+            activated_ability: Some(definition.primary_face().activated_abilities[1].clone()),
+            activated_ability_occurrence: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: true,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: Default::default(),
+            exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: TriggerContext::default(),
+        };
+        let captured_controller = copied_ability.controller;
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut events = Vec::new();
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &copied_ability,
+            controller: captured_controller,
+            affected_player: captured_controller,
+            spell_label: "copied Scepter ability",
+            previous_effect_result: &previous_effect_result,
+            resume_previous_result: None,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            program_state: None,
+        };
+
+        assert_eq!(
+            execute_effect(&mut cx, SpellEffectKind::TakeExtraTurns { count: 2 })
+                .expect("extra-turn effect resolves"),
+            EffectOutcome::Continue
+        );
+        drop(cx);
+
+        assert_eq!(engine.state.extra_turn_queue, [30, 30]);
+        assert_ne!(engine.state.extra_turn_queue, [10, 10]);
+        assert_eq!(engine.state.normal_turn_resume_player, None);
+    }
 }

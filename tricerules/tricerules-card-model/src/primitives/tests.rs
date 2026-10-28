@@ -1,4 +1,22 @@
 #[test]
+fn take_extra_turns_requires_a_positive_count() {
+    let valid: crate::primitives::SpellEffectKind =
+        ron::from_str("TakeExtraTurns(count: 1)").expect("positive extra-turn counts parse");
+    assert_eq!(
+        valid.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
+
+    let zero: crate::primitives::SpellEffectKind =
+        ron::from_str("TakeExtraTurns(count: 0)").expect("zero count still parses for validation");
+    assert_eq!(
+        zero.validate(crate::primitives::EffectContext::Ability)
+            .expect_err("zero extra-turn counts are invalid"),
+        "TakeExtraTurns count must be nonzero"
+    );
+}
+
+#[test]
 fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
     let definition = |kind: &str, cost: &str, affected: &str, option: &str| {
         format!(

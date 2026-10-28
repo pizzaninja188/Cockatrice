@@ -576,6 +576,7 @@ fn automatic_settlement_publishes_terminal_draw_loss() {
     )
     .expect("new");
     e.state.turn = 2; // the starting player's turn-one draw is intentionally skipped (CR 103.8)
+    e.state.turn_instance = 2;
     e.state.players[0].library.clear();
     let batch = e
         .apply_scenario_command(

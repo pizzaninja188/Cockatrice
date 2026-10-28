@@ -24,7 +24,54 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = if matches!(
+    let costs = if e.state.objects[&object].card_id == "magistrates_scepter" && index == 1 {
+        // The source fixture seeds the exact required count. Build the receipt from the engine's
+        // current offer so the conformance harness exercises the same source generation and
+        // Charge option that a client must submit.
+        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
+            return Err("Magistrate's Scepter Charge-removal offer is not payable".into());
+        }
+        let choice = &choices.choices[0];
+        if choice.kind() != CostChoiceKind::RemoveCounters
+            || choice.zone != CostChoiceZone::Battlefield as i32
+        {
+            return Err("Magistrate's Scepter did not offer its battlefield counter cost".into());
+        }
+        let removal = choice
+            .counter_removal
+            .as_ref()
+            .ok_or("Magistrate's Scepter omitted its counter-removal offer")?;
+        if removal.count != 3
+            || removal.options.len() != 1
+            || removal.options[0].label != "charge"
+            || removal.options[0].available_count != 3
+        {
+            return Err("Magistrate's Scepter counter-removal offer changed".into());
+        }
+        let source = removal
+            .source
+            .as_ref()
+            .ok_or("Magistrate's Scepter omitted the source payment reference")?;
+        if source.object_id != object
+            || e.state
+                .zone_change_generation
+                .get(&object)
+                .copied()
+                .unwrap_or(0)
+                != source.zone_change_generation
+        {
+            return Err("Magistrate's Scepter source payment reference is stale".into());
+        }
+        vec![CostSelection {
+            cost_index: choice.cost_index,
+            selection: Some(cost_selection::Selection::CounterRemoval(
+                CounterRemovalSelection {
+                    source: Some(*source),
+                    option_id: removal.options[0].option_id,
+                },
+            )),
+        }]
+    } else if matches!(
         e.state.objects[&object].card_id.as_str(),
         "pentavus" | "pentad_prism"
     ) && index == 0

@@ -3885,6 +3885,10 @@ pub struct GameState {
     /// Index into players for who holds priority
     pub priority_idx: usize,
     pub active_player_idx: usize,
+    /// Individual extra turns in newest-first order. Each entry represents one actual turn.
+    pub(crate) extra_turn_queue: Vec<PlayerId>,
+    /// The normal seat whose turn follows the current extra-turn chain, if any.
+    pub(crate) normal_turn_resume_player: Option<PlayerId>,
     pub turn_step: TurnStep,
     pub turn: u32,
     /// Monotonic across every player's turn; unlike `turn`, this never repeats across seats.

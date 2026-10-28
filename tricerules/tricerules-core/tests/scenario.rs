@@ -64,6 +64,8 @@ mod deck_coverage_mycosynth_lattice;
 #[path = "scenario/deck_coverage_mycosynth_lattice_mana.rs"]
 mod deck_coverage_mycosynth_lattice_mana;
 
+#[path = "scenario/deck_coverage_magistrates_scepter.rs"]
+mod deck_coverage_magistrates_scepter;
 #[path = "scenario/deck_coverage_rings_of_brighthearth.rs"]
 mod deck_coverage_rings_of_brighthearth;
 

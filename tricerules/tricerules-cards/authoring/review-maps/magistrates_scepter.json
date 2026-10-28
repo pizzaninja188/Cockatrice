@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "487485a6-cf79-48c0-bea9-0ec6b3ee253c",
+  "spans": [
+    {
+      "face_id": "magistrates_scepter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "magistrates_scepter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/subject"
+    },
+    {
+      "symbol": "Amount::Fixed(1)",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/count"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1/RemoveCounters/counter"
+    },
+    {
+      "symbol": "SpellEffectKind::TakeExtraTurns",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_magistrates_scepter::magistrates_scepter_complete_registry_identity_exists",
+      "covers": "complete normal artifact identity, exact mana cost, both ability line bindings, {4} plus tap first cost, source Charge placement, tap plus three source Charge removal, and one extra turn"
+    },
+    {
+      "test": "scenario deck_coverage_magistrates_scepter::magistrates_scepter_first_ability_pays_four_taps_and_places_charge_after_resolution",
+      "covers": "rejects three generic mana atomically, pays exactly four plus tap, places one Charge only on resolution, and grants no turn from the first ability"
+    },
+    {
+      "test": "scenario deck_coverage_magistrates_scepter::magistrates_scepter_charge_placement_uses_the_shared_counter_replacement_pipeline",
+      "covers": "the first ability's one Charge placement is doubled by Doubling Season through the shared replacement pipeline"
+    },
+    {
+      "test": "scenario deck_coverage_magistrates_scepter::magistrates_scepter_removes_three_charges_and_resolves_after_source_leaves",
+      "covers": "two counters cannot pay; exactly three source Charge counters are removed with tap; the announced ability resolves after source departure for its captured controller, grants the extra-turn draw, then resumes the saved normal successor"
+    },
+    {
+      "test": "scenario deck_coverage_magistrates_scepter::magistrates_scepter_countered_ability_does_not_schedule_an_extra_turn",
+      "covers": "Tishana's Tidebinder counters the pending ability after its cost is paid; the ability leaves the stack and the next normal seat begins"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-10-28 against Scryfall Oracle 487485a6-cf79-48c0-bea9-0ec6b3ee253c.
+// Core Set 2019 release notes confirm the newest-created Scepter turn is taken first:
+// https://magic.wizards.com/en/news/feature/core-set-2019-release-notes-2018-06-22
+(
+  id: "magistrates_scepter",
+  name: "Magistrate's Scepter",
+  face_id: "magistrates_scepter",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{4}"), Tap],
+      effect: [PutCounters(subject: Source, counter: Charge, count: 1)],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap, RemoveCounters(counter: Some(Charge), count: 3)],
+      effect: [TakeExtraTurns(count: 1)],
+    ),
+  ],
+)

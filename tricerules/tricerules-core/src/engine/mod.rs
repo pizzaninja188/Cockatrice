@@ -1925,6 +1925,8 @@ impl GameEngine {
             } else {
                 chooser_idx
             },
+            extra_turn_queue: Vec::new(),
+            normal_turn_resume_player: None,
             turn_step: TurnStep::Upkeep,
             turn: 1,
             turn_instance: 1,

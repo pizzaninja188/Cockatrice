@@ -3,6 +3,12 @@ use super::legal_actions::fill_legal;
 use super::resolution::move_object_to_zone;
 use super::*;
 
+fn expire_until_turn_start_effects(state: &mut GameState, player: PlayerId) {
+    state
+        .continuous_effects
+        .retain(|effect| effect.duration != EffectDuration::UntilTurnStart(player));
+}
+
 fn observed_token_cohort_key(
     ability: &TriggeredAbilityDef,
     context: TriggerContext,
@@ -1564,7 +1570,7 @@ impl GameEngine {
                 // may stay 1 for the second seat's first turn because we bump `turn` when wrapping
                 // to seat 0, not on every active change.
                 let skip_opening_draw = self.state.players.len() == 2
-                    && self.state.turn == 1
+                    && self.state.turn_instance == 1
                     && self.state.active_player_idx == self.state.starting_player_idx;
                 if !skip_opening_draw {
                     let completion = super::draw::DrawCompletion::FinishDrawStep {
@@ -1934,6 +1940,70 @@ impl GameEngine {
         self.finish_cleanup_roll_new_turn(ev)
     }
 
+    /// Add each extra turn at the front so the newest grant resolves first (CR 500.7).
+    pub(super) fn schedule_extra_turns(&mut self, controller: PlayerId, count: u32) {
+        let mut newest = vec![controller; count as usize];
+        newest.append(&mut self.state.extra_turn_queue);
+        self.state.extra_turn_queue = newest;
+    }
+
+    /// Select the next real turn after cleanup, omitting lost seats at their would-begin boundary.
+    /// Returns true when the selected turn is extra; normal turns retain the ordinary seat cursor.
+    fn select_next_turn_after_cleanup(&mut self) -> Result<bool, EngineError> {
+        let seat_count = self.state.players.len();
+        if seat_count == 0 {
+            return Err(EngineError::Illegal("no player in game"));
+        }
+
+        if self.state.normal_turn_resume_player.is_none() && !self.state.extra_turn_queue.is_empty()
+        {
+            let normal_successor = (self.state.active_player_idx + 1) % seat_count;
+            self.state.normal_turn_resume_player = Some(self.state.players[normal_successor].id);
+        }
+
+        loop {
+            if !self.state.extra_turn_queue.is_empty() {
+                let player = self.state.extra_turn_queue.remove(0);
+                let index = self.state.player_idx(player).ok_or(EngineError::Illegal(
+                    "extra turn references an unknown player",
+                ))?;
+                if self.state.players[index].has_lost {
+                    expire_until_turn_start_effects(&mut self.state, player);
+                    continue;
+                }
+                self.state.active_player_idx = index;
+                return Ok(true);
+            }
+
+            if let Some(player) = self.state.normal_turn_resume_player {
+                let index = self.state.player_idx(player).ok_or(EngineError::Illegal(
+                    "normal turn cursor references an unknown player",
+                ))?;
+                if self.state.players[index].has_lost {
+                    expire_until_turn_start_effects(&mut self.state, player);
+                    let next = (index + 1) % seat_count;
+                    self.state.normal_turn_resume_player = Some(self.state.players[next].id);
+                    continue;
+                }
+                self.state.normal_turn_resume_player = None;
+                self.state.active_player_idx = index;
+                return Ok(false);
+            }
+
+            let mut index = (self.state.active_player_idx + 1) % seat_count;
+            for _ in 0..seat_count {
+                let player = self.state.players[index].id;
+                if !self.state.players[index].has_lost {
+                    self.state.active_player_idx = index;
+                    return Ok(false);
+                }
+                expire_until_turn_start_effects(&mut self.state, player);
+                index = (index + 1) % seat_count;
+            }
+            return Err(EngineError::Illegal("no player in game"));
+        }
+    }
+
     /// After cleanup discards (514.1), apply 514.2-style clearing and advance the turn.
     pub(super) fn finish_cleanup_roll_new_turn(
         &mut self,
@@ -1981,11 +2051,8 @@ impl GameEngine {
             });
         debug_assert!(expired.is_empty(), "turn-end observers only expire");
         self.state.turn_history.finish_turn();
-        self.state.active_player_idx = self
-            .state
-            .next_in_game_player_idx(self.state.active_player_idx)
-            .ok_or(EngineError::Illegal("no player in game"))?;
-        if self.state.active_player_idx == 0 {
+        let selected_extra_turn = self.select_next_turn_after_cleanup()?;
+        if !selected_extra_turn && self.state.active_player_idx == 0 {
             self.state.turn = self.state.turn.saturating_add(1);
         }
         self.state.turn_instance = self.state.turn_instance.saturating_add(1);
@@ -1995,9 +2062,7 @@ impl GameEngine {
         // CR 500.4: "until your next turn" effects end as that turn begins, before the untap
         // step or any turn-begin observer sees the new turn. The resolving controller was captured
         // as a concrete player id, so extra turns and multiplayer turn order need no special case.
-        self.state
-            .continuous_effects
-            .retain(|effect| effect.duration != EffectDuration::UntilTurnStart(ap));
+        expire_until_turn_start_effects(&mut self.state, ap);
         let armed = self
             .state
             .dispatch_event_observers(ObservedGameEvent::TurnBegan {
@@ -2163,5 +2228,264 @@ impl GameEngine {
                 "primitive advance not supported in this step",
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod extra_turn_contract_tests {
+    use super::*;
+    use tricerules_proto::ruled::v1::{ruled_event::Ev, PhaseId, RuledEventBatch};
+
+    fn four_player_engine() -> GameEngine {
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            50_028,
+            &[10, 20, 30, 40],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine")
+    }
+
+    fn finish_turn(engine: &mut GameEngine) -> RuledEventBatch {
+        engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("turn boundary")
+    }
+
+    fn untap_phase_players(batch: &RuledEventBatch) -> Vec<PlayerId> {
+        batch
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(Ev::PhaseChanged(phase)) if phase.phase_id == PhaseId::Untap as i32 => {
+                    Some(phase.active_player_id)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn until_turn_start_marker(engine: &mut GameEngine, player: PlayerId) {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(u32::MAX),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilTurnStart(player),
+            timestamp: engine.state.command_index,
+        });
+    }
+
+    fn has_until_turn_start_marker(engine: &GameEngine, player: PlayerId) -> bool {
+        engine
+            .state
+            .continuous_effects
+            .iter()
+            .any(|effect| effect.duration == EffectDuration::UntilTurnStart(player))
+    }
+
+    #[test]
+    fn extra_turn_precedes_the_saved_normal_successor_without_advancing_the_cycle_counter() {
+        let mut engine = four_player_engine();
+        engine.state.extra_turn_queue = vec![30];
+
+        let extra = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        assert_eq!(engine.state.normal_turn_resume_player, Some(20));
+        assert_eq!(
+            engine.state.turn, 1,
+            "extra turn does not advance the seat cycle"
+        );
+        assert_eq!(
+            engine.state.turn_instance, 2,
+            "actual extra turn gets a new instance"
+        );
+        assert_eq!(untap_phase_players(&extra), [30]);
+
+        let resumed = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 20);
+        assert_eq!(engine.state.normal_turn_resume_player, None);
+        assert_eq!(
+            engine.state.turn, 1,
+            "resumed normal P1 preserves the seat-cycle count"
+        );
+        assert_eq!(engine.state.turn_instance, 3);
+        assert_eq!(untap_phase_players(&resumed), [20]);
+    }
+
+    #[test]
+    fn seat_zero_extra_turn_does_not_increment_until_its_resumed_normal_turn() {
+        let mut engine = four_player_engine();
+        engine.state.active_player_idx = 3;
+        engine.state.turn = 4;
+        engine.state.extra_turn_queue = vec![10];
+
+        finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 10);
+        assert_eq!(engine.state.normal_turn_resume_player, Some(10));
+        assert_eq!(engine.state.turn, 4);
+        assert_eq!(engine.state.turn_instance, 2);
+
+        finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 10);
+        assert_eq!(engine.state.normal_turn_resume_player, None);
+        assert_eq!(
+            engine.state.turn, 5,
+            "only normal seat zero advances the cycle"
+        );
+        assert_eq!(engine.state.turn_instance, 3);
+    }
+
+    #[test]
+    fn nested_grants_prepend_before_older_turns_and_keep_the_original_cursor() {
+        let mut engine = four_player_engine();
+        engine.schedule_extra_turns(30, 2);
+        finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        assert_eq!(engine.state.extra_turn_queue, [30]);
+        assert_eq!(engine.state.normal_turn_resume_player, Some(20));
+
+        engine.schedule_extra_turns(40, 1);
+        assert_eq!(engine.state.extra_turn_queue, [40, 30]);
+        finish_turn(&mut engine);
+        assert_eq!(
+            engine.state.active_player_id(),
+            40,
+            "newest grant resolves first"
+        );
+        assert_eq!(engine.state.normal_turn_resume_player, Some(20));
+        finish_turn(&mut engine);
+        assert_eq!(
+            engine.state.active_player_id(),
+            30,
+            "older extra remains queued"
+        );
+        finish_turn(&mut engine);
+        assert_eq!(
+            engine.state.active_player_id(),
+            20,
+            "resume the original normal seat"
+        );
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(engine.state.turn_instance, 5);
+    }
+
+    #[test]
+    fn departed_queued_and_saved_players_expire_at_their_omitted_turn_boundaries() {
+        let mut engine = four_player_engine();
+        engine.state.extra_turn_queue = vec![30, 40];
+        engine.state.players[2].has_lost = true;
+        until_turn_start_marker(&mut engine, 30);
+
+        let extra = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 40);
+        assert!(!has_until_turn_start_marker(&engine, 30));
+        assert_eq!(
+            engine.state.turn_instance, 2,
+            "only the live extra turn starts"
+        );
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(untap_phase_players(&extra), [40]);
+
+        engine.state.players[1].has_lost = true;
+        until_turn_start_marker(&mut engine, 20);
+        let normal = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 40);
+        assert!(!has_until_turn_start_marker(&engine, 20));
+        assert_eq!(engine.state.turn_instance, 3, "lost P1/P2 starts no turns");
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(untap_phase_players(&normal), [40]);
+    }
+
+    #[test]
+    fn lost_saved_normal_cursor_expires_after_queued_extra_turns_at_its_omitted_boundary() {
+        let mut engine = four_player_engine();
+        engine.state.extra_turn_queue = vec![30, 40];
+        engine.state.players[1].has_lost = true;
+        until_turn_start_marker(&mut engine, 20);
+        let no_phase_for_lost_p1 = |batch: &RuledEventBatch| {
+            batch.events.iter().all(|event| match event.ev.as_ref() {
+                Some(Ev::PhaseChanged(phase)) => phase.active_player_id != 20,
+                _ => true,
+            })
+        };
+
+        let p2_extra = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        assert_eq!(engine.state.normal_turn_resume_player, Some(20));
+        assert!(has_until_turn_start_marker(&engine, 20));
+        assert_eq!(engine.state.turn_instance, 2);
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(untap_phase_players(&p2_extra), [30]);
+        assert!(no_phase_for_lost_p1(&p2_extra), "lost P1 gets no phase");
+        assert_eq!(engine.state.turn_history.current.player(20).cards_drawn, 0);
+
+        let p3_extra = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 40);
+        assert_eq!(engine.state.normal_turn_resume_player, Some(20));
+        assert!(has_until_turn_start_marker(&engine, 20));
+        assert_eq!(engine.state.turn_instance, 3);
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(untap_phase_players(&p3_extra), [40]);
+        assert!(no_phase_for_lost_p1(&p3_extra), "lost P1 gets no phase");
+        assert_eq!(engine.state.turn_history.current.player(20).cards_drawn, 0);
+
+        let p2_normal = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        assert_eq!(engine.state.normal_turn_resume_player, None);
+        assert!(!has_until_turn_start_marker(&engine, 20));
+        assert_eq!(
+            engine.state.turn_instance, 4,
+            "the omitted P1 turn adds no turn instance"
+        );
+        assert_eq!(engine.state.turn, 1, "no seat-zero normal turn began");
+        assert_eq!(untap_phase_players(&p2_normal), [30]);
+        assert!(no_phase_for_lost_p1(&p2_normal), "lost P1 gets no phase");
+        assert_eq!(engine.state.turn_history.current.player(20).cards_drawn, 0);
+    }
+
+    #[test]
+    fn ordinary_lost_normal_seat_expires_its_turn_duration_without_a_fake_turn_start() {
+        let mut engine = four_player_engine();
+        engine.state.players[1].has_lost = true;
+        until_turn_start_marker(&mut engine, 20);
+
+        let batch = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        assert!(!has_until_turn_start_marker(&engine, 20));
+        assert_eq!(engine.state.turn_instance, 2);
+        assert_eq!(engine.state.turn, 1);
+        assert_eq!(untap_phase_players(&batch), [30]);
+    }
+
+    #[test]
+    fn departed_active_player_finishes_and_only_future_queued_turn_is_omitted() {
+        let mut engine = four_player_engine();
+        engine.state.extra_turn_queue = vec![30, 30];
+        finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 30);
+        until_turn_start_marker(&mut engine, 30);
+        engine.state.players[2].has_lost = true;
+        assert_eq!(
+            engine.state.active_player_id(),
+            30,
+            "the begun turn retains its active seat"
+        );
+        assert!(
+            has_until_turn_start_marker(&engine, 30),
+            "concession is not a turn boundary"
+        );
+
+        let next = finish_turn(&mut engine);
+        assert_eq!(engine.state.active_player_id(), 20);
+        assert!(!has_until_turn_start_marker(&engine, 30));
+        assert_eq!(
+            engine.state.turn_instance, 3,
+            "only the next real turn starts"
+        );
+        assert_eq!(untap_phase_players(&next), [20]);
     }
 }
