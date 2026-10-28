@@ -2199,6 +2199,12 @@ impl Compiler<'_> {
                                 .into(),
                         );
                     }
+                    if effect.contains_chosen_counter_add() {
+                        return Err(
+                            "AddOneCounterOfChosenKindToTarget is not admitted in a CardProgram"
+                                .into(),
+                        );
+                    }
                     if let SpellEffectKind::GainLife { who, .. } = effect.as_ref() {
                         // Preserve the established ability-context recipient while keeping the
                         // new target-group recipient closed to the separately validated Swords
@@ -7648,5 +7654,45 @@ mod target_exile_result_tests {
                 group_index: 0,
             }]
         );
+    }
+
+    #[test]
+    fn chosen_counter_add_is_not_admitted_in_a_card_program() {
+        let program = |effect| CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![Instruction {
+                    id: "counter".into(),
+                    bind: Vec::new(),
+                    input: None,
+                    kind: InstructionKind::Perform(Box::new(effect)),
+                }],
+                yields: Vec::new(),
+            },
+            target_bindings: Vec::new(),
+        };
+        let owner = ProgramOwnerId::face(
+            "counter_fixture",
+            crate::CardFaceId::new("counter_fixture").expect("valid face ID"),
+        );
+        let direct = SpellEffectKind::AddOneCounterOfChosenKindToTarget;
+        let wrapped = SpellEffectKind::Conditional {
+            condition: GameCondition::ActivePlayer {
+                players: super::super::RelativePlayerSet::Opponents,
+            },
+            effect: Box::new(direct.clone()),
+        };
+
+        for effect in [direct, wrapped] {
+            let Err(error) =
+                CompiledProgram::compile(owner.clone(), EffectContext::Spell, &program(effect))
+            else {
+                panic!("chosen counter kind has no typed Program frame");
+            };
+            assert!(
+                error.contains("AddOneCounterOfChosenKindToTarget is not admitted"),
+                "unexpected compiler rejection: {error}"
+            );
+        }
     }
 }

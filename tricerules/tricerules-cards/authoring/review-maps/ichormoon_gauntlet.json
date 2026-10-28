@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "9fc7aba7-eda2-4134-9c10-31ee35201b72",
+  "spans": [
+    {
+      "face_id": "ichormoon_gauntlet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ichormoon_gauntlet",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::GrantActivatedAbilityToPermanents",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents"
+    },
+    {
+      "symbol": "TargetFilter.controller",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/controller"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/permanent_types"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0/costs/0/Loyalty"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/1/costs/0/Loyalty"
+    },
+    {
+      "symbol": "SpellEffectKind::TakeExtraTurns",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/1/effect/0/TakeExtraTurns"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerCastsSpell"
+    },
+    {
+      "symbol": "SpellEffectKind::AddOneCounterOfChosenKindToTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_complete_registry_identity_exists",
+      "covers": "Exact Oracle identity, single-face mana cost and artifact type, and both authored ability definitions."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_noncreature_cast_targets_on_stack_then_adds_one_chosen_kind_after_source_leaves",
+      "covers": "The controller's noncreature spell triggers one target choice while the trigger is stacked; after the Gauntlet leaves, choosing poison adds exactly one poison counter and finishes the captured trigger."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_counterless_target_is_legal_and_resolves_without_a_counter_choice",
+      "covers": "A permanent with no counters remains a legal target; resolution offers no counter-kind choice, adds none, and clears the trigger."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_trigger_filters_out_creature_spells_opponent_casts_and_a_departed_source",
+      "covers": "No trigger is created for a creature spell, an opponent's noncreature spell, or the Gauntlet after it has left the battlefield."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_granted_abilities_filter_recipients_share_caps_and_follow_generations",
+      "covers": "The two granted loyalty abilities appear on the controller's planeswalker, not the artifact, opposing planeswalker, or creature; duplicate providers occupy distinct slots but share the recipient's once-per-turn cap; provider departure and return preserve that cap, while recipient reentry creates a new incarnation with a fresh cap. The +0 ability proliferates one selected existing loyalty counter."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_minus_twelve_uses_recipient_loyalty_and_is_captured_without_its_provider",
+      "covers": "Eleven recipient loyalty is rejected without mutation, twelve pays the actual -12 cost, and the captured ability resolves after its planeswalker and Gauntlet leave to schedule the controller's extra turn."
+    },
+    {
+      "test": "scenario deck_coverage_ichormoon_gauntlet::ichormoon_carth_cost_changes_and_teferi_emblem_allow_the_real_grants_at_instant_speed",
+      "covers": "Carth changes the offered +0 and -12 loyalty payments to +1 and -11; without an instant-speed permission the off-turn activation is rejected, while Teferi's actual emblem permits it over a spell. The changed costs are paid on their actual recipient planeswalkers."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

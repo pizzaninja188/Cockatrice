@@ -1234,6 +1234,22 @@ pub struct PendingCounterMove {
     pub offered_counter_kinds: Vec<CounterKind>,
 }
 
+/// One resolution-time counter-kind choice bound to the exact target receipt that passed the
+/// beginning-of-resolution legality check. Counter kinds are refreshed from that incarnation
+/// while the prompt is unanswered; once selected, the shared placement batch owns the kind.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingChosenCounterAddition {
+    pub target: StackTarget,
+    pub offered_counter_kinds: Vec<CounterKind>,
+    pub stage: PendingChosenCounterAdditionStage,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub enum PendingChosenCounterAdditionStage {
+    Selecting,
+    ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingResolutionBranchStage {
     /// The object controller is selecting a player to make the original chooser's choice. `None`
@@ -1817,6 +1833,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         counter_move: PendingCounterMove,
     },
+    ChosenCounterAddition {
+        stack: ParkedStackResolution,
+        counter_addition: PendingChosenCounterAddition,
+    },
     CounterReplacement {
         stack: Option<ParkedStackResolution>,
         completion: CounterPlacementCompletion,
@@ -2321,6 +2341,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::ProgramChoose { stack, .. }
             | Self::CounterMove { stack, .. }
+            | Self::ChosenCounterAddition { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::ProgramCohortPartition { stack, .. }
@@ -2396,6 +2417,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::ProgramChoose { stack, .. }
             | Self::CounterMove { stack, .. }
+            | Self::ChosenCounterAddition { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::ProgramCohortPartition { stack, .. }

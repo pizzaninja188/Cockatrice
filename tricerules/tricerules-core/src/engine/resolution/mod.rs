@@ -35,8 +35,8 @@ pub(in crate::engine) use choices::{
     card_result_maximum,
 };
 pub(in crate::engine) use choices::{
-    current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,
-    targeted_player_control_cohort_candidates,
+    chosen_counter_addition_target_counter_kinds, current_targeted_player_control_cohort,
+    current_targeted_player_permanent_candidates, targeted_player_control_cohort_candidates,
 };
 
 pub(super) fn optional_triggered_ability_branch(
@@ -3144,6 +3144,43 @@ impl GameEngine {
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        if self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                matches!(
+                    pending.continuation,
+                    ResolutionContinuation::ChosenCounterAddition { .. }
+                )
+            })
+        {
+            let event_start = events.len();
+            self.refresh_chosen_counter_addition_departure(events)?;
+            let has_refreshed_choice = events[event_start..].iter().any(|event| {
+                matches!(
+                    &event.ev,
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                )
+            });
+            if !has_refreshed_choice
+                && self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .is_some_and(|pending| {
+                        matches!(
+                            pending.continuation,
+                            ResolutionContinuation::ChosenCounterAddition { .. }
+                        )
+                    })
+            {
+                if let Some(choice) = self.chosen_counter_addition_choice_event() {
+                    events.push(choice);
+                }
+            }
+            return Ok(true);
+        }
         #[derive(Clone, Copy)]
         enum ChooserLeaf {
             ChoosePermanents,
@@ -13536,6 +13573,1046 @@ mod attached_subject_tests {
             [30],
             "the recipient is the live event-time attacker even if the defender leaves"
         );
+    }
+
+    #[test]
+    fn chosen_counter_add_waits_for_one_target_counter_kind_before_its_tail() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_101,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let target_generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 2);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Poison, 1);
+
+        let mut item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::AddOneCounterOfChosenKindToTarget,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                },
+            ],
+        );
+        item.targets = vec![StackTarget {
+            object_id: target,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(target_generation),
+        }];
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        assert_eq!(effects[0].role_group_indices, [0]);
+        assert_eq!(effects[0].target_receipts[0].object_id, target);
+        let mut events = Vec::new();
+        let result = engine.run_effect_list(&item, &label, effects, 0, &mut events);
+        assert!(
+            matches!(result, Ok(ResolutionProgress::Parked)),
+            "the effect waits for its selected kind before placement: {result:?}"
+        );
+        let choice = events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("one target-bound counter-kind choice");
+        assert_eq!(choice.deciding_player_id, item.controller);
+        assert_eq!(choice.resolution_branches.len(), 2);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Poison),
+            1
+        );
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "the tail waits for the answer"
+        );
+        assert!(engine.state.pending_resolution.is_some());
+
+        let branch = match &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .continuation
+        {
+            ResolutionContinuation::ChosenCounterAddition {
+                counter_addition, ..
+            } => counter_addition
+                .offered_counter_kinds
+                .iter()
+                .position(|kind| *kind == CounterKind::Poison)
+                .unwrap() as u32,
+            _ => panic!("the counter-kind choice remains pending"),
+        };
+        engine
+            .submit_resolution_choice(
+                item.controller,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: branch,
+                    ..Default::default()
+                },
+            )
+            .expect("add one selected counter kind and resume the tail");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Poison),
+            2
+        );
+        assert_eq!(engine.state.players[0].life, 21);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn chosen_counter_add_offer_does_not_reveal_face_down_target_identity() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_111,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        let target_object = engine.state.objects.get_mut(&target).unwrap();
+        target_object.face_down = true;
+        target_object.counters.insert(CounterKind::Charge, 1);
+        target_object.counters.insert(CounterKind::Poison, 1);
+
+        let item = chosen_counter_add_item(source, target, generation);
+        let events = begin_chosen_counter_add(&mut engine, &item);
+        let offer = events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("face-down permanent with counters still offers public counter kinds");
+        assert!(engine.state.pending_resolution.is_some());
+        assert!(engine.state.objects[&target].face_down);
+        assert_eq!(engine.state.objects[&target].owner, 1);
+        assert_eq!(
+            offer.deciding_player_id, 0,
+            "the trigger controller is the chooser"
+        );
+        assert_eq!(
+            offer.prompt_text,
+            "Choose a kind of counter on the target permanent."
+        );
+        assert_eq!(offer.resolution_branches.len(), 2);
+        assert!(offer
+            .resolution_branches
+            .iter()
+            .any(|branch| branch.label == "Add one charge counter"));
+        assert!(offer
+            .resolution_branches
+            .iter()
+            .any(|branch| branch.label == "Add one poison counter"));
+
+        assert!(offer.candidate_object_ids.is_empty());
+        assert!(offer.candidate_card_ids.is_empty());
+        assert!(offer.candidate_server_card_ids.is_empty());
+        assert!(offer.candidate_selectable.is_empty());
+        assert!(offer.candidate_source_zones.is_empty());
+        assert!(offer.public_reveal.is_none());
+        for branch in &offer.resolution_branches {
+            let presentation = branch.presentation.as_ref().expect("public fallback label");
+            assert!(presentation.card_id.is_empty());
+            assert!(presentation.face_id.is_empty());
+            assert!(presentation.path.is_empty());
+            assert!(presentation.oracle_line_indices.is_empty());
+            assert!(presentation.external_card_name.is_empty());
+            assert!(presentation.external_face_name.is_empty());
+            assert!(presentation.oracle_text_sha256.is_empty());
+            assert_eq!(presentation.fallback_text, branch.label);
+        }
+
+        let serialized_offer = format!("{offer:?}");
+        for hidden_identity in ["forest", "Forest", "CardDefinition", "OracleID"] {
+            assert!(
+                !serialized_offer.contains(hidden_identity),
+                "resolution-choice event leaked {hidden_identity:?}: {serialized_offer}"
+            );
+        }
+    }
+
+    #[test]
+    fn chosen_counter_add_rejects_unoffered_answer_atomically() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_102,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        let mut item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::AddOneCounterOfChosenKindToTarget,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                },
+            ],
+        );
+        item.targets = vec![StackTarget {
+            object_id: target,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(0),
+        }];
+        let (effects, label) = engine.build_resolution_effects(&item);
+        assert!(matches!(
+            engine.run_effect_list(&item, &label, effects, 0, &mut Vec::new()),
+            Ok(ResolutionProgress::Parked)
+        ));
+        assert!(engine
+            .submit_resolution_choice(
+                item.controller,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: u32::MAX,
+                    ..Default::default()
+                },
+            )
+            .is_err());
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            1
+        );
+        assert_eq!(engine.state.players[0].life, 20);
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::ChosenCounterAddition { .. })
+        ));
+    }
+
+    #[test]
+    fn chosen_counter_add_skips_choice_when_target_has_no_counters() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_103,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let mut item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::AddOneCounterOfChosenKindToTarget,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                },
+            ],
+        );
+        item.targets = vec![StackTarget {
+            object_id: target,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(0),
+        }];
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine.run_effect_list(&item, &label, effects, 0, &mut events),
+            Ok(ResolutionProgress::Completed)
+        ));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(!events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(engine.state.players[0].life, 21);
+    }
+
+    fn chosen_counter_add_item(source: ObjectId, target: ObjectId, generation: u64) -> StackItem {
+        let mut item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::AddOneCounterOfChosenKindToTarget,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                    who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                },
+            ],
+        );
+        item.targets = vec![StackTarget {
+            object_id: target,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(generation),
+        }];
+        item
+    }
+
+    fn begin_chosen_counter_add(engine: &mut GameEngine, item: &StackItem) -> Vec<rv1::RuledEvent> {
+        let (effects, label) = engine.build_resolution_effects(item);
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine.run_effect_list(item, &label, effects, 0, &mut events),
+            Ok(ResolutionProgress::Parked)
+        ));
+        events
+    }
+
+    fn chosen_counter_add_branch(engine: &GameEngine, kind: CounterKind) -> u32 {
+        match &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .continuation
+        {
+            ResolutionContinuation::ChosenCounterAddition {
+                counter_addition, ..
+            } => counter_addition
+                .offered_counter_kinds
+                .iter()
+                .position(|offered| *offered == kind)
+                .expect("the requested counter kind is offered") as u32,
+            other => panic!("expected chosen-counter continuation, found {other:?}"),
+        }
+    }
+
+    fn select_branch(index: u32) -> rv1::SubmitResolutionChoice {
+        rv1::SubmitResolutionChoice {
+            decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+            selected_branch_index: index,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn chosen_counter_add_refreshes_an_unanswered_stale_kind_offer() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_104,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Poison, 1);
+        let item = chosen_counter_add_item(source, target, generation);
+        let initial = begin_chosen_counter_add(&mut engine, &item);
+        let original_choice = initial
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("counter-kind offer");
+        assert_eq!(original_choice.resolution_branches.len(), 2);
+        let stale_charge_branch = chosen_counter_add_branch(&engine, CounterKind::Charge);
+
+        let target_object = engine.state.objects.get_mut(&target).unwrap();
+        target_object.counters.remove(&CounterKind::Charge);
+        target_object
+            .counter_timestamps
+            .remove(&CounterKind::Charge);
+        let refreshed = engine
+            .submit_resolution_choice(0, &select_branch(stale_charge_branch))
+            .expect("a stale answer refreshes instead of placing a different kind");
+        let refreshed_choice = refreshed
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("one refreshed counter-kind offer");
+        assert_eq!(refreshed_choice.resolution_branches.len(), 1);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Poison),
+            1
+        );
+        assert_eq!(engine.state.players[0].life, 20, "the tail remains parked");
+        assert!(matches!(
+            engine.state.pending_resolution.as_ref().map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::ChosenCounterAddition { counter_addition, .. })
+                if counter_addition.offered_counter_kinds == [CounterKind::Poison]
+        ));
+
+        engine
+            .submit_resolution_choice(0, &select_branch(0))
+            .expect("select the remaining kind from the refreshed offer");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Poison),
+            2
+        );
+        assert_eq!(engine.state.players[0].life, 21, "the tail resumes once");
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn chosen_counter_add_completes_without_placement_if_all_kinds_disappear_unanswered() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_105,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        let item = chosen_counter_add_item(source, target, generation);
+        begin_chosen_counter_add(&mut engine, &item);
+
+        let target_object = engine.state.objects.get_mut(&target).unwrap();
+        target_object.counters.remove(&CounterKind::Charge);
+        target_object
+            .counter_timestamps
+            .remove(&CounterKind::Charge);
+        let completed = engine
+            .submit_resolution_choice(0, &select_branch(0))
+            .expect("an impossible instruction completes without a counter choice");
+        assert!(!completed.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(engine.state.players[0].life, 21, "the tail completes once");
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn chosen_counter_add_does_not_rebind_to_a_returned_target_generation() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_106,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let old_generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        let item = chosen_counter_add_item(source, target, old_generation);
+        begin_chosen_counter_add(&mut engine, &item);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            target,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("target leaves during the prepared-state choice");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            target,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("the same physical object returns with a new incarnation");
+        let new_generation = engine.state.zone_change_generation[&target];
+        assert_ne!(new_generation, old_generation);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+
+        engine
+            .submit_resolution_choice(0, &select_branch(0))
+            .expect("the old receipt completes without touching the returned permanent");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            1
+        );
+        assert_eq!(engine.state.players[0].life, 21, "the tail completes once");
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn chosen_counter_add_keeps_the_accepted_kind_through_replacement_pause() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_107,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let laezel = add_battlefield_object(&mut engine, 0, "laezel,_vlaakiths_champion");
+        engine.emit_static_abilities_on_enter(laezel);
+        let doubling_season = add_battlefield_object(&mut engine, 0, "doubling_season");
+        engine.emit_static_abilities_on_enter(doubling_season);
+        let target = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Poison, 1);
+        let item = chosen_counter_add_item(source, target, generation);
+        begin_chosen_counter_add(&mut engine, &item);
+
+        let charge_branch = chosen_counter_add_branch(&engine, CounterKind::Charge);
+        engine
+            .submit_resolution_choice(0, &select_branch(charge_branch))
+            .expect("accept one counter kind and open the shared replacement order");
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("replacement choice");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect
+        );
+        assert_eq!(pending.presentation.candidates.len(), 2);
+        let batch = match engine.state.pending_replacement_event.as_ref().unwrap() {
+            super::super::replacement::PendingReplacementEvent::Counters(batch) => batch,
+            other => panic!("expected the parked counter placement, found {other:?}"),
+        };
+        assert_eq!(batch.events.len(), 1);
+        assert_eq!(
+            batch.events[0].original_counters.get(&CounterKind::Charge),
+            Some(&1)
+        );
+        assert!(!batch.events[0]
+            .original_counters
+            .contains_key(&CounterKind::Poison));
+
+        let target_object = engine.state.objects.get_mut(&target).unwrap();
+        target_object.counters.remove(&CounterKind::Charge);
+        target_object
+            .counter_timestamps
+            .remove(&CounterKind::Charge);
+        let replacement = pending.presentation.candidates[0];
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![replacement],
+                    ..Default::default()
+                },
+            )
+            .expect("finish the saved Charge addition after old Charge counters disappear");
+        assert!(engine.state.objects[&target].counter_count(CounterKind::Charge) >= 1);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Poison),
+            1
+        );
+        assert_eq!(
+            engine.state.players[0].life, 21,
+            "the parked tail resumes once"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn chosen_counter_add_does_not_repeat_target_legality_after_resolution_begins() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_108,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 0, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        let item = chosen_counter_add_item(source, target, generation);
+        let roles = SpellEffectKind::AddOneCounterOfChosenKindToTarget.target_roles();
+        let filter = match &roles[0] {
+            tricerules_card_model::primitives::TargetRole::Filtered(filter) => *filter,
+            other => panic!("unexpected target role: {other:?}"),
+        };
+        let source_identity = TargetSourceIdentity::current(&engine, source);
+        assert!(super::targeting::target_filter_legal_at_resolution(
+            &engine,
+            filter,
+            target,
+            item.controller,
+            source_identity,
+            item.trigger_context,
+        ));
+        engine.state.stack.push(item.clone());
+        let mut events = Vec::new();
+        assert!(
+            matches!(
+                engine.resolve_top_of_stack(&mut events),
+                Ok(ResolutionProgress::Parked)
+            ),
+            "resolution performs the initial legal-target check, then parks for its kind choice"
+        );
+
+        engine.state.players[0]
+            .battlefield
+            .retain(|object| *object != target);
+        engine.state.players[1].battlefield.push(target);
+        let object = engine.state.objects.get_mut(&target).unwrap();
+        object.base_controller = 1;
+        object.controller = 1;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Hexproof),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        assert!(
+            !super::targeting::target_filter_legal_at_resolution(
+                &engine,
+                filter,
+                target,
+                item.controller,
+                source_identity,
+                item.trigger_context,
+            ),
+            "after the prepared-state controller change, hexproof would make a fresh targeting check fail"
+        );
+
+        engine
+            .submit_resolution_choice(0, &select_branch(0))
+            .expect("the begun resolution uses its already-checked target receipt");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            2
+        );
+        assert_eq!(engine.state.players[0].life, 21, "the tail completes once");
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn chosen_counter_add_survives_provider_departure_after_trigger_capture() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_109,
+            &[0, 1, 2],
+            20,
+        )
+        .expect("three-player engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        engine
+            .state
+            .stack
+            .push(chosen_counter_add_item(source, target, generation));
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the triggering permanent leaves after its ability is captured");
+        let mut events = Vec::new();
+        assert!(matches!(
+            engine.resolve_top_of_stack(&mut events),
+            Ok(ResolutionProgress::Parked)
+        ));
+        engine
+            .submit_resolution_choice(0, &select_branch(0))
+            .expect("the captured trigger resolves after its provider leaves");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            2
+        );
+        assert_eq!(engine.state.players[0].life, 21);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn chosen_counter_add_controller_departure_before_resolution_cleans_up_stack_trigger() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_110,
+            &[0, 1, 2],
+            20,
+        )
+        .expect("three-player engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        engine
+            .state
+            .stack
+            .push(chosen_counter_add_item(source, target, generation));
+
+        let departure = engine
+            .concede_batch(0)
+            .expect("the trigger controller concedes");
+        assert!(engine.state.players[0].has_lost);
+        assert!(
+            engine.state.stack.is_empty(),
+            "the unbegun trigger is cleaned up"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            1
+        );
+        assert!(!departure.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+    }
+
+    #[test]
+    fn chosen_counter_add_delegates_begun_resolution_after_controller_departure() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            220_111,
+            &[0, 1, 2],
+            20,
+        )
+        .expect("three-player engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let target = add_battlefield_object(&mut engine, 1, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 1);
+        engine.state.continuous_effects.extend([
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: Some(source),
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: tricerules_card_model::primitives::ControllerReference::Fixed(0),
+                },
+                condition: None,
+                duration: EffectDuration::WhileSourceOnBattlefield,
+                timestamp: 0,
+            },
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Hexproof),
+                condition: None,
+                duration: EffectDuration::Indefinite,
+                timestamp: 0,
+            },
+        ]);
+        let mut reindex_events = Vec::new();
+        engine.reindex_battlefield_control(&mut reindex_events);
+        assert_eq!(engine.state.objects[&target].controller, 0);
+
+        let mut item = chosen_counter_add_item(source, target, generation);
+        item.triggered_ability
+            .as_mut()
+            .expect("triggered ability")
+            .effect[1] = SpellEffectKind::GainLife {
+            amount: Amount::Fixed(1),
+            who: tricerules_card_model::primitives::PlayerRecipient::EachPlayer,
+        };
+        let roles = SpellEffectKind::AddOneCounterOfChosenKindToTarget.target_roles();
+        let filter = match &roles[0] {
+            tricerules_card_model::primitives::TargetRole::Filtered(filter) => *filter,
+            other => panic!("unexpected target role: {other:?}"),
+        };
+        let source_identity = TargetSourceIdentity::current(&engine, source);
+        assert!(
+            super::targeting::target_filter_legal_at_resolution(
+                &engine,
+                filter,
+                target,
+                item.controller,
+                source_identity,
+                item.trigger_context,
+            ),
+            "the current controller can target their hexproof permanent"
+        );
+        engine.state.stack.push(item.clone());
+        let mut events = Vec::new();
+        assert!(
+            matches!(
+                engine.resolve_top_of_stack(&mut events),
+                Ok(ResolutionProgress::Parked)
+            ),
+            "target legality is checked before the chosen-kind pause"
+        );
+
+        let departure = engine
+            .concede_batch(0)
+            .expect("the controller leaves mid-resolution");
+        assert!(engine.state.players[0].has_lost);
+        assert_eq!(engine.state.objects[&target].controller, 1);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation
+        );
+        assert!(
+            !super::targeting::target_filter_legal_at_resolution(
+                &engine,
+                filter,
+                target,
+                item.controller,
+                source_identity,
+                item.trigger_context,
+            ),
+            "the same generation returned to its owner is hexproof from the departed controller"
+        );
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        let delegate_candidates = match &pending.continuation {
+            ResolutionContinuation::ChosenCounterAddition {
+                counter_addition:
+                    crate::state::PendingChosenCounterAddition {
+                        stage:
+                            crate::state::PendingChosenCounterAdditionStage::ChoosingDelegate {
+                                candidates,
+                            },
+                        ..
+                    },
+                ..
+            } => candidates.clone(),
+            other => panic!("expected the delegated choice stage, found {other:?}"),
+        };
+        let delegate_offer = departure.events.iter().find_map(|event| match &event.ev {
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+            _ => None,
+        });
+        assert!(
+            delegate_offer.is_some(),
+            "the live selector chooses the resolution delegate; events={:?}, pending={pending:?}",
+            departure.events
+        );
+        let delegate_offer = delegate_offer.unwrap();
+        assert_eq!(
+            delegate_offer.choice_kind,
+            rv1::ChoiceKind::ResolutionBranch as i32
+        );
+        assert_eq!(delegate_offer.deciding_player_id, pending.deciding_player);
+        assert_eq!(
+            delegate_offer.resolution_branches.len(),
+            delegate_candidates.len()
+        );
+        let selector = pending.deciding_player;
+        let delegate_index = delegate_candidates
+            .iter()
+            .position(|candidate| *candidate == Some(2))
+            .expect("P2 is an offered delegate") as u32;
+        engine
+            .submit_resolution_choice(selector, &select_branch(delegate_index))
+            .expect("P1 selects P2 to make P0's remaining choice");
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.deciding_player, 2);
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::ChosenCounterAddition {
+                counter_addition: crate::state::PendingChosenCounterAddition {
+                    stage: crate::state::PendingChosenCounterAdditionStage::Selecting,
+                    ..
+                },
+                ..
+            }
+        ));
+
+        engine
+            .submit_resolution_choice(2, &select_branch(0))
+            .expect("P2 chooses the kind for the begun resolution");
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            engine.state.players[1].life, 21,
+            "the tail continues for live players"
+        );
+        assert_eq!(
+            engine.state.players[2].life, 21,
+            "the tail continues once for each live player"
+        );
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "the departed controller is not revived"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
     }
 }
 

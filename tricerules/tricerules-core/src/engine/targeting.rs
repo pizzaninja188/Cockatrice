@@ -1451,6 +1451,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Earthbend { .. }
         | SpellEffectKind::ChaosWarp
         | SpellEffectKind::SetBasePowerToughness { .. }
+        | SpellEffectKind::AddOneCounterOfChosenKindToTarget
         | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
         | SpellEffectKind::DestroyAttached { target: _, .. }
         | SpellEffectKind::AttachSource { target: _ }

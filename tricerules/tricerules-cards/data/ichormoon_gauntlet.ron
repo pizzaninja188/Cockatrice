@@ -1,0 +1,42 @@
+// Exact Oracle ID 9fc7aba7-eda2-4134-9c10-31ee35201b72; semantic contract is in the approved v3 design.
+(
+  id: "ichormoon_gauntlet",
+  name: "Ichormoon Gauntlet",
+  face_id: "ichormoon_gauntlet",
+  mana_cost: "{2}{U}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: GrantActivatedAbilityToPermanents(
+      filter: (kind: AnyPermanent, controller: You, permanent_types: [Planeswalker]),
+      // Oracle line 1 combines both grants; mapping it on either child would mislabel that grant.
+      activated_abilities: [
+        (
+          ability_id: "activated_01",
+          presentation: Fallback,
+          costs: [Loyalty(0)],
+          effect: [Proliferate],
+        ),
+        (
+          ability_id: "activated_02",
+          presentation: Fallback,
+          costs: [Loyalty(-12)],
+          effect: [TakeExtraTurns(count: 1)],
+        ),
+      ],
+    ),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(Noncreature))),
+    effect: [AddOneCounterOfChosenKindToTarget],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target permanent",
+      effect_indices: [0],
+    )])),
+  )],
+)

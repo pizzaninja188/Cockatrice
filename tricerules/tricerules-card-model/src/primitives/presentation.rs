@@ -187,6 +187,12 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     who: PlayerRecipient::AffectedPlayer,
                     count: Amount::Fixed(count),
                 } => format!("The affected player draws {count} cards."),
+                SpellEffectKind::TakeExtraTurns { count: 1 } => {
+                    "Take an extra turn after this one.".into()
+                }
+                SpellEffectKind::TakeExtraTurns { count } if *count > 1 => {
+                    format!("Take {count} extra turns after this one.")
+                }
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(amount),
                     who: PlayerRecipient::Controller,
@@ -254,6 +260,7 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     who: PlayerRecipient::Controller,
                     quantity: super::DiscardQuantity::AnyNumber,
                 } => "Discard any number of cards.".into(),
+                SpellEffectKind::Proliferate => "Proliferate.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
                 SpellEffectKind::SearchLibrary { .. } => "Search".into(),
                 SpellEffectKind::ReturnAllToOwnersHand { kind } => {

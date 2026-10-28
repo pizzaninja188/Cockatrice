@@ -2044,6 +2044,10 @@ pub enum SpellEffectKind {
     /// atomic; `RemoveCounters` plus `PutCounters` would incorrectly lose the counter when the
     /// destination cannot receive it.
     MoveOneCounterBetweenTargets,
+    /// CR 122: choose one existing counter kind on one target permanent and propose exactly one
+    /// counter of that kind through ordinary effect-origin placement. Ichormoon Gauntlet's cast
+    /// trigger and Clockspinning's permanent-addition clause share this fixed operation.
+    AddOneCounterOfChosenKindToTarget,
     /// CR 119 + 119.4: drain `amount` life from a target player and give that much life to the
     /// controller ("target player loses N life and you gain N life"). Covered by Blood Artist,
     /// Falkenrath Noble, and drain-life spells like Vampire's Kiss. The target must be a player.
@@ -3022,6 +3026,14 @@ fn counter_move_destination_target_filter() -> &'static TargetFilter {
     &FILTER
 }
 
+fn chosen_counter_add_target_filter() -> &'static TargetFilter {
+    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        ..TargetFilter::default()
+    });
+    &FILTER
+}
+
 pub(super) fn validate_resolution_sacrifice_cost(
     filter: &TargetFilter,
     source_only: bool,
@@ -3707,6 +3719,12 @@ impl SpellEffectKind {
         })
     }
 
+    pub(crate) fn contains_chosen_counter_add(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| {
+            matches!(leaf, Self::AddOneCounterOfChosenKindToTarget)
+        })
+    }
+
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
         match self {
             Self::AttachEquipment {
@@ -3777,6 +3795,9 @@ impl SpellEffectKind {
                 TargetRole::Filtered(counter_move_source_target_filter()),
                 TargetRole::Filtered(counter_move_destination_target_filter()),
             ],
+            SpellEffectKind::AddOneCounterOfChosenKindToTarget => {
+                vec![TargetRole::Filtered(chosen_counter_add_target_filter())]
+            }
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
@@ -4440,6 +4461,10 @@ impl SpellEffectKind {
     pub(crate) fn validate_activated_modal_mode_effect(&self) -> Result<(), String> {
         match self {
             Self::DoubleYourCounters => Ok(()),
+            Self::AddOneCounterOfChosenKindToTarget => Err(
+                "AddOneCounterOfChosenKindToTarget is not admitted in an activated modal mode"
+                    .into(),
+            ),
             _ => self.validate(EffectContext::Ability),
         }
     }
@@ -4589,6 +4614,14 @@ impl SpellEffectKind {
         {
             return Err(
                 "ChoosePermanentsByTypeAndSacrificeRest must be a direct legacy effect-list instruction"
+                    .into(),
+            );
+        }
+        if self.contains_chosen_counter_add()
+            && !matches!(self, Self::AddOneCounterOfChosenKindToTarget)
+        {
+            return Err(
+                "AddOneCounterOfChosenKindToTarget must be a direct legacy effect-list instruction"
                     .into(),
             );
         }

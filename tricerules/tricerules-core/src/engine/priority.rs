@@ -106,18 +106,19 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
-        let begun_type_choice = self.state.pending_resolution.as_ref().and_then(|pending| {
+        let begun_resolving_choice = self.state.pending_resolution.as_ref().and_then(|pending| {
             match &pending.continuation {
-                ResolutionContinuation::TypeChoiceSacrifice { stack, .. } => {
+                ResolutionContinuation::TypeChoiceSacrifice { stack, .. }
+                | ResolutionContinuation::ChosenCounterAddition { stack, .. } => {
                     is_departed(stack).then(|| stack.clone())
                 }
                 _ => None,
             }
         });
-        if let Some(stack) = begun_type_choice {
+        if let Some(stack) = begun_resolving_choice {
             // CR 608.2m: once this effect has started resolving, a controller or source-owner
-            // departure does not cancel its parked type-choice sequence. CR 800.4a still removes
-            // the physical stack object, so mirror the ordinary outer-resolution removal path.
+            // departure does not cancel its parked resolution choice. CR 800.4a still removes the
+            // physical stack object, so mirror the ordinary outer-resolution removal path.
             if !stack.item.is_copy && stack.item.ability_text.is_none() {
                 if let Some(object) = self
                     .state
@@ -1312,6 +1313,7 @@ impl GameEngine {
         self.refresh_authored_branch_departure(events)?;
         self.refresh_program_choose_departure(events)?;
         self.refresh_optional_triggered_ability_departure(events)?;
+        self.refresh_chosen_counter_addition_departure(events)?;
         self.refresh_program_proliferate_departure(events)?;
         self.refresh_counter_placement_departure(events)?;
         self.refresh_battlefield_cohort_move_departure(

@@ -17,6 +17,39 @@ fn take_extra_turns_requires_a_positive_count() {
 }
 
 #[test]
+fn simple_fallbacks_describe_proliferate_and_extra_turn_counts() {
+    let proliferate: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "proliferate", presentation: Fallback,
+            costs: [Loyalty(0)], effect: [Proliferate])"#,
+    )
+    .expect("Proliferate ability parses");
+    assert_eq!(
+        proliferate.fallback_text("Planeswalker"),
+        "+0: Proliferate."
+    );
+
+    let extra_turn: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "extra_turn", presentation: Fallback,
+            costs: [Loyalty(-12)], effect: [TakeExtraTurns(count: 1)])"#,
+    )
+    .expect("single extra-turn ability parses");
+    assert_eq!(
+        extra_turn.fallback_text("Planeswalker"),
+        "-12: Take an extra turn after this one."
+    );
+
+    let two_extra_turns: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "two_extra_turns", presentation: Fallback,
+            costs: [Loyalty(-12)], effect: [TakeExtraTurns(count: 2)])"#,
+    )
+    .expect("multiple extra-turn ability parses");
+    assert_eq!(
+        two_extra_turns.fallback_text("Planeswalker"),
+        "-12: Take 2 extra turns after this one."
+    );
+}
+
+#[test]
 fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
     let definition = |kind: &str, cost: &str, affected: &str, option: &str| {
         format!(
@@ -22246,4 +22279,39 @@ mod tidebinder_program_compiler_tests {
         )
         .is_err());
     }
+}
+#[test]
+fn chosen_counter_add_operation_deserializes_with_one_target_role() {
+    let effect: crate::primitives::SpellEffectKind =
+        ron::from_str("AddOneCounterOfChosenKindToTarget")
+            .expect("Ichormoon and Clockspinning need the fixed add operation");
+
+    let roles = effect.target_roles();
+    assert!(effect.needs_target());
+    assert!(matches!(
+        roles.as_slice(),
+        [crate::primitives::TargetRole::Filtered(filter)]
+            if filter.kind == crate::primitives::TargetKind::AnyPermanent
+    ));
+    assert!(effect
+        .validate(crate::primitives::EffectContext::Spell)
+        .is_ok());
+    assert!(effect
+        .validate(crate::primitives::EffectContext::Ability)
+        .is_ok());
+    assert!(matches!(
+        effect.validate_activated_modal_mode_effect(),
+        Err(reason) if reason.contains("not admitted in an activated modal mode")
+    ));
+
+    let wrapped = crate::primitives::SpellEffectKind::Conditional {
+        condition: crate::primitives::GameCondition::ActivePlayer {
+            players: crate::primitives::RelativePlayerSet::Opponents,
+        },
+        effect: Box::new(effect),
+    };
+    assert!(wrapped
+        .validate(crate::primitives::EffectContext::Ability)
+        .unwrap_err()
+        .contains("direct legacy effect-list instruction"));
 }

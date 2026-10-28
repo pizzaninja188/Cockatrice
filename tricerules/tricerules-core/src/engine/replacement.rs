@@ -2732,6 +2732,116 @@ impl GameEngine {
             })
     }
 
+    /// Recognize one already-chosen counter addition while its ordinary placement replacements
+    /// wait. The proposal itself carries the selected kind and target generation; no old counter
+    /// of that kind is required to remain on the target.
+    pub(super) fn begun_chosen_counter_addition(
+        &self,
+        pending: &PendingResolution,
+        replacement: Option<&PendingReplacementEvent>,
+    ) -> bool {
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion: crate::state::CounterPlacementCompletion::StackEffect { .. },
+        } = &pending.continuation
+        else {
+            return false;
+        };
+        let Some(PendingReplacementEvent::Counters(batch)) = replacement else {
+            return false;
+        };
+        if stack.program.is_some()
+            || pending.presentation.source_object_id != stack.item.id
+            || batch.event_index >= batch.events.len()
+        {
+            return false;
+        }
+        let Some(effect_index) = stack
+            .resume_effect_index
+            .and_then(|resume| resume.checked_sub(1))
+        else {
+            return false;
+        };
+        if !matches!(
+            self.build_resolution_effects(&stack.item)
+                .0
+                .get(effect_index as usize)
+                .map(|entry| &entry.effect),
+            Some(SpellEffectKind::AddOneCounterOfChosenKindToTarget)
+        ) {
+            return false;
+        }
+        let targets = stack
+            .item
+            .targets
+            .iter()
+            .filter(|target| target.group_index == 0)
+            .collect::<Vec<_>>();
+        let [target] = targets.as_slice() else {
+            return false;
+        };
+        let Some(target_generation) = target.zone_change_generation else {
+            return false;
+        };
+        batch.events.len() == 1
+            && batch.events[0].actor == stack.item.controller
+            && batch.events[0].origin == super::continuous::CounterPlacementOrigin::Effect
+            && batch.events[0].original_counters.len() == 1
+            && batch.events[0].original_counters.values().copied().eq([1])
+            && batch.events[0].entry_source.is_none()
+            && batch.events[0].entry_context.is_none()
+            && batch.events[0].counter_move_context.is_none()
+            && batch.events[0].cost_debit_index.is_none()
+            && matches!(
+                &batch.events[0].recipient,
+                CounterPlacementRecipient::Object {
+                    object_id,
+                    zone_change_generation,
+                } if *object_id == target.object_id
+                    && *zone_change_generation == target_generation
+            )
+    }
+
+    fn chosen_counter_addition_batch_is_current(
+        &self,
+        stack: &ParkedStackResolution,
+        events: &[ProposedCounterPlacement],
+    ) -> bool {
+        let targets = stack
+            .item
+            .targets
+            .iter()
+            .filter(|target| target.group_index == 0)
+            .collect::<Vec<_>>();
+        let [target] = targets.as_slice() else {
+            return false;
+        };
+        let Some(expected_generation) = target.zone_change_generation else {
+            return false;
+        };
+        events.len() == 1
+            && matches!(
+                &events[0].recipient,
+                CounterPlacementRecipient::Object {
+                    object_id,
+                    zone_change_generation,
+                } if *object_id == target.object_id
+                    && *zone_change_generation == expected_generation
+            )
+            && self
+                .state
+                .zone_change_generation
+                .get(&target.object_id)
+                .copied()
+                == Some(expected_generation)
+            && self
+                .state
+                .objects
+                .get(&target.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+            && self.can_receive_counters(target.object_id)
+    }
+
     /// Recompute the supported begun counter-order offers after player departure. Their saved
     /// proposals retain accepted replacements while stale recipients are pruned; a changed
     /// recipient controller receives a fresh CR 616.1 order prompt.
@@ -2750,7 +2860,8 @@ impl GameEngine {
         let begun_flat = begun_self_counter
             || self
                 .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
-            || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement));
+            || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement))
+            || self.begun_chosen_counter_addition(&original_pending, Some(&original_replacement));
         let (stack, completion) = match &original_pending.continuation {
             ResolutionContinuation::CounterReplacement {
                 stack: Some(stack),
@@ -2772,6 +2883,19 @@ impl GameEngine {
         let PendingReplacementEvent::Counters(batch) = &original_replacement else {
             return Ok(());
         };
+        if self.begun_chosen_counter_addition(&original_pending, Some(&original_replacement))
+            && !self.chosen_counter_addition_batch_is_current(&stack, &batch.events)
+        {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            let completed = self.complete_parked_stack_with_previous(
+                stack.clone(),
+                stack.previous_result.clone(),
+                Vec::new(),
+            )?;
+            out.extend(completed.events);
+            return Ok(());
+        }
         self.validate_counter_placement_completion_scope(&batch.events, &completion, Some(&stack))?;
         let mut batch = (**batch).clone();
         let old_decider = original_pending.deciding_player;

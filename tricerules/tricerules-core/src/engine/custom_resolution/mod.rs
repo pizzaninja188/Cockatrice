@@ -25,6 +25,7 @@ use crate::state::{PendingTargetedPlayerChoiceStage, SpecialCastCompletion};
 
 mod attacking_tokens;
 mod branches;
+mod chosen_counter_addition;
 mod copy_choices;
 mod counter_move;
 mod explore;
@@ -85,6 +86,64 @@ fn equipment_receipt_source_label(
 }
 
 impl GameEngine {
+    pub(in crate::engine) fn chosen_counter_addition_choice_event(
+        &self,
+    ) -> Option<rv1::RuledEvent> {
+        let pending = self.state.pending_resolution.as_ref()?;
+        let (stack, addition) = match &pending.continuation {
+            ResolutionContinuation::ChosenCounterAddition {
+                stack,
+                counter_addition,
+            } => (stack, counter_addition),
+            _ => return None,
+        };
+        let options = match &addition.stage {
+            crate::state::PendingChosenCounterAdditionStage::Selecting => addition
+                .offered_counter_kinds
+                .iter()
+                .enumerate()
+                .map(|(index, kind)| {
+                    let label = format!("Add one {} counter", kind.label());
+                    rv1::ResolutionBranchOption {
+                        branch_index: index as u32,
+                        label: label.clone(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: true,
+                        search_zones: Vec::new(),
+                        presentation: Some(rv1::PresentationRef {
+                            fallback_text: label,
+                            ..Default::default()
+                        }),
+                    }
+                })
+                .collect(),
+            crate::state::PendingChosenCounterAdditionStage::ChoosingDelegate { candidates } => {
+                super::resolution::resolution_choice_delegate_options(
+                    &self.state,
+                    stack.item.controller,
+                    stack.item.controller,
+                    candidates,
+                )
+            }
+        };
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: pending.presentation.min,
+                    max: pending.presentation.max,
+                    resolution_branches: options,
+                    ..Default::default()
+                },
+            )),
+        })
+    }
+
     pub(in crate::engine) fn optional_triggered_ability_choice_event(
         &self,
     ) -> Option<rv1::RuledEvent> {
@@ -1145,6 +1204,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::ChosenCounterAddition { .. }
+        ) {
+            return self.finish_chosen_counter_addition_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::EntryCost { .. }
         ) {
             return self.finish_entry_cost_choice(pending, answer, decision);
@@ -1645,6 +1710,7 @@ impl GameEngine {
             | ResolutionContinuation::ProgramChoose { .. }
             | ResolutionContinuation::EquipmentReceiptAttach { .. }
             | ResolutionContinuation::CounterMove { .. }
+            | ResolutionContinuation::ChosenCounterAddition { .. }
             | ResolutionContinuation::PublicZoneSearchFixture { .. } => {
                 unreachable!("handled above")
             }

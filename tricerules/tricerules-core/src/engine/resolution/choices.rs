@@ -6,19 +6,112 @@ use crate::engine::presentation::{
 use crate::engine::targeting::{counter_move_target_pair_is_current, TargetSourceIdentity};
 use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
 use crate::state::{
-    ParkedStackResolution, PendingCounterMove, PendingResolution, PendingResolutionBranch,
-    PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
-    ProgramValue, ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup,
+    ParkedStackResolution, PendingChosenCounterAddition, PendingChosenCounterAdditionStage,
+    PendingCounterMove, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
+    PendingResolutionPresentation, PendingTargetedPlayerChoiceStage, ProgramValue,
+    ResolutionContinuation, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup,
     TargetedPlayerControlCohort, TriggerContext, TriggerObjectRef,
 };
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
 use tricerules_card_model::primitives::{
-    Amount, BattlefieldQuantityCharacteristic, CardResultAction, PermanentChoiceConstraint,
-    PlayerRecipient, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
-    ResolutionCost, ResultType, SpellEffectKind, TargetController, TargetFilter, TargetKind,
-    TriggerCondition, TriggeredAbilityDef,
+    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CounterKind,
+    PermanentChoiceConstraint, PlayerRecipient, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionCost, ResultType, SpellEffectKind, TargetController,
+    TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
+
+/// Current positive counter kinds on the exact target incarnation that passed the initial
+/// resolution target check. Deliberately does not repeat targetability or controller checks: CR
+/// 608.2b made those checks when resolution began, before this choice was opened.
+pub(in crate::engine) fn chosen_counter_addition_target_counter_kinds(
+    engine: &GameEngine,
+    target: &StackTarget,
+) -> Option<Vec<CounterKind>> {
+    let expected_generation = target.zone_change_generation?;
+    if target.group_index != 0
+        || engine
+            .state
+            .zone_change_generation
+            .get(&target.object_id)
+            .copied()
+            .unwrap_or(0)
+            != expected_generation
+    {
+        return None;
+    }
+    let object = engine.state.objects.get(&target.object_id)?;
+    if object.zone != Zone::Battlefield {
+        return None;
+    }
+    Some(
+        object
+            .counters
+            .iter()
+            .filter_map(|(&kind, &count)| (count > 0).then_some(kind))
+            .collect(),
+    )
+}
+
+pub(super) fn add_one_counter_of_chosen_kind_to_target(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let targets = cx
+        .target_receipts
+        .iter()
+        .filter(|target| target.group_index == 0)
+        .copied()
+        .collect::<Vec<_>>();
+    let target = match targets.as_slice() {
+        [] => return Ok(EffectOutcome::Continue),
+        [target] => *target,
+        _ => {
+            return Err(EngineError::Illegal(
+                "chosen-counter addition requires one target receipt",
+            ))
+        }
+    };
+    let Some(offered_counter_kinds) =
+        chosen_counter_addition_target_counter_kinds(cx.engine, &target)
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if offered_counter_kinds.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let prompt = "Choose a kind of counter on the target permanent.".to_string();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: cx.controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: Vec::new(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            prompt: prompt.clone(),
+            choice_kind: rv1::ChoiceKind::ResolutionBranch,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::ChosenCounterAddition {
+            stack: cx.parked_stack(),
+            counter_addition: PendingChosenCounterAddition {
+                target,
+                offered_counter_kinds,
+                stage: PendingChosenCounterAdditionStage::Selecting,
+            },
+        },
+    });
+    cx.events.push(
+        cx.engine
+            .chosen_counter_addition_choice_event()
+            .expect("the chosen-counter addition prompt was parked"),
+    );
+    cx.events.push(ev_log(prompt));
+    Ok(EffectOutcome::Suspended)
+}
 
 pub(super) fn move_one_counter_between_targets(
     cx: &mut EffectCx<'_>,

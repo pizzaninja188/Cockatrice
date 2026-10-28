@@ -181,6 +181,9 @@ pub(super) fn execute_effect(
         SpellEffectKind::MoveOneCounterBetweenTargets => {
             choices::move_one_counter_between_targets(cx)?
         }
+        SpellEffectKind::AddOneCounterOfChosenKindToTarget => {
+            choices::add_one_counter_of_chosen_kind_to_target(cx)?
+        }
         SpellEffectKind::DoubleYourCounters => pump_counters::double_your_counters(cx)?,
         effect @ SpellEffectKind::DoubleCounters { .. } => {
             pump_counters::double_counters(cx, effect)?
