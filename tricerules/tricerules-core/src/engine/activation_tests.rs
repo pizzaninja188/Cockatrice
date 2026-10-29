@@ -43,6 +43,22 @@ const AUTHORED_OPPONENT_CHOICE_LAND: &str = r#"(
     )]
 )"#;
 
+const SYNTHETIC_ACTIVATED_REVEAL_RECEIPT_SOURCE: &str = r#"(
+    id: "synthetic_activated_reveal_receipt_source",
+    name: "Synthetic Activated Reveal Receipt Source",
+    face_id: "synthetic_activated_reveal_receipt_source",
+    types: ["Artifact"],
+    activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+        costs: [], effect: [],
+        program: Some((body: (steps: [
+            (id: "reveal_top", bind: ["revealed_card"],
+                kind: Perform(RevealTopCardToHand)),
+            (id: "lose_life", input: "revealed_card",
+                kind: Perform(LoseLife(amount: RevealedCardManaValue, who: EachOpponent)))
+        ], yields: []), target_bindings: []))
+    )],
+)"#;
+
 const PAYMENT_CREATURE: &str = r#"(
     id: "payment_creature", name: "Payment Creature", face_id: "payment_creature",
     types: ["Creature"], power: Some(2), toughness: Some(2),
@@ -276,6 +292,177 @@ fn place_ready(engine: &mut GameEngine, player: PlayerId, name: &str) -> ObjectI
         .unwrap();
     engine.reconcile_activated_ability_slots();
     engine.state.next_object_id - 1
+}
+
+const LOYALTY_X_TEST_WALKER: &str = r#"(
+    id: "loyalty_x_test_walker", name: "Loyalty X Test Walker",
+    face_id: "loyalty_x_test_walker", supertypes: ["Legendary"],
+    types: ["Planeswalker"], loyalty: 6,
+    activated_abilities: [(ability_id: "minus_x", presentation: Fallback,
+        costs: [LoyaltyX], effect: [GainLife(amount: "X", who: Controller)])],
+)"#;
+
+const LOYALTY_X_CARTH_STATIC_FIXTURE: &str = r#"(
+    id: "loyalty_x_carth_static_fixture", name: "Carth Loyalty Cost Fixture",
+    face_id: "loyalty_x_carth_static_fixture", types: ["Artifact"],
+    static_abilities: [(ability_id: "static_01", presentation: Fallback,
+        definition: ControllerPlaneswalkerLoyaltyCostsAdditionalOne)],
+)"#;
+
+const LOYALTY_X_SECOND_STATIC_FIXTURE: &str = r#"(
+    id: "loyalty_x_second_static_fixture", name: "Second Loyalty Cost Fixture",
+    face_id: "loyalty_x_second_static_fixture", types: ["Artifact"],
+    static_abilities: [(ability_id: "static_01", presentation: Fallback,
+        definition: ControllerPlaneswalkerLoyaltyCostsAdditionalOne)],
+)"#;
+
+fn loyalty_x_carth_offer_fixture(seed: u64, prohibit_counter_gain: bool) -> (GameEngine, ObjectId) {
+    let walker = if prohibit_counter_gain {
+        LOYALTY_X_TEST_WALKER.replace(
+            "activated_abilities:",
+            r#"static_abilities: [(ability_id: "prohibit_counters", presentation: Fallback,
+                definition: ProhibitCounters(affected: Self_))], activated_abilities:"#,
+        )
+    } else {
+        LOYALTY_X_TEST_WALKER.to_string()
+    };
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            LOYALTY_X_CARTH_STATIC_FIXTURE,
+            walker.as_str(),
+        ],
+        &[],
+    )
+    .expect("the LoyaltyX and Carth runtime fixture compiles");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        seed,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    place_ready(&mut engine, 10, "Carth Loyalty Cost Fixture");
+    let source = place_ready(&mut engine, 10, "Loyalty X Test Walker");
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .expect("planeswalker")
+        .set_counter(CounterKind::Loyalty, 6);
+    // The fixture uses Carth's exact static cost modifier without its unrelated enter trigger.
+    (engine, source)
+}
+
+fn loyalty_x_prepared_replacement_replay_fixture(
+    seed: u64,
+) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/laezel,_vlaakiths_champion.ron"),
+            include_str!("../../../tricerules-cards/data/vorinclex,_monstrous_raider.ron"),
+            LOYALTY_X_CARTH_STATIC_FIXTURE,
+            LOYALTY_X_SECOND_STATIC_FIXTURE,
+            LOYALTY_X_TEST_WALKER,
+        ],
+        &[],
+    )
+    .expect("prepared LoyaltyX replacement fixture compiles");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        seed,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("two-player prepared replacement engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    // Put the walker in first so the replacement sources do not park its intrinsic entry loyalty.
+    let source = place_ready(&mut engine, 10, "Loyalty X Test Walker");
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .expect("planeswalker")
+        .set_counter(CounterKind::Loyalty, 6);
+    place_ready(&mut engine, 10, "Carth Loyalty Cost Fixture");
+    place_ready(&mut engine, 10, "Second Loyalty Cost Fixture");
+    let laezel = place_ready(&mut engine, 10, "Lae'zel, Vlaakith's Champion");
+    let opponent_vorinclex = place_ready(&mut engine, 20, "Vorinclex, Monstrous Raider");
+    (engine, source, laezel, opponent_vorinclex)
+}
+
+fn loyalty_x_command(engine: &GameEngine, source: ObjectId, x_value: u32) -> rv1::ActivateAbility {
+    rv1::ActivateAbility {
+        source_object_id: source,
+        ability_index: 0,
+        expected_zone_change_generation: engine.payment_object_ref(source).zone_change_generation,
+        x_value,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        ..Default::default()
+    }
+}
+
+fn activate_loyalty_x(
+    engine: &mut GameEngine,
+    source: ObjectId,
+    x_value: u32,
+) -> Result<RuledEventBatch, EngineError> {
+    let command = loyalty_x_command(engine, source, x_value);
+    engine.apply_scenario_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(command)),
+        },
+    )
+}
+
+fn assert_public_loyalty_x_announcement(batch: &RuledEventBatch, x_value: u32) {
+    let expected = format!("X = {x_value}");
+    let pushed = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(rv1::ruled_event::Ev::StackPushed(pushed)) => Some(pushed),
+            _ => None,
+        })
+        .expect("activated LoyaltyX publishes StackPushed");
+    assert!(
+        pushed.ability_annotation.contains(&expected),
+        "stack annotation announces {expected}: {}",
+        pushed.ability_annotation
+    );
+    let log = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(rv1::ruled_event::Ev::Log(log)) => Some(log),
+            _ => None,
+        })
+        .expect("activated LoyaltyX publishes its public ability log");
+    assert!(
+        log.text.contains(&expected),
+        "ability log announces {expected}"
+    );
 }
 
 fn activated_modal_fixture(seed: u64) -> (GameEngine, ObjectId, ObjectId) {
@@ -2132,6 +2319,273 @@ fn authored_battlefield_chosen_opponent_uses_the_staged_target_and_exact_owner()
 }
 
 #[test]
+fn activated_program_reveals_exact_top_card_and_loses_its_captured_pre_move_mana_value() {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/endless_one.ron"),
+            include_str!("../../../tricerules-cards/data/blaze.ron"),
+            SYNTHETIC_ACTIVATED_REVEAL_RECEIPT_SOURCE,
+        ],
+        &[],
+    )
+    .expect("the synthetic reveal receipt program compiles with existing card fixtures");
+    let decks = (0..3)
+        .map(|_| {
+            let mut mainboard = vec!["forest".to_string(); 24];
+            mainboard.extend(vec!["endless_one".to_string(); 8]);
+            mainboard.extend(vec!["blaze".to_string(); 8]);
+            EngineDeck {
+                mainboard,
+                commanders: Vec::new(),
+            }
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        602_302,
+        &[10, 20, 30],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("three-player reveal receipt engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    let source = place_ready(&mut engine, 10, "Synthetic Activated Reveal Receipt Source");
+
+    for (card_id, expected_mana_value) in [("endless_one", 0_i32), ("blaze", 1_i32)] {
+        let controller_index = engine.state.player_idx(10).expect("controller is live");
+        let object_id = engine.state.players[controller_index]
+            .library
+            .iter()
+            .copied()
+            .find(|object_id| engine.state.objects[object_id].card_id == card_id)
+            .expect("eight copies leave a fixture card in the library after the opening hand");
+        let position = engine.state.players[controller_index]
+            .library
+            .iter()
+            .position(|candidate| *candidate == object_id)
+            .expect("selected card remains in the library");
+        engine.state.players[controller_index]
+            .library
+            .remove(position);
+        engine.state.players[controller_index]
+            .library
+            .insert(0, object_id);
+        let pre_move_generation = engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let hand_before = engine.state.players[controller_index].hand.len();
+        let library_before = engine.state.players[controller_index].library.len();
+        let life_before = [engine.state.players[1].life, engine.state.players[2].life];
+        let draws_before =
+            [10, 20, 30].map(|player| engine.state.turn_history.current.player(player).cards_drawn);
+
+        let source_ref = engine.payment_object_ref(source);
+        engine
+            .apply_scenario_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                        rv1::ActivateAbility {
+                            source_object_id: source,
+                            ability_index: 0,
+                            expected_zone_change_generation: source_ref.zone_change_generation,
+                            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("controller activates the captured reveal receipt ability");
+        assert_eq!(engine.state.stack.len(), 1);
+
+        let mut resolution_batch = None;
+        for _ in 0..engine.state.players.len() {
+            let actor = engine.state.priority_player_id();
+            let batch = engine
+                .apply_scenario_command(
+                    actor,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .expect("all players pass to resolve the reveal receipt ability");
+            if engine.state.stack.is_empty() {
+                resolution_batch = Some(batch);
+                break;
+            }
+        }
+        let batch = resolution_batch.expect("all players passed and the ability resolved");
+
+        let reveal_index = batch
+            .events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event.ev.as_ref(),
+                    Some(rv1::ruled_event::Ev::CardsRevealed(reveal))
+                        if reveal.cards.iter().any(|card| card.object_id == object_id)
+                )
+            })
+            .expect("the top library object is publicly revealed before it moves");
+        let reveal = match batch.events[reveal_index].ev.as_ref() {
+            Some(rv1::ruled_event::Ev::CardsRevealed(reveal)) => reveal,
+            _ => unreachable!("the indexed event is CardsRevealed"),
+        };
+        assert_eq!(
+            reveal.source_zone,
+            rv1::ChoiceCandidateSourceZone::Library as i32
+        );
+        assert_eq!(reveal.cards.len(), 1);
+        assert_eq!(reveal.cards[0].object_id, object_id);
+        assert_eq!(reveal.cards[0].card_id, card_id);
+        assert_eq!(reveal.cards[0].zone_change_generation, pre_move_generation);
+
+        let move_index = batch
+            .events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event.ev.as_ref(),
+                    Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                        if moved.object_id == object_id
+                            && moved.destination
+                                == rv1::permanent_moved::Destination::Hand as i32
+                )
+            })
+            .expect("the exact revealed object makes an ordinary move to hand");
+        assert!(
+            reveal_index < move_index,
+            "public reveal precedes hand movement"
+        );
+        assert_eq!(
+            engine.state.objects[&object_id].zone,
+            crate::state::Zone::Hand
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&object_id],
+            pre_move_generation + 1
+        );
+        assert_eq!(
+            engine.state.players[controller_index].hand.len(),
+            hand_before + 1
+        );
+        assert_eq!(
+            engine.state.players[controller_index].library.len(),
+            library_before - 1
+        );
+        assert_eq!(
+            engine.state.players[1].life,
+            life_before[0] - expected_mana_value
+        );
+        assert_eq!(
+            engine.state.players[2].life,
+            life_before[1] - expected_mana_value
+        );
+        for (player, draws) in [10, 20, 30].into_iter().zip(draws_before) {
+            assert_eq!(
+                engine.state.turn_history.current.player(player).cards_drawn,
+                draws,
+                "revealing and moving a card is not drawing it"
+            );
+        }
+    }
+
+    let controller_index = engine
+        .state
+        .player_idx(10)
+        .expect("controller remains live");
+    let library_objects = engine.state.players[controller_index].library.clone();
+    for object_id in library_objects {
+        super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            crate::state::Zone::Hand,
+            None,
+        )
+        .expect("move every remaining card out to exercise a genuinely empty library");
+    }
+    assert!(engine.state.players[controller_index].library.is_empty());
+    let hand_before = engine.state.players[controller_index].hand.len();
+    let library_before = engine.state.players[controller_index].library.len();
+    let life_before = [engine.state.players[1].life, engine.state.players[2].life];
+    let draws_before =
+        [10, 20, 30].map(|player| engine.state.turn_history.current.player(player).cards_drawn);
+    let source_ref = engine.payment_object_ref(source);
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                    rv1::ActivateAbility {
+                        source_object_id: source,
+                        ability_index: 0,
+                        expected_zone_change_generation: source_ref.zone_change_generation,
+                        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("controller activates with an empty library");
+    let mut resolution_batch = None;
+    for _ in 0..engine.state.players.len() {
+        let actor = engine.state.priority_player_id();
+        let batch = engine
+            .apply_scenario_command(
+                actor,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("all players pass to resolve the empty-library receipt ability");
+        if engine.state.stack.is_empty() {
+            resolution_batch = Some(batch);
+            break;
+        }
+    }
+    let batch = resolution_batch.expect("the empty-library ability resolves");
+    assert!(batch.events.iter().all(|event| {
+        !matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::CardsRevealed(_))
+        )
+    }));
+    assert!(batch.events.iter().all(|event| {
+        !matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.destination == rv1::permanent_moved::Destination::Hand as i32
+        )
+    }));
+    assert!(engine.state.players[controller_index].library.is_empty());
+    assert_eq!(
+        engine.state.players[controller_index].library.len(),
+        library_before
+    );
+    assert_eq!(
+        engine.state.players[controller_index].hand.len(),
+        hand_before
+    );
+    assert_eq!(engine.state.players[1].life, life_before[0]);
+    assert_eq!(engine.state.players[2].life, life_before[1]);
+    assert!(!engine.state.players[controller_index].has_lost);
+    for (player, draws) in [10, 20, 30].into_iter().zip(draws_before) {
+        assert_eq!(
+            engine.state.turn_history.current.player(player).cards_drawn,
+            draws,
+            "an empty-library reveal is not a draw attempt"
+        );
+    }
+}
+
+#[test]
 fn arena_staged_departing_chooser_refreshes_explicit_actor_choice() {
     let (mut engine, legacy) = choice_engine_players(&[10, 20, 30, 40]);
     place_ready(&mut engine, 30, "Grizzly Bears");
@@ -3793,6 +4247,251 @@ fn arena_staged_terminal_game_abandons_announcement() {
     assert!(batch.legal_by_player.is_empty());
     assert!(!engine.state.objects[&legacy.source_object_id].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+}
+
+#[test]
+fn loyalty_x_offer_uses_carth_adjusted_interval_and_remains_activatable() {
+    let (mut engine, walker) = loyalty_x_carth_offer_fixture(602_310, false);
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .expect("the fixture has one activated LoyaltyX ability");
+    let offer = super::legal_actions::activated_ability_info(&engine, walker, &effective);
+    let range = offer
+        .loyalty_x_choice
+        .as_ref()
+        .expect("engine publishes the inclusive LoyaltyX range");
+
+    assert_eq!((range.min_x, range.max_x), (0, 7));
+    assert!(offer.activatable);
+
+    let before_invalid = serde_json::to_value(&engine.state).unwrap();
+    activate_loyalty_x(&mut engine, walker, 8).expect_err("X above the offered maximum rejects");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+
+    let batch =
+        activate_loyalty_x(&mut engine, walker, 7).expect("Carth's modified X=7 cost is payable");
+    assert_public_loyalty_x_announcement(&batch, 7);
+    assert!(!engine.state.players[0].battlefield.contains(&walker));
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack.last().unwrap().chosen_x, 7);
+    assert!(engine
+        .state
+        .stack
+        .last()
+        .unwrap()
+        .ability_text
+        .as_deref()
+        .unwrap()
+        .contains("X = 7"));
+}
+
+#[test]
+fn loyalty_x_counter_prevention_keeps_nonzero_range_activatable() {
+    let (mut engine, walker) = loyalty_x_carth_offer_fixture(602_311, true);
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .expect("the fixture has one activated LoyaltyX ability");
+    let offer = super::legal_actions::activated_ability_info(&engine, walker, &effective);
+    let range = offer
+        .loyalty_x_choice
+        .as_ref()
+        .expect("counter prevention retains legal LoyaltyX values");
+
+    assert_eq!((range.min_x, range.max_x), (1, 7));
+    assert!(offer.activatable);
+
+    let before_invalid = serde_json::to_value(&engine.state).unwrap();
+    activate_loyalty_x(&mut engine, walker, 0)
+        .expect_err("X=0's positive modified loyalty cost is prohibited");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        6
+    );
+
+    activate_loyalty_x(&mut engine, walker, 1).expect("zero net loyalty cost is legal");
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        6
+    );
+    assert_eq!(engine.state.stack.last().unwrap().chosen_x, 1);
+    engine.state.stack.clear();
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .unwrap();
+    assert!(!engine.ability_activatable(walker, effective.slot as usize, &effective.definition));
+}
+
+#[test]
+fn loyalty_x_zero_is_payable_with_carth_and_consumes_the_loyalty_use() {
+    let (mut engine, walker) = loyalty_x_carth_offer_fixture(602_312, false);
+    let batch =
+        activate_loyalty_x(&mut engine, walker, 0).expect("Carth changes X=0 into a +1 cost");
+    assert_public_loyalty_x_announcement(&batch, 0);
+
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        7
+    );
+    assert_eq!(engine.state.stack.last().unwrap().chosen_x, 0);
+    engine.state.stack.clear();
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .unwrap();
+    assert!(!engine.ability_activatable(walker, effective.slot as usize, &effective.definition));
+}
+
+#[test]
+fn loyalty_x_prepared_positive_cost_replay_preserves_nonzero_x_and_commits_once() {
+    // Two +1 modifiers keep X=1's final counter placement positive after a replay. This prepared
+    // fixture exercises the existing cost-replacement continuation without claiming normal-session
+    // reachability for two applicable loyalty-cost modifiers.
+    let (mut engine, walker, laezel, opponent_vorinclex) =
+        loyalty_x_prepared_replacement_replay_fixture(602_314);
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .expect("the prepared walker has one LoyaltyX ability");
+    let offer = super::legal_actions::activated_ability_info(&engine, walker, &effective);
+    assert_eq!(
+        offer
+            .loyalty_x_choice
+            .as_ref()
+            .map(|range| (range.min_x, range.max_x)),
+        Some((0, 8))
+    );
+    assert!(offer.activatable);
+
+    let parked = activate_loyalty_x(&mut engine, walker, 1)
+        .expect("X=1 has a positive modified loyalty placement and parks for replacement order");
+    let choice = parked
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref()? {
+            rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)
+                if choice.choice_kind == rv1::ChoiceKind::ReplacementEffect as i32 =>
+            {
+                Some(choice)
+            }
+            _ => None,
+        })
+        .expect("Lae'zel and opponent Vorinclex require a replacement-order choice");
+    assert_eq!(choice.deciding_player_id, 10);
+    assert_eq!(choice.replacement_options.len(), 2);
+    let laezel_application_id =
+        offered_counter_replacement_application_id(choice, laezel, "adds one of each counter kind");
+    let vorinclex_application_id = offered_counter_replacement_application_id(
+        choice,
+        opponent_vorinclex,
+        "halves counters opponents would put, rounded down",
+    );
+    assert_ne!(laezel_application_id, vorinclex_application_id);
+    assert!(engine.state.pending_resolution.is_some());
+    assert!(engine.pending_counter_cost_internal.is_some());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        6,
+        "the cost remains uncommitted while the ordering choice is parked"
+    );
+
+    let completed = engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![vorinclex_application_id],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("the selected counter replacement resumes the original activation");
+    assert_public_loyalty_x_announcement(&completed, 1);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.pending_counter_cost_internal.is_none());
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the replay creates one ability item"
+    );
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(walker));
+    assert_eq!(engine.state.stack[0].chosen_x, 1);
+    assert!(engine.state.stack[0]
+        .ability_text
+        .as_deref()
+        .expect("the replayed stack item retains its public annotation")
+        .contains("X = 1"));
+    assert!(
+        engine
+            .state
+            .turn_history
+            .current
+            .player(10)
+            .activated_planeswalker_loyalty
+    );
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        6,
+        "opponent Vorinclex halves the prepared +1 placement to zero; a reset to X=0 would retain +2"
+    );
+}
+
+#[test]
+fn loyalty_x_offer_uses_signed_domain_at_high_loyalty_and_rejects_overflow() {
+    let (mut engine, walker) = loyalty_x_carth_offer_fixture(602_313, false);
+    engine
+        .state
+        .objects
+        .get_mut(&walker)
+        .unwrap()
+        .set_counter(CounterKind::Loyalty, u32::MAX);
+    let effective = engine
+        .effective_activated_abilities(walker)
+        .into_iter()
+        .next()
+        .unwrap();
+    let offer = super::legal_actions::activated_ability_info(&engine, walker, &effective);
+    let range = offer.loyalty_x_choice.as_ref().unwrap();
+    assert_eq!((range.min_x, range.max_x), (0, i32::MAX as u32));
+
+    let before_invalid = serde_json::to_value(&engine.state).unwrap();
+    activate_loyalty_x(&mut engine, walker, i32::MAX as u32 + 1)
+        .expect_err("X above i32::MAX cannot be truncated or wrapped");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+
+    let mut stale = loyalty_x_command(&engine, walker, 1);
+    stale.expected_zone_change_generation += 1;
+    let before_stale = serde_json::to_value(&engine.state).unwrap();
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(stale)),
+            },
+        )
+        .expect_err("stale source generations reject before payment");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_stale);
+
+    activate_loyalty_x(&mut engine, walker, 0)
+        .expect("the positive cost retains saturation behavior");
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        u32::MAX
+    );
+    assert_eq!(engine.state.stack.last().unwrap().chosen_x, 0);
 }
 
 #[test]

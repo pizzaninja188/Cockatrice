@@ -2174,6 +2174,547 @@ mod tests {
         );
     }
 
+    fn sorin_pass_priority(session: &mut EngineSession, latest: IpcResponse) -> IpcResponse {
+        let (mut player_id, discard_count) = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Sorin session has an engine")
+                .state;
+            let player_id = state.priority_player_id();
+            let discard_count = if state.turn_step == tricerules_core::TurnStep::Cleanup
+                && !state.cleanup_priority_active
+                && state.cleanup_discard_player == Some(player_id)
+            {
+                // Hand size is public; this reads no opponent card identity.
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == player_id)
+                    .expect("cleanup actor is in the game")
+                    .hand
+                    .len()
+                    .saturating_sub(7)
+            } else {
+                0
+            };
+            (player_id, discard_count)
+        };
+        if discard_count > 0 {
+            let legal_actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&player_id)
+                .expect("cleanup actor receives current legal actions");
+            let cleanup_offers = legal_actions
+                .hand_actions
+                .iter()
+                .filter(|offer| {
+                    offer.kind == HandActionKind::HandActionCleanupDiscard as i32
+                        && (player_id != 17 || offer.card_name != "Sorin, Grim Nemesis")
+                })
+                .take(discard_count)
+                .map(|offer| offer.hand_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                cleanup_offers.len(),
+                discard_count,
+                "cleanup offers include enough cards without discarding Sorin"
+            );
+            kaya_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                        hand_card_indices: cleanup_offers,
+                    })),
+                },
+            );
+            player_id = session
+                .engine
+                .as_ref()
+                .expect("Sorin session has an engine")
+                .state
+                .priority_player_id();
+        }
+        kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PassPriority(PassPriority {})),
+            },
+        )
+    }
+
+    #[test]
+    fn sorin_plus_one_normal_session_casts_and_resolves_from_current_offers() {
+        const SORIN_NAME: &str = "Sorin, Grim Nemesis";
+        const SORIN_CARD_ID: &str = "sorin,_grim_nemesis";
+
+        let make_deck = |player_id: i32, sorin_pilot: bool| {
+            let mut mainboard_card_name = if sorin_pilot {
+                vec![SORIN_NAME.to_string(); 4]
+            } else {
+                Vec::new()
+            };
+            if sorin_pilot {
+                mainboard_card_name.extend(vec!["Plains".to_string(); 28]);
+                mainboard_card_name.extend(vec!["Swamp".to_string(); 28]);
+            } else {
+                mainboard_card_name.extend(vec!["Forest".to_string(); 60]);
+            }
+            PlayerDeck {
+                player_id,
+                mainboard_card_name,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            }
+        };
+        let player_decks = vec![make_deck(17, true), make_deck(29, false)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![
+                        SORIN_NAME.into(),
+                        "Plains".into(),
+                        "Swamp".into(),
+                        "Forest".into(),
+                    ],
+                })),
+            })
+            .expect("deck validation leaves the session open");
+        assert!(
+            validation.ok,
+            "complete Sorin decks validate: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_030,
+                    seed: 20_261_030,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the normal game session open");
+        assert!(latest.ok, "normal Sorin GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the eligible starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+        for _ in 0..4 {
+            latest = sorin_pass_priority(&mut session, latest);
+        }
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+        }
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let sorin_from_view = |objects: &[BattlefieldObject]| {
+            objects
+                .iter()
+                .find(|object| object.card_id == SORIN_CARD_ID)
+                .cloned()
+        };
+        let mut sorin_cast = false;
+        for _ in 0..2_048 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active pilot receives current legal actions")
+                    .clone();
+                let mana_sources = kaya_available_mana_abilities(&battlefield);
+                let white_sources = mana_sources
+                    .iter()
+                    .filter(|ability| kaya_output_has_color(&ability.3, 'W'))
+                    .count();
+                let black_sources = mana_sources
+                    .iter()
+                    .filter(|ability| kaya_output_has_color(&ability.3, 'B'))
+                    .count();
+                let preferred_land = if white_sources == 0 {
+                    Some("Plains")
+                } else if black_sources == 0 {
+                    Some("Swamp")
+                } else {
+                    None
+                };
+                let land = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| {
+                        action.kind == HandActionKind::HandActionPlayLand as i32
+                            && preferred_land.is_none_or(|name| action.card_name == name)
+                    })
+                    .cloned()
+                    .or_else(|| {
+                        actions
+                            .hand_actions
+                            .iter()
+                            .find(|action| action.kind == HandActionKind::HandActionPlayLand as i32)
+                            .cloned()
+                    });
+                if let Some(land) = land {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+
+                let sorin_spell = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| {
+                        action.kind == HandActionKind::HandActionCastSpell as i32
+                            && action.card_name == SORIN_NAME
+                    })
+                    .cloned();
+                let mana_sources = kaya_available_mana_abilities(&battlefield);
+                let white_sources = mana_sources
+                    .iter()
+                    .filter(|ability| kaya_output_has_color(&ability.3, 'W'))
+                    .count();
+                let black_sources = mana_sources
+                    .iter()
+                    .filter(|ability| kaya_output_has_color(&ability.3, 'B'))
+                    .count();
+                if let Some(spell) = sorin_spell
+                    .filter(|_| mana_sources.len() >= 6 && white_sources >= 1 && black_sources >= 1)
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                                announcement: Some(
+                                    tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                                        source: Some(CastSource {
+                                            location: Some(
+                                                tricerules_proto::ruled::v1::cast_source::Location::
+                                                    HandIndex(spell.hand_index),
+                                            ),
+                                            expected_zone_change_generation: None,
+                                        }),
+                                        face_index: spell.face_index,
+                                        cast_method: CastMethod::Normal as i32,
+                                        ..Default::default()
+                                    },
+                                ),
+                            })),
+                        },
+                    );
+                    let mut selected_sources = Vec::new();
+                    for color in ['W', 'B'] {
+                        selected_sources.push(
+                            mana_sources
+                                .iter()
+                                .find(|source| {
+                                    kaya_output_has_color(&source.3, color)
+                                        && !selected_sources.iter().any(
+                                            |selected: &(u32, u64, u32, String)| {
+                                                selected.0 == source.0
+                                                    && selected.1 == source.1
+                                                    && selected.2 == source.2
+                                            },
+                                        )
+                                })
+                                .expect("current lands include each required Sorin color")
+                                .clone(),
+                        );
+                    }
+                    for source in &mana_sources {
+                        if selected_sources.len() == 6 {
+                            break;
+                        }
+                        if !selected_sources.iter().any(|selected| {
+                            selected.0 == source.0
+                                && selected.1 == source.1
+                                && selected.2 == source.2
+                        }) {
+                            selected_sources.push(source.clone());
+                        }
+                    }
+                    assert_eq!(selected_sources.len(), 6);
+                    let mut produced = PaymentMana::default();
+                    for (source_object_id, generation, ability_index, output) in selected_sources {
+                        let current_source = kaya_available_mana_abilities(&battlefield)
+                            .into_iter()
+                            .find(|source| {
+                                source.0 == source_object_id
+                                    && source.1 == generation
+                                    && source.2 == ability_index
+                            })
+                            .expect("current battlefield offer retains this untapped mana source");
+                        assert_eq!(current_source.3, output);
+                        if kaya_output_has_color(&output, 'W') {
+                            produced.w += 1;
+                        } else if kaya_output_has_color(&output, 'B') {
+                            produced.b += 1;
+                        } else {
+                            panic!("Sorin test deck offered an unexpected mana color: {output}");
+                        }
+                        latest = kaya_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                    source_object_id,
+                                    ability_index,
+                                    source_zone: AbilitySourceZone::Battlefield as i32,
+                                    expected_zone_change_generation: generation,
+                                    ..Default::default()
+                                })),
+                            },
+                        );
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+
+                    let pending = kaya_batch(&latest)
+                        .legal_by_player
+                        .get(&17)
+                        .and_then(|actions| actions.pending_spell_cast.as_ref())
+                        .expect("current Sorin payment offer survives mana activation");
+                    let payment = pending
+                        .payment_preview
+                        .as_ref()
+                        .expect("pending Sorin cast publishes its payment preview");
+                    let transaction_id = pending.transaction_id;
+                    let revision = payment.revision;
+                    let payment_query = session
+                        .process(&IpcEnvelope {
+                            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                                player_id: 17,
+                                preview: Some(PreviewPayment {
+                                    transaction_id,
+                                    revision,
+                                    commit_spell_cast: Some(CommitSpellCast {
+                                        transaction_id,
+                                        payment: Some(PaymentSelection {
+                                            expected_state_revision: revision,
+                                            mana: Some(produced),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                            })),
+                        })
+                        .expect("Sorin payment query keeps the session open");
+                    assert!(
+                        payment_query.ok,
+                        "Sorin payment preview: {}",
+                        payment_query.error
+                    );
+                    let preview = payment_query
+                        .batch
+                        .and_then(|batch| batch.payment_preview)
+                        .expect("PaymentQuery returns a current Sorin payment preview");
+                    assert!(
+                        preview.valid && preview.complete,
+                        "Sorin payment: {preview:?}"
+                    );
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                                transaction_id,
+                                payment: preview.selection,
+                                restricted_mana: preview.restricted_mana,
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    for _ in 0..8 {
+                        if sorin_from_view(&battlefield).is_some() {
+                            break;
+                        }
+                        latest = sorin_pass_priority(&mut session, latest);
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert!(
+                        sorin_from_view(&battlefield).is_some(),
+                        "Sorin resolves through ordinary priority passes"
+                    );
+                    sorin_cast = true;
+                    break;
+                }
+            }
+
+            latest = sorin_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(sorin_cast, "ordinary offers eventually cast Sorin");
+
+        let sorin =
+            sorin_from_view(&battlefield).expect("current battlefield view publishes Sorin");
+        let plus_one = sorin
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == "activated_01"
+                    })
+                })
+            })
+            .expect("current Sorin view identifies +1 by stable ability ID");
+        assert!(plus_one.activatable, "Sorin's current +1 offer is legal");
+        let plus_one_index = plus_one.ability_index;
+        let source_object_id = sorin.object_id;
+        let source_generation = sorin.zone_change_generation;
+        let (controller_life_before, opponent_life_before, cards_drawn_before) = {
+            let engine = session.engine.as_ref().unwrap();
+            (
+                engine.state.players[engine.state.player_idx(17).unwrap()].life,
+                engine.state.players[engine.state.player_idx(29).unwrap()].life,
+                engine.state.turn_history.current.player(0).cards_drawn,
+            )
+        };
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id,
+                    ability_index: plus_one_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: source_generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        assert_eq!(
+            sorin_from_view(&battlefield).unwrap().loyalty,
+            7,
+            "the ordinary activation offer applies Sorin's +1 cost"
+        );
+
+        let mut revealed = None;
+        for _ in 0..4 {
+            latest = sorin_pass_priority(&mut session, latest);
+            for event in &kaya_batch(&latest).events {
+                if let Some(Ev::CardsRevealed(cards)) = event.ev.as_ref() {
+                    assert_eq!(cards.cards.len(), 1);
+                    revealed = cards.cards.first().map(|card| {
+                        (
+                            card.object_id,
+                            card.card_id.clone(),
+                            cards.zone_owner_player_id,
+                        )
+                    });
+                    break;
+                }
+            }
+            if revealed.is_some() {
+                break;
+            }
+        }
+        let (revealed_object_id, revealed_card_id, library_owner) =
+            revealed.expect("the public reveal event supplies the expected card identity");
+        assert_eq!(library_owner, 17);
+        let revealed_definition = tricerules_cards::registry::global()
+            .get(&revealed_card_id)
+            .expect("the public reveal identifies a registered card");
+        let expected_mana_value = revealed_definition.primary_face().mana_cost.mana_value();
+        {
+            let engine = session.engine.as_ref().unwrap();
+            assert_eq!(
+                engine.state.players[engine.state.player_idx(17).unwrap()].life,
+                controller_life_before,
+                "Sorin's +1 does not change its controller's life"
+            );
+            assert_eq!(
+                engine.state.players[engine.state.player_idx(29).unwrap()].life,
+                opponent_life_before - expected_mana_value as i32,
+                "the opponent loses the publicly revealed card's mana value"
+            );
+            assert_eq!(
+                engine.state.turn_history.current.player(0).cards_drawn,
+                cards_drawn_before,
+                "putting the revealed card into hand is not a draw"
+            );
+        }
+        let final_view = kaya_batch(&latest)
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event.ev.as_ref() {
+                Some(Ev::ZoneView(view)) => Some(view),
+                _ => None,
+            })
+            .expect("the resolved +1 publishes a final zone view");
+        let controller_view = final_view
+            .per_player
+            .iter()
+            .find(|view| view.player_id == 17)
+            .expect("the controller receives its private hand view");
+        assert!(controller_view
+            .hand_cards
+            .iter()
+            .any(|card| card.object_id == revealed_object_id));
+    }
+
     #[test]
     fn kaya_zero_legal_session_casts_from_offers_and_reaches_the_optional_scry_leaf() {
         let player_decks = vec![kaya_player_deck(17, true), kaya_player_deck(29, false)];

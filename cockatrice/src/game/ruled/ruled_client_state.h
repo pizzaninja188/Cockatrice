@@ -56,6 +56,22 @@ struct RuledXCounterManaChoice
     QString secondColor;
 };
 
+struct RuledLoyaltyXChoice
+{
+    static constexpr quint32 MaximumSupportedX = 0x7fffffffu;
+
+    quint32 minX = 0;
+    quint32 maxX = 0;
+
+    [[nodiscard]] bool isValid() const { return minX <= maxX && maxX <= MaximumSupportedX; }
+
+    [[nodiscard]] bool operator==(const RuledLoyaltyXChoice &other) const
+    {
+        return minX == other.minX && maxX == other.maxX;
+    }
+    [[nodiscard]] bool operator!=(const RuledLoyaltyXChoice &other) const { return !(*this == other); }
+};
+
 struct RuledAbilityEntry
 {
     QString text;
@@ -74,6 +90,14 @@ struct RuledAbilityEntry
     bool manaAbility = false;
     /// Presentation-only proof from the engine fallback and a closed complete-cost grammar.
     bool hasCompleteCostPrefix = false;
+    /// Engine-authored inclusive range for an activated LoyaltyX cost.
+    std::optional<RuledLoyaltyXChoice> loyaltyXChoice;
+
+    [[nodiscard]] bool hasConflictingLoyaltyXCost() const
+    {
+        return loyaltyXChoice &&
+               (xCounterManaChoice || manaCost.contains(QLatin1Char('X'), Qt::CaseInsensitive));
+    }
 
     [[nodiscard]] QString menuLabel() const
     {
@@ -1499,8 +1523,12 @@ public:
     [[nodiscard]] bool abilityActivatable(quint32 oid, int abilityIndex) const
     {
         const auto abilities = activatedAbilitiesForOid(oid);
-        const bool publicGate = abilityIndex < 0 || abilityIndex >= abilities.size() ||
-                                (abilities.at(abilityIndex) && abilities.at(abilityIndex)->activatable);
+        const bool hasIndex = abilityIndex >= 0 && abilityIndex < abilities.size();
+        const auto ability = hasIndex ? abilities.at(abilityIndex) : std::optional<RuledAbilityEntry>{};
+        const bool invalidXMetadata = ability &&
+                                      ((ability->loyaltyXChoice && !ability->loyaltyXChoice->isValid()) ||
+                                       ability->hasConflictingLoyaltyXCost());
+        const bool publicGate = !hasIndex || (ability && ability->activatable && !invalidXMetadata);
         const auto it = abilityCostData.constFind(abilityTargetKey(oid, abilityIndex));
         return publicGate && (it == abilityCostData.constEnd() || it->nonManaCostsPayable);
     }

@@ -1,0 +1,60 @@
+// Exact Oracle identity and abilities verified against Oracle 0a01dd05-e289-489f-b3ad-88e15e157bd0
+// and the Shadows over Innistrad release notes. Those notes specify that X in a library card's
+// mana cost is 0 for the +1 and document the separate Two-Headed Giant team-life ruling.
+// CR 107.3a, 202.3e, 115.1, 119.3, 606.3–606.6, 608.2b, and 704.5i checked against the pinned
+// Comprehensive Rules effective 2026-09-25. The engine's teamless FFA scope defers Two-Headed Giant.
+(
+    id: "sorin,_grim_nemesis",
+    name: "Sorin, Grim Nemesis",
+    face_id: "sorin_grim_nemesis",
+    mana_cost: "{4}{W}{B}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Sorin"],
+    loyalty: 6,
+    activated_abilities: [
+        (
+            ability_id: "activated_01",
+            presentation: OracleLines([1]),
+            costs: [Loyalty(1)],
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "reveal_top", bind: ["revealed_card"], kind: Perform(RevealTopCardToHand)),
+                (id: "opponents_lose_revealed_value", input: "revealed_card", kind: Perform(LoseLife(
+                    amount: RevealedCardManaValue,
+                    who: EachOpponent,
+                ))),
+            ]))),
+        ),
+        (
+            ability_id: "activated_02",
+            presentation: OracleLines([2]),
+            costs: [LoyaltyX],
+            effect: [
+                DamageTarget(
+                    amount: "X",
+                    target: (kind: AnyPermanent, permanent_types: [Creature, Planeswalker]),
+                ),
+                GainLife(amount: "X", who: Controller),
+            ],
+            targeting: Some((groups: [(
+                min: 1,
+                max: 1,
+                prompt: "Choose target creature or planeswalker",
+                effect_indices: [0],
+            )])),
+        ),
+        (
+            ability_id: "activated_03",
+            presentation: OracleLines([3]),
+            costs: [Loyalty(-9)],
+            effect: [],
+            program: Some((body: (steps: [
+                (id: "create_vampire_knights", kind: Perform(CreateTokens(
+                    token: "vampire_knight_b_1_1_lifelink",
+                    count: Count(PlayerLifeAggregate(players: All, aggregate: Maximum)),
+                    who: Controller,
+                ))),
+            ]))),
+        ),
+    ],
+)

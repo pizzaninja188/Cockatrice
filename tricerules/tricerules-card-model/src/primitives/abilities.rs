@@ -332,7 +332,7 @@ impl ActivatedAbilityDef {
     pub fn is_loyalty_ability(&self) -> bool {
         self.costs
             .iter()
-            .any(|cost| matches!(cost, AbilityCost::Loyalty(_)))
+            .any(|cost| matches!(cost, AbilityCost::Loyalty(_) | AbilityCost::LoyaltyX))
     }
 
     /// Equip carries the same timing instruction intrinsically (CR 702.6a), so callers use this
@@ -532,6 +532,26 @@ impl ActivatedAbilityDef {
             .costs
             .iter()
             .any(|cost| matches!(cost, AbilityCost::RemoveXStorageCountersFromSource));
+        let loyalty_cost_count = self
+            .costs
+            .iter()
+            .filter(|cost| matches!(cost, AbilityCost::Loyalty(_) | AbilityCost::LoyaltyX))
+            .count();
+        if loyalty_cost_count > 1 {
+            return Err("activated ability may have only one loyalty cost".into());
+        }
+        let has_mana_x_cost = self.costs.iter().any(|cost| match cost {
+            AbilityCost::Mana(mana) | AbilityCost::Waterbend(mana) => mana.has_x(),
+            _ => false,
+        });
+        if self.costs.contains(&AbilityCost::LoyaltyX)
+            && (has_mana_x_cost || has_storage_counter_split_mana || has_x_storage_counter_cost)
+        {
+            return Err(
+                "LoyaltyX cannot share the activated-ability X choice with mana or storage-counter X"
+                    .into(),
+            );
+        }
         if (has_storage_counter_split_mana || has_x_storage_counter_cost)
             && self.storage_counter_split_mana().is_none()
         {
@@ -546,15 +566,6 @@ impl ActivatedAbilityDef {
             .any(SpellEffectKind::requires_triggering_spell_context)
         {
             return Err("activated abilities cannot reference triggering-spell context".into());
-        }
-        if self
-            .costs
-            .iter()
-            .filter(|cost| matches!(cost, AbilityCost::Loyalty(_)))
-            .count()
-            > 1
-        {
-            return Err("activated ability may have only one loyalty cost".into());
         }
         if self.is_loyalty_ability() && self.source_zone != AbilitySourceZone::Battlefield {
             return Err("loyalty abilities require a battlefield source".into());
@@ -1875,6 +1886,31 @@ impl TriggeredAbilityDef {
         self.validate_trigger_limit()?;
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        if self
+            .effect
+            .iter()
+            .any(contains_activated_reveal_receipt_effect)
+            || self
+                .program
+                .as_ref()
+                .is_some_and(program_contains_activated_reveal_receipt_effect)
+            || self.modal.as_ref().is_some_and(|modal| {
+                modal.modes.iter().any(|mode| {
+                    mode.effects
+                        .iter()
+                        .any(contains_activated_reveal_receipt_effect)
+                        || mode
+                            .program
+                            .as_ref()
+                            .is_some_and(program_contains_activated_reveal_receipt_effect)
+                })
+            })
+        {
+            return Err(
+                "RevealTopCardToHand and RevealedCardManaValue require an activated ability program"
+                    .into(),
+            );
+        }
         let resolution_owners = usize::from(!self.effect.is_empty())
             + usize::from(self.modal.is_some())
             + usize::from(self.program.is_some());
@@ -2171,6 +2207,46 @@ fn program_requires_attack_trigger(program: &crate::CardProgram) -> bool {
             })
     }
     block_requires_attack_trigger(&program.body)
+}
+
+fn contains_activated_reveal_receipt_effect(effect: &SpellEffectKind) -> bool {
+    matches!(
+        effect,
+        SpellEffectKind::RevealTopCardToHand
+            | SpellEffectKind::LoseLife {
+                amount: super::LifeAmount::RevealedCardManaValue,
+                ..
+            }
+    )
+}
+
+fn program_contains_activated_reveal_receipt_effect(program: &crate::CardProgram) -> bool {
+    fn block_contains(block: &crate::primitives::AuthoredBlock) -> bool {
+        block
+            .steps
+            .iter()
+            .any(|instruction| match &instruction.kind {
+                crate::primitives::InstructionKind::Perform(effect) => {
+                    contains_activated_reveal_receipt_effect(effect)
+                }
+                crate::primitives::InstructionKind::If { yes, no, .. }
+                | crate::primitives::InstructionKind::IfResult { yes, no, .. } => {
+                    block_contains(yes) || block_contains(no)
+                }
+                crate::primitives::InstructionKind::Choose {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    block_contains(otherwise)
+                        || branches.iter().any(|branch| block_contains(&branch.body))
+                }
+                crate::primitives::InstructionKind::DrawCountChoice { .. }
+                | crate::primitives::InstructionKind::ImportCastPayment => false,
+            })
+    }
+
+    block_contains(&program.body)
 }
 
 /// A triggered ability created by an action taken during resolution (CR 603.12). It has no
@@ -3218,5 +3294,62 @@ mod combat_damage_trigger_cardinality_tests {
             .validate_shape()
             .unwrap_err()
             .contains("trigger-object effect"));
+    }
+}
+
+#[cfg(test)]
+mod triggered_program_receipt_context_tests {
+    use super::*;
+    use crate::primitives::{
+        AuthoredBlock, Instruction, InstructionKind, LifeAmount, PlayerRecipient,
+    };
+
+    fn triggered_program(effect: SpellEffectKind) -> TriggeredAbilityDef {
+        TriggeredAbilityDef {
+            ability_id: AbilityId::new("triggered_receipt_probe").expect("valid ability ID"),
+            presentation: AbilityPresentation::Fallback,
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: Vec::new(),
+            program: Some(crate::CardProgram {
+                body: AuthoredBlock {
+                    steps: vec![Instruction {
+                        id: "receipt_operation".into(),
+                        bind: Vec::new(),
+                        input: None,
+                        kind: InstructionKind::Perform(Box::new(effect)),
+                    }],
+                    yields: Vec::new(),
+                },
+                target_bindings: Vec::new(),
+                target_aliases: Vec::new(),
+            }),
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        }
+    }
+
+    #[test]
+    fn triggered_program_cannot_use_reveal_receipt_operations() {
+        let effects = [
+            SpellEffectKind::RevealTopCardToHand,
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::RevealedCardManaValue,
+                who: PlayerRecipient::EachOpponent,
+            },
+        ];
+
+        for effect in effects {
+            assert!(
+                triggered_program(effect)
+                    .validate_shape()
+                    .unwrap_err()
+                    .contains("activated ability program"),
+                "triggered programs cannot produce or consume this activated-program receipt"
+            );
+        }
     }
 }

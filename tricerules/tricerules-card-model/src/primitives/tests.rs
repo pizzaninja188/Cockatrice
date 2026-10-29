@@ -50,6 +50,46 @@ fn simple_fallbacks_describe_proliferate_and_extra_turn_counts() {
 }
 
 #[test]
+fn loyalty_x_cost_is_a_dynamic_loyalty_ability() {
+    let ability: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "loyalty_x", presentation: Fallback,
+            costs: [LoyaltyX], effect: [Proliferate])"#,
+    )
+    .expect("LoyaltyX ability parses");
+
+    assert!(ability.is_loyalty_ability());
+    assert!(ability.requires_sorcery_speed());
+    assert_eq!(
+        ability.fallback_text("Planeswalker"),
+        "Loyalty X: Proliferate."
+    );
+    ability
+        .validate_shape()
+        .expect("LoyaltyX is an admitted battlefield loyalty-cost shape");
+}
+
+#[test]
+fn loyalty_x_cost_rejects_other_activated_ability_x_modes() {
+    let ability: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "loyalty_x", presentation: Fallback,
+            costs: [LoyaltyX], effect: [Proliferate])"#,
+    )
+    .expect("LoyaltyX ability parses");
+
+    for other_x_cost in [
+        super::AbilityCost::Mana(crate::ManaCost::parse("{X}").unwrap()),
+        super::AbilityCost::RemoveXStorageCountersFromSource,
+    ] {
+        let mut ambiguous = ability.clone();
+        ambiguous.costs.push(other_x_cost);
+        let error = ambiguous
+            .validate_shape()
+            .expect_err("one x_value cannot pay two activated-ability X modes");
+        assert!(error.contains("LoyaltyX"), "{error}");
+    }
+}
+
+#[test]
 fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
     let definition = |kind: &str, cost: &str, affected: &str, option: &str| {
         format!(

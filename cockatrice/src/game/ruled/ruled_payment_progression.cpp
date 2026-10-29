@@ -2507,6 +2507,14 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
     // This comes directly from AbilityCost in the tricerules registry — no text parsing.
     const auto selectedAbility = handler->activatedAbilityForOid(oid, abilityIndex);
+    const auto loyaltyXChoice = selectedAbility ? selectedAbility->loyaltyXChoice
+                                                : std::optional<RuledLoyaltyXChoice>{};
+    if (loyaltyXChoice && (!loyaltyXChoice->isValid() ||
+                           (selectedAbility && selectedAbility->hasConflictingLoyaltyXCost()) ||
+                           !handler->abilityActivatable(oid, abilityIndex))) {
+        handler->emitLocalLog(actions->tr("This ability's current Loyalty X offer is invalid. Choose another ability."));
+        return true;
+    }
     const QString manaCostStr = selectedAbility ? selectedAbility->manaCost : QString{};
     const QMap<QChar, int> manaCost = RuledPendingCast::parseSimpleManaCost(manaCostStr);
     // CR 107.4d–f: flexible pips ({G/U}, {2/W}, {B/P}) in the ability cost are front-loaded via
@@ -2527,6 +2535,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.expectedZoneChangeGeneration = handler->abilitySourceGeneration(oid);
     actions->pendingActivatedAbility.abilityIndex = abilityIndex;
     actions->pendingActivatedAbility.manaOptionIndex = selectedOption.manaOptionIndex;
+    actions->pendingActivatedAbility.loyaltyXChoice = loyaltyXChoice;
     actions->pendingActivatedAbility.abilityText = chosen->text();
     actions->pendingActivatedAbility.cardName = card->getName();
     actions->pendingActivatedAbility.selectedMode = selectedMode;
@@ -2555,7 +2564,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     const int xPips =
         ruledActivatedManaXPipCount(manaCostStr, selectedAbility && selectedAbility->xCounterManaChoice.has_value());
-    if (xPips > 0) {
+    if (xPips > 0 && !loyaltyXChoice) {
         const auto xTargetGroup = std::find_if(activationTargets.groups.cbegin(), activationTargets.groups.cend(),
                                                [](const auto &group) { return group.hasXTargetChoices; });
         std::optional<quint32> chosenX;
@@ -2618,6 +2627,40 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         }
         actions->pendingActivatedAbility.xValue = selection->xValue;
         actions->pendingActivatedAbility.manaSplitFirstColorCount = selection->firstColorCount;
+    }
+
+    if (loyaltyXChoice) {
+        const auto &choice = *loyaltyXChoice;
+        if (!ruledPendingLoyaltyXOfferStillCurrent(*handler, actions->pendingActivatedAbility)) {
+            handler->emitLocalLog(
+                actions->tr("This ability's Loyalty X offer changed before activation. Choose it again."));
+            cancelPendingActivatedAbility();
+            return true;
+        }
+        const bool selected = ruledApplyLoyaltyXChoice(
+            actions->pendingActivatedAbility, choice, [&](quint32 minX, quint32 maxX) -> std::optional<quint32> {
+                bool accepted = false;
+                const int value = QInputDialog::getInt(
+                    actions->player->getGame()->getTab(), PlayerActions::tr("Choose Loyalty X"),
+                    PlayerActions::tr("Value of X for %1 (%2–%3):")
+                        .arg(actions->pendingActivatedAbility.cardName)
+                        .arg(minX)
+                        .arg(maxX),
+                    static_cast<int>(minX), static_cast<int>(minX), static_cast<int>(maxX), 1, &accepted);
+                return accepted ? std::optional<quint32>(static_cast<quint32>(value)) : std::nullopt;
+            });
+        if (!selected || (xPips > 0 &&
+                          !ruledApplyActivatedXChoice(actions->pendingActivatedAbility, xPips,
+                                                      actions->pendingActivatedAbility.xValue))) {
+            cancelPendingActivatedAbility();
+            return true;
+        }
+        if (!ruledPendingLoyaltyXOfferStillCurrent(*handler, actions->pendingActivatedAbility)) {
+            handler->emitLocalLog(
+                actions->tr("This ability's Loyalty X offer changed while you were choosing. Choose it again."));
+            cancelPendingActivatedAbility();
+            return true;
+        }
     }
 
     if (needsTarget) {

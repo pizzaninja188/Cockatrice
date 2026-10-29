@@ -2011,6 +2011,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Proliferate
         | SpellEffectKind::DoubleYourCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
+        | SpellEffectKind::RevealTopCardToHand
         | SpellEffectKind::RevealCohort
         | SpellEffectKind::MoveCohortPartition { .. }
         | SpellEffectKind::ShuffleLibrary { .. }

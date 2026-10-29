@@ -401,6 +401,8 @@ pub enum ResultType {
     },
     FoundLibraryCohort,
     RevealedLibraryCohort,
+    /// Empty library or the exact revealed library object and captured mana value.
+    RevealedCardReceipt,
     Count(CountResultKind),
     CardPartition,
     /// Exact replacement-expanded TriggerObject token cohort from one admitted copy effect.
@@ -2308,6 +2310,12 @@ impl Compiler<'_> {
                         input,
                         &self.slots,
                     )?;
+                    validate_program_revealed_card_mana_value_input(
+                        effect.as_ref(),
+                        input,
+                        &steps,
+                        &self.slots,
+                    )?;
                     validate_return_to_owners_hand_input(effect.as_ref(), input, &self.slots)?;
                     validate_tap_chosen_permanents_input(
                         effect.as_ref(),
@@ -3801,6 +3809,44 @@ fn same_block_direct_perform_producer(
     })
 }
 
+fn validate_program_revealed_card_mana_value_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    steps: &[CompiledInstruction],
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !matches!(
+        effect,
+        EffectOp::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            who: PlayerRecipient::EachOpponent,
+        }
+    ) {
+        return Ok(());
+    }
+    let invalid = || {
+        "LoseLife(RevealedCardManaValue) must immediately follow RevealTopCardToHand and consume its receipt".to_string()
+    };
+    let input = input.ok_or_else(invalid)?;
+    let Some(producer) = steps.last() else {
+        return Err(invalid());
+    };
+    if producer.outputs.as_slice() != [input]
+        || !matches!(
+            &producer.kind,
+            CompiledInstructionKind::Perform(producer_effect)
+                if matches!(producer_effect.as_ref(), EffectOp::RevealTopCardToHand)
+        )
+        || !matches!(
+            slots.get(input.0 as usize).map(|slot| &slot.result_type),
+            Some(ResultType::RevealedCardReceipt)
+        )
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 fn validate_program_card_result_characteristic_sum_input(
     effect: &EffectOp,
     input: Option<ResultSlotId>,
@@ -4050,6 +4096,10 @@ fn compile_input(
             source: ChooseCardSource::CardResultCohort { .. },
             ..
         } => Some("CardResultCohort"),
+        EffectOp::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            who: PlayerRecipient::EachOpponent,
+        } => Some("RevealedCardReceipt"),
         effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
             Some("CardResultCohort")
         }
@@ -4187,6 +4237,10 @@ fn compile_input(
                 EffectOp::ChooseCohortPartition { .. } => {
                     matches!(actual.result_type, ResultType::RevealedLibraryCohort)
                 }
+                EffectOp::LoseLife {
+                    amount: LifeAmount::RevealedCardManaValue,
+                    who: PlayerRecipient::EachOpponent,
+                } => matches!(actual.result_type, ResultType::RevealedCardReceipt),
                 EffectOp::MoveCohortPartition { .. } => {
                     matches!(actual.result_type, ResultType::CardPartition)
                 }
@@ -4628,6 +4682,9 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
         (ResultType::RevealedLibraryCohort, ResultType::RevealedLibraryCohort) => {
             ResultType::RevealedLibraryCohort
         }
+        (ResultType::RevealedCardReceipt, ResultType::RevealedCardReceipt) => {
+            ResultType::RevealedCardReceipt
+        }
         (ResultType::Count(a), ResultType::Count(b)) if a == b => ResultType::Count(*a),
         (ResultType::CardPartition, ResultType::CardPartition) => ResultType::CardPartition,
         (ResultType::TokenCopyBatch, ResultType::TokenCopyBatch) => ResultType::TokenCopyBatch,
@@ -4688,6 +4745,13 @@ fn validate_and_result_types(
         SpellEffectKind::CounterTargetAbility => Err(
             "CounterTargetAbility in a resolution program requires a spell or ability owner"
                 .into(),
+        ),
+        SpellEffectKind::RevealTopCardToHand if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(vec![ResultType::RevealedCardReceipt])
+        }
+        SpellEffectKind::RevealTopCardToHand => Err(
+            "RevealTopCardToHand in a resolution program requires an activated ability".into(),
         ),
         SpellEffectKind::RevealUntilArtifact if context == EffectContext::Ability => {
             effect.validate(context)?;
@@ -5008,6 +5072,20 @@ fn validate_and_result_types(
             validate_fixed_program_amount("GainLife amount", amount)?;
             Ok(Vec::new())
         }
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            who: PlayerRecipient::EachOpponent,
+        } if context == EffectContext::Ability => {
+            effect.validate(context)?;
+            Ok(Vec::new())
+        }
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            ..
+        } => Err(
+            "LoseLife(RevealedCardManaValue) requires an activated ability resolution program"
+                .into(),
+        ),
         SpellEffectKind::LoseLife { amount, who }
             if matches!(amount, LifeAmount::Fixed(_))
                 && (*who == PlayerRecipient::EachOpponent
@@ -6549,12 +6627,13 @@ fn validate_program_create_tokens_amount(
     validate_program_amount(amount)?;
     match amount {
         Amount::Fixed(_) => Ok(()),
+        Amount::Count(CountExpression::PlayerLifeAggregate { .. }) => Ok(()),
         Amount::Count(super::CountExpression::GraveyardCards {
             owners: RelativePlayerSet::Controller,
             filter: Some(_),
         }) if recipient == &PlayerRecipient::Controller => Ok(()),
         _ => Err(
-            "CreateTokens count supports only a fixed literal or an explicitly filtered Controller GraveyardCards count for Controller token creation in spell_program".into(),
+            "CreateTokens count supports a fixed literal, PlayerLifeAggregate, or an explicitly filtered Controller GraveyardCards count for Controller token creation in spell_program".into(),
         ),
     }
 }
@@ -6674,6 +6753,17 @@ mod scalar_program_input_tests {
 
     fn reveal_prefix() -> SpellEffectKind {
         SpellEffectKind::RevealUntilArtifact
+    }
+
+    fn reveal_top_card() -> SpellEffectKind {
+        SpellEffectKind::RevealTopCardToHand
+    }
+
+    fn lose_revealed_card_value() -> SpellEffectKind {
+        SpellEffectKind::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            who: PlayerRecipient::EachOpponent,
+        }
     }
 
     fn join_forces() -> SpellEffectKind {
@@ -6956,6 +7046,178 @@ mod scalar_program_input_tests {
         assert!(no_explicit_input
             .unwrap_err()
             .contains("explicitly bound input"));
+    }
+
+    #[test]
+    fn sorin_revealed_card_receipt_requires_an_adjacent_typed_producer() {
+        let adjacent = compile_ability(vec![
+            instruction("reveal", &["card"], None, reveal_top_card()),
+            instruction("lose_life", &[], Some("card"), lose_revealed_card_value()),
+        ])
+        .expect("the exact typed receipt feeds the next LoseLife instruction");
+        assert_eq!(
+            adjacent.slots[0].result_type,
+            ResultType::RevealedCardReceipt
+        );
+        assert_eq!(adjacent.body.steps[1].input, Some(ResultSlotId(0)));
+
+        let missing = compile_ability(vec![instruction(
+            "lose_life",
+            &[],
+            None,
+            lose_revealed_card_value(),
+        )]);
+        assert!(missing
+            .unwrap_err()
+            .contains("explicitly bound input result"));
+
+        let wrong_type = compile_ability(vec![
+            instruction("join_forces", &["total"], None, join_forces()),
+            instruction("lose_life", &[], Some("total"), lose_revealed_card_value()),
+        ]);
+        assert!(wrong_type.unwrap_err().contains("wrong type"));
+
+        let nonadjacent = compile_ability(vec![
+            instruction("reveal", &["card"], None, reveal_top_card()),
+            instruction("intervening_noop", &[], None, scry_zero()),
+            instruction("lose_life", &[], Some("card"), lose_revealed_card_value()),
+        ]);
+        assert!(nonadjacent
+            .unwrap_err()
+            .contains("immediately follow RevealTopCardToHand"));
+    }
+
+    #[test]
+    fn sorin_player_life_aggregate_is_a_resolving_create_tokens_count() {
+        for players in [
+            RelativePlayerSet::Controller,
+            RelativePlayerSet::Opponents,
+            RelativePlayerSet::All,
+        ] {
+            let count = CountExpression::PlayerLifeAggregate {
+                players,
+                aggregate: crate::primitives::PlayerLifeAggregate::Maximum,
+            };
+            assert!(
+                Amount::Count(count.clone()).validate_live().is_ok(),
+                "the life aggregate is valid for a resolving amount over {players:?}"
+            );
+            assert!(
+                count.validate_static_count().is_err(),
+                "a resolving life aggregate cannot scale static P/T"
+            );
+
+            let program = compile_ability(vec![instruction(
+                "create_tokens",
+                &[],
+                None,
+                SpellEffectKind::CreateTokens {
+                    token: "test_token".into(),
+                    count: Amount::Count(count),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )]);
+            assert!(
+                program.is_ok(),
+                "CreateTokens accepts the resolving Maximum life count over {players:?}: {program:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn targeted_player_life_aggregate_rejects_live_amount() {
+        let count = CountExpression::PlayerLifeAggregate {
+            players: RelativePlayerSet::TargetedPlayer {
+                group_index: 0,
+                kind: TargetKind::OpponentPlayer,
+            },
+            aggregate: crate::primitives::PlayerLifeAggregate::Maximum,
+        };
+
+        assert!(
+            Amount::Count(count).validate_live().is_err(),
+            "PlayerLifeAggregate does not support a targeted opponent"
+        );
+    }
+
+    #[test]
+    fn targeted_player_life_aggregate_rejects_create_tokens_program() {
+        let count = CountExpression::PlayerLifeAggregate {
+            players: RelativePlayerSet::TargetedPlayer {
+                group_index: 0,
+                kind: TargetKind::OpponentPlayer,
+            },
+            aggregate: crate::primitives::PlayerLifeAggregate::Maximum,
+        };
+        let card_program = CardProgram {
+            target_aliases: Vec::new(),
+            body: AuthoredBlock {
+                steps: vec![
+                    instruction(
+                        "choose",
+                        &["selected"],
+                        None,
+                        SpellEffectKind::ChoosePermanents {
+                            chooser: PlayerRecipient::TargetedPlayer {
+                                group_index: 0,
+                                kind: TargetKind::OpponentPlayer,
+                            },
+                            filter: TargetFilter {
+                                kind: TargetKind::AnyPermanent,
+                                controller: super::super::TargetController::You,
+                                ..TargetFilter::default()
+                            },
+                            min: 1,
+                            max: 1,
+                            constraints: Vec::new(),
+                        },
+                    ),
+                    instruction(
+                        "create_tokens",
+                        &[],
+                        None,
+                        SpellEffectKind::CreateTokens {
+                            token: "test_token".into(),
+                            count: Amount::Count(count),
+                            who: PlayerRecipient::Controller,
+                            tapped: false,
+                            sacrifice_timing: None,
+                        },
+                    ),
+                ],
+                yields: Vec::new(),
+            },
+            target_bindings: vec![ProgramTargetReference {
+                instruction_id: "choose".into(),
+                role: ProgramTargetRole::Target,
+                target_group_index: 0,
+            }],
+        };
+        let targeting = TargetingDef {
+            groups: vec![super::super::TargetGroupDef {
+                chooser: super::super::TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target opponent".into(),
+                effect_indices: Vec::new(),
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        let program = CompiledProgram::compile_with_targeting(
+            ability_owner(),
+            EffectContext::Ability,
+            &card_program,
+            Some(&targeting),
+        );
+
+        assert!(
+            program.is_err(),
+            "CreateTokens does not accept a targeted-opponent life count: {program:?}"
+        );
     }
 
     #[test]

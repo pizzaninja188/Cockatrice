@@ -1806,6 +1806,34 @@ impl GameEngine {
                         delta,
                     });
                 }
+                AbilityCost::LoyaltyX => {
+                    let object = self
+                        .state
+                        .objects
+                        .get(&permanent_id)
+                        .ok_or(EngineError::Illegal("planeswalker missing"))?;
+                    if object.zone != Zone::Battlefield || object.controller != player {
+                        return Err(EngineError::Illegal(
+                            "LoyaltyX requires its battlefield source under your control",
+                        ));
+                    }
+                    let range = self
+                        .loyalty_x_range(player, permanent_id)
+                        .ok_or(EngineError::Illegal("LoyaltyX has no legal range"))?;
+                    let delta = range
+                        .delta_for(x_value)
+                        .ok_or(EngineError::Illegal("loyalty X is outside the legal range"))?;
+                    debits.push(CostDebit::Loyalty {
+                        object_id: permanent_id,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                        delta,
+                    });
+                }
                 AbilityCost::Tap => {
                     if saw_tap {
                         return Err(EngineError::Illegal("duplicate tap cost"));

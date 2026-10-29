@@ -1,0 +1,11 @@
+// Sorin, Grim Nemesis creates this exact black 1/1 Vampire Knight token with lifelink.
+(
+    id: "vampire_knight_b_1_1_lifelink",
+    name: "Vampire Knight",
+    face_id: "vampire_knight",
+    types: ["Creature", "Vampire", "Knight"],
+    colors: [Black],
+    power: 1,
+    toughness: 1,
+    keywords: [Lifelink],
+)

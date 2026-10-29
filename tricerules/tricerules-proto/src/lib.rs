@@ -114,6 +114,50 @@ mod tests {
     }
 
     #[test]
+    fn loyalty_x_offer_preserves_zero_range_presence_and_descriptor_fields() {
+        let no_choice = rv1::AbilityInfo::default();
+        let zero_range = rv1::AbilityInfo {
+            loyalty_x_choice: Some(rv1::ability_info::LoyaltyXChoice { min_x: 0, max_x: 0 }),
+            ..Default::default()
+        };
+        assert!(
+            rv1::AbilityInfo::decode(no_choice.encode_to_vec().as_slice())
+                .unwrap()
+                .loyalty_x_choice
+                .is_none()
+        );
+        assert_eq!(
+            rv1::AbilityInfo::decode(zero_range.encode_to_vec().as_slice()).unwrap(),
+            zero_range,
+            "a present 0..=0 offer stays distinct from no LoyaltyX offer"
+        );
+
+        let descriptor_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/ruled-descriptors.bin"));
+        let descriptors = prost_types::FileDescriptorSet::decode(descriptor_bytes.as_slice())
+            .expect("the generated descriptor set decodes");
+        let ability = descriptors
+            .file
+            .iter()
+            .flat_map(|file| &file.message_type)
+            .find(|message| message.name.as_deref() == Some("AbilityInfo"))
+            .expect("ruled.v1.AbilityInfo is present");
+        assert!(ability.field.iter().any(|field| {
+            field.name.as_deref() == Some("loyalty_x_choice") && field.number == Some(12)
+        }));
+        let choice = ability
+            .nested_type
+            .iter()
+            .find(|message| message.name.as_deref() == Some("LoyaltyXChoice"))
+            .expect("AbilityInfo.LoyaltyXChoice is present");
+        for (name, number) in [("min_x", 1), ("max_x", 2)] {
+            assert!(choice
+                .field
+                .iter()
+                .any(|field| field.name.as_deref() == Some(name) && field.number == Some(number)));
+        }
+    }
+
+    #[test]
     fn log_message_declares_the_owner_private_card_look_contract() {
         let descriptor_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/ruled-descriptors.bin"));
         let descriptors = prost_types::FileDescriptorSet::decode(descriptor_bytes.as_slice())

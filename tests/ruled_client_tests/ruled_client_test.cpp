@@ -929,6 +929,118 @@ TEST_F(RuledClientTest, XCounterManaPromptSubmitsTheChosenSplitAndCancellationRe
     EXPECT_EQ(payment.selection.mana().u(), 1u);
 }
 
+TEST_F(RuledClientTest, LoyaltyXPromptUsesInclusiveRangeAndExistingActivationWire)
+{
+    const auto checkSelection = [](RuledLoyaltyXChoice range, quint32 expectedX) {
+        PendingActivatedAbility pending;
+        pending.permanentOid = 330;
+        pending.sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
+        pending.expectedZoneChangeGeneration = 17;
+        pending.abilityIndex = 4;
+        pending.xValue = 99;
+        quint32 offeredMin = std::numeric_limits<quint32>::max();
+        quint32 offeredMax = std::numeric_limits<quint32>::max();
+
+        ASSERT_TRUE(ruledApplyLoyaltyXChoice(pending, range, [&](quint32 minX, quint32 maxX) {
+            offeredMin = minX;
+            offeredMax = maxX;
+            return std::optional<quint32>(expectedX);
+        }));
+        EXPECT_EQ(offeredMin, range.minX);
+        EXPECT_EQ(offeredMax, range.maxX);
+        EXPECT_EQ(pending.xValue, expectedX);
+        ASSERT_TRUE(pending.loyaltyXChoice);
+        EXPECT_EQ(*pending.loyaltyXChoice, range);
+
+        ruled::v1::ActivateAbility command;
+        pending.writeActivationHeader(command);
+        EXPECT_EQ(command.source_object_id(), 330u);
+        EXPECT_EQ(command.source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        EXPECT_EQ(command.expected_zone_change_generation(), 17u);
+        EXPECT_EQ(command.ability_index(), 4u);
+        EXPECT_EQ(command.x_value(), expectedX);
+        EXPECT_EQ(command.mana_split_first_color_count(), 0u);
+    };
+
+    checkSelection({0, 0}, 0);
+    checkSelection({2, 7}, 2);
+    checkSelection({2, 7}, 7);
+}
+
+TEST_F(RuledClientTest, LoyaltyXPromptCancellationAndMalformedChoicesFailClosed)
+{
+    PendingActivatedAbility pending;
+    pending.xValue = 5;
+    int promptCount = 0;
+    EXPECT_FALSE(ruledApplyLoyaltyXChoice(pending, {2, 7}, [&](quint32 minX, quint32 maxX) {
+        ++promptCount;
+        EXPECT_EQ(minX, 2u);
+        EXPECT_EQ(maxX, 7u);
+        return std::optional<quint32>{};
+    }));
+    EXPECT_EQ(promptCount, 1);
+    EXPECT_EQ(pending.xValue, 5u);
+    EXPECT_FALSE(pending.loyaltyXChoice);
+
+    EXPECT_FALSE(ruledApplyLoyaltyXChoice(pending, {2, 7}, [](quint32, quint32) {
+        return std::optional<quint32>(8u);
+    }));
+    EXPECT_EQ(pending.xValue, 5u);
+    EXPECT_FALSE(pending.loyaltyXChoice);
+
+    bool invalidRangePrompted = false;
+    EXPECT_FALSE(ruledApplyLoyaltyXChoice(pending, {7, 2}, [&](quint32, quint32) {
+        invalidRangePrompted = true;
+        return std::optional<quint32>(7u);
+    }));
+    EXPECT_FALSE(invalidRangePrompted);
+    EXPECT_FALSE(ruledApplyLoyaltyXChoice(pending, {0, 0x80000000u}, [&](quint32, quint32) {
+        invalidRangePrompted = true;
+        return std::optional<quint32>(0u);
+    }));
+    EXPECT_FALSE(invalidRangePrompted);
+    EXPECT_EQ(pending.xValue, 5u);
+}
+
+TEST_F(RuledClientTest, PendingLoyaltyXOfferMustMatchCurrentSourceSlotAndRange)
+{
+    constexpr quint32 sourceOid = 0x731u;
+    constexpr quint64 sourceGeneration = 19;
+    const RuledLoyaltyXChoice range{0, 7};
+    RuledAbilityEntry currentOffer;
+    currentOffer.text = QStringLiteral("Sorin -X");
+    currentOffer.activatable = true;
+    currentOffer.loyaltyXChoice = range;
+    RuledAbilityEntries abilities;
+    abilities.append(currentOffer);
+    state->activatedAbilitiesByOid.insert(sourceOid, abilities);
+    state->battlefieldGenerationByOid.insert(sourceOid, sourceGeneration);
+
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentOid = sourceOid;
+    pending.sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
+    pending.expectedZoneChangeGeneration = sourceGeneration;
+    pending.abilityIndex = 0;
+    pending.loyaltyXChoice = range;
+    EXPECT_TRUE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+
+    state->battlefieldGenerationByOid.insert(sourceOid, sourceGeneration + 1);
+    EXPECT_FALSE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+    state->battlefieldGenerationByOid.insert(sourceOid, sourceGeneration);
+    state->zoneAbilitySourceByOid.insert(sourceOid, ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    EXPECT_FALSE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+    state->zoneAbilitySourceByOid.remove(sourceOid);
+    pending.abilityIndex = 1;
+    EXPECT_FALSE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+    pending.abilityIndex = 0;
+    state->activatedAbilitiesByOid[sourceOid][0]->loyaltyXChoice = RuledLoyaltyXChoice{0, 6};
+    EXPECT_FALSE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+    state->activatedAbilitiesByOid[sourceOid][0]->loyaltyXChoice = range;
+    state->activatedAbilitiesByOid[sourceOid][0]->activatable = false;
+    EXPECT_FALSE(ruledPendingLoyaltyXOfferStillCurrent(*state, pending));
+}
+
 TEST(RuledPendingCastTest, XCounterManaPromptAllowsZeroWithoutAskingForASplit)
 {
     int promptCount = 0;
@@ -3818,6 +3930,17 @@ TEST_F(RuledClientTest, StackAnnotationKeepsAbilityAndStructuredChoicePresentati
     apply(markerBatch);
 
     EXPECT_EQ(state->stackAnnotation(705u), QStringLiteral("X = 4"));
+
+    for (const auto &x : QVector<QPair<quint32, QString>>{{706u, QStringLiteral("X = 0")},
+                                                          {707u, QStringLiteral("X = 7")}}) {
+        ruled::v1::RuledEventBatch loyaltyXBatch;
+        auto *loyaltyX = loyaltyXBatch.add_events()->mutable_stack_pushed();
+        loyaltyX->set_object_id(x.first);
+        loyaltyX->set_ability_annotation(x.second.toStdString());
+        loyaltyX->mutable_primary_presentation()->set_fallback_text("Sorin -X");
+        apply(loyaltyXBatch);
+        EXPECT_TRUE(state->stackAnnotation(x.first).contains(x.second));
+    }
 }
 
 TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
@@ -7357,6 +7480,74 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
         EXPECT_EQ(state->activatedAbilityMenuLabel(oid, 2), QStringLiteral("Updated ability"));
         EXPECT_FALSE(state->abilityActivatable(oid, 2));
     }
+}
+
+TEST_F(RuledClientTest, LoyaltyXAbilityInfoPreservesPresenceAndRejectsMalformedRanges)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+
+    const auto addAbility = [view](quint32 oid, quint32 minX, quint32 maxX, bool addStorageChoice,
+                                   bool addManaXCost) {
+        auto *object = view->add_battlefield_objects();
+        object->set_object_id(oid);
+        object->set_zone_change_generation(23);
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(0);
+        ability->set_text("Sorin -X");
+        ability->set_activatable(true);
+        if (addManaXCost) {
+            ability->set_mana_cost("X");
+        }
+        ability->mutable_loyalty_x_choice()->set_min_x(minX);
+        ability->mutable_loyalty_x_choice()->set_max_x(maxX);
+        if (addStorageChoice) {
+            auto *storage = ability->mutable_x_counter_mana_choice();
+            storage->set_counter_label("charge");
+            storage->set_max_x(3);
+            storage->set_first_color("R");
+            storage->set_second_color("G");
+        }
+    };
+
+    addAbility(810u, 0u, 0u, false, false);
+    addAbility(811u, 2u, 7u, false, false);
+    addAbility(812u, 7u, 2u, false, false);
+    addAbility(813u, 0u, 0x80000000u, false, false);
+    addAbility(814u, 0u, 0u, true, false);
+    addAbility(815u, 0u, 7u, false, true);
+    auto *plainObject = view->add_battlefield_objects();
+    plainObject->set_object_id(816u);
+    plainObject->set_zone_change_generation(23);
+    auto *plainAbility = plainObject->add_activated_abilities();
+    plainAbility->set_ability_index(0);
+    plainAbility->set_text("Ordinary ability");
+    plainAbility->set_activatable(true);
+    apply(batch);
+
+    const auto zero = state->activatedAbilityForOid(810u, 0);
+    ASSERT_TRUE(zero);
+    ASSERT_TRUE(zero->loyaltyXChoice);
+    EXPECT_EQ(zero->loyaltyXChoice->minX, 0u);
+    EXPECT_EQ(zero->loyaltyXChoice->maxX, 0u);
+    EXPECT_TRUE(state->abilityActivatable(810u, 0));
+
+    const auto nonzero = state->activatedAbilityForOid(811u, 0);
+    ASSERT_TRUE(nonzero);
+    ASSERT_TRUE(nonzero->loyaltyXChoice);
+    EXPECT_EQ(nonzero->loyaltyXChoice->minX, 2u);
+    EXPECT_EQ(nonzero->loyaltyXChoice->maxX, 7u);
+    EXPECT_TRUE(state->abilityActivatable(811u, 0));
+
+    EXPECT_FALSE(state->abilityActivatable(812u, 0));
+    EXPECT_FALSE(state->abilityActivatable(813u, 0));
+    EXPECT_FALSE(state->abilityActivatable(814u, 0));
+    EXPECT_FALSE(state->abilityActivatable(815u, 0));
+    const auto ordinary = state->activatedAbilityForOid(816u, 0);
+    ASSERT_TRUE(ordinary);
+    EXPECT_FALSE(ordinary->loyaltyXChoice);
+    EXPECT_TRUE(state->abilityActivatable(816u, 0));
 }
 
 TEST_F(RuledClientTest, RemovingEarlierGrantRetainsSurvivingSparseSlotAndRecipientGeneration)

@@ -1197,6 +1197,54 @@ TEST_F(RuledBatchTest, PresentationReferencesFollowTheirOwningPublicAndPerPlayer
     EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
 }
 
+TEST_F(RuledBatchTest, PublicLoyaltyXZeroRangeSurvivesRecipientRedaction)
+{
+    constexpr quint32 sourceOid = 0x6f1u;
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(sourceOid);
+    object->set_zone_change_generation(4);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(3);
+    ability->set_activatable(true);
+    ability->mutable_loyalty_x_choice()->set_min_x(0);
+    ability->mutable_loyalty_x_choice()->set_max_x(0);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+
+    const auto findAbility = [sourceOid](const ruled::v1::RuledEventBatch &filtered,
+                                         int playerId) -> const ruled::v1::AbilityInfo * {
+        for (const auto &event : filtered.events()) {
+            if (!event.has_zone_view())
+                continue;
+            for (const auto &playerView : event.zone_view().per_player()) {
+                if (playerView.player_id() != playerId)
+                    continue;
+                for (const auto &permanent : playerView.battlefield_objects()) {
+                    if (permanent.object_id() != sourceOid)
+                        continue;
+                    for (const auto &entry : permanent.activated_abilities()) {
+                        if (entry.ability_index() == 3)
+                            return &entry;
+                    }
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    for (Server_AbstractParticipant *recipient : {static_cast<Server_AbstractParticipant *>(p1),
+                                                   static_cast<Server_AbstractParticipant *>(p2)}) {
+        const auto filtered = redactFor(batch, recipient);
+        const auto *forwarded = findAbility(filtered, p1->getPlayerId());
+        ASSERT_NE(forwarded, nullptr);
+        ASSERT_TRUE(forwarded->has_loyalty_x_choice());
+        EXPECT_EQ(forwarded->loyalty_x_choice().min_x(), 0u);
+        EXPECT_EQ(forwarded->loyalty_x_choice().max_x(), 0u);
+    }
+}
+
 TEST_F(RuledBatchTest, HandSourceActivationPublishesRevealAndKeepsCostCandidatesPerPlayer)
 {
     ruled::v1::RuledEventBatch batch;

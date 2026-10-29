@@ -86,6 +86,7 @@ pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String
                         .into()
                 }
                 AbilityCost::Loyalty(amount) => format!("{amount:+}"),
+                AbilityCost::LoyaltyX => "Loyalty X".into(),
                 _ => return None,
             })
         })

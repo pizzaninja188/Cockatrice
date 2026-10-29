@@ -188,6 +188,7 @@ struct PendingActivatedAbility
     int abilityIndex = -1;
     int manaOptionIndex = 0;
     quint32 xValue = 0;
+    std::optional<RuledLoyaltyXChoice> loyaltyXChoice;
     quint32 manaSplitFirstColorCount = 0;
     quint64 castingPermissionId = 0;
     QString abilityText;
@@ -242,6 +243,23 @@ struct PendingActivatedAbility
         }
     }
 };
+
+template <typename Prompt>
+[[nodiscard]] inline bool ruledApplyLoyaltyXChoice(PendingActivatedAbility &pending,
+                                                    const RuledLoyaltyXChoice &choice,
+                                                    Prompt &&prompt)
+{
+    if (!choice.isValid()) {
+        return false;
+    }
+    const auto selectedX = prompt(choice.minX, choice.maxX);
+    if (!selectedX || *selectedX < choice.minX || *selectedX > choice.maxX) {
+        return false;
+    }
+    pending.xValue = *selectedX;
+    pending.loyaltyXChoice = choice;
+    return true;
+}
 
 [[nodiscard]] inline int ruledActivatedManaXPipCount(const QString &manaCost, bool hasCounterManaSplit)
 {
@@ -411,6 +429,9 @@ template <typename PendingPayment>
     return selected && selected->selectable ? selected : nullptr;
 }
 
+[[nodiscard]] inline bool ruledPendingLoyaltyXOfferStillCurrent(const RuledClientState &state,
+                                                                const PendingActivatedAbility &pending);
+
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
 /// permanent actions deliberately carry no activated-ability index, so they must be matched
 /// against the engine's typed action list instead.
@@ -436,8 +457,30 @@ template <typename PendingPayment>
                                 pending.permanentActionFaceIndex)
             .has_value();
     }
-    return state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
-           state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex) &&
+    const bool sourceStillCurrent =
+        state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
+        state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex) &&
+        (!pending.selectedMode || ruledCurrentActivatedAbilityMode(state, pending));
+    return sourceStillCurrent &&
+           (!pending.loyaltyXChoice || ruledPendingLoyaltyXOfferStillCurrent(state, pending));
+}
+
+[[nodiscard]] inline bool ruledPendingLoyaltyXOfferStillCurrent(const RuledClientState &state,
+                                                                const PendingActivatedAbility &pending)
+{
+    if (!pending.valid || pending.permanentAction || pending.permanentOid == 0 || pending.abilityIndex < 0 ||
+        pending.engineTransactionId != 0 || !pending.loyaltyXChoice || !pending.loyaltyXChoice->isValid()) {
+        return false;
+    }
+    if (state.abilitySourceZone(pending.permanentOid) != pending.sourceZone ||
+        state.abilitySourceGeneration(pending.permanentOid) != pending.expectedZoneChangeGeneration ||
+        !state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex)) {
+        return false;
+    }
+    const auto offered = state.activatedAbilityForOid(pending.permanentOid, pending.abilityIndex);
+    return offered && offered->activatable && !offered->hasConflictingLoyaltyXCost() && offered->loyaltyXChoice &&
+           offered->loyaltyXChoice->isValid() && *offered->loyaltyXChoice == *pending.loyaltyXChoice &&
+           state.abilityActivatable(pending.permanentOid, pending.abilityIndex) &&
            (!pending.selectedMode || ruledCurrentActivatedAbilityMode(state, pending));
 }
 

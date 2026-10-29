@@ -2123,6 +2123,22 @@ impl GameEngine {
             CountExpression::CardsDrawnThisTurn { players } => {
                 self.cards_drawn_this_turn_count(*players, context.controller) as i64
             }
+            CountExpression::PlayerLifeAggregate { players, aggregate } => {
+                player_life_aggregate_value(
+                    &self.state,
+                    *players,
+                    *aggregate,
+                    context.controller,
+                    |player_id| {
+                        self.state
+                            .players
+                            .iter()
+                            .find(|player| player.id == player_id && !player.has_lost)
+                            .map(|player| player.life)
+                    },
+                )
+                .map_or(0, i64::from)
+            }
             CountExpression::CardsMatchingResult { filter } => context
                 .previous_effect_result
                 .zip(context.stack_item)
@@ -2896,6 +2912,60 @@ mod tests {
             true,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn player_life_aggregate_count_uses_live_signed_totals_and_clamps_only_the_amount() {
+        let mut engine = quantity_engine();
+        let all_maximum = CountExpression::PlayerLifeAggregate {
+            players: RelativePlayerSet::All,
+            aggregate: PlayerLifeAggregate::Maximum,
+        };
+        let opponents_maximum = CountExpression::PlayerLifeAggregate {
+            players: RelativePlayerSet::Opponents,
+            aggregate: PlayerLifeAggregate::Maximum,
+        };
+
+        engine.state.players[0].life = 13;
+        engine.state.players[1].life = 7;
+        assert_eq!(
+            engine.resolve_quantity(&all_maximum, quantity_context(0)),
+            13
+        );
+        assert_eq!(
+            engine.resolve_amount(
+                &Amount::Count(opponents_maximum.clone()),
+                quantity_context(0)
+            ),
+            7
+        );
+
+        engine.state.players[0].life = -2;
+        engine.state.players[1].life = -7;
+        assert_eq!(
+            engine.resolve_quantity(&all_maximum, quantity_context(0)),
+            -2
+        );
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(all_maximum.clone()), quantity_context(0)),
+            0,
+            "negative live totals remain signed until Amount's final clamp"
+        );
+
+        engine.state.players[1].life = 20;
+        engine.state.players[1].has_lost = true;
+        assert_eq!(
+            engine.resolve_quantity(&all_maximum, quantity_context(0)),
+            -2,
+            "a departed player's stale life total is excluded"
+        );
+
+        engine.state.players[0].has_lost = true;
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(all_maximum), quantity_context(0)),
+            0,
+            "an empty live player set yields the zero count"
+        );
     }
 
     #[test]

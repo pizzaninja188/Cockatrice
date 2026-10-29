@@ -5439,6 +5439,97 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
     Ok(EffectOutcome::Continue)
 }
 
+/// Sorin, Grim Nemesis's activated +1 reveals the exact top library object, moves it to hand,
+/// and publishes the pre-move mana value for the immediately following program instruction.
+pub(super) fn reveal_top_card_to_hand(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    if cx.program_state.is_none() {
+        return Err(EngineError::ProgramInvariant(
+            "RevealTopCardToHand requires an activated resolution program",
+        ));
+    }
+    let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
+        return Err(EngineError::ProgramInvariant(
+            "RevealTopCardToHand controller is missing from turn order",
+        ));
+    };
+    let Some(object_id) = cx.engine.state.players[player_idx].library.front().copied() else {
+        cx.events.push(ev_log(format!(
+            "P{} has no card to reveal for {}.",
+            cx.controller, cx.spell_label
+        )));
+        cx.effect_result.program_value = Some(crate::state::ProgramValue::RevealedCardReceipt(
+            crate::state::RevealedCardReceipt::EmptyLibrary,
+        ));
+        return Ok(EffectOutcome::Continue);
+    };
+    let object = cx
+        .engine
+        .state
+        .objects
+        .get(&object_id)
+        .filter(|object| object.zone == Zone::Library)
+        .ok_or(EngineError::ProgramInvariant(
+            "library top card has no matching library object",
+        ))?;
+    let owner = object.owner;
+    let card_name = cx
+        .engine
+        .registry
+        .get(&object.card_id)
+        .map(|definition| definition.name.clone())
+        .unwrap_or_else(|| "card".into());
+    let zone_change_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0);
+    let mana_value = super::super::characteristics::characteristics_from(
+        &cx.engine.state,
+        cx.engine.registry,
+        object_id,
+    )
+    .map(|characteristics| characteristics.mana_value)
+    .ok_or(EngineError::ProgramInvariant(
+        "library top card has no mana-value snapshot",
+    ))?;
+
+    cx.events.extend(super::super::reveals::reveal_cards(
+        &cx.engine.state,
+        cx.engine.registry,
+        &[object_id],
+        cx.top.id,
+        cx.spell_label,
+    ));
+    cx.events.push(ev_log(format!(
+        "P{} reveals {card_name} for {}.",
+        cx.controller, cx.spell_label
+    )));
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        object_id,
+        Zone::Hand,
+        None,
+    )?;
+    cx.events.push(permanent_moved_event_with_library_position(
+        &cx.engine.state,
+        object_id,
+        owner,
+        rv1::permanent_moved::Destination::Hand,
+        0,
+    ));
+    cx.effect_result.program_value = Some(crate::state::ProgramValue::RevealedCardReceipt(
+        crate::state::RevealedCardReceipt::Revealed {
+            object_id,
+            zone_change_generation,
+            mana_value,
+        },
+    ));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
         cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(0));
@@ -9680,6 +9771,68 @@ mod tests {
                 Some(if retained_cards == 0 { 0 } else { 1 })
             );
         }
+    }
+
+    #[test]
+    fn reveal_top_card_with_missing_controller_is_program_invariant_not_empty_library() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_103,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new game");
+        let mut top =
+            linked_exile_test_item(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        top.controller = 99;
+        top.is_triggered = false;
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "nautiloid_ship",
+            tricerules_card_model::CardFaceId::new("nautiloid_ship").unwrap(),
+        );
+        let program_state = ProgramRunState {
+            owner,
+            pending_owners: Vec::new(),
+            frames: vec![ProgramFrame {
+                path: Vec::new(),
+                next_instruction: 0,
+                yield_to: Vec::new(),
+            }],
+            slots: Vec::new(),
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        };
+        let previous_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut events = Vec::new();
+        let result = reveal_top_card_to_hand(&mut EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &top,
+            controller: 99,
+            affected_player: 99,
+            spell_label: "invalid controller reveal",
+            previous_effect_result: &previous_result,
+            resume_previous_result: Some(&previous_result),
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            program_state: Some(program_state),
+        });
+
+        assert!(matches!(
+            result,
+            Err(EngineError::ProgramInvariant(
+                "RevealTopCardToHand controller is missing from turn order"
+            ))
+        ));
+        assert!(effect_result.program_value.is_none());
+        assert!(events.is_empty());
     }
 
     #[test]

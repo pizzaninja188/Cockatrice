@@ -161,6 +161,7 @@ pub(super) fn lose_life(
             // the CR 608.2b fizzle check kills the whole spell before resolution when that
             // target is gone. Resolve to 0 rather than panicking if it ever is.
             .unwrap_or(0),
+        LifeAmount::RevealedCardManaValue => revealed_card_mana_value(cx.previous_effect_result)?,
     };
 
     if amount == 0 {
@@ -184,6 +185,25 @@ pub(super) fn lose_life(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+fn revealed_card_mana_value(previous: &EffectResult) -> Result<u32, EngineError> {
+    if previous.input_result_type != Some(ResultType::RevealedCardReceipt) {
+        return Err(EngineError::ProgramInvariant(
+            "LoseLife(RevealedCardManaValue) has no typed revealed-card input",
+        ));
+    }
+    match previous.program_value.as_ref() {
+        Some(crate::state::ProgramValue::RevealedCardReceipt(
+            crate::state::RevealedCardReceipt::EmptyLibrary,
+        )) => Ok(0),
+        Some(crate::state::ProgramValue::RevealedCardReceipt(
+            crate::state::RevealedCardReceipt::Revealed { mana_value, .. },
+        )) => Ok(*mana_value),
+        _ => Err(EngineError::ProgramInvariant(
+            "LoseLife(RevealedCardManaValue) requires its exact revealed-card receipt",
+        )),
+    }
 }
 
 pub(super) fn target_player_gains_life(
@@ -327,7 +347,80 @@ pub(super) fn drain_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::PlayerState;
+    use crate::state::{PlayerState, ProgramValue, RevealedCardReceipt};
+
+    #[test]
+    fn revealed_card_life_amount_requires_a_typed_exact_receipt() {
+        let missing_type = crate::state::EffectResult::default();
+        assert!(matches!(
+            revealed_card_mana_value(&missing_type),
+            Err(EngineError::ProgramInvariant(
+                "LoseLife(RevealedCardManaValue) has no typed revealed-card input"
+            ))
+        ));
+
+        let missing_receipt = crate::state::EffectResult {
+            input_result_type: Some(ResultType::RevealedCardReceipt),
+            ..Default::default()
+        };
+        assert!(matches!(
+            revealed_card_mana_value(&missing_receipt),
+            Err(EngineError::ProgramInvariant(
+                "LoseLife(RevealedCardManaValue) requires its exact revealed-card receipt"
+            ))
+        ));
+
+        let wrong_receipt = crate::state::EffectResult {
+            input_result_type: Some(ResultType::RevealedCardReceipt),
+            program_value: Some(ProgramValue::Count(1)),
+            ..Default::default()
+        };
+        assert!(matches!(
+            revealed_card_mana_value(&wrong_receipt),
+            Err(EngineError::ProgramInvariant(
+                "LoseLife(RevealedCardManaValue) requires its exact revealed-card receipt"
+            ))
+        ));
+
+        let wrong_declared_type = crate::state::EffectResult {
+            input_result_type: Some(ResultType::CardPartition),
+            program_value: Some(ProgramValue::RevealedCardReceipt(
+                RevealedCardReceipt::EmptyLibrary,
+            )),
+            ..Default::default()
+        };
+        assert!(matches!(
+            revealed_card_mana_value(&wrong_declared_type),
+            Err(EngineError::ProgramInvariant(
+                "LoseLife(RevealedCardManaValue) has no typed revealed-card input"
+            ))
+        ));
+    }
+
+    #[test]
+    fn revealed_card_life_amount_uses_the_captured_snapshot_and_empty_library_is_zero() {
+        let empty = crate::state::EffectResult {
+            input_result_type: Some(ResultType::RevealedCardReceipt),
+            program_value: Some(ProgramValue::RevealedCardReceipt(
+                RevealedCardReceipt::EmptyLibrary,
+            )),
+            ..Default::default()
+        };
+        assert_eq!(revealed_card_mana_value(&empty).unwrap(), 0);
+
+        let revealed = crate::state::EffectResult {
+            input_result_type: Some(ResultType::RevealedCardReceipt),
+            program_value: Some(ProgramValue::RevealedCardReceipt(
+                RevealedCardReceipt::Revealed {
+                    object_id: 7,
+                    zone_change_generation: 3,
+                    mana_value: 5,
+                },
+            )),
+            ..Default::default()
+        };
+        assert_eq!(revealed_card_mana_value(&revealed).unwrap(), 5);
+    }
 
     fn archive_source(engine: &mut GameEngine, player: PlayerId) -> ObjectId {
         let pi = engine.state.player_idx(player).unwrap();

@@ -150,6 +150,8 @@ mod deck_coverage_liliana_vess;
 mod deck_coverage_kaya_intangible_slayer;
 #[path = "scenario/deck_coverage_liliana_dreadhorde_general.rs"]
 mod deck_coverage_liliana_dreadhorde_general;
+#[path = "scenario/deck_coverage_sorin_grim_nemesis.rs"]
+mod deck_coverage_sorin_grim_nemesis;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
 #[path = "scenario/myriad_search_prerequisites.rs"]

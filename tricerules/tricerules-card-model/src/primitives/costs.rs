@@ -124,6 +124,9 @@ pub enum AbilityCost {
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
     /// as the cost of activating a planeswalker's loyalty ability.
     Loyalty(i32),
+    /// CR 107.3a / 606.4: choose X and pay a loyalty-counter cost of `-X`, after applying
+    /// existing loyalty-cost modifiers. The announced X is also the effect value.
+    LoyaltyX,
     /// {T}: tap the source permanent.
     Tap,
     /// Tap exactly `count` untapped permanents the activating player controls that match

@@ -693,6 +693,16 @@ pub(super) fn activated_ability_info(
             second_color: mana_color_symbol(second).to_string(),
         }
     });
+    let loyalty_x_choice = if ability.costs.contains(&AbilityCost::LoyaltyX) {
+        let actor = eng.controller_of(source_id).unwrap_or(controller);
+        eng.loyalty_x_range(actor, source_id)
+            .map(|range| rv1::ability_info::LoyaltyXChoice {
+                min_x: range.min_x,
+                max_x: range.max_x,
+            })
+    } else {
+        None
+    };
     let mana_produced = eng
         .active_mana_options(source_id, ability)
         .map(|options| {
@@ -754,6 +764,7 @@ pub(super) fn activated_ability_info(
                     None => "Loyalty cost unavailable".to_string(),
                 }
             }
+            AbilityCost::LoyaltyX => "Loyalty X".to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
             AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
             AbilityCost::Discard => "Discard a card".to_string(),
@@ -814,7 +825,7 @@ pub(super) fn activated_ability_info(
         && ability
             .costs
             .iter()
-            .any(|cost| matches!(cost, AbilityCost::Loyalty(_)))
+            .any(|cost| matches!(cost, AbilityCost::Loyalty(_) | AbilityCost::LoyaltyX))
         && ability.costs.iter().all(|cost| {
             matches!(
                 cost,
@@ -823,6 +834,7 @@ pub(super) fn activated_ability_info(
                     | AbilityCost::PayLife { .. }
                     | AbilityCost::PayCommanderColorIdentityLife
                     | AbilityCost::Loyalty(_)
+                    | AbilityCost::LoyaltyX
             )
         })
     {
@@ -832,6 +844,7 @@ pub(super) fn activated_ability_info(
             AbilityCost::Loyalty(printed) => eng
                 .effective_loyalty_cost(actor, source_id, *printed)
                 .is_some(),
+            AbilityCost::LoyaltyX => eng.loyalty_x_range(actor, source_id).is_some(),
             _ => true,
         });
         if life_cost.is_some()
@@ -881,6 +894,7 @@ pub(super) fn activated_ability_info(
         presentation,
         ability_index: ability_index as u32,
         x_counter_mana_choice,
+        loyalty_x_choice,
         is_mana_ability: ability.is_mana_ability(),
     }
 }
@@ -1504,7 +1518,8 @@ pub(super) fn legal_ability_cost_choices(
             | AbilityCost::Mana(_)
             | AbilityCost::RemoveXStorageCountersFromSource
             | AbilityCost::Waterbend(_)
-            | AbilityCost::Loyalty(_) => {}
+            | AbilityCost::Loyalty(_)
+            | AbilityCost::LoyaltyX => {}
         }
     }
     structurally_payable &=

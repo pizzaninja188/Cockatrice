@@ -1517,6 +1517,19 @@ pub(crate) enum ProgramValue {
     /// The exact post-move object from Koya's optional targeted Exile. `None` is a completed
     /// optional-target Exile with no object to watch.
     ExiledObject(Option<TriggerObjectRef>),
+    RevealedCardReceipt(RevealedCardReceipt),
+}
+
+/// The exact library object publicly revealed and moved to hand by an activated CardProgram.
+/// EmptyLibrary is a completed zero-value result, distinct from a missing program output.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RevealedCardReceipt {
+    EmptyLibrary,
+    Revealed {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        mana_value: u32,
+    },
 }
 
 /// Physical card identity frozen for a typed resolution-program library cohort.

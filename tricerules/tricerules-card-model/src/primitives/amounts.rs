@@ -92,6 +92,12 @@ pub enum CountExpression {
     /// Memory, Fractal Anomaly, and Elenda and Azor use this resolving amount for counters or
     /// token quantity.
     CardsDrawnThisTurn { players: RelativePlayerSet },
+    /// The live players' signed life totals collapsed at resolution. Sorin, Grim Nemesis uses
+    /// All / Maximum for its token quantity; Two-Headed Giant shared life is not represented.
+    PlayerLifeAggregate {
+        players: RelativePlayerSet,
+        aggregate: PlayerLifeAggregate,
+    },
     /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
     /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
     CardsMatchingResult { filter: CardResultFilter },
@@ -281,11 +287,16 @@ impl CountExpression {
                 Ok(())
             }
             CountExpression::BattlefieldCreatures { filter } => filter.validate(),
+            CountExpression::PlayerLifeAggregate {
+                players: RelativePlayerSet::TargetedPlayer { .. },
+                ..
+            } => Err("PlayerLifeAggregate does not support TargetedPlayer".into()),
             CountExpression::CreatureDeathsThisTurn
             | CountExpression::CardsDrawnThisTurn { .. }
             | CountExpression::CardsMatchingResult { .. }
             | CountExpression::CardsMatchingResultForAffectedPlayer { .. }
             | CountExpression::MaximumCardsMatchingResult { .. }
+            | CountExpression::PlayerLifeAggregate { .. }
             | CountExpression::ProgramInputCount => Ok(()),
             CountExpression::CardResultCharacteristicSum {
                 filter,
@@ -998,6 +1009,9 @@ pub enum LifeAmount {
     /// CR 202.3: the mana value of the object this spell targets (Reanimate). Legal only in an
     /// effect list that also contains a target-bearing effect — enforced at registry load.
     TargetManaValue,
+    /// Mana value captured from an immediately preceding typed RevealTopCardToHand result.
+    /// Legal only as a resolving CardProgram input, never from current hidden-zone state.
+    RevealedCardManaValue,
 }
 
 #[cfg(test)]

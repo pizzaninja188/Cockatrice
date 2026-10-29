@@ -1,0 +1,142 @@
+{
+  "format_version": 1,
+  "oracle_id": "0a01dd05-e289-489f-b3ad-88e15e157bd0",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "sorin_grim_nemesis",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/program"
+      ]
+    },
+    {
+      "face_id": "sorin_grim_nemesis",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0",
+        "/faces/0/activated_abilities/1/effect/1",
+        "/faces/0/activated_abilities/1/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "sorin_grim_nemesis",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/program"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::RevealTopCardToHand",
+      "typed_path": "/faces/0/activated_abilities/0/program"
+    },
+    {
+      "symbol": "LifeAmount::RevealedCardManaValue",
+      "typed_path": "/faces/0/activated_abilities/0/program"
+    },
+    {
+      "symbol": "PlayerRecipient::EachOpponent",
+      "typed_path": "/faces/0/activated_abilities/0/program"
+    },
+    {
+      "symbol": "AbilityCost::LoyaltyX",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/DamageTarget/target/permanent_types/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Planeswalker",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/DamageTarget/target/permanent_types/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/1/effect/1"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/2/program"
+    },
+    {
+      "symbol": "CountExpression::PlayerLifeAggregate",
+      "typed_path": "/faces/0/activated_abilities/2/program"
+    },
+    {
+      "symbol": "RelativePlayerSet::All",
+      "typed_path": "/faces/0/activated_abilities/2/program"
+    },
+    {
+      "symbol": "PlayerLifeAggregate::Maximum",
+      "typed_path": "/faces/0/activated_abilities/2/program"
+    }
+  ],
+  "tokens": [
+    "vampire_knight_b_1_1_lifelink"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_grim_nemesis_has_exact_identity_and_three_abilities",
+      "covers": "Exact card identity, mana cost, legendary planeswalker types, starting loyalty, all three ability costs and representations, target filter, and the registered black 1/1 Vampire Knight lifelink token."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_plus_one_reveals_the_same_card_then_each_opponent_loses_its_mana_value",
+      "covers": "The +1 publicly reveals the exact top-card incarnation before moving it to the controller's private hand, causes each opponent to lose the captured mana value, and does not count as a draw."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_plus_one_empty_library_contributes_zero_without_a_draw",
+      "covers": "The +1 remains legal with an empty library, reveals and draws no card, and causes no life change."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_plus_one_uses_library_mana_value_with_x_rules",
+      "covers": "An X in a library card's mana cost contributes zero while its other mana symbols still determine mana value."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_x_zero_consumes_the_loyalty_use_and_stale_or_player_targets_reject",
+      "covers": "-X rejects a stale source generation and a player target atomically; X=0 is still a targeted loyalty activation and consumes the turn's loyalty use."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_x_with_carth_keeps_effect_x_after_source_sba",
+      "covers": "Carth makes X=7 pay six loyalty; Sorin reaches zero and leaves, Carth's planeswalker-death trigger is handled, and the retained -X activation still deals and gains seven."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_x_fizzles_when_its_sole_target_becomes_illegal",
+      "covers": "When the sole creature target leaves before resolution, -X does nothing and its already-paid loyalty cost remains."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_x_prevention_does_not_reduce_the_separate_life_gain",
+      "covers": "Damage prevention prevents the targeted damage without reducing the separate X life gain."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_nine_counts_controller_in_all_player_maximum_and_batches_tokens",
+      "covers": "-9 uses the maximum life total among all players including Sorin's controller and creates the resulting tokens in one batch; the committed battlefield view confirms black 1/1 Creature-Vampire-Knight tokens with lifelink."
+    },
+    {
+      "test": "scenario deck_coverage_sorin_grim_nemesis::sorin_minus_nine_reads_resolution_life_and_excludes_a_lost_player",
+      "covers": "-9 reads current life at resolution and excludes a player who has lost, even if that player's life total is higher."
+    }
+  ]
+}

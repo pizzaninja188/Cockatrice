@@ -201,6 +201,12 @@ impl GameEngine {
                         demands.push((delta.unsigned_abs(), vec![(source, CounterKind::Loyalty)]));
                     }
                 }
+                AbilityCost::LoyaltyX => {
+                    let actor = self.controller_of(source).unwrap_or(player);
+                    if self.loyalty_x_range(actor, source).is_none() {
+                        return false;
+                    }
+                }
                 _ => continue,
             }
         }

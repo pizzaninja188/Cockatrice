@@ -42,6 +42,23 @@ pub(super) struct EffectiveActivatedAbility {
     pub granted: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct LoyaltyXRange {
+    pub min_x: u32,
+    pub max_x: u32,
+    zero_x_delta: i32,
+}
+
+impl LoyaltyXRange {
+    pub fn delta_for(self, x_value: u32) -> Option<i32> {
+        if x_value < self.min_x || x_value > self.max_x {
+            return None;
+        }
+        let delta = i64::from(self.zero_x_delta).checked_sub(i64::from(x_value))?;
+        i32::try_from(delta).ok()
+    }
+}
+
 impl EffectiveActivatedAbility {
     pub fn authored(
         slot: u32,
@@ -216,6 +233,40 @@ impl GameEngine {
             }
         }
         Some(total)
+    }
+
+    /// Engine-owned inclusive X range for a loyalty cost of `-X` after live fixed loyalty-cost
+    /// modifiers. The direct interval calculation avoids scanning the chosen-X domain.
+    pub(super) fn loyalty_x_range(
+        &self,
+        actor: PlayerId,
+        source: ObjectId,
+    ) -> Option<LoyaltyXRange> {
+        let object = self
+            .state
+            .objects
+            .get(&source)
+            .filter(|object| object.zone == Zone::Battlefield)?;
+        let zero_x_delta = self.effective_loyalty_cost(actor, source, 0)?;
+        let a = i64::from(zero_x_delta);
+        let loyalty = i64::from(object.counter_count(CounterKind::Loyalty));
+
+        let mut min_x = 0_i64.max(a.checked_sub(i64::from(i32::MAX))?);
+        if !self.can_receive_counters(source) {
+            min_x = min_x.max(a);
+        }
+        let max_x = i64::from(i32::MAX)
+            .min(a.checked_sub(i64::from(i32::MIN))?)
+            .min(a.checked_add(loyalty)?);
+        if min_x > max_x {
+            return None;
+        }
+
+        Some(LoyaltyXRange {
+            min_x: u32::try_from(min_x).ok()?,
+            max_x: u32::try_from(max_x).ok()?,
+            zero_x_delta,
+        })
     }
 
     /// The resolving item's controller is captured on the stack; Ashiok's controller and

@@ -103,6 +103,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::RevealTopCardToHandIfMatches { .. } => {
             zones::reveal_top_card_to_hand_if_matches(cx, effect)?
         }
+        SpellEffectKind::RevealTopCardToHand => zones::reveal_top_card_to_hand(cx)?,
         SpellEffectKind::RevealUntilArtifact => zones::reveal_until_artifact(cx)?,
         effect @ SpellEffectKind::Discover { .. } => zones::discover(cx, effect)?,
         effect @ SpellEffectKind::Cascade { .. } => zones::cascade(cx, effect)?,

@@ -2147,6 +2147,35 @@ impl GameEngine {
         x_value: u32,
         first_color_count: u32,
     ) -> Result<(), EngineError> {
+        let has_loyalty_x_cost = ability.costs.contains(&AbilityCost::LoyaltyX);
+        let has_mana_x_cost = ability.costs.iter().any(|cost| match cost {
+            AbilityCost::Mana(mana) | AbilityCost::Waterbend(mana) => mana.has_x(),
+            _ => false,
+        });
+        let has_storage_x_cost = ability
+            .costs
+            .contains(&AbilityCost::RemoveXStorageCountersFromSource);
+        if has_loyalty_x_cost {
+            if source_zone != AbilitySourceZone::Battlefield
+                || has_mana_x_cost
+                || has_storage_x_cost
+                || ability.storage_counter_split_mana().is_some()
+            {
+                return Err(EngineError::Illegal(
+                    "LoyaltyX cannot share the activated-ability X choice with another cost",
+                ));
+            }
+            let actor = self
+                .controller_of(source)
+                .ok_or(EngineError::Illegal("LoyaltyX source is unavailable"))?;
+            let range = self
+                .loyalty_x_range(actor, source)
+                .ok_or(EngineError::Illegal("LoyaltyX has no legal range"))?;
+            if range.delta_for(x_value).is_none() {
+                return Err(EngineError::Illegal("loyalty X is outside the legal range"));
+            }
+        }
+
         if ability.storage_counter_split_mana().is_some() {
             let source_object = self
                 .state
@@ -2169,6 +2198,7 @@ impl GameEngine {
 
         if first_color_count != 0
             || (x_value != 0
+                && !has_loyalty_x_cost
                 && !ability
                     .costs
                     .iter()
@@ -2941,6 +2971,11 @@ impl GameEngine {
             planeswalker_loyalty_activation,
             x_value,
         } = announcement;
+        let ability_annotation = if ability.costs.contains(&AbilityCost::LoyaltyX) {
+            format!("{ability_text} (X = {x_value})")
+        } else {
+            ability_text.clone()
+        };
         let idx = self
             .state
             .player_idx(player)
@@ -3013,7 +3048,7 @@ impl GameEngine {
             card_id: card_id.clone(),
             prototyped: false,
             targets: stack_targets,
-            ability_text: Some(ability_text.clone()),
+            ability_text: Some(ability_annotation.clone()),
             source_permanent_id: Some(permanent_id),
             source_owner: Some(source_owner),
             source_zone_change,
@@ -3056,13 +3091,18 @@ impl GameEngine {
         self.state.priority_idx = idx;
 
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
+        let ability_log_suffix = if ability.costs.contains(&AbilityCost::LoyaltyX) {
+            format!("{tgt_line} (X = {x_value})")
+        } else {
+            tgt_line
+        };
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log_ability(
             format!("P{player} activates {card_name}{paid_costs_line}: "),
             &ability_text,
             primary_presentation.clone(),
-            tgt_line,
+            ability_log_suffix,
         ));
         for replacement_log in &payment.counter_replacement_logs {
             batch.events.push(ev_log(replacement_log.clone()));
@@ -3088,7 +3128,7 @@ impl GameEngine {
                 object_id: virtual_id,
                 description: card_name,
                 targets,
-                ability_annotation: ability_text,
+                ability_annotation,
                 card_id: String::new(),
                 card_display_name: String::new(),
                 is_prepare_spell: false,

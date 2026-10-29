@@ -1315,6 +1315,9 @@ pub enum SpellEffectKind {
     RevealTopCardToHandIfMatches {
         filter: ZoneCardFilter,
     },
+    /// Publicly reveal the controller's top library card and move that exact object to hand.
+    /// An activated CardProgram records a typed receipt for the pre-move mana value.
+    RevealTopCardToHand,
     /// CR 701.62: look at the top two cards, manifest one, then put the other into the
     /// graveyard. The choice is private, logged, and resumable through the engine's library
     /// picker. Bashful Beastie, Innocuous Rat, Manifest Dread, and Twist Reality.
@@ -4143,6 +4146,7 @@ impl SpellEffectKind {
             | SpellEffectKind::EachOpponentMayScry { .. }
             | SpellEffectKind::LibraryPartition { .. }
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
+            | SpellEffectKind::RevealTopCardToHand
             | SpellEffectKind::RevealUntilArtifact
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::LookChooseBattlefield { .. }
@@ -4458,6 +4462,21 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Self::RevealTopCardToHand
+                    | Self::LoseLife {
+                        amount: LifeAmount::RevealedCardManaValue,
+                        ..
+                    }
+            )
+        }) {
+            return Err(
+                "RevealTopCardToHand and LoseLife(RevealedCardManaValue) require an activated CardProgram"
+                    .into(),
+            );
+        }
         if effects
             .iter()
             .any(SpellEffectKind::contains_kaya_schema_feature)
@@ -5829,6 +5848,7 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::RevealTopCardToHandIfMatches { filter } => filter.validate()?,
+            SpellEffectKind::RevealTopCardToHand => {}
             SpellEffectKind::ChoosePermanents {
                 chooser,
                 filter,

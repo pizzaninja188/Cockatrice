@@ -601,17 +601,22 @@ RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const 
                                                      QString::fromStdString(choice.first_color()),
                                                      QString::fromStdString(choice.second_color())};
     }
-    return {ability.has_presentation() ? resolver.resolve(ability.presentation())
-                                       : QString::fromStdString(ability.text()),
-            QString::fromStdString(ability.mana_cost()),
-            QString::fromStdString(ability.mana_produced()),
-            QString::fromStdString(ability.cost_label()),
-            ability.activatable(),
-            ability.has_only_tap_cost(),
-            manaOptionLabels,
-            xCounterManaChoice,
-            ability.is_mana_ability(),
-            engineFallbackHasCompleteCostPrefix(ability)};
+    RuledAbilityEntry parsed{ability.has_presentation() ? resolver.resolve(ability.presentation())
+                                                        : QString::fromStdString(ability.text()),
+                             QString::fromStdString(ability.mana_cost()),
+                             QString::fromStdString(ability.mana_produced()),
+                             QString::fromStdString(ability.cost_label()),
+                             ability.activatable(),
+                             ability.has_only_tap_cost(),
+                             manaOptionLabels,
+                             xCounterManaChoice,
+                             ability.is_mana_ability(),
+                             engineFallbackHasCompleteCostPrefix(ability)};
+    if (ability.has_loyalty_x_choice()) {
+        parsed.loyaltyXChoice = RuledLoyaltyXChoice{ability.loyalty_x_choice().min_x(),
+                                                    ability.loyalty_x_choice().max_x()};
+    }
+    return parsed;
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.

@@ -2125,6 +2125,13 @@ message SbasApplied {
 // One activated ability on a battlefield permanent, in registry order. Keeping each property
 // structured avoids a second delimiter-based protocol inside protobuf.
 message AbilityInfo {
+  // Inclusive engine-authored X domain for an activated loyalty ability. The message's
+  // presence distinguishes an offered 0..=0 range from an ability without LoyaltyX.
+  message LoyaltyXChoice {
+    uint32 min_x = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    uint32 max_x = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  }
+
   // A mana ability whose output depends on removing a bounded number of source counters and
   // choosing a split between two colors. The engine publishes the current bound and color order.
   message XCounterManaChoice {
@@ -2160,6 +2167,9 @@ message AbilityInfo {
   // Engine-authored CR 605.1a classification. Required when a valid mana ability currently
   // produces no colored/colorless option, such as Arcane Signet without a declared identity.
   bool is_mana_ability = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Inclusive legal X range for an activated LoyaltyX cost. ActivateAbility.x_value carries the
+  // selected value; this offer is independent of the storage-counter mana choice above.
+  LoyaltyXChoice loyalty_x_choice = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // CR 722. Public designation and exact source linkage, independent of card characteristics.

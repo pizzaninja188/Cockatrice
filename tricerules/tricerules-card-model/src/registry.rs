@@ -1195,7 +1195,8 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Waterbend(_)
-            | AbilityCost::Loyalty(_) => {
+            | AbilityCost::Loyalty(_)
+            | AbilityCost::LoyaltyX => {
                 matches!(cost, AbilityCost::TapPermanents { .. }).then_some(CardResultAction::Tap)
             }
         })
