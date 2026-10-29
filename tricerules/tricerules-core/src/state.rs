@@ -1692,6 +1692,50 @@ pub enum PendingLibraryPartitionKind {
     Look,
 }
 
+/// The two independently owed choices in Kaya's direct legacy `EachOpponentMayScry` tail.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingEachOpponentScryChoice {
+    OptIn { subject_index: usize },
+    Placement { card_index: usize },
+}
+
+/// Stage and delegated chooser for the one currently actionable choice.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PendingEachOpponentScryStage {
+    OptIn {
+        subject_index: usize,
+        delegated_chooser: Option<PlayerId>,
+    },
+    Placement {
+        card_index: usize,
+        delegated_chooser: Option<PlayerId>,
+    },
+    ChoosingDelegate {
+        choice: PendingEachOpponentScryChoice,
+        candidates: Vec<Option<PlayerId>>,
+    },
+}
+
+/// One exact top-library incarnation captured after every opt-in has resolved.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PendingEachOpponentScryCard {
+    pub(crate) subject: PlayerId,
+    pub(crate) object_id: ObjectId,
+    pub(crate) zone_change_generation: u64,
+    pub(crate) put_bottom: Option<bool>,
+}
+
+/// A frozen APNAP cohort and all answers for one Kaya multi-opponent Scry1 instruction.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingEachOpponentScry {
+    pub(crate) controller: PlayerId,
+    pub(crate) subjects: Vec<PlayerId>,
+    pub(crate) accepted_subjects: Vec<PlayerId>,
+    pub(crate) cards: Vec<PendingEachOpponentScryCard>,
+    pub(crate) spell_label: String,
+    pub(crate) stage: PendingEachOpponentScryStage,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)]
 pub enum PendingLibraryLookStage {
@@ -2062,6 +2106,10 @@ pub enum ResolutionContinuation {
         stage: PendingLibraryPartitionStage,
         kind: PendingLibraryPartitionKind,
     },
+    EachOpponentMayScry {
+        stack: ParkedStackResolution,
+        scry: Box<PendingEachOpponentScry>,
+    },
     LibraryLook {
         stack: ParkedStackResolution,
         stage: PendingLibraryLookStage,
@@ -2368,6 +2416,7 @@ impl ResolutionContinuation {
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
+            | Self::EachOpponentMayScry { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
@@ -2444,6 +2493,7 @@ impl ResolutionContinuation {
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
+            | Self::EachOpponentMayScry { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }

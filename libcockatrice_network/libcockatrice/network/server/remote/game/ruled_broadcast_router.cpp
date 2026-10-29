@@ -1,7 +1,6 @@
 // Fork-owned. See ruled_broadcast_router.h.
 
 #include "ruled_broadcast_router.h"
-#include <libcockatrice/protocol/ruled_choice_metadata.h>
 
 #include "ruled_batch_synchronizer.h"
 #include "ruled_game_driver.h"
@@ -16,6 +15,8 @@
 #include <QHash>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
+#include <libcockatrice/protocol/ruled_choice_metadata.h>
+#include <libcockatrice/protocol/ruled_private_card_look.h>
 #include <libcockatrice/utility/zone_names.h>
 
 RuledBroadcastRouter::RuledBroadcastRouter(Server_Game *_game, RuledBatchSynchronizer *_synchronizer)
@@ -662,6 +663,10 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             continue;
         }
         const auto &log = ev.log();
+        if (log.has_private_card_look() && (participant->isSpectator() || !ruledPrivateCardLookRouteValid(log))) {
+            filtered.mutable_events()->DeleteSubrange(ei, 1);
+            continue;
+        }
         if (log.has_visible_to_player_id() && log.visible_to_player_id() != participant->getPlayerId()) {
             filtered.mutable_events()->DeleteSubrange(ei, 1);
         } else if (log.has_hidden_from_player_id() && log.hidden_from_player_id() == participant->getPlayerId()) {
@@ -989,6 +994,11 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         log->set_text(logIt.value().text());
         if (logIt.value().has_ability_presentation()) {
             log->mutable_ability_presentation()->CopyFrom(logIt.value().ability_presentation());
+        }
+        if (logIt.value().has_private_card_look() && !participant->isSpectator() &&
+            ruledPrivateCardLookRouteValid(logIt.value()) &&
+            logIt.value().private_card_look().viewer_player_id() == participant->getPlayerId()) {
+            log->mutable_private_card_look()->CopyFrom(logIt.value().private_card_look());
         }
     }
     for (auto choiceIt = routedChoices.constBegin(); choiceIt != routedChoices.constEnd(); ++choiceIt) {

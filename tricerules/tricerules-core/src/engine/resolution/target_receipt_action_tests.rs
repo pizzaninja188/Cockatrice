@@ -27,7 +27,7 @@ const ACTIONS: [ChosenAction; 8] = [
     ChosenAction::Exchange,
 ];
 
-fn fixture_engine() -> GameEngine {
+fn fixture_engine_for(player_ids: &[PlayerId]) -> GameEngine {
     let deck = [
         "grizzly_bears",
         "hill_giant",
@@ -44,18 +44,41 @@ fn fixture_engine() -> GameEngine {
     GameEngine::new(
         tricerules_cards::registry::global(),
         60_608,
-        &[0, 1],
+        player_ids,
         20,
-        Some(vec![deck.clone(), deck]),
+        Some(vec![deck; player_ids.len()]),
         true,
     )
     .expect("target receipt action fixture")
+}
+
+fn fixture_engine() -> GameEngine {
+    fixture_engine_for(&[0, 1])
 }
 
 #[derive(Clone, Copy)]
 enum CopyAction {
     Gardens,
     ChosenCreatureToken,
+    ChosenCreatureTokenWithKayaException,
+    ChosenCreatureTokenWithReplaceException,
+    KayaMinusThree,
+}
+
+fn kaya_copy_exception(
+    mode: tricerules_card_model::TokenCopySubtypeMode,
+) -> tricerules_card_model::TokenCopyException {
+    tricerules_card_model::TokenCopyException {
+        colors: vec![tricerules_card_model::primitives::Color::White],
+        power: 1,
+        toughness: 1,
+        added_card_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Creature],
+        creature_subtypes: Some(tricerules_card_model::TokenCopyCreatureSubtypeChange {
+            mode,
+            subtypes: vec!["Spirit".into()],
+        }),
+        added_keywords: vec![tricerules_card_model::primitives::Keyword::Flying],
+    }
 }
 
 fn invoke_copy_action(
@@ -102,6 +125,37 @@ fn invoke_copy_action(
                     source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
                         TargetFilter::default_creature(),
                     )),
+                    copy_exception: None,
+                },
+            ),
+            CopyAction::ChosenCreatureTokenWithKayaException => tokens::create_token_copies(
+                &mut cx,
+                SpellEffectKind::CreateTokenCopies {
+                    count: tricerules_card_model::primitives::Amount::Fixed(1),
+                    source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
+                        TargetFilter::default_creature(),
+                    )),
+                    copy_exception: Some(kaya_copy_exception(
+                        tricerules_card_model::TokenCopySubtypeMode::Add,
+                    )),
+                },
+            ),
+            CopyAction::ChosenCreatureTokenWithReplaceException => tokens::create_token_copies(
+                &mut cx,
+                SpellEffectKind::CreateTokenCopies {
+                    count: tricerules_card_model::primitives::Amount::Fixed(1),
+                    source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
+                        TargetFilter::default_creature(),
+                    )),
+                    copy_exception: Some(kaya_copy_exception(
+                        tricerules_card_model::TokenCopySubtypeMode::Replace,
+                    )),
+                },
+            ),
+            CopyAction::KayaMinusThree => dispatch::execute_effect(
+                &mut cx,
+                SpellEffectKind::ExileTargetAndCopyUnlessAura {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
                 },
             ),
         }
@@ -121,6 +175,48 @@ fn set_copy_values_from(engine: &mut GameEngine, target: ObjectId, donor: Object
         .expect("fixture target")
         .copiable_values = Some(values);
     source_card_id
+}
+
+fn install_copy_exception_source_values(engine: &mut GameEngine, target: ObjectId) {
+    let mut values = engine
+        .copiable_values_for(target)
+        .expect("fixture target has copiable values");
+    values.face.types = vec!["Creature".into(), "Human".into()];
+    values.face.color_indicator = Some(vec![tricerules_card_model::primitives::Color::Blue]);
+    values.face.colors_override = Some(vec![tricerules_card_model::primitives::Color::Blue]);
+
+    let cdas = vec![
+        tricerules_card_model::IdentifiedAbility::fallback(
+            "copy_test_devoid",
+            tricerules_card_model::CharacteristicDefiningAbility::Devoid,
+        )
+        .expect("test Devoid CDA identity"),
+        tricerules_card_model::IdentifiedAbility::fallback(
+            "copy_test_colors",
+            tricerules_card_model::CharacteristicDefiningAbility::DefinesColors {
+                colors: vec![tricerules_card_model::primitives::Color::Blue],
+            },
+        )
+        .expect("test color CDA identity"),
+        tricerules_cards::registry::global()
+            .get("lumbering_worldwagon")
+            .expect("P/T CDA fixture is registered")
+            .primary_face()
+            .characteristic_defining_abilities[0]
+            .clone(),
+        tricerules_card_model::IdentifiedAbility::fallback(
+            "copy_test_changeling",
+            tricerules_card_model::CharacteristicDefiningAbility::Changeling,
+        )
+        .expect("test Changeling CDA identity"),
+    ];
+    values.face.characteristic_defining_abilities = cdas;
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("fixture target")
+        .copiable_values = Some(values);
 }
 
 fn gardens_stack_item(engine: &GameEngine, gardens: ObjectId, target: ObjectId) -> StackItem {
@@ -810,4 +906,817 @@ fn chosen_token_copy_uses_only_retained_target_receipts_and_captured_incarnation
         result.produced_objects.is_empty(),
         "an absent legal-at-start receipt cannot use saved LKI"
     );
+}
+
+#[test]
+fn kaya_copy_exception_changes_only_the_new_token_snapshot() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    install_copy_exception_source_values(&mut engine, target);
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+    let original = engine
+        .characteristics(target)
+        .expect("source characteristics before copying");
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithKayaException,
+    )
+    .expect("copy the target with Kaya's fixed exception");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("copy exception creates one token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains its copiable origin");
+    assert_eq!(
+        copy.face.colors(),
+        vec![tricerules_card_model::primitives::Color::White]
+    );
+    assert_eq!((copy.face.power, copy.face.toughness), (Some(1), Some(1)));
+    assert!(copy.face.types.iter().any(|kind| kind == "Creature"));
+    assert!(copy.face.types.iter().any(|kind| kind == "Human"));
+    assert!(copy.face.types.iter().any(|kind| kind == "Spirit"));
+    assert!(copy
+        .face
+        .keywords
+        .contains(&tricerules_card_model::primitives::Keyword::Flying));
+    assert_eq!(copy.face.color_indicator, None);
+    assert!(copy
+        .face
+        .characteristic_defining_abilities
+        .iter()
+        .any(|ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::Changeling
+        )));
+    assert!(!copy.face.characteristic_defining_abilities.iter().any(
+        |ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::Devoid
+                | tricerules_card_model::CharacteristicDefiningAbility::DefinesColors { .. }
+                | tricerules_card_model::CharacteristicDefiningAbility::CountScaledPowerToughness { .. }
+        )
+    ));
+    assert_eq!(engine.characteristics(target), Some(original));
+
+    let token_receipt = receipt(&engine, token, 0);
+    let top = item(vec![token_receipt]);
+    let (_, _, second_result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[token],
+        &[token_receipt],
+        CopyAction::ChosenCreatureToken,
+    )
+    .expect("copy the already modified token without another exception");
+    let second_token = second_result
+        .produced_objects
+        .first()
+        .expect("later copy inherits the exception characteristics")
+        .object_id;
+    let second_copy = engine.state.objects[&second_token]
+        .token_origin
+        .as_ref()
+        .expect("later copy retains its copiable values");
+    assert_eq!(
+        second_copy.face.colors(),
+        vec![tricerules_card_model::primitives::Color::White]
+    );
+    assert_eq!(
+        (second_copy.face.power, second_copy.face.toughness),
+        (Some(1), Some(1))
+    );
+    assert!(second_copy.face.types.iter().any(|kind| kind == "Human"));
+    assert!(second_copy.face.types.iter().any(|kind| kind == "Spirit"));
+    assert!(second_copy
+        .face
+        .keywords
+        .contains(&tricerules_card_model::primitives::Keyword::Flying));
+}
+
+#[test]
+fn token_copy_exception_replace_suppresses_changeling_and_existing_creature_subtypes() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    install_copy_exception_source_values(&mut engine, target);
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+    let original = engine
+        .characteristics(target)
+        .expect("source characteristics before copying");
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithReplaceException,
+    )
+    .expect("replace copied creature subtypes");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("replacement exception creates a token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains its copiable origin");
+    assert!(!copy.face.types.iter().any(|kind| kind == "Human"));
+    assert!(copy.face.types.iter().any(|kind| kind == "Spirit"));
+    assert!(!copy
+        .face
+        .characteristic_defining_abilities
+        .iter()
+        .any(|ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::Changeling
+        )));
+    assert_eq!(engine.characteristics(target), Some(original));
+}
+
+#[test]
+fn token_copy_exception_updates_both_double_faced_faces_and_keeps_the_active_face() {
+    let mut engine = fixture_engine();
+    let expected_layout = engine
+        .registry
+        .get("reckless_waif_merciless_predator")
+        .expect("double-faced fixture is registered")
+        .layout;
+    assert_eq!(expected_layout, tricerules_card_model::Layout::Transform);
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    {
+        let object = engine
+            .state
+            .objects
+            .get_mut(&target)
+            .expect("fixture target");
+        object.card_id = "reckless_waif_merciless_predator".into();
+        object.face_up_index = 1;
+    }
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithKayaException,
+    )
+    .expect("copy the double-faced target with Kaya's exception");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("double-faced copy creates a token")
+        .object_id;
+    let object = &engine.state.objects[&token];
+    let faces = object
+        .token_faces
+        .as_ref()
+        .expect("copy token retains both intrinsic faces");
+    assert_eq!(faces.layout, expected_layout);
+    assert_eq!(object.face_up_index, 1);
+    for (index, face) in faces.faces.iter().enumerate() {
+        assert_eq!(face.source_face_index, index);
+        assert_eq!(
+            face.face.colors(),
+            vec![tricerules_card_model::primitives::Color::White]
+        );
+        assert_eq!((face.face.power, face.face.toughness), (Some(1), Some(1)));
+        assert!(face.face.is_creature);
+        assert!(face.face.types.iter().any(|kind| kind == "Spirit"));
+        assert!(face
+            .face
+            .keywords
+            .contains(&tricerules_card_model::primitives::Keyword::Flying));
+    }
+    assert_eq!(engine.state.objects[&target].face_up_index, 1);
+
+    let mut face_events = Vec::new();
+    assert!(engine
+        .change_permanent_face(
+            token,
+            tricerules_card_model::primitives::FaceChangeAction::Transform,
+            &mut face_events,
+        )
+        .expect("transform the copied token through the engine face-change path"));
+    assert_eq!(engine.state.objects[&token].face_up_index, 0);
+    assert!(face_events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::FaceChanged(_))
+    )));
+
+    let token_receipt = receipt(&engine, token, 0);
+    let top = item(vec![token_receipt]);
+    let (_, _, later_result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[token],
+        &[token_receipt],
+        CopyAction::ChosenCreatureToken,
+    )
+    .expect("copy the transformed token without another exception");
+    let later_token = later_result
+        .produced_objects
+        .first()
+        .expect("transformed copy produces a later token")
+        .object_id;
+    let later_object = &engine.state.objects[&later_token];
+    assert_eq!(later_object.face_up_index, 0);
+    let later_faces = later_object
+        .token_faces
+        .as_ref()
+        .expect("later copy retains both transformed faces");
+    for face in &later_faces.faces {
+        assert_eq!(
+            face.face.colors(),
+            vec![tricerules_card_model::primitives::Color::White]
+        );
+        assert_eq!((face.face.power, face.face.toughness), (Some(1), Some(1)));
+        assert!(face.face.types.iter().any(|kind| kind == "Spirit"));
+        assert!(face
+            .face
+            .keywords
+            .contains(&tricerules_card_model::primitives::Keyword::Flying));
+    }
+}
+
+#[test]
+fn kaya_minus_three_exiles_a_non_aura_then_creates_the_exception_token() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+
+    let (outcome, events, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("resolve Kaya's compound exile-and-copy effect");
+    assert_eq!(outcome, EffectOutcome::Continue);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert!(events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::Log(message)) if message.text.contains("exiles")
+    )));
+    let token = result
+        .produced_objects
+        .last()
+        .expect("non-Aura target creates one copy token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("Kaya token retains copied characteristics");
+    assert_eq!(
+        copy.face.colors(),
+        vec![tricerules_card_model::primitives::Color::White]
+    );
+    assert_eq!((copy.face.power, copy.face.toughness), (Some(1), Some(1)));
+    assert!(copy.face.types.iter().any(|kind| kind == "Spirit"));
+}
+
+#[test]
+fn kaya_copy_source_prepared_state_uses_current_derived_characteristics_for_same_generation() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let donor = card_in_zone(&mut engine, 0, "hill_giant", Zone::Battlefield);
+    set_copy_values_from(&mut engine, target, donor);
+    let generation = engine.state.zone_change_generation[&target];
+
+    let (types, snapshot) = zones::token_copy_source_after_move(&engine, target, generation)
+        .expect("same-generation current battlefield values are available");
+    assert!(types.iter().any(|kind| kind == "Giant"));
+    assert!(!types.iter().any(|kind| kind == "Bear"));
+    assert_eq!(snapshot.values.source_card_id, "hill_giant");
+}
+
+#[test]
+fn kaya_minus_three_prepared_state_uses_old_generation_lki_not_a_returned_permanent() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let donor = card_in_zone(&mut engine, 0, "hill_giant", Zone::Battlefield);
+    let old_source = set_copy_values_from(&mut engine, target, donor);
+    let target_receipt = receipt(&engine, target, 0);
+    let old_generation = target_receipt.zone_change_generation.unwrap();
+    let top = item(vec![target_receipt]);
+    move_object_to_zone(&mut engine.state, engine.registry, target, Zone::Hand, None)
+        .expect("leave the captured battlefield incarnation");
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        target,
+        Zone::Battlefield,
+        None,
+    )
+    .expect("return the physical card as a newer incarnation");
+    let new_generation = engine.state.zone_change_generation[&target];
+    assert_ne!(new_generation, old_generation);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("resolve with the retained old-generation receipt");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(engine.state.zone_change_generation[&target], new_generation);
+    let token = result
+        .produced_objects
+        .first()
+        .expect("old-generation LKI still supplies the copy source")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains old-generation values");
+    assert_eq!(copy.source_card_id, old_source);
+    assert_eq!(
+        copy.face.colors(),
+        vec![tricerules_card_model::primitives::Color::White]
+    );
+}
+
+#[test]
+fn kaya_minus_three_prepared_state_fails_closed_when_exact_copy_lki_is_missing() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let target_receipt = receipt(&engine, target, 0);
+    let old_generation = target_receipt.zone_change_generation.unwrap();
+    let top = item(vec![target_receipt]);
+    move_object_to_zone(&mut engine.state, engine.registry, target, Zone::Hand, None)
+        .expect("leave the captured battlefield incarnation");
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        target,
+        Zone::Battlefield,
+        None,
+    )
+    .expect("return the physical card as a newer incarnation");
+    engine
+        .state
+        .last_known_copy_by_generation
+        .remove(&(target, old_generation));
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("missing old-generation copy LKI is a no-op after Exile attempt");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert!(result.produced_objects.is_empty());
+}
+
+#[test]
+fn kaya_minus_three_prepared_state_uses_derived_aura_types_not_the_copy_face_flag() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let target_receipt = receipt(&engine, target, 0);
+    let old_generation = target_receipt.zone_change_generation.unwrap();
+    let top = item(vec![target_receipt]);
+    move_object_to_zone(&mut engine.state, engine.registry, target, Zone::Hand, None)
+        .expect("leave the captured battlefield incarnation");
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        target,
+        Zone::Battlefield,
+        None,
+    )
+    .expect("return the physical card as a newer incarnation");
+    engine.state.last_known_types_by_generation.insert(
+        (target, old_generation),
+        vec!["Creature".into(), "Aura".into()],
+    );
+    assert!(
+        !engine.state.last_known_copy_by_generation[&(target, old_generation)]
+            .values
+            .face
+            .is_aura
+    );
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("derived Aura LKI suppresses token creation");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert!(result.produced_objects.is_empty());
+}
+
+#[test]
+fn kaya_minus_three_copies_face_down_battlefield_values_before_exile_reveals_the_card() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    engine.state.objects.get_mut(&target).unwrap().face_down = true;
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+    let old_generation = target_receipt.zone_change_generation.unwrap();
+    let face_down_snapshot = super::copying::token_copy_snapshot_for_incarnation(
+        &engine.state,
+        engine.registry,
+        target,
+        old_generation,
+    )
+    .expect("face-down battlefield values are copiable");
+    assert_eq!(face_down_snapshot.token_id, "anonymous_creature_token");
+    assert!(face_down_snapshot.values.source_card_id.is_empty());
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("use the face-down battlefield copy snapshot after ordinary Exile");
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    let token = result
+        .produced_objects
+        .first()
+        .expect("face-down non-Aura source creates a token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains anonymous face-down copiable values");
+    assert!(copy.source_card_id.is_empty());
+    assert_eq!(copy.display_name, "Face-down creature");
+    assert_eq!(
+        copy.face.colors(),
+        vec![tricerules_card_model::primitives::Color::White]
+    );
+}
+
+#[test]
+fn kaya_minus_three_real_token_entry_choice_resumes_the_tail_once() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let donor = card_in_zone(&mut engine, 0, "hill_giant", Zone::Battlefield);
+    let source = card_in_zone(&mut engine, 0, "the_mycosynth_gardens", Zone::Battlefield);
+    let mut copied_values = engine
+        .copiable_values_for(target)
+        .expect("target copy source has current values");
+    copied_values.face.static_abilities = engine
+        .registry
+        .get("clone")
+        .expect("Clone replacement fixture is registered")
+        .primary_face()
+        .static_abilities
+        .clone();
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .unwrap()
+        .copiable_values = Some(copied_values);
+
+    let target_receipt = receipt(&engine, target, 0);
+    let mut top = item(vec![target_receipt]);
+    let mut activated_ability = engine
+        .registry
+        .get("the_mycosynth_gardens")
+        .expect("ability fixture is registered")
+        .primary_face()
+        .activated_abilities[0]
+        .clone();
+    activated_ability.effect = vec![
+        SpellEffectKind::ExileTargetAndCopyUnlessAura {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+        },
+        SpellEffectKind::Draw {
+            who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+            count: tricerules_card_model::primitives::Amount::Fixed(1),
+        },
+    ];
+    activated_ability.program = None;
+    activated_ability.modal = None;
+    activated_ability.targeting = None;
+    top.id = u32::MAX;
+    top.card_id = "the_mycosynth_gardens".into();
+    top.ability_text = Some("Kaya −3 continuation fixture".into());
+    top.source_permanent_id = Some(source);
+    top.source_owner = Some(0);
+    top.source_zone_change = engine.state.zone_change_generation[&source];
+    top.ability_index = Some(0);
+    top.activated_ability = Some(activated_ability);
+    engine.state.stack.push(top);
+
+    let hand_before = engine.state.players[0].hand.len();
+    let mut initial_events = Vec::new();
+    assert_eq!(
+        engine
+            .resolve_top_of_stack(&mut initial_events)
+            .expect("resolve into the token copy-source choice"),
+        ResolutionProgress::Parked
+    );
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    let exiled_generation = engine.state.zone_change_generation[&target];
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Clone as-enters choice parks token entry");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        rv1::ChoiceKind::CopySource
+    );
+    assert_eq!(
+        pending
+            .continuation
+            .stack()
+            .expect("entry choice retains the resolving ability")
+            .resume_effect_index,
+        Some(1),
+        "the continuation starts after the compound exile/copy instruction"
+    );
+    assert_eq!(engine.state.players[0].hand.len(), hand_before);
+
+    engine
+        .publish_resolution_prompt_ids(&mut initial_events)
+        .expect("publish the entry copy-source choice");
+    let choice = initial_events
+        .iter()
+        .find_map(|event| match event.ev.as_ref()? {
+            rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)
+                if choice.choice_kind == rv1::ChoiceKind::CopySource as i32 =>
+            {
+                Some(choice.clone())
+            }
+            _ => None,
+        })
+        .expect("published Clone copy-source prompt");
+    assert!(choice.candidate_object_ids.contains(&donor));
+
+    let resumed = engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: choice.resolution_prompt_id,
+                        chosen_object_ids: vec![donor],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("finish token entry and resume after the compound effect");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        exiled_generation
+    );
+    assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(
+        engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.is_token() && object.zone == Zone::Battlefield)
+            .count(),
+        1,
+        "resuming the entry choice does not repeat token creation"
+    );
+    let events = initial_events.iter().chain(resumed.events.iter());
+    assert_eq!(
+        events
+            .clone()
+            .filter(|event| matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::TokenCreated(_))
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        events
+            .filter(|event| matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("exiles")
+            ))
+            .count(),
+        1,
+        "the target is exiled exactly once across suspension and resume"
+    );
+}
+
+#[test]
+fn kaya_minus_three_concede_during_parked_clone_entry_finishes_outer_resolution_once() {
+    let mut engine = fixture_engine_for(&[0, 1, 2]);
+    let target = card_in_zone(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
+    let donor = card_in_zone(&mut engine, 1, "hill_giant", Zone::Battlefield);
+    let source = card_in_zone(&mut engine, 0, "the_mycosynth_gardens", Zone::Battlefield);
+    let mut copied_values = engine
+        .copiable_values_for(target)
+        .expect("target copy source has current values");
+    copied_values.face.static_abilities = engine
+        .registry
+        .get("clone")
+        .expect("Clone replacement fixture is registered")
+        .primary_face()
+        .static_abilities
+        .clone();
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .unwrap()
+        .copiable_values = Some(copied_values);
+
+    let target_receipt = receipt(&engine, target, 0);
+    let mut top = item(vec![target_receipt]);
+    let mut activated_ability = engine
+        .registry
+        .get("the_mycosynth_gardens")
+        .expect("ability fixture is registered")
+        .primary_face()
+        .activated_abilities[0]
+        .clone();
+    activated_ability.effect = vec![
+        SpellEffectKind::ExileTargetAndCopyUnlessAura {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+        },
+        SpellEffectKind::Draw {
+            who: tricerules_card_model::primitives::PlayerRecipient::EachOpponent,
+            count: tricerules_card_model::primitives::Amount::Fixed(1),
+        },
+    ];
+    activated_ability.program = None;
+    activated_ability.modal = None;
+    activated_ability.targeting = None;
+    top.id = u32::MAX;
+    top.card_id = "the_mycosynth_gardens".into();
+    top.ability_text = Some("Kaya −3 departure continuation fixture".into());
+    top.source_permanent_id = Some(source);
+    top.source_owner = Some(0);
+    top.source_zone_change = engine.state.zone_change_generation[&source];
+    top.ability_index = Some(0);
+    top.activated_ability = Some(activated_ability);
+    engine.state.stack.push(top);
+
+    let hand_sizes_before = [
+        engine.state.players[1].hand.len(),
+        engine.state.players[2].hand.len(),
+    ];
+    let cards_drawn_before = [
+        engine.state.turn_history.current.player(1).cards_drawn,
+        engine.state.turn_history.current.player(2).cards_drawn,
+    ];
+    let mut initial_events = Vec::new();
+    assert_eq!(
+        engine
+            .resolve_top_of_stack(&mut initial_events)
+            .expect("resolve into the token copy-source choice"),
+        ResolutionProgress::Parked
+    );
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    let exiled_generation = engine.state.zone_change_generation[&target];
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Clone as-enters choice parks token entry");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        rv1::ChoiceKind::CopySource
+    );
+
+    engine
+        .publish_resolution_prompt_ids(&mut initial_events)
+        .expect("publish the entry copy-source choice");
+    let choice = initial_events
+        .iter()
+        .find_map(|event| match event.ev.as_ref()? {
+            rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)
+                if choice.choice_kind == rv1::ChoiceKind::CopySource as i32 =>
+            {
+                Some(choice.clone())
+            }
+            _ => None,
+        })
+        .expect("published Clone copy-source prompt");
+    assert!(choice.candidate_object_ids.contains(&donor));
+
+    let conceded = engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+            },
+        )
+        .expect("a player may concede while the token-entry choice is parked");
+
+    assert!(engine.state.players[0].has_lost);
+    assert!(!engine.state.players[1].has_lost);
+    assert!(!engine.state.players[2].has_lost);
+    assert!(
+        !engine.state.is_terminal(),
+        "two players remain in the game"
+    );
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "the departed chooser leaves no stuck prompt"
+    );
+    assert!(engine.state.pending_replacement_event.is_none());
+    assert!(
+        engine.state.stack.is_empty(),
+        "the begun outer resolution completed"
+    );
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert_eq!(
+        engine.state.zone_change_generation[&target],
+        exiled_generation
+    );
+    assert_eq!(engine.state.players[1].hand.len(), hand_sizes_before[0] + 1);
+    assert_eq!(engine.state.players[2].hand.len(), hand_sizes_before[1] + 1);
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        cards_drawn_before[0] + 1
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(2).cards_drawn,
+        cards_drawn_before[1] + 1
+    );
+
+    let events = initial_events.iter().chain(conceded.events.iter());
+    assert_eq!(
+        events
+            .clone()
+            .filter(|event| matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.object_id == target
+                        && moved.destination == rv1::permanent_moved::Destination::Exile as i32
+            ))
+            .count(),
+        1,
+        "the target's begun exile move is not repeated after departure"
+    );
+    assert_eq!(
+        events
+            .clone()
+            .filter(|event| matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::TokenCreated(_))
+            ))
+            .count(),
+        0,
+        "a departed original controller receives no token"
+    );
+    assert!(engine
+        .state
+        .objects
+        .values()
+        .all(|object| !object.is_token() || object.owner != 0));
+}
+
+#[test]
+fn kaya_minus_three_does_not_mint_for_a_departed_original_controller() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let target_receipt = receipt(&engine, target, 0);
+    let top = item(vec![target_receipt]);
+    engine.state.players[0].has_lost = true;
+
+    let (outcome, _, result) = invoke_copy_action(
+        &mut engine,
+        &top,
+        &[target],
+        &[target_receipt],
+        CopyAction::KayaMinusThree,
+    )
+    .expect("begun resolution finishes after its controller leaves");
+    assert_eq!(outcome, EffectOutcome::Continue);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+    assert!(result.produced_objects.is_empty());
+    assert!(engine
+        .state
+        .objects
+        .values()
+        .all(|object| !object.is_token() || object.zone != Zone::Battlefield));
 }

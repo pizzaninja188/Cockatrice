@@ -3,6 +3,7 @@
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
 #include "ruled_pending_cast.h"
+#include "ruled_private_card_look.h"
 #include "ruled_token_display.h"
 
 #include <QDebug>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/ruled_choice_metadata.h>
+#include <libcockatrice/protocol/ruled_private_card_look.h>
 #include <libcockatrice/utility/ruled_debug.h>
 #include <limits>
 
@@ -828,6 +830,19 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 
     for (const auto &e : batch.events()) {
         if (e.has_log()) {
+            if (e.log().has_private_card_look()) {
+                const auto &look = e.log().private_card_look();
+                if (!ruledPrivateCardLookPayloadValid(look) || look.viewer_player_id() != host->localPlayerId())
+                    continue;
+
+                QStringList cardNames;
+                cardNames.reserve(look.external_card_names_size());
+                for (const auto &name : look.external_card_names())
+                    cardNames.append(QString::fromUtf8(name.data(), static_cast<int>(name.size())));
+                ctx.privateCardLooks.append(std::move(cardNames));
+                continue;
+            }
+
             QString logLine = QString::fromStdString(e.log().text());
             if (e.log().has_ability_presentation() && e.log().ability_presentation().has_ability()) {
                 const auto &presentation = e.log().ability_presentation();
@@ -2939,6 +2954,8 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
         emit state->stackOrderChanged(state->stackOidOrder);
     }
     emit state->engineTimeline(ctx.timeline);
+    for (const QStringList &cardNames : ctx.privateCardLooks)
+        emit state->privateCardLookReceived(cardNames);
     emit state->enginePromptFeed(ctx.promptFeed);
     emit state->openingUiChanged();
     if (ctx.battlefieldMapDirty) {

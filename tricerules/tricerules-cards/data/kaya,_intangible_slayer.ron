@@ -1,0 +1,53 @@
+// Exact Oracle text and card-specific rulings verified from Wizards' Phyrexia: All Will Be One
+// Release Notes, Kaya entry, lines 806-820. The notes confirm that the Aura check uses the
+// permanent's last battlefield existence, and that copied enters-the-battlefield abilities work.
+// https://magic.wizards.com/en/news/feature/phyrexia-all-will-be-one-release-notes
+// CR 101.4 and 701.22c govern multiplayer Scry choices; 606.3-606.6 govern loyalty timing and
+// costs; 608.2b/608.2m govern target legality and begun-resolution continuation; 707.2/707.9a-d
+// govern the copiable values and characteristic exceptions. Checked against CR effective 2026-09-25.
+(
+  id: "kaya,_intangible_slayer",
+  name: "Kaya, Intangible Slayer",
+  face_id: "kaya_intangible_slayer",
+  mana_cost: "{3}{W}{W}{B}{B}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Kaya"],
+  loyalty: 6,
+  keywords: [Hexproof],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(2)],
+      effect: [
+        LoseLife(amount: Fixed(3), who: EachOpponent),
+        GainLife(amount: 3),
+      ],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(0)],
+      effect: [
+        Draw(count: 2),
+        EachOpponentMayScry(count: 1),
+      ],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([4]),
+      costs: [Loyalty(-3)],
+      effect: [
+        ExileTargetAndCopyUnlessAura(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment])),
+        ),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature or enchantment",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

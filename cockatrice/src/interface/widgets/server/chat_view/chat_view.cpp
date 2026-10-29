@@ -1,6 +1,7 @@
 #include "chat_view.h"
 
 #include "../../../../client/settings/cache_settings.h"
+#include "../../../../game/ruled/ruled_private_card_look.h"
 #include "../../client/sound_engine.h"
 #include "../../interface/pixel_map_generator.h"
 #include "../../interface/widgets/tabs/tab_account.h"
@@ -597,6 +598,25 @@ void ChatView::mouseMoveEvent(QMouseEvent *event)
 {
     QString anchorHref = getFragmentUnderMouse(event->pos()).charFormat().anchorHref();
     if (!anchorHref.isEmpty()) {
+        QString previewCardName;
+        const RuledCardPreviewHrefKind cardHrefKind = ruledResolveCardPreviewHref(anchorHref, &previewCardName);
+        if (cardHrefKind == RuledCardPreviewHrefKind::LegacyCard ||
+            cardHrefKind == RuledCardPreviewHrefKind::PrivateLookCard) {
+            hoveredContent = std::move(previewCardName);
+            hoveredItemType = HoveredCard;
+            emit cardNameHovered(hoveredContent);
+            viewport()->setCursor(Qt::PointingHandCursor);
+            QTextBrowser::mouseMoveEvent(event);
+            return;
+        }
+        if (cardHrefKind == RuledCardPreviewHrefKind::InvalidPrivateLookCard) {
+            hoveredContent.clear();
+            hoveredItemType = HoveredNothing;
+            viewport()->setCursor(Qt::IBeamCursor);
+            QTextBrowser::mouseMoveEvent(event);
+            return;
+        }
+
         const int delimiterIndex = anchorHref.indexOf("://");
         if (delimiterIndex != -1) {
             const QString scheme = anchorHref.left(delimiterIndex);

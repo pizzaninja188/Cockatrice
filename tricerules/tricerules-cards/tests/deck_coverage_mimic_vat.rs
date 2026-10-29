@@ -113,6 +113,7 @@ fn mimic_vat_create_copy_program_compiles_from_the_actual_card_definition() {
             if matches!(effect.as_ref(), SpellEffectKind::CreateTokenCopies {
                 count: Amount::Fixed(1),
                 source: TokenCopySource::LinkedExile { producer_ability_id, linked_exile_id },
+                copy_exception: None,
             } if producer_ability_id.as_str() == "imprint"
                 && linked_exile_id.as_str() == "imprinted_card")
     ));

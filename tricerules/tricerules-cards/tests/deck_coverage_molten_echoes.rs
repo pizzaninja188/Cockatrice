@@ -71,6 +71,7 @@ fn molten_echoes_copy_matching_creature_is_a_mandatory_typed_program() {
             if matches!(effect.as_ref(), SpellEffectKind::CreateTokenCopies {
                 count: Amount::Fixed(1),
                 source: TokenCopySource::TriggerObject,
+                copy_exception: None,
             })
     ));
     let [batch_slot] = copy.outputs.as_slice() else {

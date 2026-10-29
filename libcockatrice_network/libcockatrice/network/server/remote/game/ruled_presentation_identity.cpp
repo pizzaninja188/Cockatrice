@@ -73,7 +73,7 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        const QByteArray expected("e785e138da2c38a94fc9c6264a95caa1eac64f1f12e370465b21b89ba3c0c9b6");
+        const QByteArray expected("9bb78a9362736b421ff9e8620b887c4806ef98e85c7f03367d0a5bc86d783b11");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

@@ -2371,6 +2371,16 @@ message ReplayState {
   uint64 command_index = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
+// Owner-private, display-only full-card inspection data. The relay requires a present,
+// nonnegative viewer_player_id matching LogMessage.visible_to_player_id and rejects a
+// conflicting hidden_from_player_id. Names are plain external display names; receivers must
+// escape them as text and must not treat them as HTML. Enforce 1..64 names, each nonempty after
+// trimming and at most 512 UTF-8 bytes. This carries no game-object identity or rules authority.
+message PrivateCardLook {
+  optional int32 viewer_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated string external_card_names = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LogMessage {
   string text = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // If set, the relay delivers this message only to that player. Absent = broadcast to all.
@@ -2380,6 +2390,8 @@ message LogMessage {
   // Triggered and activated ability logs resolve the same text as their stack/menu presentation.
   // `text` remains the complete deterministic fallback. Routing applies to the entire message.
   AbilityLogPresentation ability_presentation = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // The relay validates matching owner-only routing before restoring this display-only payload.
+  optional PrivateCardLook private_card_look = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message AbilityLogPresentation {

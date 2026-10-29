@@ -22,6 +22,7 @@
 #include "game/ruled/ruled_payment_resume_policy.h"
 #include "game/ruled/ruled_pending_cast.h"
 #include "game/ruled/ruled_presentation_resolver.h"
+#include "game/ruled/ruled_private_card_look.h"
 #include "game/ruled/ruled_public_zone_order_plan.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
@@ -30,6 +31,7 @@
 #include <QBuffer>
 #include <QJsonArray>
 #include <QRectF>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
@@ -15022,4 +15024,89 @@ TEST(RuledPublicZoneOrderTest, FreeformHiddenAndOtherZonesRetainExistingPaths)
     coordinates.set_with_coords(true);
     EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), cards, coordinates));
     EXPECT_EQ(synthetic.annotation, QStringLiteral("synthetic stack object"));
+}
+
+TEST_F(RuledClientTest, PrivateCardLookViewerCheckLeavesPendingPromptUntouched)
+{
+    host.local = kOpponent;
+    QSignalSpy privateLook(state, &RuledClientState::privateCardLookReceived);
+    QSignalSpy timeline(state, &RuledClientState::engineTimeline);
+    const QString secretName = QStringLiteral("Fire & Ice / 龍 50%: \"Choice\"");
+
+    ruled::v1::RuledEventBatch batch;
+    auto *log = batch.add_events()->mutable_log();
+    log->set_text((QStringLiteral("fallback secret: ") + secretName).toStdString());
+    auto *look = log->mutable_private_card_look();
+    look->set_viewer_player_id(kOpponent);
+    look->add_external_card_names(secretName.toStdString());
+    auto *promptState = batch.mutable_resolution_prompt_state();
+    promptState->set_active(true);
+    promptState->set_deciding_player_id(kLocalPlayer);
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    choice->set_prompt_text("The other player is choosing.");
+
+    applyRaw(batch);
+
+    ASSERT_EQ(privateLook.size(), 1);
+    ASSERT_EQ(privateLook.first().size(), 1);
+    EXPECT_EQ(privateLook.first().first().toStringList(), QStringList{secretName});
+    ASSERT_EQ(timeline.size(), 1);
+    EXPECT_TRUE(timeline.first().first().toString().trimmed().isEmpty());
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, kLocalPlayer);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_EQ(state->choiceWaitingPlayer(), kLocalPlayer);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    privateLook.clear();
+    timeline.clear();
+    ruled::v1::RuledEventBatch wrongViewer = batch;
+    wrongViewer.mutable_events(0)->mutable_log()->mutable_private_card_look()->set_viewer_player_id(kLocalPlayer);
+    applyRaw(wrongViewer);
+    ASSERT_EQ(privateLook.size(), 0);
+    ASSERT_EQ(timeline.size(), 1);
+    EXPECT_TRUE(timeline.first().first().toString().trimmed().isEmpty());
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, kLocalPlayer);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    privateLook.clear();
+    timeline.clear();
+    ruled::v1::RuledEventBatch malformed = batch;
+    malformed.mutable_events(0)->mutable_log()->mutable_private_card_look()->set_external_card_names(
+        0, std::string(513, 'X'));
+    applyRaw(malformed);
+    ASSERT_EQ(privateLook.size(), 0);
+    ASSERT_EQ(timeline.size(), 1);
+    EXPECT_TRUE(timeline.first().first().toString().trimmed().isEmpty());
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, kLocalPlayer);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST(RuledPrivateCardLookTest, EncodedHrefResolvesForPreviewAndKeepsRawHrefBehavior)
+{
+    const QString cardName = QStringLiteral("Fire & Ice / 龍 50%: \"Choice\"");
+    const QString html = ruledPrivateCardLookMessageHtml({cardName});
+    EXPECT_NE(html.indexOf(QStringLiteral("Fire &amp; Ice")), -1);
+    EXPECT_NE(html.indexOf(QStringLiteral("50%")), -1);
+    EXPECT_EQ(html.indexOf(QStringLiteral("\"Choice\"")), -1);
+    EXPECT_NE(html.indexOf(QStringLiteral("&quot;Choice&quot;")), -1);
+
+    const QRegularExpression hrefExpression(QStringLiteral("href=\\\"([^\\\"]+)\\\""));
+    const auto match = hrefExpression.match(html);
+    ASSERT_TRUE(match.hasMatch());
+    QString resolvedName;
+    EXPECT_EQ(ruledResolveCardPreviewHref(match.captured(1), &resolvedName), RuledCardPreviewHrefKind::PrivateLookCard);
+    EXPECT_EQ(resolvedName, cardName);
+
+    EXPECT_EQ(ruledResolveCardPreviewHref(QStringLiteral("card://Legacy Raw Name"), &resolvedName),
+              RuledCardPreviewHrefKind::LegacyCard);
+    EXPECT_EQ(resolvedName, QStringLiteral("Legacy Raw Name"));
+    EXPECT_EQ(ruledResolveCardPreviewHref(QStringLiteral("card://ruled-private-look/%GG"), &resolvedName),
+              RuledCardPreviewHrefKind::InvalidPrivateLookCard);
 }

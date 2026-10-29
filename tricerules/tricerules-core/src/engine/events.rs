@@ -1321,6 +1321,7 @@ pub(super) fn ev_log(text: String) -> RuledEvent {
             visible_to_player_id: None,
             hidden_from_player_id: None,
             ability_presentation: None,
+            private_card_look: None,
         })),
     }
 }
@@ -1342,6 +1343,7 @@ pub(super) fn ev_log_ability(
             }),
             visible_to_player_id: None,
             hidden_from_player_id: None,
+            private_card_look: None,
         })),
     }
 }
@@ -1353,8 +1355,33 @@ pub(super) fn ev_log_private(text: String, player_id: i32) -> RuledEvent {
             visible_to_player_id: Some(player_id),
             hidden_from_player_id: None,
             ability_presentation: None,
+            private_card_look: None,
         })),
     }
+}
+
+/// Owner-private display data for a full-card look. Validate the schema and routing contract at
+/// the engine producer boundary so malformed names or viewer IDs fail closed before relay use.
+pub(super) fn ev_log_private_card_look(
+    text: String,
+    player_id: i32,
+    external_card_names: Vec<String>,
+) -> Result<RuledEvent, EngineError> {
+    let message = rv1::LogMessage {
+        text,
+        visible_to_player_id: Some(player_id),
+        hidden_from_player_id: None,
+        ability_presentation: None,
+        private_card_look: Some(rv1::PrivateCardLook {
+            viewer_player_id: Some(player_id),
+            external_card_names,
+        }),
+    };
+    tricerules_proto::validate_private_card_look(&message)
+        .map_err(|_| EngineError::Illegal("invalid owner-private card look payload"))?;
+    Ok(RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::Log(message)),
+    })
 }
 
 pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
@@ -1364,6 +1391,7 @@ pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
             visible_to_player_id: None,
             hidden_from_player_id: Some(player_id),
             ability_presentation: None,
+            private_card_look: None,
         })),
     }
 }

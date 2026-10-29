@@ -1491,6 +1491,9 @@ fn validate_effect_targets(
         | SpellEffectKind::SkipNextUntap { target: _ }
         | SpellEffectKind::GainControl { target: _, duration: _ }
         | SpellEffectKind::CopyTargetArtifactWithManaValueX { target: _ }
+        | SpellEffectKind::ExileTargetAndCopyUnlessAura {
+            subject: EffectSubject::Chosen(_),
+        }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Chosen(_),
         }
@@ -1557,6 +1560,11 @@ fn validate_effect_targets(
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("trigger-object token copy does not target"));
             }
+        }
+        SpellEffectKind::ExileTargetAndCopyUnlessAura { .. } => {
+            return Err(EngineError::Illegal(
+                "Kaya exile-and-copy requires one chosen target",
+            ));
         }
         SpellEffectKind::ExileIfWouldDieThisTurn { target: filter } => {
             if targets.len() != 1 {
@@ -1969,6 +1977,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Hideaway { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
+        | SpellEffectKind::EachOpponentMayScry { .. }
         | SpellEffectKind::LibraryPartition { .. }
         | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
         | SpellEffectKind::RevealUntilArtifact

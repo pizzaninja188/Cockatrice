@@ -4,7 +4,12 @@ pub(super) fn create_token_copies(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateTokenCopies { count, source } = effect else {
+    let SpellEffectKind::CreateTokenCopies {
+        count,
+        source,
+        copy_exception,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     if matches!(
@@ -33,7 +38,10 @@ pub(super) fn create_token_copies(
             producer_ability_id.clone(),
         ),
         TokenCopySource::Chosen(_) => {
-            for (_, snapshot) in cx.target_token_copy_snapshots_in_role(0) {
+            for (_, mut snapshot) in cx.target_token_copy_snapshots_in_role(0) {
+                if let Some(exception) = copy_exception.as_ref() {
+                    copying::apply_token_copy_exception(&mut snapshot, exception)?;
+                }
                 let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                     &snapshot,
                     count,
@@ -49,7 +57,10 @@ pub(super) fn create_token_copies(
             return Ok(EffectOutcome::Continue);
         }
     };
-    if let Some(snapshot) = snapshot {
+    if let Some(mut snapshot) = snapshot {
+        if let Some(exception) = copy_exception.as_ref() {
+            copying::apply_token_copy_exception(&mut snapshot, exception)?;
+        }
         let Some(produced_objects) = cx.engine.create_tokens_from_copy(
             &snapshot,
             count,
@@ -184,7 +195,7 @@ impl GameEngine {
         self.create_tokens_from_copy(&snapshot, count, stack, label, events)
     }
 
-    fn create_tokens_from_copy(
+    pub(super) fn create_tokens_from_copy(
         &mut self,
         snapshot: &TokenCopySnapshot,
         count: u32,

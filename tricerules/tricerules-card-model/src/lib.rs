@@ -46,8 +46,9 @@ pub use primitives::{
     RelativePlayerSet, ResolvingEffectDuration, ResolvingPermanentModifier, ResultSlotId,
     ResultType, SearchDestination, SearchZoneSelection, SpecialActionManaPurpose, SpellCastFilter,
     SpellCastOrigin, SpellCostModifier, SpellEffectKind, SpellKeyword, StaticEmblemEffect,
-    TargetMatchFilter, TargetObjectExclusion, TriggerCondition, TriggeredAbilityDef,
-    TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    TargetMatchFilter, TargetObjectExclusion, TokenCopyCreatureSubtypeChange, TokenCopyException,
+    TokenCopySubtypeMode, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

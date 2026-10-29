@@ -10,6 +10,8 @@
 #include "../../interface/widgets/server/chat_view/chat_view.h"
 #include "../zones/logic/card_zone_logic.h"
 
+#include <QStringList>
+
 class AbstractGame;
 class CardItem;
 class GameEventContext;
@@ -107,6 +109,7 @@ public slots:
                                  bool optionalIsBold = false,
                                  QString optionalFontColor = QString()) override;
     void logRuledGameplay(QString message);
+    void logRuledPrivateCardLook(QStringList cardNames);
     void prepareForNewGame();
 };
 

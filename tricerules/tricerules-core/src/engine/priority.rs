@@ -109,7 +109,8 @@ impl GameEngine {
         let begun_resolving_choice = self.state.pending_resolution.as_ref().and_then(|pending| {
             match &pending.continuation {
                 ResolutionContinuation::TypeChoiceSacrifice { stack, .. }
-                | ResolutionContinuation::ChosenCounterAddition { stack, .. } => {
+                | ResolutionContinuation::ChosenCounterAddition { stack, .. }
+                | ResolutionContinuation::EachOpponentMayScry { stack, .. } => {
                     is_departed(stack).then(|| stack.clone())
                 }
                 _ => None,
@@ -532,6 +533,23 @@ impl GameEngine {
                     self.state.pending_replacement_event.as_ref(),
                 )
             });
+        let begun_token_copy_entry =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    matches!(
+                        &pending.continuation,
+                        ResolutionContinuation::EntryCopySource { .. }
+                    ) && matches!(
+                        self.state.pending_replacement_event.as_ref(),
+                        Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry))
+                            if matches!(
+                                &entry.completion,
+                                BattlefieldEntryCompletion::TokenBatch(_)
+                            )
+                    )
+                });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -651,6 +669,13 @@ impl GameEngine {
                     if begun_combined_counters || begun_wolf_counters || begun_self_counters => {
                     // These validated counter instructions have begun. Surviving recipients keep
                     // accepted replacements and the original cursor after controller departure.
+                    preserve = true;
+                }
+                ResolutionContinuation::EntryCopySource { .. } if begun_token_copy_entry => {
+                    // The Clone-style copy choice is part of an already-begun token-creation
+                    // instruction. Preserve its exact parent cursor so departure reconciliation
+                    // can retire the departed entrant/chooser and finish the spell or ability's
+                    // remaining instructions (CR 608.2m).
                     preserve = true;
                 }
                 ResolutionContinuation::EntryChooseOpponent { .. }
@@ -1313,6 +1338,7 @@ impl GameEngine {
         self.refresh_authored_branch_departure(events)?;
         self.refresh_program_choose_departure(events)?;
         self.refresh_optional_triggered_ability_departure(events)?;
+        self.refresh_each_opponent_scry_departure(events)?;
         self.refresh_chosen_counter_addition_departure(events)?;
         self.refresh_program_proliferate_departure(events)?;
         self.refresh_counter_placement_departure(events)?;

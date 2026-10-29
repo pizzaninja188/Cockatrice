@@ -1,12 +1,13 @@
 #include "message_log_widget.h"
 
-#include "../ruled/ruled_actions.h"
 #include "../../client/sound_engine.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../board/card_item.h"
 #include "../board/translate_counter_name.h"
 #include "../phase.h"
 #include "../player/player.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_private_card_look.h"
 
 #include <../../client/settings/card_counter_settings.h>
 #include <libcockatrice/protocol/pb/context_move_card.pb.h>
@@ -891,6 +892,24 @@ void MessageLogWidget::logRuledGameplay(QString message)
         return;
     }
     QString formatted = QStringLiteral("<b>%1</b><br/>").arg(tr("Ruled game")) + sanitizeHtml(message);
+    if (pendingGameStartMessage) {
+        if (!deferredRuledMessages.isEmpty()) {
+            deferredRuledMessages += QLatin1String("<br/>");
+        }
+        deferredRuledMessages += formatted;
+        return;
+    }
+    appendHtmlServerMessage(formatted);
+}
+
+void MessageLogWidget::logRuledPrivateCardLook(QStringList cardNames)
+{
+    const QString body = ruledPrivateCardLookMessageHtml(cardNames);
+    if (body.isEmpty()) {
+        return;
+    }
+
+    const QString formatted = QStringLiteral("<b>%1</b><br/>").arg(tr("Ruled game")) + body;
     if (pendingGameStartMessage) {
         if (!deferredRuledMessages.isEmpty()) {
             deferredRuledMessages += QLatin1String("<br/>");

@@ -1532,6 +1532,7 @@ fn resultless_program_can_copy_its_trigger_observed_object() {
             if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokenCopies {
                 count: crate::primitives::Amount::Fixed(1),
                 source: crate::primitives::TokenCopySource::TriggerObject,
+                ..
             })
     ));
 }
@@ -1819,6 +1820,7 @@ fn linked_exile_copy_program_admits_generic_pair_and_count_two() {
                 source: crate::primitives::TokenCopySource::LinkedExile {
                     producer_ability_id, linked_exile_id,
                 },
+                ..
             } if producer_ability_id.as_str() == "archive_event"
                 && linked_exile_id.as_str() == "archived_card")
     ));
@@ -4029,6 +4031,7 @@ fn trigger_object_copy_is_trigger_context_scoped() {
     let effect = SpellEffectKind::CreateTokenCopies {
         count: Amount::Fixed(1),
         source: TokenCopySource::TriggerObject,
+        copy_exception: None,
     };
     assert!(effect.uses_trigger_object_reference());
     assert!(effect
@@ -22314,4 +22317,24 @@ fn chosen_counter_add_operation_deserializes_with_one_target_role() {
         .validate(crate::primitives::EffectContext::Ability)
         .unwrap_err()
         .contains("direct legacy effect-list instruction"));
+}
+
+#[test]
+fn token_copy_exception_rejects_negative_base_power_or_toughness() {
+    let make_exception = |power, toughness| crate::primitives::TokenCopyException {
+        colors: vec![],
+        power,
+        toughness,
+        added_card_types: vec![],
+        creature_subtypes: None,
+        added_keywords: vec![],
+    };
+
+    for exception in [make_exception(-1, 1), make_exception(1, -1)] {
+        assert_eq!(
+            exception.validate().unwrap_err(),
+            "token copy exception power and toughness must be nonnegative"
+        );
+    }
+    assert!(make_exception(0, 1).validate().is_ok());
 }

@@ -10,11 +10,13 @@ fn token_copy_requires_one_permanent_source() {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
         })),
+        copy_exception: None,
     };
     assert!(effect.validate(EffectContext::Spell).is_err());
     let effect = SpellEffectKind::CreateTokenCopies {
         count: 2.into(),
         source: TokenCopySource::Chosen(Box::new(TargetFilter::default_creature())),
+        copy_exception: None,
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {

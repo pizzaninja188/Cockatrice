@@ -31,6 +31,7 @@ mod counter_move;
 mod explore;
 mod hand_choice;
 mod join_forces;
+mod kaya_multiscry;
 pub(in crate::engine) mod library_cohorts;
 mod library_order;
 mod library_search;
@@ -1143,6 +1144,12 @@ impl GameEngine {
             return self.finish_optional_triggered_ability_choice(pending, answer, decision);
         }
         if matches!(
+            &pending.continuation,
+            ResolutionContinuation::EachOpponentMayScry { .. }
+        ) {
+            return self.finish_each_opponent_scry_choice(pending, answer, decision);
+        }
+        if matches!(
             pending.continuation,
             ResolutionContinuation::TypeChoiceSacrifice { .. }
         ) {
@@ -1517,6 +1524,9 @@ impl GameEngine {
         match &pending.continuation {
             ResolutionContinuation::OptionalTriggeredAbility { .. } => {
                 unreachable!("optional triggered ability choice handled above")
+            }
+            ResolutionContinuation::EachOpponentMayScry { .. } => {
+                unreachable!("Kaya multi-scry choice handled above")
             }
             ResolutionContinuation::SimultaneousEntryOrder { .. } => {
                 self.finish_entry_timestamp_order_choice(pending, chosen)

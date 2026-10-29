@@ -85,6 +85,7 @@ fn mirrorworks_is_registered_as_a_complete_card() {
                 if matches!(effect.as_ref(), tricerules_cards::SpellEffectKind::CreateTokenCopies {
                     count: tricerules_cards::Amount::Fixed(1),
                     source: TokenCopySource::TriggerObject,
+                    copy_exception: None,
                 })
         )
     ));

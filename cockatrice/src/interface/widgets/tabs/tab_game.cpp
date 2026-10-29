@@ -687,6 +687,8 @@ void TabGame::connectMessageLogToGameEventHandler()
 
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::engineTimeline, messageLog,
             &MessageLogWidget::logRuledGameplay);
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::privateCardLookReceived, messageLog,
+            &MessageLogWidget::logRuledPrivateCardLook);
     connect(game->getGameEventHandler(), &GameEventHandler::logGameClosed, messageLog,
             &MessageLogWidget::logGameClosed);
 }

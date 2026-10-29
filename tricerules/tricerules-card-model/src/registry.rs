@@ -4986,3 +4986,150 @@ mod scoped_grant_linked_exile_validation_tests {
             .expect("the scoped grant visitor counts the exact producer and wrapped consumer once");
     }
 }
+
+#[cfg(test)]
+mod kaya_intangible_schema_tests {
+    use super::*;
+
+    const DIRECT_LEGACY_EFFECTS: &str = r#"
+        (id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+         types: ["Planeswalker"], loyalty: Some(4),
+         activated_abilities: [
+           (ability_id: "minus_03", presentation: Fallback, costs: [Loyalty(-3)],
+            effect: [ExileTargetAndCopyUnlessAura(
+              subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment]))
+            )],
+            targeting: Some((groups: [(min: 1, max: 1,
+              prompt: "Choose target creature or enchantment", effect_indices: [0])]))),
+           (ability_id: "zero", presentation: Fallback, costs: [Loyalty(0)],
+            effect: [Draw(who: Controller, count: 2), EachOpponentMayScry(count: 1)]),
+           (ability_id: "plus_01", presentation: Fallback, costs: [Loyalty(1)],
+            effect: [CreateTokenCopies(count: 1, source: Source,
+              copy_exception: Some((colors: [White], power: 1, toughness: 1,
+                added_card_types: [Creature],
+                creature_subtypes: Some((mode: Add, subtypes: ["Spirit"])),
+                added_keywords: [Flying])))]),
+           (ability_id: "plus_02", presentation: Fallback, costs: [Loyalty(1)],
+            effect: [CreateTokenCopies(count: 1, source: Source,
+              copy_exception: Some((colors: [Black], power: 4, toughness: 4,
+                creature_subtypes: Some((mode: Replace, subtypes: ["Zombie"])))))]),
+         ])
+    "#;
+
+    #[test]
+    fn direct_legacy_ability_effects_accept_the_kaya_and_scarab_god_shapes() {
+        let result = CardRegistry::from_chunks_and_tokens(&[DIRECT_LEGACY_EFFECTS], &[]);
+        assert!(
+            result.is_ok(),
+            "the direct legacy ability schema should validate both copy exception shapes and both Kaya leaves: {:?}",
+            result.err()
+        );
+    }
+
+    fn registry_for(ron: &str) -> Result<CardRegistry, RegistryError> {
+        CardRegistry::from_chunks_and_tokens(&[ron], &[])
+    }
+
+    fn rejection_debug(ron: &str) -> String {
+        match registry_for(ron) {
+            Err(error) => format!("{error:?}"),
+            Ok(_) => panic!("schema fixture unexpectedly registered: {ron}"),
+        }
+    }
+
+    fn direct_ability_card(effect: &str) -> String {
+        format!(
+            r#"(id: "frame_probe", name: "Frame Probe", face_id: "frame_probe", types: ["Artifact"],
+              activated_abilities: [(ability_id: "ability_01", presentation: Fallback,
+                costs: [Tap], effect: [{effect}])])"#
+        )
+    }
+
+    #[test]
+    fn unsupported_wrappers_programs_and_modal_frames_reject_kaya_schema_effects() {
+        let wrapper = direct_ability_card(
+            "Conditional(condition: ActivePlayer(players: Controller), effect: EachOpponentMayScry(count: 1))",
+        );
+        assert!(
+            registry_for(&wrapper).is_err(),
+            "effect wrappers are not admitted"
+        );
+
+        let program = r#"(id: "program_probe", name: "Program Probe", face_id: "program_probe", types: ["Artifact"],
+          activated_abilities: [(ability_id: "ability_01", presentation: Fallback,
+            costs: [Tap], effect: [], program: Some((body: (steps: [
+              (id: "scry", bind: [], input: None,
+                kind: Perform(EachOpponentMayScry(count: 1)))], yields: []),
+              target_bindings: [])))])"#;
+        assert!(rejection_debug(program).contains("direct legacy ability effect lists"));
+
+        let program_branch = r#"(id: "program_branch_probe", name: "Program Branch Probe", face_id: "program_branch_probe", types: ["Artifact"],
+          activated_abilities: [(ability_id: "ability_01", presentation: Fallback,
+            costs: [Tap], effect: [], program: Some((body: (steps: [
+              (id: "branch", bind: [], input: None,
+                kind: If(condition: ActivePlayer(players: Controller),
+                  yes: (steps: [(id: "scry", bind: [], input: None,
+                    kind: Perform(EachOpponentMayScry(count: 1)))], yields: []),
+                  no: (steps: [], yields: [])))], yields: []),
+              target_bindings: [])))])"#;
+        assert!(rejection_debug(program_branch).contains("direct legacy ability effect lists"));
+
+        let modal_spell = r#"(id: "modal_spell_probe", name: "Modal Spell Probe", face_id: "modal_spell_probe", types: ["Sorcery"],
+          modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
+            (mode_id: "mode_01", presentation: Fallback,
+              effects: [EachOpponentMayScry(count: 1)])])))"#;
+        assert!(
+            registry_for(modal_spell).is_err(),
+            "modal spell modes are deferred"
+        );
+
+        let modal_ability = r#"(id: "modal_ability_probe", name: "Modal Ability Probe", face_id: "modal_ability_probe", types: ["Artifact"],
+          activated_abilities: [(ability_id: "ability_01", presentation: Fallback,
+            costs: [Tap], effect: [], modal: Some((min_modes: 1, max_modes: 1, modes: [
+              (mode_id: "mode_01", presentation: Fallback,
+                effects: [CreateTokenCopies(count: 1, source: Source,
+                  copy_exception: Some((colors: [White], power: 1, toughness: 1,
+                    added_card_types: [Creature],
+                    creature_subtypes: Some((mode: Add, subtypes: ["Spirit"])),
+                    added_keywords: [Flying])))])]))])"#;
+        assert!(
+            registry_for(modal_ability).is_err(),
+            "activated modal frames are deferred"
+        );
+    }
+
+    #[test]
+    fn copy_exception_shape_and_exile_target_binding_fail_closed() {
+        let invalid_copy_effect = "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((colors: [White, White], power: 1, toughness: 1, added_card_types: [Creature], creature_subtypes: Some((mode: Add, subtypes: [\"Spirit\"])), added_keywords: [Flying])))";
+        let parsed_copy: SpellEffectKind = RON_OPTS
+            .from_str(invalid_copy_effect)
+            .expect("copy exception fixture parses");
+        assert!(
+            parsed_copy.validate(EffectContext::Ability).is_err(),
+            "duplicate colors fail at effect validation: {parsed_copy:?}"
+        );
+        let invalid_copy = direct_ability_card(invalid_copy_effect);
+        assert!(rejection_debug(&invalid_copy).contains("colors must be distinct"));
+
+        let missing_target = direct_ability_card(
+            "ExileTargetAndCopyUnlessAura(subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment])))",
+        );
+        assert!(rejection_debug(&missing_target).contains("explicit singleton target group"));
+
+        let wrong_target = r#"(id: "wrong_target_probe", name: "Wrong Target Probe", face_id: "wrong_target_probe", types: ["Artifact"],
+          activated_abilities: [(ability_id: "ability_01", presentation: Fallback, costs: [Tap],
+            effect: [ExileTargetAndCopyUnlessAura(subject: Chosen((kind: Creature)))],
+            targeting: Some((groups: [(min: 1, max: 1,
+              prompt: "Choose target creature", effect_indices: [0])])))])"#;
+        assert!(rejection_debug(wrong_target).contains("Creature-or-Enchantment target filter"));
+
+        let ambiguous_target = r#"(id: "ambiguous_target_probe", name: "Ambiguous Target Probe", face_id: "ambiguous_target_probe", types: ["Artifact"],
+          activated_abilities: [(ability_id: "ability_01", presentation: Fallback, costs: [Tap],
+            effect: [ExileTargetAndCopyUnlessAura(subject: Chosen((kind: AnyPermanent,
+              permanent_types: [Creature, Enchantment])))],
+            targeting: Some((groups: [
+              (min: 1, max: 1, prompt: "Choose target", effect_indices: [0]),
+              (min: 1, max: 1, prompt: "Choose target", effect_indices: [0])])) )])"#;
+        assert!(rejection_debug(ambiguous_target).contains("exactly one target group"));
+    }
+}

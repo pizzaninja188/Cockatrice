@@ -2200,6 +2200,8 @@ signals:
     void engineCommandPendingUiChanged();
     /// Authoritative ruled-game timeline (lands, spells, combat, life) for the message log.
     void engineTimeline(QString message);
+    /// Owner-scoped display-only full-card previews from a relayed private look.
+    void privateCardLookReceived(QStringList cardNames);
     /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
     void enginePromptFeed(QString message);
     /// Emitted when the engine rejects a DeclareBlockers command (e.g. menace with one blocker).

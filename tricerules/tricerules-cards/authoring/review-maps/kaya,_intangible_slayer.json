@@ -1,0 +1,176 @@
+{
+  "format_version": 1,
+  "oracle_id": "9260ae3d-59bf-4e46-a13e-930754c3f0d2",
+  "spans": [
+    {
+      "face_id": "kaya_intangible_slayer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "kaya_intangible_slayer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0",
+        "/faces/0/activated_abilities/0/effect/1"
+      ]
+    },
+    {
+      "face_id": "kaya_intangible_slayer",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0",
+        "/faces/0/activated_abilities/1/effect/1"
+      ]
+    },
+    {
+      "face_id": "kaya_intangible_slayer",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/effect/0",
+        "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen",
+        "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/kind",
+        "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/permanent_types/0",
+        "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/permanent_types/1",
+        "/faces/0/activated_abilities/2/targeting",
+        "/faces/0/activated_abilities/2/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Hexproof",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "LifeAmount::Fixed",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/LoseLife/amount"
+    },
+    {
+      "symbol": "PlayerRecipient::EachOpponent",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/LoseLife/who"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "Amount::Fixed",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/GainLife/amount"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "Amount::Fixed",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/Draw/count"
+    },
+    {
+      "symbol": "SpellEffectKind::EachOpponentMayScry",
+      "typed_path": "/faces/0/activated_abilities/1/effect/1"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileTargetAndCopyUnlessAura",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/kind"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/permanent_types/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Enchantment",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen/permanent_types/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/2/targeting"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/2/targeting/groups/0"
+    },
+    {
+      "symbol": "TokenCopyException",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_intangible_slayer_has_exact_identity_and_three_abilities",
+      "covers": "exact Oracle identity, mana cost, Legendary Planeswalker type, Kaya subtype, loyalty 6, Hexproof, all three loyalty costs, direct effects, and the singleton Creature-or-Enchantment target group"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_plus_two_each_opponent_loses_three_and_controller_gains_three_once",
+      "covers": "in a three-player game, each opponent loses exactly 3 life and the controller gains exactly 3 once"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_zero_draws_before_ordered_optional_scry_choices_and_defers_library_moves",
+      "covers": "the actual zero ability draws two before ordered opponent opt-ins, publishes viewer-private looks only for accepters, and defers accepted library moves until all scry placement choices are complete"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_hexproof_and_loyalty_timing_block_opponent_targets_and_wrong_phase",
+      "covers": "opponents cannot target Kaya through Hexproof, only its controller can activate it, and loyalty activation is rejected outside its controller's main phase and after another loyalty ability was activated this turn"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_minus_three_copies_creature_exiles_source_and_triggers_entry_once",
+      "covers": "a legal creature target is exiled, a 1/1 white Spirit creature with flying and retained creature subtypes is created for the ability controller, Kaya leaves at exactly three loyalty, and the copied Visionary trigger draws once"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_minus_three_copies_non_aura_enchantment_with_added_type",
+      "covers": "a non-Aura enchantment is a legal target, is exiled, and is copied as a white 1/1 Enchantment Creature Spirit with flying"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_minus_three_auras_do_not_create_a_copy",
+      "covers": "an attached Pacifism Aura is a legal Enchantment target, is exiled, and creates no copy based on its last battlefield type"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_minus_three_rejects_land_target_without_paying_loyalty",
+      "covers": "a land is not a legal target and rejection leaves Kaya's loyalty and stack unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_kaya_intangible_slayer::kaya_minus_three_all_targets_becoming_illegal_keep_the_loyalty_cost_paid",
+      "covers": "if the sole target leaves before resolution, the ability does nothing and the activation's three-loyalty cost remains paid"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

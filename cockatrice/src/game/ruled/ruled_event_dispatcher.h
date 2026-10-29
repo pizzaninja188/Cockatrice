@@ -79,6 +79,7 @@ private:
     {
         QString timeline;
         QString promptFeed;
+        QVector<QStringList> privateCardLooks;
         bool combatStateDirty = false;
         bool battlefieldMapDirty = false;
         /// Stack order or a committed stack card's physical owner/id binding changed this batch.

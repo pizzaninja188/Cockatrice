@@ -27,6 +27,7 @@
 #include "game/server_counter.h"
 #include "game/server_game.h"
 #include "game/server_player.h"
+#include "game/server_spectator.h"
 #include "server_abstractuserinterface.h"
 #include "server_response_containers.h"
 #include "server_room.h"
@@ -40,9 +41,9 @@
 #include <array>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
+#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
-#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
@@ -8928,6 +8929,197 @@ TEST_F(RuledBatchTest, AbilityLogPresentationFollowsWholeMessageRecipientRouting
         }
         EXPECT_EQ(filtered.events(0).log().ability_presentation().prefix(), "public");
         EXPECT_EQ(filtered.events(1).log().ability_presentation().prefix(), recipient == p1 ? "private" : "hidden");
+    }
+}
+
+TEST_F(RuledBatchTest, PrivateCardLookOwnerRoutingRestoresOnlyValidatedOwnerPayload)
+{
+    auto *spectator = new Server_Spectator(game, 3, userA, false, nullptr);
+    insertParticipant(3, spectator);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *publicDecision = batch.add_events()->mutable_log();
+    publicDecision->set_text("The active player keeps the pending decision.");
+
+    auto addLook = [&](int viewer, const QString &fallback, const QString &secret, bool boundaryPayload) {
+        auto *log = batch.add_events()->mutable_log();
+        log->set_text(fallback.toStdString());
+        log->set_visible_to_player_id(viewer);
+        auto *look = log->mutable_private_card_look();
+        look->set_viewer_player_id(viewer);
+        if (boundaryPayload) {
+            look->add_external_card_names(std::string(512, 'X'));
+            look->add_external_card_names(secret.toStdString());
+            for (int i = 2; i < 64; ++i) {
+                look->add_external_card_names("Owner one card " + std::to_string(i));
+            }
+        } else {
+            look->add_external_card_names(secret.toStdString());
+        }
+    };
+    const QString p1Secret = QStringLiteral("P1 Secret Alpha");
+    const QString p2Secret = QStringLiteral("P2 Secret Beta");
+    addLook(p1->getPlayerId(), QStringLiteral("P1 fallback: ") + p1Secret, p1Secret, true);
+    addLook(p2->getPlayerId(), QStringLiteral("P2 fallback: ") + p2Secret, p2Secret, false);
+
+    auto *prompt = batch.add_events()->mutable_resolution_choice_required();
+    prompt->set_deciding_player_id(p1->getPlayerId());
+    prompt->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    prompt->set_prompt_text("Choose whether to continue.");
+    prompt->set_ordered(false);
+    prompt->add_candidate_object_ids(700);
+    prompt->add_candidate_object_ids(701);
+    prompt->add_candidate_names("Continue");
+    prompt->add_candidate_names("Stop");
+
+    for (auto *recipient :
+         {static_cast<Server_AbstractParticipant *>(p1), static_cast<Server_AbstractParticipant *>(p2),
+          static_cast<Server_AbstractParticipant *>(spectator)}) {
+        ruled::v1::RuledEventBatch wireBatch;
+        const auto filtered = redactFor(batch, recipient);
+        std::string serialized;
+        ASSERT_TRUE(filtered.SerializeToString(&serialized));
+        ASSERT_TRUE(wireBatch.ParseFromString(serialized));
+
+        const int recipientId = recipient->getPlayerId();
+        const QString expectedSecret = recipientId == p1->getPlayerId() ? p1Secret : p2Secret;
+        const QString forbiddenSecret = recipientId == p1->getPlayerId() ? p2Secret : p1Secret;
+        bool foundOwnLook = false;
+        bool foundPrompt = false;
+        for (const auto &event : wireBatch.events()) {
+            if (event.has_log() && event.log().has_private_card_look()) {
+                const auto &log = event.log();
+                const auto &look = log.private_card_look();
+                foundOwnLook = true;
+                EXPECT_EQ(look.viewer_player_id(), recipientId);
+                EXPECT_EQ(look.external_card_names_size(), recipientId == p1->getPlayerId() ? 64 : 1);
+                EXPECT_FALSE(log.has_visible_to_player_id());
+                EXPECT_FALSE(log.has_hidden_from_player_id());
+                EXPECT_NE(serialized.find(expectedSecret.toStdString()), std::string::npos);
+                EXPECT_EQ(serialized.find(forbiddenSecret.toStdString()), std::string::npos);
+            }
+            if (event.has_resolution_choice_required()) {
+                foundPrompt = true;
+                EXPECT_FALSE(event.resolution_choice_required().prompt_text().empty());
+                if (recipientId == p1->getPlayerId()) {
+                    EXPECT_EQ(event.resolution_choice_required().prompt_text(), "Choose whether to continue.");
+                } else {
+                    EXPECT_EQ(event.resolution_choice_required().prompt_text(),
+                              "Opponent is making a resolution choice.");
+                }
+            }
+        }
+
+        EXPECT_EQ(foundOwnLook, recipientId == p1->getPlayerId() || recipientId == p2->getPlayerId());
+        EXPECT_TRUE(foundPrompt);
+        if (recipientId == spectator->getPlayerId()) {
+            EXPECT_EQ(serialized.find(p1Secret.toStdString()), std::string::npos);
+            EXPECT_EQ(serialized.find(p2Secret.toStdString()), std::string::npos);
+            EXPECT_EQ(serialized.find("P1 fallback"), std::string::npos);
+            EXPECT_EQ(serialized.find("P2 fallback"), std::string::npos);
+        }
+    }
+}
+
+TEST_F(RuledBatchTest, MalformedPrivateCardLookIsDroppedForEveryRecipient)
+{
+    auto *spectator = new Server_Spectator(game, 3, userA, false, nullptr);
+    insertParticipant(3, spectator);
+    const QVector<Server_AbstractParticipant *> recipients = {p1, p2, spectator};
+
+    for (int malformed = 0; malformed < 9; ++malformed) {
+        ruled::v1::RuledEventBatch batch;
+        auto *log = batch.add_events()->mutable_log();
+        log->set_text("PRIVATE LOOK FALLBACK SECRET");
+        log->set_visible_to_player_id(1);
+        auto *look = log->mutable_private_card_look();
+        look->set_viewer_player_id(1);
+        look->add_external_card_names("Private look secret name");
+
+        switch (malformed) {
+            case 0:
+                look->clear_viewer_player_id();
+                break;
+            case 1:
+                look->set_viewer_player_id(-1);
+                log->set_visible_to_player_id(-1);
+                break;
+            case 2:
+                log->clear_visible_to_player_id();
+                break;
+            case 3:
+                log->set_visible_to_player_id(2);
+                break;
+            case 4:
+                log->set_hidden_from_player_id(2);
+                break;
+            case 5:
+                look->clear_external_card_names();
+                break;
+            case 6:
+                look->set_external_card_names(0, " \t\r\n ");
+                break;
+            case 7:
+                look->set_external_card_names(0, std::string(513, 'X'));
+                break;
+            case 8:
+                look->clear_external_card_names();
+                for (int i = 0; i < 65; ++i) {
+                    look->add_external_card_names("Private look secret name");
+                }
+                break;
+        }
+        auto *publicDecision = batch.add_events()->mutable_log();
+        publicDecision->set_text("Public decision remains visible.");
+
+        for (auto *recipient : recipients) {
+            const auto filtered = redactFor(batch, recipient);
+            std::string serialized;
+            ASSERT_TRUE(filtered.SerializeToString(&serialized));
+            ruled::v1::RuledEventBatch wireBatch;
+            ASSERT_TRUE(wireBatch.ParseFromString(serialized));
+            ASSERT_EQ(wireBatch.events_size(), 1) << "malformed case " << malformed;
+            ASSERT_TRUE(wireBatch.events(0).has_log()) << "malformed case " << malformed;
+            EXPECT_EQ(wireBatch.events(0).log().text(), "Public decision remains visible.")
+                << "malformed case " << malformed;
+            EXPECT_EQ(serialized.find("PRIVATE LOOK FALLBACK SECRET"), std::string::npos)
+                << "malformed case " << malformed;
+            EXPECT_EQ(serialized.find("Private look secret name"), std::string::npos) << "malformed case " << malformed;
+        }
+    }
+}
+
+TEST_F(RuledBatchTest, SpectatorCannotReceiveTypedPrivateCardLookByForgedRoute)
+{
+    auto *spectator = new Server_Spectator(game, 3, userA, false, nullptr);
+    insertParticipant(3, spectator);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *typed = batch.add_events()->mutable_log();
+    typed->set_text("Typed fallback must stay private.");
+    typed->set_visible_to_player_id(spectator->getPlayerId());
+    auto *look = typed->mutable_private_card_look();
+    look->set_viewer_player_id(spectator->getPlayerId());
+    look->add_external_card_names("Spectator-only forged name");
+
+    auto *legacy = batch.add_events()->mutable_log();
+    legacy->set_text("Legacy routed log remains visible.");
+    legacy->set_visible_to_player_id(spectator->getPlayerId());
+
+    for (auto *recipient :
+         {static_cast<Server_AbstractParticipant *>(p1), static_cast<Server_AbstractParticipant *>(p2),
+          static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto filtered = redactFor(batch, recipient);
+        if (recipient == spectator) {
+            ASSERT_EQ(filtered.events_size(), 1);
+            ASSERT_TRUE(filtered.events(0).has_log());
+            EXPECT_FALSE(filtered.events(0).log().has_private_card_look());
+            EXPECT_EQ(filtered.events(0).log().text(), "Legacy routed log remains visible.");
+            EXPECT_EQ(filtered.SerializeAsString().find("Typed fallback"), std::string::npos);
+            EXPECT_EQ(filtered.SerializeAsString().find("Spectator-only forged name"), std::string::npos);
+        } else {
+            EXPECT_EQ(filtered.events_size(), 0);
+        }
     }
 }
 

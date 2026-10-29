@@ -139,6 +139,15 @@ impl ModalDef {
                     mode.mode_id
                 ));
             }
+            if mode
+                .effects
+                .iter()
+                .any(SpellEffectKind::contains_kaya_schema_feature)
+            {
+                return Err(
+                    "Kaya schema effects are not admitted in modal ability or spell modes".into(),
+                );
+            }
             if mode.program.is_none() {
                 for effect in &mode.effects {
                     if allow_activated_modal_mode_effect {
@@ -766,7 +775,7 @@ pub struct PrototypeCharacteristics {
 impl CardFace {
     /// Populate the `#[serde(skip)]` type/supertype flags from `types`/`supertypes`, the single
     /// source of truth. Called once per face at registry load. Idempotent.
-    pub(crate) fn derive_type_flags(&mut self) {
+    pub fn derive_type_flags(&mut self) {
         fn has(list: &[String], t: &str) -> bool {
             list.iter().any(|x| x == t)
         }

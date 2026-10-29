@@ -226,6 +226,105 @@ pub enum TokenCopySource {
     Chosen(Box<TargetFilter>),
 }
 
+/// Which finite creature-subtype operation a copy exception applies after copying.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TokenCopySubtypeMode {
+    /// Add these creature subtypes while preserving existing ones (Kaya's Spirit copy).
+    Add,
+    /// Replace all copied creature subtypes with these (The Scarab God's Zombie copy).
+    Replace,
+}
+
+/// One closed creature-subtype adjustment for token copies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenCopyCreatureSubtypeChange {
+    pub mode: TokenCopySubtypeMode,
+    pub subtypes: Vec<String>,
+}
+
+/// Fixed, copiable-characteristic exceptions applied while constructing a token copy.
+///
+/// This intentionally excludes supertypes, arbitrary type-line changes, continuous modifiers,
+/// and general effect programs. Kaya, Intangible Slayer uses White 1/1 Creature Spirit with
+/// Flying; The Scarab God establishes the reusable Black 4/4 Zombie replacement shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenCopyException {
+    /// Exact resulting color set; an empty list means colorless.
+    pub colors: Vec<Color>,
+    /// Nonnegative fixed base power; CardFace stores its copiable base P/T as unsigned values.
+    pub power: i32,
+    /// Nonnegative fixed base toughness; CardFace stores its copiable base P/T as unsigned values.
+    pub toughness: i32,
+    /// Card types added to the copied type line.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added_card_types: Vec<PermanentTypeFilter>,
+    /// Optional creature-subtype operation. `None` preserves copied creature subtypes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creature_subtypes: Option<TokenCopyCreatureSubtypeChange>,
+    /// Copiable keyword abilities added to the copy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added_keywords: Vec<Keyword>,
+}
+
+impl TokenCopyException {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.power < 0 || self.toughness < 0 {
+            return Err("token copy exception power and toughness must be nonnegative".into());
+        }
+        if self
+            .colors
+            .iter()
+            .enumerate()
+            .any(|(index, color)| self.colors[..index].contains(color))
+        {
+            return Err("token copy exception colors must be distinct".into());
+        }
+        if self
+            .added_card_types
+            .iter()
+            .enumerate()
+            .any(|(index, card_type)| self.added_card_types[..index].contains(card_type))
+        {
+            return Err("token copy exception card types must be distinct".into());
+        }
+        if let Some(change) = &self.creature_subtypes {
+            if change.subtypes.is_empty() {
+                return Err(
+                    "token copy creature-subtype change requires at least one subtype".into(),
+                );
+            }
+            if change
+                .subtypes
+                .iter()
+                .any(|subtype| !crate::card_def::is_creature_type(subtype))
+            {
+                return Err(
+                    "token copy creature-subtype change requires known creature subtypes".into(),
+                );
+            }
+            if change
+                .subtypes
+                .iter()
+                .enumerate()
+                .any(|(index, subtype)| change.subtypes[..index].contains(subtype))
+            {
+                return Err("token copy creature-subtype change requires distinct subtypes".into());
+            }
+        }
+        if self
+            .added_keywords
+            .iter()
+            .enumerate()
+            .any(|(index, keyword)| self.added_keywords[..index].contains(keyword))
+        {
+            return Err("token copy exception keywords must be distinct".into());
+        }
+        Ok(())
+    }
+}
+
 /// Additional legality applied to a public battlefield-permanent choice. The ordinary
 /// [`TargetFilter`] still owns characteristics and controller scope; constraints compose facts
 /// involving another object already bound to the resolving stack item.
@@ -1176,6 +1275,11 @@ pub enum SpellEffectKind {
     Scry {
         count: Amount,
     },
+    /// Kaya, Intangible Slayer's finite +0 tail: each opponent may scry 1 after the draw effect.
+    /// This leaf is supported only in direct legacy ability effect lists for now.
+    EachOpponentMayScry {
+        count: u32,
+    },
     /// Look at the top `count` cards, put a bounded number back on top in any order, and put the
     /// rest into the graveyard in any order. The player selects the graveyard cohort first; when
     /// two or more cards remain, resolution parks again for their top-library order.
@@ -1640,6 +1744,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         linked_exile_id: Option<AbilityLinkId>,
     },
+    /// Kaya, Intangible Slayer's fixed −3 tail after its sole target's exile attempt. The chosen
+    /// target is a creature or enchantment; if it is not an Aura after that attempt, create a
+    /// White 1/1 Spirit creature token with Flying copying its current or last-known values.
+    /// Only direct legacy ability effect lists are admitted in this schema increment.
+    ExileTargetAndCopyUnlessAura {
+        subject: EffectSubject,
+    },
     /// Exile a permanent-valued subject and let the resulting card's owner cast it from exile
     /// for the stated alternative mana cost while that exact generation remains there. Airbend
     /// uses `{2}`; Release to the Wind demonstrates the same permission with a zero cost.
@@ -1911,6 +2022,10 @@ pub enum SpellEffectKind {
     CreateTokenCopies {
         count: Amount,
         source: TokenCopySource,
+        /// Fixed copy characteristics (e.g. Kaya's 1/1 flying Spirit or The Scarab God's 4/4
+        /// Zombie). Omitted to preserve ordinary CR 707 copy behavior.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        copy_exception: Option<TokenCopyException>,
     },
     /// CR 701.36: choose a creature token you control during resolution, then copy it.
     /// Untargeted (Wake the Reflections, Rootborn Defenses).
@@ -3697,6 +3812,26 @@ impl SpellEffectKind {
         }
     }
 
+    fn is_kaya_schema_feature(effect: &Self) -> bool {
+        matches!(
+            effect,
+            Self::EachOpponentMayScry { .. }
+                | Self::ExileTargetAndCopyUnlessAura { .. }
+                | Self::CreateTokenCopies {
+                    copy_exception: Some(_),
+                    ..
+                }
+        )
+    }
+
+    pub(crate) fn contains_kaya_schema_feature(&self) -> bool {
+        self.contains_legacy_flat_signature(Self::is_kaya_schema_feature)
+    }
+
+    fn is_direct_kaya_schema_feature(&self) -> bool {
+        Self::is_kaya_schema_feature(self)
+    }
+
     pub(crate) fn contains_memory_jar_leaf(&self) -> bool {
         self.contains_legacy_flat_signature(|leaf| {
             matches!(leaf, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
@@ -3859,6 +3994,7 @@ impl SpellEffectKind {
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
             | SpellEffectKind::Exile { subject, .. }
+            | SpellEffectKind::ExileTargetAndCopyUnlessAura { subject }
             | SpellEffectKind::ExileWithOwnerCastPermission { subject, .. }
             | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
@@ -3974,6 +4110,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
+            | SpellEffectKind::EachOpponentMayScry { .. }
             | SpellEffectKind::LibraryPartition { .. }
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
             | SpellEffectKind::RevealUntilArtifact
@@ -4291,6 +4428,17 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_kaya_schema_feature)
+            && effects.iter().any(|effect| {
+                effect.contains_kaya_schema_feature() && !effect.is_direct_kaya_schema_feature()
+            })
+        {
+            return Err(
+                "Kaya schema effects are supported only as direct legacy ability effects".into(),
+            );
+        }
         if effects.iter().any(Self::contains_chain_veil_permission)
             && effects != [Self::GrantChainVeilLoyaltyPermission]
         {
@@ -4459,6 +4607,11 @@ impl SpellEffectKind {
     /// Validation entry used only after an activated modal owner has established that this is a
     /// direct legacy mode effect. Nested effects still go through ordinary `validate` calls.
     pub(crate) fn validate_activated_modal_mode_effect(&self) -> Result<(), String> {
+        if self.contains_kaya_schema_feature() {
+            return Err(
+                "Kaya schema effects are not admitted in activated modal ability frames".into(),
+            );
+        }
         match self {
             Self::DoubleYourCounters => Ok(()),
             Self::AddOneCounterOfChosenKindToTarget => Err(
@@ -5221,7 +5374,20 @@ impl SpellEffectKind {
                 }
             }
         }
-        if let SpellEffectKind::CreateTokenCopies { source, .. } = self {
+        if let SpellEffectKind::CreateTokenCopies {
+            source,
+            copy_exception,
+            ..
+        } = self
+        {
+            if let Some(copy_exception) = copy_exception {
+                if context != EffectContext::Ability {
+                    return Err(
+                        "CreateTokenCopies copy exceptions require a direct ability effect".into(),
+                    );
+                }
+                copy_exception.validate()?;
+            }
             match source {
                 TokenCopySource::Chosen(target) if !target.is_permanent_only() => {
                     return Err("CreateTokenCopies requires a permanent source".into());
@@ -5243,6 +5409,22 @@ impl SpellEffectKind {
                     linked_exile_id.validate()?;
                 }
                 _ => {}
+            }
+        }
+        if let SpellEffectKind::EachOpponentMayScry { count } = self {
+            if context != EffectContext::Ability || *count != 1 {
+                return Err("EachOpponentMayScry is a direct ability effect with count 1".into());
+            }
+        }
+        if let SpellEffectKind::ExileTargetAndCopyUnlessAura { subject } = self {
+            if context != EffectContext::Ability {
+                return Err("ExileTargetAndCopyUnlessAura requires a direct ability effect".into());
+            }
+            match subject {
+                EffectSubject::Chosen(target) => target.validate_target_constraints()?,
+                _ => {
+                    return Err("ExileTargetAndCopyUnlessAura requires one chosen target".into());
+                }
             }
         }
         if let SpellEffectKind::Exile { subject, .. }

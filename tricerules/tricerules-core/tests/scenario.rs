@@ -143,6 +143,8 @@ mod deck_coverage_laezel;
 #[path = "scenario/deck_coverage_liliana_vess.rs"]
 mod deck_coverage_liliana_vess;
 
+#[path = "scenario/deck_coverage_kaya_intangible_slayer.rs"]
+mod deck_coverage_kaya_intangible_slayer;
 #[path = "scenario/deck_coverage_liliana_dreadhorde_general.rs"]
 mod deck_coverage_liliana_dreadhorde_general;
 #[path = "scenario/myr_damage_prerequisites.rs"]

@@ -507,12 +507,16 @@ mod tests {
         diagnostics::Record,
         ipc_envelope::Msg,
         ruled::v1::{
-            dev_command, ActivateAbility, CostObjectRef, DevAddMana, DevCommand, DevMoveCard,
-            DevPutCardInZone, DevZone, PassPriority, PaymentMana, PaymentSelection,
-            SelectedSpellMode, TargetRef, TargetRefKind,
+            dev_command, ruled_event::Ev, AbilitySourceZone, ActivateAbility, BattlefieldObject,
+            BeginSpellCast, CastMethod, CastSource, ChoiceKind, CommitSpellCast, CostObjectRef,
+            DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone, DiscardToHandSize,
+            HandActionKind, LandSource, PassPriority, PaymentMana, PaymentSelection, PlayLand,
+            PresentationPathKind, ResolutionChoiceDecision, SelectedSpellMode,
+            SubmitResolutionChoice, TargetRef, TargetRefKind,
         },
         ruled_command::Cmd,
-        CommanderSetup, MulliganDecision, PlayerCommand, PlayerDeck, RuledCommand,
+        ChooseStartingPlayer, CommanderSetup, MulliganDecision, PaymentQuery, PlayerCommand,
+        PlayerDeck, PreviewPayment, RuledCommand, SessionStart, ValidateDeck,
     };
 
     fn fixture() -> (tempfile::TempDir, Value) {
@@ -1403,5 +1407,667 @@ mod tests {
         assert!(!capture.warnings.is_empty());
         fs::write(&path, text.replace("raw/000000000001.pb", "../secret.pb")).unwrap();
         assert!(load_capture(root.path()).unwrap_err().contains("path"));
+    }
+
+    fn kaya_player_deck(player_id: i32, pilot: bool) -> PlayerDeck {
+        let mut mainboard_card_name = if pilot {
+            vec!["Kaya, Intangible Slayer".to_string(); 4]
+        } else {
+            Vec::new()
+        };
+        if pilot {
+            mainboard_card_name.extend(vec!["Plains".to_string(); 28]);
+            mainboard_card_name.extend(vec!["Swamp".to_string(); 28]);
+        } else {
+            mainboard_card_name.extend(vec!["Plains".to_string(); 60]);
+        }
+        PlayerDeck {
+            player_id,
+            mainboard_card_name,
+            commander_setup: Some(CommanderSetup {
+                declaration: Some(commander_setup::Declaration::NoCommander(true)),
+            }),
+        }
+    }
+
+    fn kaya_player_command(
+        session: &mut EngineSession,
+        player_id: i32,
+        command: RuledCommand,
+    ) -> IpcResponse {
+        let response = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::PlayerCommand(PlayerCommand {
+                    player_id,
+                    ruled_command: command.encode_to_vec(),
+                })),
+            })
+            .expect("Kaya player command keeps the session open");
+        assert!(
+            response.ok,
+            "player {player_id} command rejected: {}",
+            response.error
+        );
+        assert!(
+            response.batch.is_some(),
+            "accepted command returns its current batch"
+        );
+        response
+    }
+
+    fn kaya_pass_priority(session: &mut EngineSession, mut latest: IpcResponse) -> IpcResponse {
+        let mut player_id = session
+            .engine
+            .as_ref()
+            .expect("Kaya session has an engine")
+            .state
+            .priority_player_id();
+        let cleanup_discard_count = session
+            .engine
+            .as_ref()
+            .and_then(|engine| {
+                let state = &engine.state;
+                let player = state.players.iter().find(|player| player.id == player_id)?;
+                Some(
+                    if state.turn_step == tricerules_core::TurnStep::Cleanup
+                        && !state.cleanup_priority_active
+                        && state.cleanup_discard_player == Some(player_id)
+                    {
+                        player.hand.len().saturating_sub(7)
+                    } else {
+                        0
+                    },
+                )
+            })
+            .expect("Kaya priority player is in the session cleanup state");
+        // Both test decks contain only basics and Kaya, so the default maximum of seven applies.
+        let discard_count = cleanup_discard_count;
+        if discard_count > 0 {
+            let legal_actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&player_id)
+                .expect("the cleanup discard player receives current legal actions");
+            let cleanup_offers = legal_actions
+                .hand_actions
+                .iter()
+                .filter(|offer| {
+                    offer.kind == HandActionKind::HandActionCleanupDiscard as i32
+                        && offer.card_name != "Kaya, Intangible Slayer"
+                })
+                .take(discard_count)
+                .map(|offer| offer.hand_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                cleanup_offers.len(),
+                discard_count,
+                "cleanup offers include enough non-Kaya cards to discard"
+            );
+            latest = kaya_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                        hand_card_indices: cleanup_offers,
+                    })),
+                },
+            );
+            player_id = session
+                .engine
+                .as_ref()
+                .expect("Kaya session has an engine")
+                .state
+                .priority_player_id();
+            assert!(
+                kaya_batch(&latest).legal_by_player.contains_key(&player_id),
+                "the post-discard response publishes current actions for the new priority player"
+            );
+        }
+        kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PassPriority(PassPriority {})),
+            },
+        )
+    }
+
+    fn kaya_batch(response: &IpcResponse) -> &tricerules_proto::ruled::v1::RuledEventBatch {
+        response
+            .batch
+            .as_ref()
+            .expect("Kaya session response has a current event batch")
+    }
+
+    fn kaya_starting_player_offer(
+        response: &IpcResponse,
+    ) -> Option<tricerules_proto::ruled::v1::OpeningActions> {
+        kaya_batch(response)
+            .legal_by_player
+            .values()
+            .filter_map(|actions| actions.opening.as_ref())
+            .find(|opening| !opening.eligible_starting_player_ids.is_empty())
+            .cloned()
+    }
+
+    fn kaya_mulligan_offer(
+        response: &IpcResponse,
+    ) -> Option<tricerules_proto::ruled::v1::OpeningActions> {
+        kaya_batch(response)
+            .legal_by_player
+            .values()
+            .filter_map(|actions| actions.opening.as_ref())
+            .find(|opening| opening.can_keep)
+            .cloned()
+    }
+
+    fn kaya_capture_battlefield(
+        response: &IpcResponse,
+        player_id: i32,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) {
+        for event in &kaya_batch(response).events {
+            let Some(Ev::ZoneView(view)) = event.ev.as_ref() else {
+                continue;
+            };
+            if view.battlefields_unchanged {
+                continue;
+            }
+            if let Some(player_view) = view
+                .per_player
+                .iter()
+                .find(|player_view| player_view.player_id == player_id)
+            {
+                *battlefield = player_view.battlefield_objects.clone();
+            }
+        }
+    }
+
+    fn kaya_available_mana_abilities(
+        battlefield: &[BattlefieldObject],
+    ) -> Vec<(u32, u64, u32, String)> {
+        battlefield
+            .iter()
+            .filter(|permanent| !permanent.tapped)
+            .flat_map(|permanent| {
+                permanent
+                    .activated_abilities
+                    .iter()
+                    .filter(|ability| ability.is_mana_ability && ability.activatable)
+                    .map(|ability| {
+                        (
+                            permanent.object_id,
+                            permanent.zone_change_generation,
+                            ability.ability_index,
+                            ability.mana_produced.clone(),
+                        )
+                    })
+            })
+            .collect()
+    }
+
+    fn kaya_output_has_color(output: &str, color: char) -> bool {
+        output.to_ascii_uppercase().contains(color)
+    }
+
+    fn kaya_can_pay_from_offered_lands(battlefield: &[BattlefieldObject]) -> bool {
+        let mana = kaya_available_mana_abilities(battlefield);
+        let white = mana
+            .iter()
+            .filter(|ability| kaya_output_has_color(&ability.3, 'W'))
+            .count();
+        let black = mana
+            .iter()
+            .filter(|ability| kaya_output_has_color(&ability.3, 'B'))
+            .count();
+        mana.len() >= 7 && white >= 2 && black >= 2
+    }
+
+    fn kaya_on_battlefield(session: &EngineSession) -> Option<(u32, u64)> {
+        let engine = session.engine.as_ref()?;
+        let player = engine.state.player_idx(17)?;
+        engine.state.players[player]
+            .battlefield
+            .iter()
+            .find_map(|object_id| {
+                let object = engine.state.objects.get(object_id)?;
+                if object.card_id == "kaya,_intangible_slayer" {
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .map(|generation| (*object_id, *generation))
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn kaya_choice(
+        response: &IpcResponse,
+        choice_kind: ChoiceKind,
+    ) -> Option<tricerules_proto::ruled::v1::ResolutionChoiceRequired> {
+        kaya_batch(response)
+            .events
+            .iter()
+            .find_map(|event| match event.ev.as_ref() {
+                Some(Ev::ResolutionChoiceRequired(choice))
+                    if choice.choice_kind == choice_kind as i32 =>
+                {
+                    Some(choice.clone())
+                }
+                _ => None,
+            })
+    }
+
+    #[test]
+    fn kaya_zero_legal_session_casts_from_offers_and_reaches_the_optional_scry_leaf() {
+        let player_decks = vec![kaya_player_deck(17, true), kaya_player_deck(29, false)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![
+                        "Kaya, Intangible Slayer".into(),
+                        "Plains".into(),
+                        "Swamp".into(),
+                    ],
+                })),
+            })
+            .expect("deck validation leaves the session open");
+        assert!(
+            validation.ok,
+            "complete Kaya deck validates: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_028,
+                    seed: 20_261_028,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the normal game session open");
+        assert!(latest.ok, "normal Kaya GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the eligible starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: if starting.eligible_starting_player_ids.contains(&17) {
+                        17
+                    } else {
+                        starting.eligible_starting_player_ids[0]
+                    },
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+
+        for _ in 0..4 {
+            latest = kaya_pass_priority(&mut session, latest);
+        }
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+        }
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let mut committed = false;
+        for _ in 0..2_000 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let engine = session.engine.as_ref().unwrap();
+                let state = &engine.state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let pilot_actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active pilot receives current legal actions")
+                    .clone();
+                if let Some(land) = pilot_actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| action.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned()
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+
+                let kaya_spell = pilot_actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| {
+                        action.kind == HandActionKind::HandActionCastSpell as i32
+                            && action.card_name == "Kaya, Intangible Slayer"
+                    })
+                    .cloned();
+                if let Some(spell) =
+                    kaya_spell.filter(|_| kaya_can_pay_from_offered_lands(&battlefield))
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                                announcement: Some(
+                                    tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                                        source: Some(CastSource {
+                                            location: Some(
+                                                tricerules_proto::ruled::v1::cast_source::Location::
+                                                    HandIndex(spell.hand_index),
+                                            ),
+                                            expected_zone_change_generation: None,
+                                        }),
+                                        face_index: spell.face_index,
+                                        cast_method: CastMethod::Normal as i32,
+                                        ..Default::default()
+                                    },
+                                ),
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+                    let mut produced = PaymentMana::default();
+                    for _ in 0..7 {
+                        let mana_abilities = kaya_available_mana_abilities(&battlefield);
+                        let preferred = if produced.w < 2 {
+                            Some('W')
+                        } else if produced.b < 2 {
+                            Some('B')
+                        } else {
+                            None
+                        };
+                        let (source_object_id, generation, ability_index, output) =
+                            mana_abilities
+                                .iter()
+                                .find(|ability| {
+                                    preferred.is_none_or(|color| {
+                                        kaya_output_has_color(&ability.3, color)
+                                    })
+                                })
+                                .cloned()
+                                .expect("current battlefield view offers seven suitable basic-land mana abilities");
+                        let has_white = kaya_output_has_color(&output, 'W');
+                        let has_black = kaya_output_has_color(&output, 'B');
+                        assert_ne!(
+                            has_white, has_black,
+                            "each offered basic land makes one color"
+                        );
+                        if has_white {
+                            produced.w += 1;
+                        } else {
+                            produced.b += 1;
+                        }
+                        latest = kaya_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                    source_object_id,
+                                    ability_index,
+                                    source_zone: AbilitySourceZone::Battlefield as i32,
+                                    expected_zone_change_generation: generation,
+                                    ..Default::default()
+                                })),
+                            },
+                        );
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert_eq!(produced.w + produced.b, 7);
+                    assert!(produced.w >= 2 && produced.b >= 2);
+
+                    let pending = kaya_batch(&latest)
+                        .legal_by_player
+                        .get(&17)
+                        .and_then(|actions| actions.pending_spell_cast.as_ref())
+                        .expect("current cast-payment offer survives mana activation");
+                    let pending_payment = pending
+                        .payment_preview
+                        .as_ref()
+                        .expect("the pending cast publishes payment preview");
+                    let transaction_id = pending.transaction_id;
+                    let revision = pending_payment.revision;
+                    let proposed_payment = PaymentSelection {
+                        expected_state_revision: revision,
+                        mana: Some(produced),
+                        ..Default::default()
+                    };
+                    let payment_query = session
+                        .process(&IpcEnvelope {
+                            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                                player_id: 17,
+                                preview: Some(PreviewPayment {
+                                    transaction_id,
+                                    revision,
+                                    commit_spell_cast: Some(CommitSpellCast {
+                                        transaction_id,
+                                        payment: Some(proposed_payment),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                            })),
+                        })
+                        .expect("payment query keeps the session open");
+                    assert!(
+                        payment_query.ok,
+                        "Kaya payment preview: {}",
+                        payment_query.error
+                    );
+                    let preview = payment_query
+                        .batch
+                        .and_then(|batch| batch.payment_preview)
+                        .expect("PaymentQuery returns a current payment preview");
+                    assert!(
+                        preview.valid && preview.complete,
+                        "Kaya payment: {preview:?}"
+                    );
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                                transaction_id,
+                                payment: preview.selection,
+                                restricted_mana: preview.restricted_mana,
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+                    for _ in 0..8 {
+                        if kaya_on_battlefield(&session).is_some() {
+                            committed = true;
+                            break;
+                        }
+                        latest = kaya_pass_priority(&mut session, latest);
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert!(
+                        committed,
+                        "Kaya spell resolves through ordinary priority passes"
+                    );
+                    break;
+                }
+            }
+
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(
+            committed,
+            "60-card normal session finds and casts Kaya using offered lands"
+        );
+
+        let (source_object_id, generation) =
+            kaya_on_battlefield(&session).expect("normal Kaya spell is on the battlefield");
+        let source_view = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == source_object_id)
+            .expect("current server response publishes Kaya's battlefield view");
+        assert_eq!(source_view.zone_change_generation, generation);
+        let zero_ability = source_view
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == "activated_02"
+                    })
+                })
+            })
+            .expect("the published Kaya view identifies the zero-loyalty ability by stable ID");
+        assert!(zero_ability.activatable);
+        let hand_before = session.engine.as_ref().unwrap().state.players[0].hand.len();
+        let library_before = session.engine.as_ref().unwrap().state.players[0]
+            .library
+            .len();
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id,
+                    ability_index: zero_ability.ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+        latest = kaya_pass_priority(&mut session, latest);
+        assert!(
+            kaya_choice(&latest, ChoiceKind::ResolutionBranch).is_none(),
+            "first priority pass does not run Kaya's ability"
+        );
+        latest = kaya_pass_priority(&mut session, latest);
+        let opt_in = kaya_choice(&latest, ChoiceKind::ResolutionBranch)
+            .expect("the first opponent receives the current Scry 1 opt-in");
+        assert_eq!(opt_in.deciding_player_id, 29);
+        assert_ne!(opt_in.resolution_prompt_id, 0);
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.players[0].hand.len(),
+            hand_before + 2
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.players[0]
+                .library
+                .len(),
+            library_before - 2,
+            "Kaya draws both cards before its first opponent opt-in"
+        );
+        let accept_branch = opt_in
+            .resolution_branches
+            .iter()
+            .find(|branch| branch.branch_index == 0 && branch.selectable)
+            .expect("the current offer includes Scry 1");
+        latest = kaya_player_command(
+            &mut session,
+            29,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: opt_in.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: accept_branch.branch_index,
+                    ..Default::default()
+                })),
+            },
+        );
+        let private_looks = kaya_batch(&latest)
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(Ev::Log(log)) if log.private_card_look.is_some() => Some(log),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(private_looks.len(), 1);
+        assert_eq!(private_looks[0].visible_to_player_id, Some(29));
+        assert_eq!(
+            private_looks[0]
+                .private_card_look
+                .as_ref()
+                .unwrap()
+                .viewer_player_id,
+            Some(29)
+        );
+
+        let placement = kaya_choice(&latest, ChoiceKind::LibraryTop)
+            .expect("LibraryTop placement follows the opt-in and private look");
+        assert_eq!(placement.deciding_player_id, 29);
+        latest = kaya_player_command(
+            &mut session,
+            29,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: placement.resolution_prompt_id,
+                    ..Default::default()
+                })),
+            },
+        );
+        assert!(session
+            .engine
+            .as_ref()
+            .unwrap()
+            .state
+            .pending_resolution
+            .is_none());
+        assert!(kaya_batch(&latest)
+            .events
+            .iter()
+            .all(|event| !matches!(event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
     }
 }

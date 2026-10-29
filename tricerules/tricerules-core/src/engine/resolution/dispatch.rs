@@ -311,6 +311,12 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CreateTokenCopies { .. } => {
             tokens::create_token_copies(cx, effect)?
         }
+        effect @ SpellEffectKind::ExileTargetAndCopyUnlessAura { .. } => {
+            zones::exile_target_and_copy_unless_aura(cx, effect)?
+        }
+        effect @ SpellEffectKind::EachOpponentMayScry { .. } => {
+            kaya_multiscry::each_opponent_may_scry(cx, effect)?
+        }
         SpellEffectKind::Populate => tokens::populate(cx)?,
         effect @ SpellEffectKind::Amass { .. } => amass::amass(cx, effect)?,
         effect @ SpellEffectKind::CreateAttackingTokens { .. } => {

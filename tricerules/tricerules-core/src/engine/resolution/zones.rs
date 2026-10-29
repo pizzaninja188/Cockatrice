@@ -1059,6 +1059,112 @@ pub(super) fn exile(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn exile_target_and_copy_unless_aura(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileTargetAndCopyUnlessAura { subject } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let EffectSubject::Chosen(target_filter) = subject else {
+        return Err(EngineError::Illegal(
+            "Kaya exile-and-copy requires one chosen target",
+        ));
+    };
+    let [target_id] = cx.targets_by_role.first().map(Vec::as_slice).unwrap_or(&[]) else {
+        return Err(EngineError::Illegal(
+            "Kaya exile-and-copy requires one target receipt",
+        ));
+    };
+    let target_id = *target_id;
+    let target_generation = cx
+        .target_receipt_in_role(target_id, 0)
+        .and_then(|receipt| receipt.zone_change_generation)
+        .ok_or(EngineError::Illegal(
+            "Kaya exile-and-copy requires a generation-bound target receipt",
+        ))?;
+
+    // Use the ordinary synchronous Exile path with the already captured role receipt. That path
+    // emits the normal move event and records exact-generation LKI before the copy tail runs.
+    let outcome = exile(
+        cx,
+        SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(target_filter),
+            linked_exile_id: None,
+        },
+    )?;
+    if outcome != EffectOutcome::Continue {
+        return Ok(outcome);
+    }
+    cx.effect_result.produced_objects.clear();
+
+    let Some((types, mut snapshot)) =
+        token_copy_source_after_move(cx.engine, target_id, target_generation)
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if types.iter().any(|kind| kind == "Aura") {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let exception = tricerules_card_model::TokenCopyException {
+        colors: vec![Color::White],
+        power: 1,
+        toughness: 1,
+        added_card_types: vec![PermanentTypeFilter::Creature],
+        creature_subtypes: Some(tricerules_card_model::TokenCopyCreatureSubtypeChange {
+            mode: tricerules_card_model::TokenCopySubtypeMode::Add,
+            subtypes: vec!["Spirit".into()],
+        }),
+        added_keywords: vec![Keyword::Flying],
+    };
+    super::copying::apply_token_copy_exception(&mut snapshot, &exception)?;
+    let parked_stack = cx.parked_stack();
+    let Some(produced_objects) =
+        cx.engine
+            .create_tokens_from_copy(&snapshot, 1, parked_stack, cx.spell_label, cx.events)?
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    cx.effect_result.produced_objects = produced_objects;
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn token_copy_source_after_move(
+    engine: &GameEngine,
+    object_id: ObjectId,
+    zone_change_generation: u64,
+) -> Option<(Vec<String>, crate::state::TokenCopySnapshot)> {
+    let same_battlefield_incarnation = engine
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0)
+        == zone_change_generation
+        && engine
+            .state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+    let types = if same_battlefield_incarnation {
+        engine.characteristics(object_id)?.types
+    } else {
+        engine
+            .state
+            .last_known_types_by_generation
+            .get(&(object_id, zone_change_generation))?
+            .clone()
+    };
+    let snapshot = super::copying::token_copy_snapshot_for_incarnation(
+        &engine.state,
+        engine.registry,
+        object_id,
+        zone_change_generation,
+    )?;
+    Some((types, snapshot))
+}
+
 fn target_exile_result_group(cx: &EffectCx<'_>, object_id: ObjectId) -> Option<u32> {
     let program = cx.program_state.as_ref()?;
     let in_flight = program.in_flight.as_ref()?;

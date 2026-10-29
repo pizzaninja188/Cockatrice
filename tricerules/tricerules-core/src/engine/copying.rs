@@ -21,6 +21,74 @@ pub(super) fn double_faced_values(definition: &CardDefinition) -> Option<Box<Dou
     }))
 }
 
+/// Apply a closed copy exception to the owned active values and each intrinsic DFC face.
+/// The physical source is never mutated; later copies read these modified owned values.
+pub(super) fn apply_token_copy_exception(
+    snapshot: &mut TokenCopySnapshot,
+    exception: &tricerules_card_model::TokenCopyException,
+) -> Result<(), EngineError> {
+    apply_token_copy_exception_to_face(&mut snapshot.values.face, exception)?;
+    if let Some(faces) = snapshot.faces.as_mut() {
+        for face in &mut faces.faces {
+            apply_token_copy_exception_to_face(&mut face.face, exception)?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_token_copy_exception_to_face(
+    face: &mut CardFace,
+    exception: &tricerules_card_model::TokenCopyException,
+) -> Result<(), EngineError> {
+    let power = u32::try_from(exception.power)
+        .map_err(|_| EngineError::Illegal("negative token copy exception power"))?;
+    let toughness = u32::try_from(exception.toughness)
+        .map_err(|_| EngineError::Illegal("negative token copy exception toughness"))?;
+
+    face.characteristic_defining_abilities.retain(|ability| {
+        !matches!(
+            &ability.definition,
+            CharacteristicDefiningAbility::Devoid
+                | CharacteristicDefiningAbility::DefinesColors { .. }
+                | CharacteristicDefiningAbility::CountScaledPowerToughness { .. }
+        )
+    });
+    face.color_indicator = None;
+    face.colors_override = Some(exception.colors.clone());
+    face.power = Some(power);
+    face.toughness = Some(toughness);
+
+    for card_type in exception.added_card_types.iter().copied() {
+        let card_type = card_type.as_str().to_string();
+        if !face.types.contains(&card_type) {
+            face.types.push(card_type);
+        }
+    }
+    if let Some(change) = &exception.creature_subtypes {
+        if change.mode == tricerules_card_model::TokenCopySubtypeMode::Replace {
+            face.types.retain(|subtype| !is_creature_type(subtype));
+            face.characteristic_defining_abilities.retain(|ability| {
+                !matches!(
+                    &ability.definition,
+                    CharacteristicDefiningAbility::Changeling
+                )
+            });
+        }
+        for subtype in &change.subtypes {
+            if !face.types.contains(subtype) {
+                face.types.push(subtype.clone());
+            }
+        }
+    }
+    for keyword in &exception.added_keywords {
+        if !face.keywords.contains(keyword) {
+            face.keywords.push(*keyword);
+        }
+    }
+    face.derive_type_flags();
+    Ok(())
+}
+
 /// Capture both faces only when the physical source actually is double-faced. Copy-layer
 /// provenance alone cannot make a Clone double-faced, and face-down identity stays anonymous.
 pub(super) fn token_copy_snapshot_from(

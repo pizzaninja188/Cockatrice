@@ -123,6 +123,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_dev_command_parser.cpp
     src/game/ruled/ruled_dev_console.cpp
     src/game/ruled/ruled_event_dispatcher.cpp
+    src/game/ruled/ruled_private_card_look.cpp
     src/game/ruled/ruled_pending_cast.cpp
     src/game/ruled/ruled_pending_costs.cpp
     src/game/ruled/ruled_pending_targets.cpp

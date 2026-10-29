@@ -143,7 +143,12 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     let InstructionKind::Perform(effect) = &copy_program.body.steps[0].kind else {
         panic!("the copy mode starts with its token-copy instruction");
     };
-    let SpellEffectKind::CreateTokenCopies { count, source } = effect.as_ref() else {
+    let SpellEffectKind::CreateTokenCopies {
+        count,
+        source,
+        copy_exception: None,
+    } = effect.as_ref()
+    else {
         panic!("the copy mode creates one token copy");
     };
     assert_eq!(*count, Amount::Fixed(1));

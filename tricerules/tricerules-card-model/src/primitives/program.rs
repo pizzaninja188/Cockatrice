@@ -559,6 +559,29 @@ pub struct CompiledProgram {
     pub slots: Vec<CompiledSlot>,
 }
 
+fn block_contains_kaya_schema_feature(block: &AuthoredBlock) -> bool {
+    block
+        .steps
+        .iter()
+        .any(|instruction| match &instruction.kind {
+            InstructionKind::Perform(effect) => effect.contains_kaya_schema_feature(),
+            InstructionKind::If { yes, no, .. } | InstructionKind::IfResult { yes, no, .. } => {
+                block_contains_kaya_schema_feature(yes) || block_contains_kaya_schema_feature(no)
+            }
+            InstructionKind::Choose {
+                branches,
+                otherwise,
+                ..
+            } => {
+                block_contains_kaya_schema_feature(otherwise)
+                    || branches
+                        .iter()
+                        .any(|branch| block_contains_kaya_schema_feature(&branch.body))
+            }
+            InstructionKind::ImportCastPayment | InstructionKind::DrawCountChoice { .. } => false,
+        })
+}
+
 struct Compiler<'a> {
     owner: ProgramOwnerId,
     context: EffectContext,
@@ -633,6 +656,12 @@ impl CompiledProgram {
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
+        if block_contains_kaya_schema_feature(&program.body) {
+            return Err(
+                "Kaya schema effects are supported only in direct legacy ability effect lists"
+                    .into(),
+            );
+        }
         let source_program = normalize_authored_program(program, targeting)?;
         let source_program = source_program.as_ref();
         let mut compiled = Self::compile_internal(
@@ -5439,7 +5468,9 @@ fn validate_and_result_types(
                 cardinality: Cardinality { min: 0, max: None },
             }])
         }
-        SpellEffectKind::CreateTokenCopies { count, source } => {
+        SpellEffectKind::CreateTokenCopies {
+            count, source, ..
+        } => {
             effect.validate(context)?;
             validate_program_amount(count)?;
             validate_fixed_program_amount("CreateTokenCopies count", count)?;

@@ -1171,6 +1171,70 @@ impl TargetingDef {
         Ok(())
     }
 
+    fn validate_kaya_exile_target_binding(
+        targeting: Option<&Self>,
+        effects: &[SpellEffectKind],
+    ) -> Result<(), String> {
+        let exile_copy_indices = effects
+            .iter()
+            .enumerate()
+            .filter_map(|(index, effect)| {
+                matches!(effect, SpellEffectKind::ExileTargetAndCopyUnlessAura { .. })
+                    .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        if exile_copy_indices.is_empty() {
+            return Ok(());
+        }
+        let [effect_index] = exile_copy_indices.as_slice() else {
+            return Err(
+                "ExileTargetAndCopyUnlessAura requires exactly one target instruction".into(),
+            );
+        };
+        let SpellEffectKind::ExileTargetAndCopyUnlessAura {
+            subject: super::EffectSubject::Chosen(filter),
+        } = &effects[*effect_index]
+        else {
+            return Err("ExileTargetAndCopyUnlessAura requires one chosen target".into());
+        };
+        let expected_filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            permanent_types: vec![
+                super::PermanentTypeFilter::Creature,
+                super::PermanentTypeFilter::Enchantment,
+            ],
+            ..TargetFilter::default()
+        };
+        if **filter != expected_filter {
+            return Err(
+                "ExileTargetAndCopyUnlessAura requires the Creature-or-Enchantment target filter"
+                    .into(),
+            );
+        }
+        let Some(targeting) = targeting else {
+            return Err(
+                "ExileTargetAndCopyUnlessAura requires one explicit singleton target group".into(),
+            );
+        };
+        let [group] = targeting.groups.as_slice() else {
+            return Err("ExileTargetAndCopyUnlessAura requires exactly one target group".into());
+        };
+        if group.min != 1
+            || group.max != 1
+            || group.effect_indices.as_slice() != [*effect_index as u32]
+            || group.chooser != TargetChooser::Controller
+            || !group.distinct_from.is_empty()
+            || group.same_graveyard
+            || group.cast_cost_expansion.is_some()
+        {
+            return Err(
+                "ExileTargetAndCopyUnlessAura requires one controller-chosen singleton group bound only to its target role"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate_optional(
         targeting: Option<&Self>,
         effects: &[SpellEffectKind],
@@ -1178,6 +1242,7 @@ impl TargetingDef {
         if targeting.is_some_and(Self::requires_opponent_choice) {
             return Err("opponent target choices require a supported activated ability".into());
         }
+        Self::validate_kaya_exile_target_binding(targeting, effects)?;
         TargetSchema::compile(effects, targeting).map(|_| ())
     }
 
@@ -1187,6 +1252,7 @@ impl TargetingDef {
         source_zone: super::AbilitySourceZone,
         costs: &[super::AbilityCost],
     ) -> Result<(), String> {
+        Self::validate_kaya_exile_target_binding(targeting, effects)?;
         let schema = TargetSchema::compile(effects, targeting)?;
         Self::validate_activation_schema(targeting, schema, source_zone, costs)
     }
