@@ -597,6 +597,7 @@ impl GameEngine {
                 _ => {}
             }
         }
+        delayed.extend(self.collect_repeating_combat_damage_observers(events));
         let mut collected = self.collect_event_triggers(events);
         collected.extend(delayed.into_iter().map(|(watched, delayed)| {
             let ability_text = delayed.ability.fallback_text(&delayed.card_name);
@@ -635,6 +636,60 @@ impl GameEngine {
             self.stage_triggers(collected);
             Vec::new()
         }
+    }
+
+    fn collect_repeating_combat_damage_observers(
+        &self,
+        events: &[GameEvent],
+    ) -> Vec<(Option<TriggerObjectRef>, DelayedTriggerPayload)> {
+        let mut delayed = Vec::new();
+        for observer in &self.state.active_event_observers {
+            let EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn {
+                controller,
+                created_turn_instance,
+            } = &observer.matcher
+            else {
+                continue;
+            };
+            if *created_turn_instance != self.state.turn_instance
+                || self
+                    .state
+                    .player_idx(*controller)
+                    .is_none_or(|index| self.state.players[index].has_lost)
+            {
+                continue;
+            }
+            let EventObserverPayload::StageDelayedTrigger(payload) = &observer.payload else {
+                continue;
+            };
+            if payload.controller != *controller {
+                continue;
+            }
+
+            let mut damaged_players = std::collections::BTreeSet::new();
+            for event in events {
+                let GameEvent::DamageDealt { event } = event else {
+                    continue;
+                };
+                if event.classification != DamageClassification::Combat
+                    || event.amount == 0
+                    || event.source.zone_change_generation.is_none()
+                    || event.source.controller != *controller
+                    || !event.source.types.iter().any(|kind| kind == "Creature")
+                {
+                    continue;
+                }
+                if let DamageRecipient::Player(damaged_player) = event.recipient {
+                    damaged_players.insert(damaged_player);
+                }
+            }
+            delayed.extend(
+                damaged_players
+                    .into_iter()
+                    .map(|_| (None, payload.as_ref().clone())),
+            );
+        }
+        delayed
     }
 
     /// Collect matching triggers without staging them. Casts and activations use this boundary to
@@ -6481,5 +6536,958 @@ mod tests {
             &restored_snapshot,
             &restored_origin,
         ));
+    }
+
+    const JACE_OBSERVER_RUNTIME_FIXTURE: &str = r#"(
+        id: "jace_observer_runtime_fixture",
+        name: "Jace Observer Runtime Fixture",
+        face_id: "jace_observer_runtime_fixture",
+        supertypes: ["Legendary"],
+        types: ["Planeswalker"],
+        loyalty: 3,
+        activated_abilities: [(
+            ability_id: "activated_01",
+            presentation: Fallback,
+            costs: [Loyalty(1)],
+            effect: [CreateDelayedTriggerThisTurn(
+                ability: (
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
+                    trigger: WheneverCreatureDealsCombatDamageToPlayer(
+                        source_controller: Controller,
+                        damaged_player: AnyPlayer,
+                        cardinality: OneOrMorePerDamagedPlayer,
+                    ),
+                    effect: [
+                        Draw(count: 1),
+                        Discard(who: Controller, quantity: Exact(1)),
+                    ],
+                ),
+            )],
+        )],
+    )"#;
+
+    const JACE_OBSERVER_NO_COST_RUNTIME_FIXTURE: &str = r#"(
+        id: "jace_observer_runtime_fixture_no_cost",
+        name: "Jace Observer Runtime Fixture No Cost",
+        face_id: "jace_observer_runtime_fixture_no_cost",
+        supertypes: ["Legendary"],
+        types: ["Planeswalker"],
+        loyalty: 3,
+        activated_abilities: [(
+            ability_id: "activated_01",
+            presentation: Fallback,
+            costs: [],
+            effect: [CreateDelayedTriggerThisTurn(
+                ability: (
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
+                    trigger: WheneverCreatureDealsCombatDamageToPlayer(
+                        source_controller: Controller,
+                        damaged_player: AnyPlayer,
+                        cardinality: OneOrMorePerDamagedPlayer,
+                    ),
+                    effect: [
+                        Draw(count: 1),
+                        Discard(who: Controller, quantity: Exact(1)),
+                    ],
+                ),
+            )],
+        )],
+    )"#;
+
+    const OBSERVER_TEST_CREATURE: &str = r#"(
+        id: "observer_test_creature",
+        name: "Observer Test Creature",
+        face_id: "observer_test_creature",
+        types: ["Creature"],
+        power: Some(1),
+        toughness: Some(1),
+    )"#;
+
+    #[test]
+    fn jace_combat_observer_activation_reaches_runtime() {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                JACE_OBSERVER_RUNTIME_FIXTURE,
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let decks = (0..3)
+            .map(|_| EngineDeck {
+                mainboard: vec!["mountain".into(); 40],
+                commanders: Vec::new(),
+            })
+            .collect();
+        let mut engine = GameEngine::new_with_registry(
+            200_908,
+            &[17, 29, 43],
+            20,
+            Some(decks),
+            true,
+            Box::leak(Box::new(registry)),
+        )
+        .unwrap();
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        engine
+            .apply_dev_command(
+                17,
+                &rv1::DevCommand {
+                    target_player_id: 17,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: "Jace Observer Runtime Fixture".into(),
+                            zone: rv1::DevZone::Battlefield as i32,
+                            ready: true,
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        let jace = engine.state.next_object_id - 1;
+        engine.reconcile_activated_ability_slots();
+        let source_ref = engine.payment_object_ref(jace);
+        let command = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: jace,
+                    ability_index: 0,
+                    expected_zone_change_generation: source_ref.zone_change_generation,
+                    ..Default::default()
+                },
+            )),
+        };
+        engine.apply_scenario_command(17, &command).unwrap();
+        let mut events = Vec::new();
+        engine.resolve_top_of_stack(&mut events).unwrap();
+
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+        let observer = &engine.state.active_event_observers[0];
+        assert_eq!(observer.watched, None);
+        assert_eq!(
+            observer.matcher,
+            EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn {
+                controller: 17,
+                created_turn_instance: engine.state.turn_instance,
+            }
+        );
+        let EventObserverPayload::StageDelayedTrigger(payload) = &observer.payload else {
+            panic!("Jace's +1 installs a delayed trigger observer");
+        };
+        assert_eq!(payload.controller, 17);
+        assert_eq!(payload.source.object_id, jace);
+        assert_eq!(
+            payload.source.zone_change_generation,
+            engine.state.zone_change_generation[&jace]
+        );
+        assert_eq!(payload.source.controller_at_event, 17);
+        assert_eq!(payload.affected_player, None);
+        assert_eq!(payload.memory_jar_cohort, None);
+        assert_eq!(payload.program_definition, None);
+        assert!(payload.presentation.is_some());
+    }
+
+    fn place_observer_test_card(
+        engine: &mut GameEngine,
+        player: PlayerId,
+        card_name: &str,
+    ) -> ObjectId {
+        engine
+            .apply_dev_command(
+                player,
+                &rv1::DevCommand {
+                    target_player_id: player,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: card_name.into(),
+                            zone: rv1::DevZone::Battlefield as i32,
+                            ready: true,
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        engine.state.next_object_id - 1
+    }
+
+    fn move_prepared_object_from_battlefield(
+        engine: &mut GameEngine,
+        object_id: ObjectId,
+        new_controller: PlayerId,
+    ) {
+        let generation = engine.state.zone_change_generation[&object_id];
+        if let Some(object) = engine.state.objects.get_mut(&object_id) {
+            object.controller = new_controller;
+            object.zone = Zone::Graveyard;
+        }
+        for player in &mut engine.state.players {
+            player.battlefield.retain(|id| *id != object_id);
+        }
+        engine
+            .state
+            .zone_change_generation
+            .insert(object_id, generation + 1);
+    }
+
+    fn observer_fixture_with_creatures_and_host(
+        host_definition: &str,
+        host_card_name: &str,
+        game_id: u64,
+    ) -> (GameEngine, ObjectId, [ObjectId; 2]) {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                host_definition,
+                OBSERVER_TEST_CREATURE,
+                include_str!("../../../tricerules-cards/data/abundance.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let decks = (0..3)
+            .map(|_| EngineDeck {
+                mainboard: vec!["mountain".into(); 40],
+                commanders: Vec::new(),
+            })
+            .collect();
+        let mut engine = GameEngine::new_with_registry(
+            game_id,
+            &[17, 29, 43],
+            20,
+            Some(decks),
+            true,
+            Box::leak(Box::new(registry)),
+        )
+        .unwrap();
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        let jace = place_observer_test_card(&mut engine, 17, host_card_name);
+        let creatures = [
+            place_observer_test_card(&mut engine, 17, "Observer Test Creature"),
+            place_observer_test_card(&mut engine, 17, "Observer Test Creature"),
+        ];
+        engine.reconcile_activated_ability_slots();
+        let source_ref = engine.payment_object_ref(jace);
+        let command = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: jace,
+                    ability_index: 0,
+                    expected_zone_change_generation: source_ref.zone_change_generation,
+                    ..Default::default()
+                },
+            )),
+        };
+        engine.apply_scenario_command(17, &command).unwrap();
+        let mut events = Vec::new();
+        engine.resolve_top_of_stack(&mut events).unwrap();
+        (engine, jace, creatures)
+    }
+
+    fn jace_observer_fixture_with_creatures() -> (GameEngine, ObjectId, [ObjectId; 2]) {
+        observer_fixture_with_creatures_and_host(
+            JACE_OBSERVER_RUNTIME_FIXTURE,
+            "Jace Observer Runtime Fixture",
+            200_909,
+        )
+    }
+
+    fn activate_observer_fixture_ability(
+        engine: &mut GameEngine,
+        controller: PlayerId,
+        source: ObjectId,
+    ) {
+        let source_ref = engine.payment_object_ref(source);
+        let command = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: source,
+                    ability_index: 0,
+                    expected_zone_change_generation: source_ref.zone_change_generation,
+                    ..Default::default()
+                },
+            )),
+        };
+        engine.apply_scenario_command(controller, &command).unwrap();
+        let mut events = Vec::new();
+        engine.resolve_top_of_stack(&mut events).unwrap();
+    }
+
+    fn jace_observer_fixture_with_foreign_owned_source() -> (GameEngine, ObjectId, ObjectId) {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                JACE_OBSERVER_RUNTIME_FIXTURE,
+                OBSERVER_TEST_CREATURE,
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let decks = (0..3)
+            .map(|_| EngineDeck {
+                mainboard: vec!["mountain".into(); 40],
+                commanders: Vec::new(),
+            })
+            .collect();
+        let mut engine = GameEngine::new_with_registry(
+            200_911,
+            &[17, 29, 43],
+            20,
+            Some(decks),
+            true,
+            Box::leak(Box::new(registry)),
+        )
+        .unwrap();
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        let jace = place_observer_test_card(&mut engine, 43, "Jace Observer Runtime Fixture");
+        engine.state.players[2]
+            .battlefield
+            .retain(|object_id| *object_id != jace);
+        engine.state.players[0].battlefield.push(jace);
+        let source = engine.state.objects.get_mut(&jace).unwrap();
+        source.base_controller = 17;
+        source.controller = 17;
+        let creature = place_observer_test_card(&mut engine, 17, "Observer Test Creature");
+        engine.reconcile_activated_ability_slots();
+
+        let source_ref = engine.payment_object_ref(jace);
+        let command = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: jace,
+                    ability_index: 0,
+                    expected_zone_change_generation: source_ref.zone_change_generation,
+                    ..Default::default()
+                },
+            )),
+        };
+        engine.apply_scenario_command(17, &command).unwrap();
+        let mut events = Vec::new();
+        engine.resolve_top_of_stack(&mut events).unwrap();
+        assert_eq!(engine.state.objects[&jace].owner, 43);
+        assert_eq!(engine.state.objects[&jace].controller, 17);
+        (engine, jace, creature)
+    }
+
+    fn prepared_combat_damage_event(
+        engine: &GameEngine,
+        source: ObjectId,
+        damaged_player: PlayerId,
+    ) -> GameEvent {
+        let generation = engine.state.zone_change_generation[&source];
+        let mut event = DamageEvent::combat(
+            source,
+            17,
+            "Observer Test Creature",
+            DamageRecipient::Player(damaged_player),
+            1,
+        );
+        engine.capture_combat_damage_source(&mut event);
+        assert_eq!(event.source.zone_change_generation, Some(generation));
+        GameEvent::DamageDealt { event }
+    }
+
+    fn place_observer_test_card_in_hand(
+        engine: &mut GameEngine,
+        player: PlayerId,
+        card_name: &str,
+    ) -> ObjectId {
+        engine
+            .apply_dev_command(
+                player,
+                &rv1::DevCommand {
+                    target_player_id: player,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: card_name.into(),
+                            zone: rv1::DevZone::Hand as i32,
+                            ready: false,
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        engine.state.next_object_id - 1
+    }
+
+    fn resolve_test_combat_damage_to_players(
+        engine: &mut GameEngine,
+        attacks: &[(ObjectId, PlayerId)],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        use crate::state::{CombatAttackAssignment, CombatDefenderTarget, CombatState};
+
+        let attacking = attacks.iter().map(|(attacker, _)| *attacker).collect();
+        let attack_assignments = attacks
+            .iter()
+            .map(|&(attacker, defending_player)| {
+                let zone_change_generation = engine
+                    .state
+                    .zone_change_generation
+                    .get(&attacker)
+                    .copied()
+                    .unwrap_or(0);
+                (
+                    attacker,
+                    CombatAttackAssignment {
+                        attacker: TriggerObjectRef {
+                            object_id: attacker,
+                            zone_change_generation,
+                            controller_at_event: engine.controller_of(attacker).unwrap(),
+                        },
+                        defender: CombatDefenderTarget::Player(defending_player),
+                        defending_player,
+                    },
+                )
+            })
+            .collect();
+        let combat = CombatState {
+            attacking,
+            attack_assignments,
+            blockers: std::collections::HashMap::new(),
+            damage_assignments: std::collections::HashMap::new(),
+            trample_player_damage: std::collections::HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: attacks.iter().map(|(_, defender)| *defender).collect(),
+            blockers_declared: true,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: std::collections::HashMap::new(),
+            first_strike_damage_done: false,
+        };
+        engine.state.turn_step = TurnStep::CombatDamage;
+        engine.state.combat = Some(combat.clone());
+        engine
+            .resolve_combat_damage(&combat, super::super::combat::DamagePass::Normal, events)
+            .unwrap();
+    }
+
+    #[test]
+    fn repeating_jace_observer_groups_players_and_survives_source_loss_until_cleanup() {
+        let (mut engine, jace, creatures) = jace_observer_fixture_with_creatures();
+        let first_slice = vec![
+            prepared_combat_damage_event(&engine, creatures[0], 29),
+            prepared_combat_damage_event(&engine, creatures[1], 29),
+        ];
+        for creature in creatures {
+            move_prepared_object_from_battlefield(&mut engine, creature, 29);
+        }
+        let mut events = Vec::new();
+        let first = engine.fire_triggers_collecting(&first_slice, &mut events);
+        assert_eq!(first.len(), 1, "two creatures hit one player in one slice");
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+
+        let jace_generation = engine.state.zone_change_generation[&jace];
+        let owner_index = engine.state.player_idx(17).unwrap();
+        engine.state.players[owner_index]
+            .battlefield
+            .retain(|object_id| *object_id != jace);
+        engine.state.objects.remove(&jace);
+        engine
+            .state
+            .zone_change_generation
+            .insert(jace, jace_generation + 1);
+
+        let later_creatures = [
+            place_observer_test_card(&mut engine, 17, "Observer Test Creature"),
+            place_observer_test_card(&mut engine, 17, "Observer Test Creature"),
+        ];
+        let later_slice = vec![
+            prepared_combat_damage_event(&engine, later_creatures[0], 29),
+            prepared_combat_damage_event(&engine, later_creatures[1], 43),
+        ];
+        for creature in later_creatures {
+            move_prepared_object_from_battlefield(&mut engine, creature, 29);
+        }
+        let later = engine.fire_triggers_collecting(&later_slice, &mut events);
+        assert_eq!(
+            later.len(),
+            2,
+            "a later slice repeats for each damaged player"
+        );
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+
+        engine.state.turn_step = TurnStep::Cleanup;
+        engine.finish_cleanup_roll_new_turn(Vec::new()).unwrap();
+        assert!(engine.state.active_event_observers.is_empty());
+    }
+
+    #[test]
+    fn identical_observers_from_the_same_source_and_child_id_remain_independent() {
+        let (mut engine, jace, creatures) = observer_fixture_with_creatures_and_host(
+            JACE_OBSERVER_NO_COST_RUNTIME_FIXTURE,
+            "Jace Observer Runtime Fixture No Cost",
+            200_912,
+        );
+        activate_observer_fixture_ability(&mut engine, 17, jace);
+        assert_eq!(engine.state.active_event_observers.len(), 2);
+        let damage_slice = vec![
+            prepared_combat_damage_event(&engine, creatures[0], 29),
+            prepared_combat_damage_event(&engine, creatures[1], 29),
+        ];
+        let mut events = Vec::new();
+        let triggers = engine.fire_triggers_collecting(&damage_slice, &mut events);
+
+        assert_eq!(triggers.len(), 2);
+        assert!(triggers.iter().all(|trigger| trigger.source_id == jace));
+        assert_eq!(
+            triggers[0].ability.ability_id,
+            triggers[1].ability.ability_id
+        );
+    }
+
+    #[test]
+    fn repeating_combat_observer_rejects_nonqualifying_damage_snapshots() {
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        let qualifying = prepared_combat_damage_event(&engine, creatures[0], 29);
+
+        let mut noncreature = qualifying.clone();
+        if let GameEvent::DamageDealt { event } = &mut noncreature {
+            event.source.types = vec!["Artifact".into()];
+        }
+        let mut wrong_controller = qualifying.clone();
+        if let GameEvent::DamageDealt { event } = &mut wrong_controller {
+            event.source.controller = 29;
+        }
+        let mut noncombat = qualifying.clone();
+        if let GameEvent::DamageDealt { event } = &mut noncombat {
+            event.classification = DamageClassification::Noncombat;
+        }
+        let mut zero_damage = qualifying.clone();
+        if let GameEvent::DamageDealt { event } = &mut zero_damage {
+            event.amount = 0;
+        }
+        let mut damage_to_permanent = qualifying.clone();
+        if let GameEvent::DamageDealt { event } = &mut damage_to_permanent {
+            event.recipient = DamageRecipient::Permanent(creatures[1]);
+        }
+        let invalid_slices = [
+            ("noncreature source", noncreature),
+            ("wrong event-time controller", wrong_controller),
+            ("noncombat damage", noncombat),
+            ("zero or fully prevented damage", zero_damage),
+            ("damage to a permanent", damage_to_permanent),
+        ];
+
+        let mut ruled_events = Vec::new();
+        for (description, slice) in invalid_slices {
+            let triggers = engine.fire_triggers_collecting(&[slice], &mut ruled_events);
+            assert!(
+                triggers.is_empty(),
+                "{description} cannot trigger the observer"
+            );
+            assert_eq!(
+                engine.state.active_event_observers.len(),
+                1,
+                "{description} leaves the turn-limited observer waiting"
+            );
+        }
+
+        let qualifying_triggers = engine.fire_triggers_collecting(&[qualifying], &mut ruled_events);
+        assert_eq!(qualifying_triggers.len(), 1);
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+    }
+
+    #[test]
+    fn owner_concede_removes_source_but_keeps_controller_observer_alive() {
+        let (mut engine, jace, attacker) = jace_observer_fixture_with_foreign_owned_source();
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+
+        engine
+            .apply_scenario_command(
+                43,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+
+        assert!(engine.state.players[engine.state.player_idx(43).unwrap()].has_lost);
+        assert!(
+            !engine.state.objects.contains_key(&jace),
+            "a departed owner loses the physical planeswalker even while another player controls it"
+        );
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+        let EventObserverPayload::StageDelayedTrigger(payload) =
+            &engine.state.active_event_observers[0].payload
+        else {
+            panic!("Jace's observer remains a delayed trigger");
+        };
+        assert_eq!(payload.controller, 17);
+
+        let damage = prepared_combat_damage_event(&engine, attacker, 29);
+        let mut ruled_events = Vec::new();
+        let triggers = engine.fire_triggers_collecting(&[damage], &mut ruled_events);
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].controller, 17);
+    }
+
+    #[test]
+    fn controller_concede_before_event_matching_does_not_stage_delayed_trigger() {
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        let damage = prepared_combat_damage_event(&engine, creatures[0], 29);
+
+        engine
+            .apply_scenario_command(
+                17,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .expect("the delayed-trigger controller can concede through the command path");
+
+        assert!(engine.state.players[engine.state.player_idx(17).unwrap()].has_lost);
+        assert!(engine
+            .state
+            .active_event_observers
+            .iter()
+            .all(|observer| !matches!(
+                observer.payload,
+                EventObserverPayload::StageDelayedTrigger(ref payload) if payload.controller == 17
+            )));
+        let mut ruled_events = Vec::new();
+        let triggers = engine.fire_triggers_collecting(&[damage], &mut ruled_events);
+        assert!(
+            triggers.is_empty(),
+            "an eliminated controller cannot receive a delayed trigger"
+        );
+        assert!(engine.state.staged_trigger_groups.is_empty());
+        assert!(engine.state.pending_triggers.is_empty());
+    }
+
+    #[test]
+    fn source_gone_delayed_draw_then_discard_resolves_through_private_choice() {
+        let (mut engine, jace, creatures) = jace_observer_fixture_with_creatures();
+        let original_jace_generation = engine.state.zone_change_generation[&jace];
+        engine
+            .apply_dev_command(
+                17,
+                &rv1::DevCommand {
+                    target_player_id: 17,
+                    dev: Some(rv1::dev_command::Dev::MoveCard(rv1::DevMoveCard {
+                        card_name: "Jace Observer Runtime Fixture".into(),
+                        zone: rv1::DevZone::Graveyard as i32,
+                        ..Default::default()
+                    })),
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.objects[&jace].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.zone_change_generation[&jace],
+            original_jace_generation + 1
+        );
+        let starting_hand_card = place_observer_test_card_in_hand(&mut engine, 17, "Mountain");
+        let hand_before = engine.state.players[0].hand.len();
+        let drawn_card = engine.state.players[0].library[0];
+        let library_before = engine.state.players[0].library.len();
+        let cards_drawn_before = engine.state.turn_history.current.player(17).cards_drawn;
+
+        let mut events = Vec::new();
+        resolve_test_combat_damage_to_players(&mut engine, &[(creatures[0], 29)], &mut events);
+        engine.flush_staged_triggers(&mut events);
+        assert_eq!(engine.state.stack.len(), 1);
+        assert!(engine.state.stack[0].is_triggered);
+        assert_eq!(engine.state.stack[0].source_permanent_id, Some(jace));
+        engine.resolve_top_of_stack(&mut events).unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap_or_else(|| {
+                panic!(
+                    "the delayed trigger should park privately: priority={}, stack={:?}, trigger-order={}, staged={}, hand={}, cards-drawn={}",
+                    engine.state.priority_player_id(),
+                    engine.state.stack.iter().map(|item| (item.id, item.is_triggered, item.source_permanent_id, item.controller)).collect::<Vec<_>>(),
+                    engine.state.pending_trigger_order.is_some(),
+                    engine.state.staged_trigger_groups.len(),
+                    engine.state.players[0].hand.len(),
+                    engine.state.turn_history.current.player(17).cards_drawn,
+                )
+            });
+        assert_eq!(pending.deciding_player, 17);
+        assert_eq!(pending.presentation.choice_kind, rv1::ChoiceKind::HandCards);
+        assert_eq!(engine.state.players[0].library.len(), library_before - 1);
+        assert_eq!(
+            engine.state.turn_history.current.player(17).cards_drawn,
+            cards_drawn_before + 1
+        );
+        assert!(engine.state.players[0].hand.contains(&drawn_card));
+        assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+        let prompt = events
+            .iter()
+            .find_map(|event| match event.ev.as_ref() {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                    if choice.deciding_player_id == 17 =>
+                {
+                    Some(choice)
+                }
+                _ => None,
+            })
+            .expect("publish the discard prompt to the delayed ability's controller");
+        assert_eq!(prompt.choice_kind, rv1::ChoiceKind::HandCards as i32);
+        assert!(prompt.candidate_object_ids.len() > 1);
+        assert!(prompt.candidate_object_ids.contains(&starting_hand_card));
+        assert!(prompt.candidate_object_ids.contains(&drawn_card));
+
+        engine
+            .apply_scenario_command(
+                17,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![starting_hand_card],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("finish the normal delayed trigger discard");
+        assert_eq!(engine.state.players[0].library.len(), library_before - 1);
+        assert_eq!(
+            engine.state.objects[&starting_hand_card].zone,
+            Zone::Graveyard
+        );
+        assert!(engine.state.players[0].hand.contains(&drawn_card));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+    }
+
+    #[test]
+    fn controller_concede_clears_grouped_trigger_order_without_delegating() {
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        let unrelated_watched = place_observer_test_card(&mut engine, 29, "Observer Test Creature");
+        engine
+            .apply_dev_command(
+                29,
+                &rv1::DevCommand {
+                    target_player_id: 29,
+                    dev: Some(rv1::dev_command::Dev::MoveCard(rv1::DevMoveCard {
+                        card_name: "Mountain".into(),
+                        zone: rv1::DevZone::Exile as i32,
+                        ..Default::default()
+                    })),
+                },
+            )
+            .unwrap();
+        let unrelated_exiled = *engine.state.players[1]
+            .exile
+            .last()
+            .expect("the foreign player's existing Mountain moves to exile");
+        let unrelated_watched_ref = TriggerObjectRef {
+            object_id: unrelated_watched,
+            zone_change_generation: engine.state.zone_change_generation[&unrelated_watched],
+            controller_at_event: 29,
+        };
+        let unrelated_exiled_ref = TriggerObjectRef {
+            object_id: unrelated_exiled,
+            zone_change_generation: engine.state.zone_change_generation[&unrelated_exiled],
+            controller_at_event: 29,
+        };
+        engine
+            .state
+            .active_event_observers
+            .push(ActiveEventObserver {
+                watched: Some(unrelated_watched_ref),
+                matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+                payload: EventObserverPayload::ReturnExiledObject {
+                    exiled: unrelated_exiled_ref,
+                },
+            });
+        let mut events = Vec::new();
+        resolve_test_combat_damage_to_players(
+            &mut engine,
+            &[(creatures[0], 29), (creatures[1], 43)],
+            &mut events,
+        );
+        engine.flush_staged_triggers(&mut events);
+        let pending_order = engine.state.pending_trigger_order.as_ref().expect(
+            "one observer matching two damaged players creates a controller ordering choice",
+        );
+        assert_eq!(pending_order.deciding_player, 17);
+        assert_eq!(pending_order.candidates.len(), 2);
+
+        let batch = engine
+            .apply_scenario_command(
+                17,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+
+        assert!(engine.state.players[engine.state.player_idx(17).unwrap()].has_lost);
+        assert!(engine.state.pending_trigger_order.is_none());
+        assert!(engine.state.staged_trigger_groups.is_empty());
+        assert!(engine.state.pending_triggers.is_empty());
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(
+            batch.events.iter().all(|event| !matches!(
+                event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+            )),
+            "no surviving player inherits the departed controller's trigger order"
+        );
+        assert!(engine.state.active_event_observers.iter().any(|observer| {
+            observer.watched == Some(unrelated_watched_ref)
+                && matches!(
+                    observer.payload,
+                    EventObserverPayload::ReturnExiledObject { .. }
+                )
+        }));
+    }
+
+    #[test]
+    fn controller_concede_during_draw_replacement_does_not_delegate_or_resume_draw() {
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        place_observer_test_card(&mut engine, 17, "Abundance");
+        let mut events = Vec::new();
+        resolve_test_combat_damage_to_players(&mut engine, &[(creatures[0], 29)], &mut events);
+        engine.flush_staged_triggers(&mut events);
+        engine.resolve_top_of_stack(&mut events).unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Abundance parks the delayed trigger during its draw instruction");
+        assert_eq!(pending.deciding_player, 17);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::ResolutionBranch
+        );
+        assert!(events.iter().any(|event| matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(ref choice))
+                if choice.deciding_player_id == 17
+                    && choice.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32
+        )));
+
+        let batch = engine
+            .apply_scenario_command(
+                17,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+
+        assert!(engine.state.players[engine.state.player_idx(17).unwrap()].has_lost);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert!(batch.events.iter().all(|event| !matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+        assert_eq!(engine.state.turn_history.current.player(17).cards_drawn, 0);
+    }
+
+    #[test]
+    fn controller_concede_during_private_discard_does_not_delegate_or_resume_discard() {
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        place_observer_test_card_in_hand(&mut engine, 17, "Mountain");
+        let mut events = Vec::new();
+        resolve_test_combat_damage_to_players(&mut engine, &[(creatures[0], 29)], &mut events);
+        engine.flush_staged_triggers(&mut events);
+        engine.resolve_top_of_stack(&mut events).unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed ability parks on its controller's hand choice");
+        assert_eq!(pending.deciding_player, 17);
+        assert_eq!(pending.presentation.choice_kind, rv1::ChoiceKind::HandCards);
+        assert!(events.iter().any(|event| matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(ref choice))
+                if choice.deciding_player_id == 17
+                    && choice.choice_kind == rv1::ChoiceKind::HandCards as i32
+        )));
+
+        let batch = engine
+            .apply_scenario_command(
+                17,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+
+        assert!(engine.state.players[engine.state.player_idx(17).unwrap()].has_lost);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert!(batch.events.iter().all(|event| !matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+        )));
+    }
+
+    #[test]
+    fn direct_combat_fast_path_preserves_creature_snapshot_for_delayed_observer() {
+        use crate::state::{CombatAttackAssignment, CombatDefenderTarget, CombatState};
+
+        let (mut engine, _, creatures) = jace_observer_fixture_with_creatures();
+        let attacker = creatures[0];
+        let generation = engine.state.zone_change_generation[&attacker];
+        let attacker_ref = TriggerObjectRef {
+            object_id: attacker,
+            zone_change_generation: generation,
+            controller_at_event: 17,
+        };
+        let combat = CombatState {
+            attacking: vec![attacker],
+            attack_assignments: std::collections::HashMap::from([(
+                attacker,
+                CombatAttackAssignment {
+                    attacker: attacker_ref,
+                    defender: CombatDefenderTarget::Player(29),
+                    defending_player: 29,
+                },
+            )]),
+            blockers: std::collections::HashMap::new(),
+            damage_assignments: std::collections::HashMap::new(),
+            trample_player_damage: std::collections::HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: vec![29],
+            blockers_declared: true,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: std::collections::HashMap::new(),
+            first_strike_damage_done: false,
+        };
+        engine.state.turn_step = TurnStep::CombatDamage;
+        engine.state.combat = Some(combat.clone());
+        let mut events = Vec::new();
+        engine
+            .resolve_combat_damage(
+                &combat,
+                super::super::combat::DamagePass::Normal,
+                &mut events,
+            )
+            .unwrap();
+
+        assert_eq!(
+            engine.state.turn_history.current.dealt_damage_objects,
+            vec![(attacker, generation)]
+        );
+        assert_eq!(
+            engine.state.staged_trigger_groups.len(),
+            1,
+            "the direct fast path must retain Creature, controller, and incarnation facts"
+        );
     }
 }

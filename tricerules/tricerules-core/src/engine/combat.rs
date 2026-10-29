@@ -2882,8 +2882,8 @@ impl GameEngine {
                         recipient,
                         att_power,
                     );
-                    let Some(result) = self.process_or_park_combat_damage(
-                        damage_event.clone(),
+                    let Some((result, mut damage_event)) = self.process_or_park_combat_damage(
+                        damage_event,
                         att_has_deathtouch,
                         att_has_lifelink,
                         events,
@@ -2917,9 +2917,8 @@ impl GameEngine {
                         )?,
                     };
                     if p > 0 {
-                        let mut dealt_event = damage_event;
-                        dealt_event.amount = p;
-                        damage_dealt_events.push(dealt_event);
+                        damage_event.amount = p;
+                        damage_dealt_events.push(damage_event);
                     }
                     // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && p > 0 {
@@ -2943,7 +2942,7 @@ impl GameEngine {
                     .map(|o| o.controller)
                     .unwrap_or(defending_player);
                 if blocker_participates {
-                    let Some(result) = self.process_or_park_combat_damage(
+                    let Some((result, mut damage_event)) = self.process_or_park_combat_damage(
                         DamageEvent::combat(
                             blk,
                             blk_controller,
@@ -2960,13 +2959,8 @@ impl GameEngine {
                     };
                     let dmg_to_att = result.dealt;
                     if dmg_to_att > 0 {
-                        damage_dealt_events.push(DamageEvent::combat(
-                            blk,
-                            blk_controller,
-                            object_display_name(&self.state, self.registry, blk),
-                            DamageRecipient::Permanent(att),
-                            dmg_to_att,
-                        ));
+                        damage_event.amount = dmg_to_att;
+                        damage_dealt_events.push(damage_event);
                     }
                     if let Some(af) = self.state.objects.get_mut(&att) {
                         af.damage = af
@@ -2984,7 +2978,7 @@ impl GameEngine {
                     }
                 }
                 if attacker_participates {
-                    let Some(result) = self.process_or_park_combat_damage(
+                    let Some((result, mut damage_event)) = self.process_or_park_combat_damage(
                         DamageEvent::combat(
                             att,
                             att_controller,
@@ -3001,13 +2995,8 @@ impl GameEngine {
                     };
                     let dmg_to_blk = result.dealt;
                     if dmg_to_blk > 0 {
-                        damage_dealt_events.push(DamageEvent::combat(
-                            att,
-                            att_controller,
-                            object_display_name(&self.state, self.registry, att),
-                            DamageRecipient::Permanent(blk),
-                            dmg_to_blk,
-                        ));
+                        damage_event.amount = dmg_to_blk;
+                        damage_dealt_events.push(damage_event);
                     }
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
                         bf.damage = bf
@@ -3066,7 +3055,7 @@ impl GameEngine {
                     if !*participates || *blocker_power == 0 {
                         continue;
                     }
-                    let Some(result) = self.process_or_park_combat_damage(
+                    let Some((result, mut damage_event)) = self.process_or_park_combat_damage(
                         DamageEvent::combat(
                             *blocker_id,
                             *blocker_controller,
@@ -3086,13 +3075,8 @@ impl GameEngine {
                         .checked_add(dealt)
                         .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                     if dealt > 0 {
-                        damage_dealt_events.push(DamageEvent::combat(
-                            *blocker_id,
-                            *blocker_controller,
-                            object_display_name(&self.state, self.registry, *blocker_id),
-                            DamageRecipient::Permanent(att),
-                            dealt,
-                        ));
+                        damage_event.amount = dealt;
+                        damage_dealt_events.push(damage_event);
                     }
                     if *has_deathtouch && dealt > 0 {
                         any_blocker_deathtouch_hit = true;
@@ -3116,7 +3100,7 @@ impl GameEngine {
                     ))?;
                     let mut total_att_lifelink: u32 = 0;
                     for &(blk, dmg) in pairs {
-                        let Some(result) = self.process_or_park_combat_damage(
+                        let Some((result, mut damage_event)) = self.process_or_park_combat_damage(
                             DamageEvent::combat(
                                 att,
                                 att_controller,
@@ -3133,13 +3117,8 @@ impl GameEngine {
                         };
                         let dmg_to_blk = result.dealt;
                         if dmg_to_blk > 0 {
-                            damage_dealt_events.push(DamageEvent::combat(
-                                att,
-                                att_controller,
-                                object_display_name(&self.state, self.registry, att),
-                                DamageRecipient::Permanent(blk),
-                                dmg_to_blk,
-                            ));
+                            damage_event.amount = dmg_to_blk;
+                            damage_dealt_events.push(damage_event);
                         }
                         if let Some(bf) = self.state.objects.get_mut(&blk) {
                             bf.damage = bf
@@ -3167,12 +3146,13 @@ impl GameEngine {
                                 recipient,
                                 player_trample_dmg,
                             );
-                            let Some(result) = self.process_or_park_combat_damage(
-                                damage_event.clone(),
-                                att_has_deathtouch,
-                                att_has_lifelink,
-                                events,
-                            )?
+                            let Some((result, mut damage_event)) = self
+                                .process_or_park_combat_damage(
+                                    damage_event,
+                                    att_has_deathtouch,
+                                    att_has_lifelink,
+                                    events,
+                                )?
                             else {
                                 return Ok(());
                             };
@@ -3202,9 +3182,8 @@ impl GameEngine {
                                 )?,
                             };
                             if trample_after > 0 {
-                                let mut dealt_event = damage_event;
-                                dealt_event.amount = trample_after;
-                                damage_dealt_events.push(dealt_event);
+                                damage_event.amount = trample_after;
+                                damage_dealt_events.push(damage_event);
                             }
                             total_att_lifelink = total_att_lifelink
                                 .checked_add(trample_after)
@@ -3250,14 +3229,11 @@ impl GameEngine {
                 trigger_events.push(event);
             }
         }
-        trigger_events.extend(damage_dealt_events.into_iter().map(|mut event| {
-            event.source.zone_change_generation = self
-                .state
-                .zone_change_generation
-                .get(&event.source.object_id)
-                .copied();
-            GameEvent::DamageDealt { event }
-        }));
+        trigger_events.extend(
+            damage_dealt_events
+                .into_iter()
+                .map(|event| GameEvent::DamageDealt { event }),
+        );
         self.fire_triggers(&trigger_events, events);
         Ok(())
     }

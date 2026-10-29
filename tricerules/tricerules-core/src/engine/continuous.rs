@@ -1970,6 +1970,7 @@ impl GameEngine {
                 observer.matcher,
                 EventObserverMatcher::WhenWatchedObjectDiesThisTurn
                     | EventObserverMatcher::NextInstantOrSorceryThisTurn { .. }
+                    | EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn { .. }
             )
         });
     }

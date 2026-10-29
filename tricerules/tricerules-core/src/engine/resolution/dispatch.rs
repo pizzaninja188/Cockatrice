@@ -294,6 +294,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
             misc::create_delayed_trigger(cx, effect)?
         }
+        effect @ SpellEffectKind::CreateDelayedTriggerThisTurn { .. } => {
+            misc::create_delayed_trigger_this_turn(cx, effect)?
+        }
         effect @ SpellEffectKind::ExileUntilSourceLeaves { .. } => {
             zones::exile_until_source_leaves(cx, effect)?
         }

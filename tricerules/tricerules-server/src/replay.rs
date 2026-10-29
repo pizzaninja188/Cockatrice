@@ -1660,6 +1660,521 @@ mod tests {
     }
 
     #[test]
+    fn jace_normal_session_reaches_triggered_private_discard() {
+        const JACE_NAME: &str = "Jace, Cunning Castaway";
+        const JACE_CARD_ID: &str = "jace,_cunning_castaway";
+
+        let make_deck = |player_id: i32, jace_count: usize| {
+            let mut mainboard_card_name = vec![JACE_NAME.to_string(); jace_count];
+            mainboard_card_name.extend(vec!["Island".to_string(); 60 - jace_count]);
+            PlayerDeck {
+                player_id,
+                mainboard_card_name,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            }
+        };
+        let player_decks = vec![make_deck(17, 4), make_deck(29, 0)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![JACE_NAME.into(), "Island".into()],
+                })),
+            })
+            .expect("deck validation leaves the session open");
+        assert!(
+            validation.ok,
+            "complete Jace deck validates: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_029,
+                    seed: 20_261_029,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the normal game session open");
+        assert!(latest.ok, "normal Jace GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the eligible starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+
+        for _ in 0..4 {
+            latest = kaya_pass_priority(&mut session, latest);
+        }
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+        }
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let jace_from_view = |objects: &[BattlefieldObject]| {
+            objects
+                .iter()
+                .find(|object| object.card_id == JACE_CARD_ID)
+                .cloned()
+        };
+
+        let mut jace_resolved = false;
+        for _ in 0..512 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active player receives current legal actions")
+                    .clone();
+                if let Some(land) = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| action.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned()
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+
+                let jace_spell = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| {
+                        action.kind == HandActionKind::HandActionCastSpell as i32
+                            && action.card_name == JACE_NAME
+                    })
+                    .cloned();
+                let blue_mana_offers = kaya_available_mana_abilities(&battlefield)
+                    .iter()
+                    .filter(|ability| kaya_output_has_color(&ability.3, 'U'))
+                    .count();
+                if let Some(spell) = jace_spell.filter(|_| blue_mana_offers >= 3) {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                                announcement: Some(
+                                    tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                                        source: Some(CastSource {
+                                            location: Some(
+                                                tricerules_proto::ruled::v1::cast_source::Location::
+                                                    HandIndex(spell.hand_index),
+                                            ),
+                                            expected_zone_change_generation: None,
+                                        }),
+                                        face_index: spell.face_index,
+                                        cast_method: CastMethod::Normal as i32,
+                                        ..Default::default()
+                                    },
+                                ),
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+                    let mut produced = PaymentMana::default();
+                    for _ in 0..3 {
+                        let (source_object_id, generation, ability_index, output) =
+                            kaya_available_mana_abilities(&battlefield)
+                                .into_iter()
+                                .find(|ability| kaya_output_has_color(&ability.3, 'U'))
+                                .expect("current Island view offers the required blue mana");
+                        assert!(kaya_output_has_color(&output, 'U'));
+                        produced.u += 1;
+                        latest = kaya_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                    source_object_id,
+                                    ability_index,
+                                    source_zone: AbilitySourceZone::Battlefield as i32,
+                                    expected_zone_change_generation: generation,
+                                    ..Default::default()
+                                })),
+                            },
+                        );
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+
+                    let pending = kaya_batch(&latest)
+                        .legal_by_player
+                        .get(&17)
+                        .and_then(|actions| actions.pending_spell_cast.as_ref())
+                        .expect("current cast-payment offer survives mana activation");
+                    let payment = pending
+                        .payment_preview
+                        .as_ref()
+                        .expect("pending cast publishes its current payment preview");
+                    let transaction_id = pending.transaction_id;
+                    let revision = payment.revision;
+                    let payment_query = session
+                        .process(&IpcEnvelope {
+                            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                                player_id: 17,
+                                preview: Some(PreviewPayment {
+                                    transaction_id,
+                                    revision,
+                                    commit_spell_cast: Some(CommitSpellCast {
+                                        transaction_id,
+                                        payment: Some(PaymentSelection {
+                                            expected_state_revision: revision,
+                                            mana: Some(produced),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                            })),
+                        })
+                        .expect("payment query keeps the session open");
+                    assert!(
+                        payment_query.ok,
+                        "Jace payment preview: {}",
+                        payment_query.error
+                    );
+                    let preview = payment_query
+                        .batch
+                        .and_then(|batch| batch.payment_preview)
+                        .expect("PaymentQuery returns a current payment preview");
+                    assert!(
+                        preview.valid && preview.complete,
+                        "Jace payment: {preview:?}"
+                    );
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                                transaction_id,
+                                payment: preview.selection,
+                                restricted_mana: preview.restricted_mana,
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+                    for _ in 0..8 {
+                        if jace_from_view(&battlefield).is_some() {
+                            jace_resolved = true;
+                            break;
+                        }
+                        latest = kaya_pass_priority(&mut session, latest);
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert!(
+                        jace_resolved,
+                        "Jace resolves through ordinary priority passes"
+                    );
+                    break;
+                }
+            }
+
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(jace_resolved, "normal offers eventually cast Jace");
+
+        let jace = jace_from_view(&battlefield).expect("current view publishes Jace");
+        let prior_battlefield_ids = battlefield
+            .iter()
+            .map(|object| object.object_id)
+            .collect::<Vec<_>>();
+        let minus_two = jace
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == "activated_02"
+                    })
+                })
+            })
+            .expect("current Jace view identifies -2 by stable ability ID");
+        assert!(minus_two.activatable, "Jace's current -2 offer is legal");
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: jace.object_id,
+                    ability_index: minus_two.ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: jace.zone_change_generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+
+        let mut illusion = None;
+        for _ in 0..8 {
+            let new_objects = battlefield
+                .iter()
+                .filter(|object| !prior_battlefield_ids.contains(&object.object_id))
+                .collect::<Vec<_>>();
+            if !new_objects.is_empty() {
+                assert_eq!(new_objects.len(), 1, "Jace's -2 creates one Illusion");
+                assert!(new_objects[0].is_creature);
+                assert_eq!(new_objects[0].power, 2);
+                assert_eq!(new_objects[0].toughness, 2);
+                illusion = Some((*new_objects[0]).clone());
+                break;
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        let illusion = illusion.expect("ordinary priority resolves Jace's -2 Illusion");
+
+        let mut reached_opponent_main = false;
+        let mut reached_next_active_main = false;
+        for _ in 0..256 {
+            let (active_player_id, priority_player_id, turn_step) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step,
+                )
+            };
+            if active_player_id == 29 && turn_step == tricerules_core::TurnStep::Main1 {
+                reached_opponent_main = true;
+            }
+            if reached_opponent_main
+                && active_player_id == 17
+                && priority_player_id == 17
+                && turn_step == tricerules_core::TurnStep::Main1
+            {
+                reached_next_active_main = true;
+                break;
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(
+            reached_next_active_main,
+            "Jace reaches its controller's next main phase"
+        );
+
+        if let Some(land) = kaya_batch(&latest)
+            .legal_by_player
+            .get(&17)
+            .expect("active player receives next-turn legal actions")
+            .hand_actions
+            .iter()
+            .find(|action| action.kind == HandActionKind::HandActionPlayLand as i32)
+            .cloned()
+        {
+            latest = kaya_player_command(
+                &mut session,
+                17,
+                RuledCommand {
+                    cmd: Some(Cmd::PlayLand(PlayLand {
+                        source: Some(LandSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::land_source::Location::HandIndex(
+                                    land.hand_index,
+                                ),
+                            ),
+                            ..Default::default()
+                        }),
+                        face_index: land.face_index,
+                        ..Default::default()
+                    })),
+                },
+            );
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+
+        let jace = jace_from_view(&battlefield).expect("current view still publishes Jace");
+        let plus_one = jace
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == "activated_01"
+                    })
+                })
+            })
+            .expect("current Jace view identifies +1 by stable ability ID");
+        assert!(
+            plus_one.activatable,
+            "Jace's current +1 offer is legal next turn"
+        );
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: jace.object_id,
+                    ability_index: plus_one.ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: jace.zone_change_generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        for _ in 0..2 {
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+
+        let mut reached_attackers = false;
+        for _ in 0..128 {
+            let state = &session.engine.as_ref().unwrap().state;
+            if state.players[state.active_player_idx].id == 17
+                && state.turn_step == tricerules_core::TurnStep::DeclareAttackers
+                && state.priority_player_id() == 17
+            {
+                reached_attackers = true;
+                break;
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(
+            reached_attackers,
+            "ordinary priority reaches Declare Attackers"
+        );
+
+        let current_illusion = battlefield
+            .iter()
+            .find(|object| object.object_id == illusion.object_id)
+            .expect("current battlefield view still publishes the Illusion");
+        assert_eq!(
+            current_illusion.zone_change_generation,
+            illusion.zone_change_generation
+        );
+        let attack = kaya_batch(&latest)
+            .legal_by_player
+            .get(&17)
+            .expect("active player receives current attack offers")
+            .legal_attack_assignments
+            .iter()
+            .find(|assignment| {
+                assignment.attacker_object_id == current_illusion.object_id
+                    && assignment.defending_player_id == 29
+            })
+            .cloned()
+            .expect("current legal attack offer includes the ready Illusion");
+        assert_eq!(
+            attack.attacker_zone_change_generation,
+            current_illusion.zone_change_generation
+        );
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(
+                    tricerules_proto::ruled::v1::DeclareAttackers {
+                        assignments: vec![attack],
+                    },
+                )),
+            },
+        );
+
+        let mut discard_offer = kaya_choice(&latest, ChoiceKind::HandCards);
+        for _ in 0..64 {
+            if discard_offer.is_some() {
+                break;
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+            discard_offer = kaya_choice(&latest, ChoiceKind::HandCards);
+        }
+        let discard_offer =
+            discard_offer.expect("Jace's combat-damage trigger reaches its private discard offer");
+        assert_eq!(discard_offer.deciding_player_id, 17);
+        assert_ne!(discard_offer.resolution_prompt_id, 0);
+        assert_eq!(discard_offer.min, 1);
+        assert_eq!(discard_offer.max, 1);
+        let chosen_object_id = *discard_offer
+            .candidate_object_ids
+            .first()
+            .expect("current private discard offer has a live candidate");
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: discard_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![chosen_object_id],
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+        );
+        assert!(
+            kaya_choice(&latest, ChoiceKind::HandCards).is_none(),
+            "the current engine-side private discard offer resolves"
+        );
+    }
+
+    #[test]
     fn kaya_zero_legal_session_casts_from_offers_and_reaches_the_optional_scry_leaf() {
         let player_decks = vec![kaya_player_deck(17, true), kaya_player_deck(29, false)];
         assert_eq!(player_decks[0].mainboard_card_name.len(), 60);

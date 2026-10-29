@@ -44,6 +44,9 @@ mod deck_coverage_carth_the_lion;
 #[path = "scenario/deck_coverage_carth_the_lion_cost_edges.rs"]
 mod deck_coverage_carth_the_lion_cost_edges;
 
+#[path = "scenario/deck_coverage_jace_cunning_castaway.rs"]
+mod deck_coverage_jace_cunning_castaway;
+
 #[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
 mod deck_coverage_jace_unraveler_of_secrets;
 

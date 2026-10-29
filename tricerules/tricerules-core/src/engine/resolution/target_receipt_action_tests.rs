@@ -60,6 +60,9 @@ fn fixture_engine() -> GameEngine {
 enum CopyAction {
     Gardens,
     ChosenCreatureToken,
+    ChosenCreatureTokenWithNoOverrides,
+    ChosenCreatureTokenWithLegendaryRemoval,
+    ChosenCreatureTokenWithColorlessOverride,
     ChosenCreatureTokenWithKayaException,
     ChosenCreatureTokenWithReplaceException,
     KayaMinusThree,
@@ -69,15 +72,33 @@ fn kaya_copy_exception(
     mode: tricerules_card_model::TokenCopySubtypeMode,
 ) -> tricerules_card_model::TokenCopyException {
     tricerules_card_model::TokenCopyException {
-        colors: vec![tricerules_card_model::primitives::Color::White],
-        power: 1,
-        toughness: 1,
+        colors: Some(vec![tricerules_card_model::primitives::Color::White]),
+        power: Some(1),
+        toughness: Some(1),
+        remove_legendary: false,
         added_card_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Creature],
         creature_subtypes: Some(tricerules_card_model::TokenCopyCreatureSubtypeChange {
             mode,
             subtypes: vec!["Spirit".into()],
         }),
         added_keywords: vec![tricerules_card_model::primitives::Keyword::Flying],
+    }
+}
+
+fn optional_copy_exception(
+    colors: Option<Vec<tricerules_card_model::primitives::Color>>,
+    power: Option<i32>,
+    toughness: Option<i32>,
+    remove_legendary: bool,
+) -> tricerules_card_model::TokenCopyException {
+    tricerules_card_model::TokenCopyException {
+        colors,
+        power,
+        toughness,
+        remove_legendary,
+        added_card_types: vec![],
+        creature_subtypes: None,
+        added_keywords: vec![],
     }
 }
 
@@ -128,6 +149,32 @@ fn invoke_copy_action(
                     copy_exception: None,
                 },
             ),
+            CopyAction::ChosenCreatureTokenWithNoOverrides
+            | CopyAction::ChosenCreatureTokenWithLegendaryRemoval
+            | CopyAction::ChosenCreatureTokenWithColorlessOverride => {
+                let exception = match action {
+                    CopyAction::ChosenCreatureTokenWithNoOverrides => {
+                        optional_copy_exception(None, None, None, false)
+                    }
+                    CopyAction::ChosenCreatureTokenWithLegendaryRemoval => {
+                        optional_copy_exception(None, None, None, true)
+                    }
+                    CopyAction::ChosenCreatureTokenWithColorlessOverride => {
+                        optional_copy_exception(Some(vec![]), None, None, false)
+                    }
+                    _ => unreachable!("grouped copy-exception action"),
+                };
+                tokens::create_token_copies(
+                    &mut cx,
+                    SpellEffectKind::CreateTokenCopies {
+                        count: tricerules_card_model::primitives::Amount::Fixed(1),
+                        source: tricerules_card_model::primitives::TokenCopySource::Chosen(
+                            Box::new(TargetFilter::default_creature()),
+                        ),
+                        copy_exception: Some(exception),
+                    },
+                )
+            }
             CopyAction::ChosenCreatureTokenWithKayaException => tokens::create_token_copies(
                 &mut cx,
                 SpellEffectKind::CreateTokenCopies {
@@ -216,6 +263,33 @@ fn install_copy_exception_source_values(engine: &mut GameEngine, target: ObjectI
         .objects
         .get_mut(&target)
         .expect("fixture target")
+        .copiable_values = Some(values);
+}
+
+fn install_legendary_copy_exception_source_values(engine: &mut GameEngine, target: ObjectId) {
+    install_copy_exception_source_values(engine, target);
+    let mut values = engine.state.objects[&target]
+        .copiable_values
+        .clone()
+        .expect("fixture source has owned copiable values");
+    values.face.supertypes = vec!["Snow".into(), "Legendary".into()];
+    values.face.power = Some(4);
+    values.face.toughness = Some(6);
+    values.face.loyalty = Some(3);
+    values.face.keywords = vec![tricerules_card_model::primitives::Keyword::Flying];
+    values.face.activated_abilities = engine
+        .registry
+        .get("lumbering_worldwagon")
+        .expect("Lumbering Worldwagon fixture is registered")
+        .primary_face()
+        .activated_abilities
+        .clone();
+    values.face.derive_type_flags();
+    engine
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("fixture source")
         .copiable_values = Some(values);
 }
 
@@ -1000,6 +1074,224 @@ fn kaya_copy_exception_changes_only_the_new_token_snapshot() {
         .face
         .keywords
         .contains(&tricerules_card_model::primitives::Keyword::Flying));
+}
+
+#[test]
+fn remove_legendary_copy_exception_preserves_other_owned_values() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    install_legendary_copy_exception_source_values(&mut engine, target);
+    let source_values = engine.state.objects[&target]
+        .copiable_values
+        .clone()
+        .expect("fixture owns copiable values");
+    let original = engine
+        .characteristics(target)
+        .expect("source characteristics before copying");
+    let target_receipt = receipt(&engine, target, 0);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &item(vec![target_receipt]),
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithLegendaryRemoval,
+    )
+    .expect("copy the target after removing only Legendary");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("copy exception creates a token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains its owned copiable values");
+
+    assert_eq!(copy.face.supertypes, vec!["Snow"]);
+    assert!(!copy.face.is_legendary);
+    assert_eq!(copy.face.types, source_values.face.types);
+    assert_eq!(
+        copy.face.color_indicator,
+        source_values.face.color_indicator
+    );
+    assert_eq!(
+        copy.face.colors_override,
+        source_values.face.colors_override
+    );
+    assert_eq!((copy.face.power, copy.face.toughness), (Some(4), Some(6)));
+    assert_eq!(copy.face.loyalty, Some(3));
+    assert_eq!(copy.face.keywords, source_values.face.keywords);
+    assert_eq!(
+        copy.face.activated_abilities,
+        source_values.face.activated_abilities
+    );
+    assert_eq!(
+        copy.face.characteristic_defining_abilities,
+        source_values.face.characteristic_defining_abilities
+    );
+    assert_eq!(copy.source_card_id, source_values.source_card_id);
+    assert_eq!(copy.source_face_index, source_values.source_face_index);
+    assert_eq!(copy.display_name, source_values.display_name);
+    assert_eq!(copy.prototyped, source_values.prototyped);
+    assert_eq!(
+        copy.room_faces.is_some(),
+        source_values.room_faces.is_some()
+    );
+    assert_eq!(engine.characteristics(target), Some(original));
+}
+
+#[test]
+fn copy_exception_without_color_and_pt_overrides_preserves_copy_cdas() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    install_copy_exception_source_values(&mut engine, target);
+    let source_values = engine.state.objects[&target]
+        .copiable_values
+        .clone()
+        .expect("fixture owns copiable values");
+    let target_receipt = receipt(&engine, target, 0);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &item(vec![target_receipt]),
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithNoOverrides,
+    )
+    .expect("copy without color or P/T overrides");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("copy exception creates a token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains its owned copiable values");
+
+    assert_eq!(
+        copy.face.color_indicator,
+        source_values.face.color_indicator
+    );
+    assert_eq!(
+        copy.face.colors_override,
+        source_values.face.colors_override
+    );
+    assert_eq!(
+        (copy.face.power, copy.face.toughness),
+        (source_values.face.power, source_values.face.toughness)
+    );
+    assert_eq!(
+        copy.face.characteristic_defining_abilities,
+        source_values.face.characteristic_defining_abilities
+    );
+}
+
+#[test]
+fn copy_exception_explicit_colorless_override_removes_only_color_cdas() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    install_copy_exception_source_values(&mut engine, target);
+    let target_receipt = receipt(&engine, target, 0);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &item(vec![target_receipt]),
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithColorlessOverride,
+    )
+    .expect("apply an explicit colorless override");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("copy exception creates a token")
+        .object_id;
+    let copy = engine.state.objects[&token]
+        .token_origin
+        .as_ref()
+        .expect("token retains its owned copiable values");
+
+    assert_eq!(copy.face.colors(), Vec::new());
+    assert_eq!(copy.face.colors_override, Some(Vec::new()));
+    assert_eq!(copy.face.color_indicator, None);
+    assert!(!copy
+        .face
+        .characteristic_defining_abilities
+        .iter()
+        .any(|ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::Devoid
+                | tricerules_card_model::CharacteristicDefiningAbility::DefinesColors { .. }
+        )));
+    assert!(copy
+        .face
+        .characteristic_defining_abilities
+        .iter()
+        .any(|ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::CountScaledPowerToughness { .. }
+        )));
+    assert!(copy
+        .face
+        .characteristic_defining_abilities
+        .iter()
+        .any(|ability| matches!(
+            &ability.definition,
+            tricerules_card_model::CharacteristicDefiningAbility::Changeling
+        )));
+}
+
+#[test]
+fn remove_legendary_copy_exception_updates_active_and_intrinsic_faces() {
+    let mut engine = fixture_engine();
+    let target = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    {
+        let object = engine
+            .state
+            .objects
+            .get_mut(&target)
+            .expect("fixture source");
+        object.card_id = "reckless_waif_merciless_predator".into();
+        object.face_up_index = 1;
+    }
+    install_legendary_copy_exception_source_values(&mut engine, target);
+    let target_receipt = receipt(&engine, target, 0);
+
+    let (_, _, result) = invoke_copy_action(
+        &mut engine,
+        &item(vec![target_receipt]),
+        &[target],
+        &[target_receipt],
+        CopyAction::ChosenCreatureTokenWithLegendaryRemoval,
+    )
+    .expect("copy both intrinsic faces after removing Legendary");
+    let token = result
+        .produced_objects
+        .first()
+        .expect("copy exception creates a token")
+        .object_id;
+    let object = &engine.state.objects[&token];
+    assert_eq!(object.face_up_index, 1);
+    assert_eq!(
+        object
+            .token_origin
+            .as_ref()
+            .expect("token retains its active copied face")
+            .face
+            .supertypes,
+        vec!["Snow"]
+    );
+    let faces = object
+        .token_faces
+        .as_ref()
+        .expect("token retains both intrinsic faces");
+    assert_eq!(faces.layout, tricerules_card_model::Layout::Transform);
+    for face in &faces.faces {
+        assert_eq!(face.face.supertypes, vec!["Snow"]);
+        assert!(!face.face.is_legendary);
+    }
 }
 
 #[test]

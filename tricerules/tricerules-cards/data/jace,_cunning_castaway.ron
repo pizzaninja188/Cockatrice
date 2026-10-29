@@ -1,0 +1,47 @@
+// Oracle and rulings verified from Ixalan release notes. CR 510.2/510.4, 603.2c/603.7b/603.7e,
+// 514.2, 113.7a/113.8/306.5b/306.5d/704.5i-j, 400.7/608.2h, 707.2/707.9c-d and 121.2/121.6.
+(
+  id: "jace,_cunning_castaway",
+  name: "Jace, Cunning Castaway",
+  face_id: "jace_cunning_castaway",
+  mana_cost: "{1}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Jace"],
+  loyalty: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Loyalty(1)],
+      effect: [CreateDelayedTriggerThisTurn(ability: (
+        ability_id: "delayed_01",
+        presentation: OracleLines([1]),
+        trigger: WheneverCreatureDealsCombatDamageToPlayer(
+          source_controller: Controller,
+          damaged_player: AnyPlayer,
+          cardinality: OneOrMorePerDamagedPlayer,
+        ),
+        effect: [
+          Draw(who: Controller, count: 1),
+          Discard(who: Controller, quantity: Exact(1)),
+        ],
+      ))],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(-2)],
+      effect: [CreateTokens(token: "illusion_u_2_2_spell_target_sacrifice", count: 1)],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-5)],
+      effect: [CreateTokenCopies(
+        count: 2,
+        source: Source,
+        copy_exception: Some((remove_legendary: true)),
+      )],
+    ),
+  ],
+)

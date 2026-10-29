@@ -2315,6 +2315,11 @@ fn validate_nested_effect_metadata_with_delayed_child_program(
             }
             validate_triggered_ability_effect_tree(ability)
         }
+        SpellEffectKind::CreateDelayedTriggerThisTurn { ability } => {
+            ability.ability_id.validate()?;
+            ability.validate_shape()?;
+            validate_triggered_ability_effect_tree(ability)
+        }
         SpellEffectKind::ApplyPermanentModifier {
             modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
             ..
@@ -2420,6 +2425,20 @@ fn validate_face_spell_effect_metadata(face: &CardFace) -> Result<(), String> {
         }
         validate_nested_effect_metadata(effect)?;
     }
+    for effect in face_activated_abilities(face).flat_map(|ability| &ability.effect) {
+        if let SpellEffectKind::CreateDelayedTriggerThisTurn { ability } = effect {
+            ability.ability_id.validate()?;
+            let id = ability.ability_id.as_str().to_owned();
+            if runtime_owner_ids.contains(&id) {
+                return Err(format!(
+                    "delayed child ability id '{id}' conflicts with a face-local runtime ability owner"
+                ));
+            }
+            if !direct_delayed_ids.insert(id.clone()) {
+                return Err(format!("duplicate direct delayed child ability id '{id}'"));
+            }
+        }
+    }
     if let Some(program) = &face.spell_program {
         let mut program_delayed_ids = HashSet::new();
         visit_authored_program_effects(&program.body, &mut |effect| {
@@ -2449,6 +2468,191 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
         validate_nested_effect_metadata(effect)?;
     }
     Ok(())
+}
+
+fn reject_delayed_trigger_this_turn_effects(effects: &[SpellEffectKind]) -> Result<(), String> {
+    if effects
+        .iter()
+        .any(SpellEffectKind::contains_delayed_trigger_this_turn_profile)
+    {
+        return Err(
+            "CreateDelayedTriggerThisTurn is supported only as a direct legacy activated effect"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+fn reject_delayed_trigger_this_turn_program(program: &crate::CardProgram) -> Result<(), String> {
+    let mut contains_profile = false;
+    visit_authored_program_effects(&program.body, &mut |effect| {
+        contains_profile |= effect.contains_delayed_trigger_this_turn_profile();
+        Ok(())
+    })?;
+    if contains_profile {
+        return Err(
+            "CreateDelayedTriggerThisTurn is not supported through an authored Program".into(),
+        );
+    }
+    Ok(())
+}
+
+fn reject_delayed_trigger_this_turn_activated_ability(
+    ability: &crate::ActivatedAbilityDef,
+) -> Result<(), String> {
+    let contains_profile = ability
+        .effect
+        .iter()
+        .any(SpellEffectKind::contains_delayed_trigger_this_turn_profile);
+    if contains_profile && (ability.program.is_some() || ability.modal.is_some()) {
+        return Err(
+            "CreateDelayedTriggerThisTurn requires a nonmodal activated legacy effect list".into(),
+        );
+    }
+    for effect in &ability.effect {
+        if effect.contains_delayed_trigger_this_turn_profile() {
+            if !matches!(effect, SpellEffectKind::CreateDelayedTriggerThisTurn { .. }) {
+                return Err(
+                    "CreateDelayedTriggerThisTurn must be a direct legacy activated effect".into(),
+                );
+            }
+            effect.validate_direct_activated_legacy_effect()?;
+        }
+    }
+    if let Some(program) = &ability.program {
+        reject_delayed_trigger_this_turn_program(program)?;
+    }
+    if let Some(modal) = &ability.modal {
+        for mode in &modal.modes {
+            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            if let Some(program) = &mode.program {
+                reject_delayed_trigger_this_turn_program(program)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_delayed_trigger_this_turn_triggered_ability(
+    ability: &crate::TriggeredAbilityDef,
+) -> Result<(), String> {
+    reject_delayed_trigger_this_turn_effects(&ability.effect)?;
+    if let Some(program) = &ability.program {
+        reject_delayed_trigger_this_turn_program(program)?;
+    }
+    if let Some(modal) = &ability.modal {
+        for mode in &modal.modes {
+            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            if let Some(program) = &mode.program {
+                reject_delayed_trigger_this_turn_program(program)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_delayed_trigger_this_turn_in_nested_abilities(face: &CardFace) -> Result<(), String> {
+    for ability in face_static_abilities(face) {
+        match &ability.definition {
+            StaticAbilityDef::AttachedModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            }
+            | StaticAbilityDef::ConditionalSelfModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            } => {
+                for nested in activated_abilities {
+                    reject_delayed_trigger_this_turn_effects(&nested.effect)?;
+                    if let Some(program) = &nested.program {
+                        reject_delayed_trigger_this_turn_program(program)?;
+                    }
+                    if let Some(modal) = &nested.modal {
+                        for mode in &modal.modes {
+                            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                            if let Some(program) = &mode.program {
+                                reject_delayed_trigger_this_turn_program(program)?;
+                            }
+                        }
+                    }
+                }
+                for nested in triggered_abilities {
+                    reject_delayed_trigger_this_turn_triggered_ability(nested)?;
+                }
+            }
+            StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                activated_abilities,
+                ..
+            } => {
+                for nested in activated_abilities {
+                    reject_delayed_trigger_this_turn_effects(&nested.effect)?;
+                    if let Some(program) = &nested.program {
+                        reject_delayed_trigger_this_turn_program(program)?;
+                    }
+                    if let Some(modal) = &nested.modal {
+                        for mode in &modal.modes {
+                            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                            if let Some(program) = &mode.program {
+                                reject_delayed_trigger_this_turn_program(program)?;
+                            }
+                        }
+                    }
+                }
+            }
+            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            }
+            | StaticAbilityDef::ConditionalPermanentTransformation {
+                triggered_abilities,
+                ..
+            } => {
+                for nested in triggered_abilities {
+                    reject_delayed_trigger_this_turn_triggered_ability(nested)?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_delayed_trigger_this_turn_admission(face: &CardFace) -> Result<(), String> {
+    reject_delayed_trigger_this_turn_effects(&face.spell_effect)?;
+    if let Some(program) = &face.spell_program {
+        reject_delayed_trigger_this_turn_program(program)?;
+    }
+    if let Some(modal) = &face.modal_spell {
+        for mode in &modal.modes {
+            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            if let Some(program) = &mode.program {
+                reject_delayed_trigger_this_turn_program(program)?;
+            }
+        }
+    }
+    for ability in face_activated_abilities(face) {
+        reject_delayed_trigger_this_turn_activated_ability(ability)?;
+    }
+    for ability in face_triggered_abilities(face) {
+        reject_delayed_trigger_this_turn_triggered_ability(ability)?;
+    }
+    for bar in &face.class_level_bars {
+        reject_delayed_trigger_this_turn_effects(&bar.level_ability.effect)?;
+        if let Some(program) = &bar.level_ability.program {
+            reject_delayed_trigger_this_turn_program(program)?;
+        }
+        if let Some(modal) = &bar.level_ability.modal {
+            for mode in &modal.modes {
+                reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                if let Some(program) = &mode.program {
+                    reject_delayed_trigger_this_turn_program(program)?;
+                }
+            }
+        }
+    }
+    reject_delayed_trigger_this_turn_in_nested_abilities(face)
 }
 
 fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String, (u32, u32)>) {
@@ -3396,6 +3600,7 @@ fn validate_retained_exile_cohorts(
 }
 
 fn validate_face_identity(face: &CardFace) -> Result<(), String> {
+    validate_delayed_trigger_this_turn_admission(face)?;
     validate_retained_exile_cohorts(&face.spell_effect, face.modal_spell.is_none())?;
     if let Some(modal) = &face.modal_spell {
         for mode in &modal.modes {
@@ -4561,23 +4766,26 @@ impl CardRegistry {
                             reason,
                         })?;
                 }
-                for effects in face
+                for (effects, direct_activated) in face
                     .activated_abilities
                     .iter()
-                    .map(|a| &a.effect)
-                    .chain(face.triggered_abilities.iter().map(|t| &t.effect))
+                    .map(|a| (&a.effect, true))
+                    .chain(face.triggered_abilities.iter().map(|t| (&t.effect, false)))
                     .chain(face.class_level_bars.iter().flat_map(|bar| {
-                        std::iter::once(&bar.level_ability.effect)
-                            .chain(bar.activated_abilities.iter().map(|a| &a.effect))
-                            .chain(bar.triggered_abilities.iter().map(|t| &t.effect))
+                        std::iter::once((&bar.level_ability.effect, false))
+                            .chain(bar.activated_abilities.iter().map(|a| (&a.effect, true)))
+                            .chain(bar.triggered_abilities.iter().map(|t| (&t.effect, false)))
                     }))
                 {
                     for effect in effects {
-                        effect.validate(EffectContext::Ability).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
+                        let validation = if direct_activated {
+                            effect.validate_direct_activated_legacy_effect()
+                        } else {
+                            effect.validate(EffectContext::Ability)
+                        };
+                        validation.map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
                         })?;
                     }
                     SpellEffectKind::validate_list(effects).map_err(|reason| {
@@ -5005,13 +5213,13 @@ mod kaya_intangible_schema_tests {
             effect: [Draw(who: Controller, count: 2), EachOpponentMayScry(count: 1)]),
            (ability_id: "plus_01", presentation: Fallback, costs: [Loyalty(1)],
             effect: [CreateTokenCopies(count: 1, source: Source,
-              copy_exception: Some((colors: [White], power: 1, toughness: 1,
+              copy_exception: Some((colors: Some([White]), power: Some(1), toughness: Some(1),
                 added_card_types: [Creature],
                 creature_subtypes: Some((mode: Add, subtypes: ["Spirit"])),
                 added_keywords: [Flying])))]),
            (ability_id: "plus_02", presentation: Fallback, costs: [Loyalty(1)],
             effect: [CreateTokenCopies(count: 1, source: Source,
-              copy_exception: Some((colors: [Black], power: 4, toughness: 4,
+              copy_exception: Some((colors: Some([Black]), power: Some(4), toughness: Some(4),
                 creature_subtypes: Some((mode: Replace, subtypes: ["Zombie"])))))]),
          ])
     "#;
@@ -5088,7 +5296,7 @@ mod kaya_intangible_schema_tests {
             costs: [Tap], effect: [], modal: Some((min_modes: 1, max_modes: 1, modes: [
               (mode_id: "mode_01", presentation: Fallback,
                 effects: [CreateTokenCopies(count: 1, source: Source,
-                  copy_exception: Some((colors: [White], power: 1, toughness: 1,
+                  copy_exception: Some((colors: Some([White]), power: Some(1), toughness: Some(1),
                     added_card_types: [Creature],
                     creature_subtypes: Some((mode: Add, subtypes: ["Spirit"])),
                     added_keywords: [Flying])))])]))])"#;
@@ -5100,7 +5308,7 @@ mod kaya_intangible_schema_tests {
 
     #[test]
     fn copy_exception_shape_and_exile_target_binding_fail_closed() {
-        let invalid_copy_effect = "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((colors: [White, White], power: 1, toughness: 1, added_card_types: [Creature], creature_subtypes: Some((mode: Add, subtypes: [\"Spirit\"])), added_keywords: [Flying])))";
+        let invalid_copy_effect = "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((colors: Some([White, White]), power: Some(1), toughness: Some(1), added_card_types: [Creature], creature_subtypes: Some((mode: Add, subtypes: [\"Spirit\"])), added_keywords: [Flying])))";
         let parsed_copy: SpellEffectKind = RON_OPTS
             .from_str(invalid_copy_effect)
             .expect("copy exception fixture parses");
@@ -5131,5 +5339,156 @@ mod kaya_intangible_schema_tests {
               (min: 1, max: 1, prompt: "Choose target", effect_indices: [0]),
               (min: 1, max: 1, prompt: "Choose target", effect_indices: [0])])) )])"#;
         assert!(rejection_debug(ambiguous_target).contains("exactly one target group"));
+    }
+}
+
+#[cfg(test)]
+mod delayed_trigger_this_turn_profile_tests {
+    use super::*;
+
+    fn registry_for(ron: &str) -> Result<CardRegistry, RegistryError> {
+        CardRegistry::from_chunks_and_tokens(&[ron], &[])
+    }
+
+    fn rejection_debug(ron: &str) -> String {
+        format!(
+            "{:?}",
+            registry_for(ron).expect_err("fixture should be rejected")
+        )
+    }
+
+    fn profile_effect(trigger: &str, body: &str) -> String {
+        format!(
+            r#"CreateDelayedTriggerThisTurn(ability: (
+                ability_id: "observer_01", presentation: Fallback,
+                trigger: {trigger}, effect: [{body}]))"#
+        )
+    }
+
+    fn grouped_combat_trigger() -> &'static str {
+        "WheneverCreatureDealsCombatDamageToPlayer(source_controller: Controller, damaged_player: AnyPlayer, cardinality: OneOrMorePerDamagedPlayer)"
+    }
+
+    fn draw_then_discard_body() -> &'static str {
+        "Draw(who: Controller, count: 1), Discard(who: Controller, quantity: Exact(1))"
+    }
+
+    fn direct_card(effect: &str) -> String {
+        format!(
+            r#"(id: "observer_profile_probe", name: "Observer Profile Probe",
+                face_id: "observer_profile_probe", types: ["Planeswalker"], loyalty: Some(3),
+                activated_abilities: [(ability_id: "plus_01", presentation: Fallback,
+                    costs: [Loyalty(1)], effect: [{effect}])])"#
+        )
+    }
+
+    fn assert_rejected_card(source: &str) {
+        let _: RawCardDefinition = RON_OPTS
+            .from_str(source)
+            .expect("negative profile fixture parses before admission is checked");
+        assert!(
+            registry_for(source).is_err(),
+            "profile bypass must be rejected: {source}"
+        );
+    }
+
+    #[test]
+    fn direct_activated_legacy_effect_accepts_grouped_combat_observer_profile() {
+        let effect = profile_effect(grouped_combat_trigger(), draw_then_discard_body());
+        let card = direct_card(&effect);
+        let result = CardRegistry::from_chunks_and_tokens(&[&card], &[]);
+        assert!(
+            result.is_ok(),
+            "the direct activated profile should validate with a captured grouped combat observer: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn direct_activated_profile_is_closed_to_other_triggers_and_bodies() {
+        let wrong_trigger = profile_effect(
+            "WheneverCreatureDealsCombatDamageToPlayer(source_controller: Controller, damaged_player: AnyPlayer, cardinality: EachCreature)",
+            draw_then_discard_body(),
+        );
+        let wrong_body = profile_effect(
+            grouped_combat_trigger(),
+            "Draw(who: Controller, count: 2), Discard(who: Controller, quantity: Exact(1))",
+        );
+        let optional_child = format!(
+            "CreateDelayedTriggerThisTurn(ability: (ability_id: \"observer_01\", presentation: Fallback, trigger: {}, may: true, effect: [{}]))",
+            grouped_combat_trigger(),
+            draw_then_discard_body()
+        );
+
+        for effect in [wrong_trigger, wrong_body, optional_child] {
+            let card = direct_card(&effect);
+            assert_rejected_card(&card);
+        }
+    }
+
+    #[test]
+    fn profile_rejects_spell_trigger_program_wrapper_and_modal_bypasses() {
+        let effect = profile_effect(grouped_combat_trigger(), draw_then_discard_body());
+        let spell = format!(
+            r#"(id: "observer_spell_probe", name: "Observer Spell Probe",
+                face_id: "observer_spell_probe", types: ["Sorcery"], spell_effect: [{effect}])"#
+        );
+        let triggered = format!(
+            r#"(id: "observer_trigger_probe", name: "Observer Trigger Probe",
+                face_id: "observer_trigger_probe", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [{effect}])])"#
+        );
+        let program = format!(
+            r#"(id: "observer_program_probe", name: "Observer Program Probe",
+                face_id: "observer_program_probe", types: ["Artifact"],
+                activated_abilities: [(ability_id: "plus_01", presentation: Fallback,
+                    costs: [Tap], effect: [], program: Some((body: (steps: [
+                        (id: "observer", bind: [], input: None, kind: Perform({effect}))
+                    ], yields: []), target_bindings: [])))])"#
+        );
+        let wrapped = direct_card(&format!(
+            "Conditional(condition: ActivePlayer(players: Controller), effect: {effect})"
+        ));
+        let modal = format!(
+            r#"(id: "observer_modal_probe", name: "Observer Modal Probe",
+                face_id: "observer_modal_probe", types: ["Artifact"],
+                activated_abilities: [(ability_id: "plus_01", presentation: Fallback,
+                    costs: [Tap], effect: [], modal: Some((min_modes: 1, max_modes: 1,
+                        modes: [(mode_id: "mode_01", presentation: Fallback, effects: [{effect}])])))] )"#
+        );
+
+        for source in [spell, triggered, program, wrapped, modal] {
+            assert_rejected_card(&source);
+        }
+    }
+
+    #[test]
+    fn profile_child_ability_ids_are_validated_and_unique() {
+        let effect = profile_effect(grouped_combat_trigger(), draw_then_discard_body());
+        let duplicate = format!(
+            r#"(id: "observer_duplicate_probe", name: "Observer Duplicate Probe",
+                face_id: "observer_duplicate_probe", types: ["Planeswalker"], loyalty: Some(3),
+                activated_abilities: [
+                    (ability_id: "plus_01", presentation: Fallback, costs: [Loyalty(1)], effect: [{effect}]),
+                    (ability_id: "plus_02", presentation: Fallback, costs: [Loyalty(1)], effect: [{effect}])
+                ])"#
+        );
+        let collides_with_parent = effect.replace("observer_01", "plus_01");
+        let collision = direct_card(&collides_with_parent);
+
+        let _: RawCardDefinition = RON_OPTS
+            .from_str(&duplicate)
+            .expect("duplicate-child fixture parses before identity validation");
+        assert!(
+            rejection_debug(&duplicate).contains("duplicate direct delayed child ability id"),
+            "duplicate child ids fail closed"
+        );
+        assert!(
+            rejection_debug(&collision)
+                .contains("conflicts with a face-local runtime ability owner"),
+            "the child id cannot reuse its parent activation id: {}",
+            rejection_debug(&collision)
+        );
     }
 }

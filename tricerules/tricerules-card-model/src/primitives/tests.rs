@@ -22322,19 +22322,54 @@ fn chosen_counter_add_operation_deserializes_with_one_target_role() {
 #[test]
 fn token_copy_exception_rejects_negative_base_power_or_toughness() {
     let make_exception = |power, toughness| crate::primitives::TokenCopyException {
-        colors: vec![],
+        colors: None,
         power,
         toughness,
+        remove_legendary: false,
         added_card_types: vec![],
         creature_subtypes: None,
         added_keywords: vec![],
     };
 
-    for exception in [make_exception(-1, 1), make_exception(1, -1)] {
+    for exception in [
+        make_exception(Some(-1), Some(1)),
+        make_exception(Some(1), Some(-1)),
+    ] {
         assert_eq!(
             exception.validate().unwrap_err(),
             "token copy exception power and toughness must be nonnegative"
         );
     }
-    assert!(make_exception(0, 1).validate().is_ok());
+    assert!(make_exception(None, None).validate().is_ok());
+    assert!(make_exception(Some(0), Some(1)).validate().is_ok());
+    assert_eq!(
+        make_exception(Some(0), None).validate().unwrap_err(),
+        "token copy exception power and toughness must be specified together"
+    );
+}
+
+#[test]
+fn token_copy_exception_accepts_absent_color_and_paired_pt_overrides() {
+    let effect: crate::primitives::SpellEffectKind = ron::from_str(
+        "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((colors: None, power: None, toughness: None, remove_legendary: true)))",
+    )
+    .expect("copy exceptions can preserve source color and P/T while removing Legendary");
+
+    assert_eq!(
+        effect.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
+}
+
+#[test]
+fn token_copy_exception_accepts_explicit_colorless_override() {
+    let effect: crate::primitives::SpellEffectKind = ron::from_str(
+        "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((colors: Some([]), power: Some(1), toughness: Some(1))))",
+    )
+    .expect("an empty present color override explicitly makes a copy colorless");
+
+    assert_eq!(
+        effect.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
 }

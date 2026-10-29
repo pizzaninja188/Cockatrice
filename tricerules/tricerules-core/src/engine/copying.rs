@@ -40,23 +40,44 @@ fn apply_token_copy_exception_to_face(
     face: &mut CardFace,
     exception: &tricerules_card_model::TokenCopyException,
 ) -> Result<(), EngineError> {
-    let power = u32::try_from(exception.power)
+    if exception.power.is_some() != exception.toughness.is_some() {
+        return Err(EngineError::Illegal(
+            "token copy exception power and toughness must be specified together",
+        ));
+    }
+    let power = exception
+        .power
+        .map(u32::try_from)
+        .transpose()
         .map_err(|_| EngineError::Illegal("negative token copy exception power"))?;
-    let toughness = u32::try_from(exception.toughness)
+    let toughness = exception
+        .toughness
+        .map(u32::try_from)
+        .transpose()
         .map_err(|_| EngineError::Illegal("negative token copy exception toughness"))?;
 
     face.characteristic_defining_abilities.retain(|ability| {
-        !matches!(
-            &ability.definition,
-            CharacteristicDefiningAbility::Devoid
-                | CharacteristicDefiningAbility::DefinesColors { .. }
-                | CharacteristicDefiningAbility::CountScaledPowerToughness { .. }
-        )
+        let remove_color_cda = exception.colors.is_some()
+            && matches!(
+                &ability.definition,
+                CharacteristicDefiningAbility::Devoid
+                    | CharacteristicDefiningAbility::DefinesColors { .. }
+            );
+        let remove_pt_cda = power.is_some()
+            && matches!(
+                &ability.definition,
+                CharacteristicDefiningAbility::CountScaledPowerToughness { .. }
+            );
+        !(remove_color_cda || remove_pt_cda)
     });
-    face.color_indicator = None;
-    face.colors_override = Some(exception.colors.clone());
-    face.power = Some(power);
-    face.toughness = Some(toughness);
+    if let Some(colors) = &exception.colors {
+        face.color_indicator = None;
+        face.colors_override = Some(colors.clone());
+    }
+    if let (Some(power), Some(toughness)) = (power, toughness) {
+        face.power = Some(power);
+        face.toughness = Some(toughness);
+    }
 
     for card_type in exception.added_card_types.iter().copied() {
         let card_type = card_type.as_str().to_string();
@@ -84,6 +105,9 @@ fn apply_token_copy_exception_to_face(
         if !face.keywords.contains(keyword) {
             face.keywords.push(*keyword);
         }
+    }
+    if exception.remove_legendary {
+        face.supertypes.retain(|supertype| supertype != "Legendary");
     }
     face.derive_type_flags();
     Ok(())
@@ -338,5 +362,41 @@ mod tests {
             .is_none(),
             "missing LKI fails closed instead of using the new incarnation"
         );
+    }
+
+    #[test]
+    fn malformed_copy_exception_pt_pair_fails_before_changing_snapshot() {
+        let mut snapshot = snapshot("grizzly_bears");
+        snapshot.values.face.color_indicator =
+            Some(vec![tricerules_card_model::primitives::Color::Blue]);
+        snapshot.values.face.colors_override =
+            Some(vec![tricerules_card_model::primitives::Color::Blue]);
+        snapshot.values.face.supertypes = vec!["Legendary".into()];
+        let original_indicator = snapshot.values.face.color_indicator.clone();
+        let original_colors = snapshot.values.face.colors_override.clone();
+        let original_power = snapshot.values.face.power;
+        let original_toughness = snapshot.values.face.toughness;
+        let original_supertypes = snapshot.values.face.supertypes.clone();
+        let exception = tricerules_card_model::TokenCopyException {
+            colors: Some(Vec::new()),
+            power: Some(1),
+            toughness: None,
+            remove_legendary: true,
+            added_card_types: Vec::new(),
+            creature_subtypes: None,
+            added_keywords: Vec::new(),
+        };
+
+        assert!(matches!(
+            apply_token_copy_exception(&mut snapshot, &exception),
+            Err(EngineError::Illegal(
+                "token copy exception power and toughness must be specified together"
+            ))
+        ));
+        assert_eq!(snapshot.values.face.color_indicator, original_indicator);
+        assert_eq!(snapshot.values.face.colors_override, original_colors);
+        assert_eq!(snapshot.values.face.power, original_power);
+        assert_eq!(snapshot.values.face.toughness, original_toughness);
+        assert_eq!(snapshot.values.face.supertypes, original_supertypes);
     }
 }

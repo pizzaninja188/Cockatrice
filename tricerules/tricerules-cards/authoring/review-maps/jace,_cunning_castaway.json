@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2341a16-ffde-42fa-9746-0d8888e812d4",
+  "spans": [
+    {
+      "face_id": "jace_cunning_castaway",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "jace_cunning_castaway",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    },
+    {
+      "face_id": "jace_cunning_castaway",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/2"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateDelayedTriggerThisTurn",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateDelayedTriggerThisTurn/ability/trigger"
+    },
+    {
+      "symbol": "CombatDamageTriggerCardinality::OneOrMorePerDamagedPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateDelayedTriggerThisTurn/ability/trigger/WheneverCreatureDealsCombatDamageToPlayer/cardinality"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateDelayedTriggerThisTurn/ability/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateDelayedTriggerThisTurn/ability/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "TokenCopySource::Source",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/CreateTokenCopies/source"
+    }
+  ],
+  "tokens": ["illusion_u_2_2_spell_target_sacrifice"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_cunning_castaway_has_exact_registered_identity",
+      "covers": "The exact Jace definition is registered under its canonical engine ID and is not a token."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_plus_one_groups_combatants_and_resolves_a_private_draw_discard",
+      "covers": "One +1 observer groups multiple creatures damaging one player, resolves the captured controller's draw then private discard, survives source departure and expires at cleanup."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_plus_one_repeats_per_damaged_player_across_first_and_regular_damage_steps",
+      "covers": "The +1 creates one trigger for each damaged player in a committed damage slice and can trigger again in a later first-strike or regular damage slice."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_plus_one_on_two_created_copies_keeps_activation_observers_independent",
+      "covers": "Separate resolved +1 activations on two nonlegendary Jaces create independent observers whose same-slice occurrences do not merge."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_illusion_spell_target_sacrifices_it_and_sole_target_spell_has_no_effect",
+      "covers": "A real spell targeting the created Illusion causes its sacrifice trigger; a spell with no other legal target then fails to resolve."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_illusion_ability_target_does_not_sacrifice_it",
+      "covers": "An ability targeting the Illusion does not match its spell-only target trigger."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_illusion_spell_copy_target_sacrifices_token_before_copy_fails_to_resolve",
+      "covers": "A spell copy targeting the Illusion triggers its sacrifice ability above the copy."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_illusion_multi_target_spell_keeps_its_other_legal_target",
+      "covers": "Sacrificing the targeted Illusion does not stop a spell with another legal target from resolving for that target."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_minus_five_at_five_creates_two_fresh_nonlegendary_copies",
+      "covers": "At exactly five loyalty, the source leaves before resolution and creates two fresh blue nonlegendary Jaces with three loyalty, copied characteristics, separate object identities and entry metadata."
+    },
+    {
+      "test": "scenario deck_coverage_jace_cunning_castaway::jace_minus_five_uses_original_incarnation_lki_after_same_object_reentry",
+      "covers": "The -5 copy effect uses the original source incarnation's last-known values rather than a later generation reusing its ObjectId."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

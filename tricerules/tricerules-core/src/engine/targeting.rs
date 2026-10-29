@@ -1698,6 +1698,11 @@ fn validate_effect_targets(
                 }
             }
         },
+        SpellEffectKind::CreateDelayedTriggerThisTurn { .. } => {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal("this effect takes no targets"));
+            }
+        }
         SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
             CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => {
                 if !targets.is_empty() {

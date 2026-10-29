@@ -3,12 +3,13 @@
 use super::{
     AbilitySourceZone, ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType,
     BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardTypeFilter,
-    CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression, CreatureScopeFilter,
-    DamageDivision, EventZone, GameCondition, GraveyardDestination, GraveyardFilter, Keyword,
-    LifeAmount, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
-    ProtectionQuality, ReflexiveTriggeredAbilityDef, ResultType, SpecialActionKind, SpellKeyword,
-    StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    CastCostReceiptCondition, CastTriggerPlayer, Color, CombatDamageTriggerCardinality,
+    ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
+    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
+    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    ResultType, SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter,
+    TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -245,18 +246,25 @@ pub struct TokenCopyCreatureSubtypeChange {
 
 /// Fixed, copiable-characteristic exceptions applied while constructing a token copy.
 ///
-/// This intentionally excludes supertypes, arbitrary type-line changes, continuous modifiers,
-/// and general effect programs. Kaya, Intangible Slayer uses White 1/1 Creature Spirit with
-/// Flying; The Scarab God establishes the reusable Black 4/4 Zombie replacement shape.
+/// This intentionally excludes arbitrary type-line changes, continuous modifiers, and general
+/// effect programs. Omitted color and P/T overrides preserve the source's copied values; an
+/// explicit empty color override means colorless. Kaya, Intangible Slayer uses White 1/1 Creature
+/// Spirit with Flying, and The Scarab God establishes a Black 4/4 Zombie replacement shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TokenCopyException {
-    /// Exact resulting color set; an empty list means colorless.
-    pub colors: Vec<Color>,
-    /// Nonnegative fixed base power; CardFace stores its copiable base P/T as unsigned values.
-    pub power: i32,
-    /// Nonnegative fixed base toughness; CardFace stores its copiable base P/T as unsigned values.
-    pub toughness: i32,
+    /// Exact color override. `None` preserves copied color values; `Some([])` means colorless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colors: Option<Vec<Color>>,
+    /// Nonnegative fixed base power; pair both values to replace copied P/T and its CDA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power: Option<i32>,
+    /// Nonnegative fixed base toughness; pair both values to replace copied P/T and its CDA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toughness: Option<i32>,
+    /// Remove only the Legendary supertype while retaining all other copied values.
+    #[serde(default)]
+    pub remove_legendary: bool,
     /// Card types added to the copied type line.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub added_card_types: Vec<PermanentTypeFilter>,
@@ -270,16 +278,25 @@ pub struct TokenCopyException {
 
 impl TokenCopyException {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.power < 0 || self.toughness < 0 {
-            return Err("token copy exception power and toughness must be nonnegative".into());
+        match (self.power, self.toughness) {
+            (Some(power), Some(toughness)) if power < 0 || toughness < 0 => {
+                return Err("token copy exception power and toughness must be nonnegative".into());
+            }
+            (Some(_), None) | (None, Some(_)) => {
+                return Err(
+                    "token copy exception power and toughness must be specified together".into(),
+                );
+            }
+            _ => {}
         }
-        if self
-            .colors
-            .iter()
-            .enumerate()
-            .any(|(index, color)| self.colors[..index].contains(color))
-        {
-            return Err("token copy exception colors must be distinct".into());
+        if let Some(colors) = &self.colors {
+            if colors
+                .iter()
+                .enumerate()
+                .any(|(index, color)| colors[..index].contains(color))
+            {
+                return Err("token copy exception colors must be distinct".into());
+            }
         }
         if self
             .added_card_types
@@ -1656,6 +1673,11 @@ pub enum SpellEffectKind {
         subject: Option<EffectSubject>,
         #[serde(default)]
         affected_player: Option<PlayerRecipient>,
+        ability: Box<TriggeredAbilityDef>,
+    },
+    /// Create Jace, Cunning Castaway's finite one-turn combat-damage observer. This fixed
+    /// profile is admitted only as a direct effect of a nonmodal activated legacy ability.
+    CreateDelayedTriggerThisTurn {
         ability: Box<TriggeredAbilityDef>,
     },
     /// Sacrifice the exact generation-bound cohort captured by an engine-created delayed
@@ -3789,7 +3811,8 @@ impl SpellEffectKind {
                 .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
             Self::GrantTriggeredAbility { ability, .. }
             | Self::CreateTriggeredEmblem { ability, .. }
-            | Self::CreateDelayedTrigger { ability, .. } => {
+            | Self::CreateDelayedTrigger { ability, .. }
+            | Self::CreateDelayedTriggerThisTurn { ability } => {
                 ability
                     .effect
                     .iter()
@@ -3835,6 +3858,12 @@ impl SpellEffectKind {
     pub(crate) fn contains_memory_jar_leaf(&self) -> bool {
         self.contains_legacy_flat_signature(|leaf| {
             matches!(leaf, Self::MemoryJarExileHands | Self::ReturnMemoryJarHands)
+        })
+    }
+
+    pub(crate) fn contains_delayed_trigger_this_turn_profile(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| {
+            matches!(leaf, Self::CreateDelayedTriggerThisTurn { .. })
         })
     }
 
@@ -4023,6 +4052,7 @@ impl SpellEffectKind {
                 )
                 | None => Vec::new(),
             },
+            SpellEffectKind::CreateDelayedTriggerThisTurn { .. } => Vec::new(),
             SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
                 CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
                 CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
@@ -4601,7 +4631,12 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
-        self.validate_inner(context, false)
+        self.validate_inner(context, false, context == EffectContext::Ability)
+    }
+
+    /// Admission used only for a direct effect item in a nonmodal activated legacy effect list.
+    pub(crate) fn validate_direct_activated_legacy_effect(&self) -> Result<(), String> {
+        self.validate_inner(EffectContext::Ability, false, true)
     }
 
     /// Validation entry used only after an activated modal owner has established that this is a
@@ -4697,7 +4732,7 @@ impl SpellEffectKind {
         &self,
         context: EffectContext,
     ) -> Result<(), String> {
-        self.validate_inner(context, true)
+        self.validate_inner(context, true, false)
     }
 
     fn contains_unlowered_target_alias_marker(&self) -> bool {
@@ -4761,7 +4796,20 @@ impl SpellEffectKind {
         &self,
         context: EffectContext,
         allow_typed_search_result: bool,
+        allow_delayed_trigger_this_turn: bool,
     ) -> Result<(), String> {
+        if self.contains_delayed_trigger_this_turn_profile() {
+            if !matches!(self, Self::CreateDelayedTriggerThisTurn { .. }) {
+                return Err(
+                    "CreateDelayedTriggerThisTurn must be a direct legacy activated effect".into(),
+                );
+            }
+            if !allow_delayed_trigger_this_turn || context != EffectContext::Ability {
+                return Err(
+                    "CreateDelayedTriggerThisTurn is supported only as a direct legacy activated effect".into(),
+                );
+            }
+        }
         if self.contains_type_choice_sacrifice()
             && !matches!(self, Self::ChoosePermanentsByTypeAndSacrificeRest { .. })
         {
@@ -6412,6 +6460,55 @@ impl SpellEffectKind {
                 } else {
                     ability.validate_shape()
                 }
+            }
+            SpellEffectKind::CreateDelayedTriggerThisTurn { ability } => {
+                let expected_trigger = matches!(
+                    ability.trigger,
+                    TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+                        source_controller: CastTriggerPlayer::Controller,
+                        damaged_player: CastTriggerPlayer::AnyPlayer,
+                        cardinality: CombatDamageTriggerCardinality::OneOrMorePerDamagedPlayer,
+                    }
+                );
+                if !expected_trigger {
+                    return Err(
+                        "CreateDelayedTriggerThisTurn requires the grouped controller-creature combat-damage-to-any-player trigger".into(),
+                    );
+                }
+                if ability.program.is_some()
+                    || ability.modal.is_some()
+                    || ability.targeting.is_some()
+                    || ability.may
+                    || ability.intervening_if.is_some()
+                    || ability.triggers_only_once
+                    || ability.max_triggers_per_turn.is_some()
+                {
+                    return Err(
+                        "CreateDelayedTriggerThisTurn child ability cannot have a Program, modal, target, optionality, intervening-if, or trigger limit".into(),
+                    );
+                }
+                if !matches!(
+                    ability.effect.as_slice(),
+                    [
+                        SpellEffectKind::Draw {
+                            who: PlayerRecipient::Controller,
+                            count: Amount::Fixed(1),
+                        },
+                        SpellEffectKind::Discard {
+                            who: PlayerRecipient::Controller,
+                            quantity: DiscardQuantity::Exact(1),
+                        }
+                    ]
+                ) {
+                    return Err(
+                        "CreateDelayedTriggerThisTurn requires Draw(Controller, 1) then Discard(Controller, Exact(1))".into(),
+                    );
+                }
+                ability
+                    .trigger
+                    .validate()
+                    .and_then(|()| ability.validate_trigger_limit())?;
+                ability.validate_shape()
             }
             SpellEffectKind::AddTypes { subject, addition } => {
                 if let EffectSubject::Chosen(target) = subject {

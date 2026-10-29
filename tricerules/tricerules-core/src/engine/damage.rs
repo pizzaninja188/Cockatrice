@@ -1437,7 +1437,7 @@ impl GameEngine {
         source_has_deathtouch: bool,
         source_has_lifelink: bool,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<Option<DamageResult>, EngineError> {
+    ) -> Result<Option<(DamageResult, DamageEvent)>, EngineError> {
         self.process_prepared_combat_damage_batch(
             vec![DamageSpec {
                 event,
@@ -1447,11 +1447,15 @@ impl GameEngine {
             events,
         )
         .map(|completed| {
-            completed.and_then(|completed| completed.first().map(|damage| damage.result))
+            completed.and_then(|completed| {
+                completed
+                    .first()
+                    .map(|damage| (damage.result, damage.spec.event.clone()))
+            })
         })
     }
 
-    fn capture_combat_damage_source(&self, event: &mut DamageEvent) {
+    pub(super) fn capture_combat_damage_source(&self, event: &mut DamageEvent) {
         let source = event.source.object_id;
         event.source.zone_change_generation = self.state.objects.contains_key(&source).then(|| {
             self.state
@@ -2726,7 +2730,7 @@ mod tests {
             });
         }
 
-        let result = engine
+        let (result, _event) = engine
             .process_or_park_combat_damage(
                 DamageEvent::combat(
                     attacker,
@@ -4625,6 +4629,91 @@ mod tests {
         assert_eq!(source.label, "Grizzly Bears LKI");
         assert!(completed[0].spec.source_has_deathtouch);
         assert!(completed[0].spec.source_has_lifelink);
+    }
+
+    #[test]
+    fn direct_combat_damage_to_permanent_returns_captured_source_snapshot() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_233,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let source = move_bear_to_battlefield(&mut engine);
+        let recipient = move_bear_to_battlefield(&mut engine);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let event = DamageEvent::combat(
+            source,
+            0,
+            "Grizzly Bears combat snapshot",
+            DamageRecipient::Permanent(recipient),
+            2,
+        );
+
+        // This captured event is returned to the direct combat fast path for its
+        // permanent-recipient branches, including attacker-to-blocker damage.
+        let (result, captured_event) = engine
+            .process_or_park_combat_damage(event, false, false, &mut Vec::new())
+            .expect("combat damage processes")
+            .expect("no replacement choice is needed");
+        assert_eq!(result.dealt, 2);
+        assert_eq!(
+            captured_event.recipient,
+            DamageRecipient::Permanent(recipient)
+        );
+        engine
+            .commit_damage_result(&captured_event, result, false, &mut Vec::new())
+            .expect("the captured event commits damage to the recipient");
+        assert_eq!(engine.state.objects[&recipient].damage, 2);
+
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the source leaves after combat damage");
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("the same ObjectId returns under another controller");
+        engine.state.objects.get_mut(&source).unwrap().card_id = "serra_angel".into();
+        assert_ne!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation
+        );
+        assert_eq!(engine.controller_of(source), Some(1));
+        assert_eq!(captured_event.source.object_id, source);
+        assert_eq!(
+            captured_event.source.zone_change_generation,
+            Some(source_generation)
+        );
+        assert_eq!(captured_event.source.controller, 0);
+        assert_eq!(captured_event.source.colors, vec![Color::Green]);
+        assert_eq!(captured_event.source.types, vec!["Creature", "Bear"]);
+        assert_eq!(captured_event.source.label, "Grizzly Bears combat snapshot");
     }
 
     #[test]

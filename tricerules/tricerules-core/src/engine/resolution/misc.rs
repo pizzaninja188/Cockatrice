@@ -590,6 +590,44 @@ pub(super) fn create_delayed_trigger(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
+    create_delayed_trigger_inner(cx, effect, None)
+}
+
+pub(super) fn create_delayed_trigger_this_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateDelayedTriggerThisTurn { ability } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if !matches!(
+        &ability.trigger,
+        TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer { .. }
+    ) {
+        return Err(EngineError::Illegal(
+            "turn-limited delayed observer has an unsupported trigger condition",
+        ));
+    }
+    let matcher = EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn {
+        controller: cx.controller,
+        created_turn_instance: cx.engine.state.turn_instance,
+    };
+    create_delayed_trigger_inner(
+        cx,
+        SpellEffectKind::CreateDelayedTrigger {
+            subject: None,
+            affected_player: None,
+            ability,
+        },
+        Some(matcher),
+    )
+}
+
+fn create_delayed_trigger_inner(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+    matcher_override: Option<EventObserverMatcher>,
+) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::CreateDelayedTrigger {
         subject,
         affected_player,
@@ -734,7 +772,8 @@ pub(super) fn create_delayed_trigger(
             }
         };
         Some(watched)
-    } else if memory_jar_delayed
+    } else if matcher_override.is_some()
+        || memory_jar_delayed
         || matches!(
             ability.trigger,
             TriggerCondition::AtBeginningOfNextTurnUpkeep
@@ -794,36 +833,40 @@ pub(super) fn create_delayed_trigger(
     } else {
         None
     };
-    let matcher = match ability.trigger {
-        TriggerCondition::AtBeginningOfNextEndStep => {
-            EventObserverMatcher::AtBeginningOfNextEndStep
-        }
-        TriggerCondition::AtBeginningOfControllerNextTurnEndStep => {
-            EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
-                controller: cx.controller,
-                created_turn_instance: cx.engine.state.turn_instance,
-                target_turn_instance: None,
+    let matcher = if let Some(matcher) = matcher_override {
+        matcher
+    } else {
+        match ability.trigger {
+            TriggerCondition::AtBeginningOfNextEndStep => {
+                EventObserverMatcher::AtBeginningOfNextEndStep
             }
-        }
-        TriggerCondition::AtBeginningOfNextTurnUpkeep => {
-            EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
-                created_turn_instance: cx.engine.state.turn_instance,
-                target_turn_instance: None,
+            TriggerCondition::AtBeginningOfControllerNextTurnEndStep => {
+                EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                    controller: cx.controller,
+                    created_turn_instance: cx.engine.state.turn_instance,
+                    target_turn_instance: None,
+                }
             }
-        }
-        TriggerCondition::WhenControllerLosesControlOf => {
-            EventObserverMatcher::WhenControllerLosesControlOf
-        }
-        TriggerCondition::WhenWatchedObjectDiesThisTurn => {
-            EventObserverMatcher::WhenWatchedObjectDiesThisTurn
-        }
-        TriggerCondition::WhenWatchedObjectDiesOrIsExiled => {
-            EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled
-        }
-        _ => {
-            return Err(EngineError::Illegal(
-                "delayed trigger has a non-delayed condition",
-            ));
+            TriggerCondition::AtBeginningOfNextTurnUpkeep => {
+                EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                    created_turn_instance: cx.engine.state.turn_instance,
+                    target_turn_instance: None,
+                }
+            }
+            TriggerCondition::WhenControllerLosesControlOf => {
+                EventObserverMatcher::WhenControllerLosesControlOf
+            }
+            TriggerCondition::WhenWatchedObjectDiesThisTurn => {
+                EventObserverMatcher::WhenWatchedObjectDiesThisTurn
+            }
+            TriggerCondition::WhenWatchedObjectDiesOrIsExiled => {
+                EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled
+            }
+            _ => {
+                return Err(EngineError::Illegal(
+                    "delayed trigger has a non-delayed condition",
+                ));
+            }
         }
     };
     let ability_text = ability.fallback_text(&card_name);

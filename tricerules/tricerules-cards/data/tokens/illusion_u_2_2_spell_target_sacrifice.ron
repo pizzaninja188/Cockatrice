@@ -1,0 +1,19 @@
+// Jace, Cunning Castaway token. Its trigger applies to spells and spell copies, not abilities.
+(
+  id: "illusion_u_2_2_spell_target_sacrifice",
+  name: "Illusion",
+  face_id: "illusion",
+  types: ["Creature", "Illusion"],
+  colors: [Blue],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WheneverSelfBecomesTarget(
+      source: Spell,
+      source_controller: AnyPlayer,
+    ),
+    effect: [Sacrifice(subject: Source)],
+  )],
+)

@@ -3635,6 +3635,10 @@ pub enum EventObserverMatcher {
         created_turn_instance: u64,
         target_turn_instance: Option<u64>,
     },
+    CreatureCombatDamageToPlayerThisTurn {
+        controller: PlayerId,
+        created_turn_instance: u64,
+    },
     WhenWatchedObjectDiesThisTurn,
     WhenWatchedObjectDiesOrIsExiled,
     WhenWatchedObjectLeavesBattlefield,

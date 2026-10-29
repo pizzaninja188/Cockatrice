@@ -1108,9 +1108,10 @@ pub(super) fn exile_target_and_copy_unless_aura(
     }
 
     let exception = tricerules_card_model::TokenCopyException {
-        colors: vec![Color::White],
-        power: 1,
-        toughness: 1,
+        colors: Some(vec![Color::White]),
+        power: Some(1),
+        toughness: Some(1),
+        remove_legendary: false,
         added_card_types: vec![PermanentTypeFilter::Creature],
         creature_subtypes: Some(tricerules_card_model::TokenCopyCreatureSubtypeChange {
             mode: tricerules_card_model::TokenCopySubtypeMode::Add,
