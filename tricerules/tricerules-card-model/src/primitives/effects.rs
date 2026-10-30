@@ -1050,6 +1050,12 @@ impl CreatureTypeChange {
 pub enum ManaValueLimit {
     /// The mana value of the permanent observed by the resolving triggered ability.
     TriggerObject,
+    /// The announced X of a resolving activated LoyaltyX ability.
+    ActivatedAbilityX,
+}
+
+fn default_put_permanent_from_hand_up_to_count() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1129,11 +1135,14 @@ pub enum SpellEffectKind {
     /// Optionally put a permanent card from the resolving ability controller's hand onto the
     /// battlefield. PuPu UFO narrows the private choice to lands; Kodama of the East Tree adds an
     /// observed-object mana-value ceiling and retains exact trigger provenance through the choice.
+    /// `up_to_count` is the authored maximum for this optional selection.
     PutPermanentFromHand {
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
         #[serde(default)]
         max_mana_value: Option<ManaValueLimit>,
+        #[serde(default = "default_put_permanent_from_hand_up_to_count")]
+        up_to_count: u32,
     },
     /// Create a persistent, nonpermanent emblem marker and its controller-scoped static effects.
     /// Effects remain active after the source planeswalker leaves.
@@ -2008,6 +2017,9 @@ pub enum SpellEffectKind {
     /// Farewell selects artifacts/creatures/enchantments; Final Judgment selects creatures.
     ExileAll {
         kind: TargetFilter,
+        /// Dynamic cohort ceiling supplied by one announced activated-ability X value.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_mana_value_limit: Option<ManaValueLimit>,
         /// CR 610.3: when true, this cohort returns under its owners' control as this exact
         /// source incarnation leaves the battlefield. This is an ability-only mode.
         #[serde(default, skip_serializing_if = "is_false")]
@@ -3540,6 +3552,24 @@ impl SpellEffectKind {
         )
     }
 
+    pub(crate) fn uses_activated_ability_x_mana_value_limit(&self) -> bool {
+        match self {
+            Self::ExileAll {
+                max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
+                ..
+            } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.uses_activated_ability_x_mana_value_limit()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::uses_activated_ability_x_mana_value_limit),
+            // Triggered and reflexive abilities own their effects independently. Programs also
+            // retain their finite operation whitelist instead of inheriting this effect-list owner.
+            _ => false,
+        }
+    }
+
     pub(crate) fn uses_defending_player_reference(&self) -> bool {
         self.target_filters().iter().any(|filter| {
             filter.any_terminal_filter_matches(|leaf| {
@@ -4897,6 +4927,32 @@ impl SpellEffectKind {
                 "typed retained search/cohort operations are valid only inside a spell_program"
                     .into(),
             );
+        }
+        match self {
+            Self::PutPermanentFromHand { up_to_count, .. } if !(1..=7).contains(up_to_count) => {
+                return Err("PutPermanentFromHand up_to_count must be in 1..=7".into())
+            }
+            Self::ExileAll {
+                max_mana_value_limit: Some(ManaValueLimit::TriggerObject),
+                ..
+            } => {
+                return Err("ExileAll max_mana_value_limit supports only ActivatedAbilityX".into())
+            }
+            Self::ExileAll {
+                max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
+                ..
+            } if context != EffectContext::Ability => {
+                return Err("ExileAll ActivatedAbilityX requires an activated ability owner".into())
+            }
+            Self::PutPermanentFromHand {
+                max_mana_value: Some(ManaValueLimit::ActivatedAbilityX),
+                ..
+            } => {
+                return Err(
+                    "PutPermanentFromHand max_mana_value supports only TriggerObject".into(),
+                )
+            }
+            _ => {}
         }
         if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
             return Err("ExileObservedObjects requires an ability context".into());
@@ -7773,6 +7829,7 @@ mod pupu_ufo_effect_validation_tests {
                     ..Default::default()
                 }),
                 max_mana_value: None,
+                up_to_count: 1,
             },
             source_power(Amount::Fixed(1)),
         ] {
@@ -8182,5 +8239,110 @@ mod issue_158_predicate_tests {
         for condition in conditions {
             condition.validate().expect("valid issue #158 condition");
         }
+    }
+}
+
+#[cfg(test)]
+mod activated_x_mana_value_limit_tests {
+    use super::{EffectContext, ManaValueLimit, SpellEffectKind, TargetFilter};
+
+    #[test]
+    fn old_exile_all_ron_defaults_the_new_limit_to_none() {
+        let effect: SpellEffectKind =
+            ron::from_str("ExileAll(kind: (kind: AnyPermanent))").expect("legacy RON parses");
+        let SpellEffectKind::ExileAll {
+            max_mana_value_limit,
+            ..
+        } = effect
+        else {
+            panic!("legacy RON retains the ExileAll operation");
+        };
+        assert_eq!(max_mana_value_limit, None);
+    }
+
+    #[test]
+    fn dynamic_limit_variants_remain_closed_to_their_own_effect_consumers() {
+        let exile = |limit| SpellEffectKind::ExileAll {
+            kind: TargetFilter::default_creature(),
+            max_mana_value_limit: Some(limit),
+            until_source_leaves: false,
+        };
+        let hand_entry = |limit| SpellEffectKind::PutPermanentFromHand {
+            filter: None,
+            max_mana_value: Some(limit),
+            up_to_count: 1,
+        };
+
+        assert!(exile(ManaValueLimit::ActivatedAbilityX)
+            .validate(EffectContext::Ability)
+            .is_ok());
+        assert!(exile(ManaValueLimit::TriggerObject)
+            .validate(EffectContext::Ability)
+            .unwrap_err()
+            .contains("supports only ActivatedAbilityX"));
+        assert!(hand_entry(ManaValueLimit::TriggerObject)
+            .validate(EffectContext::Ability)
+            .is_ok());
+        assert!(hand_entry(ManaValueLimit::ActivatedAbilityX)
+            .validate(EffectContext::Ability)
+            .unwrap_err()
+            .contains("supports only TriggerObject"));
+    }
+
+    #[test]
+    fn authored_hand_entry_maximum_survives_typed_round_trip() {
+        let effect: SpellEffectKind = ron::from_str(
+            "PutPermanentFromHand(filter: None, max_mana_value: None, up_to_count: 7)",
+        )
+        .expect("the hand-entry maximum is a supported authored field");
+        let serialized = ron::to_string(&effect).expect("effect serializes to RON");
+        let probe: SerializedHandEntry =
+            ron::from_str(&serialized).expect("serialized effect retains the authored maximum");
+
+        let SerializedHandEntry::PutPermanentFromHand {
+            filter,
+            max_mana_value,
+            up_to_count,
+        } = probe;
+        assert_eq!(filter, None);
+        assert_eq!(max_mana_value, None);
+        assert_eq!(up_to_count, 7);
+    }
+
+    #[test]
+    fn old_hand_entry_ron_defaults_to_one_and_authored_domain_is_closed() {
+        let legacy: SpellEffectKind =
+            ron::from_str("PutPermanentFromHand(filter: None, max_mana_value: None)")
+                .expect("legacy hand-entry RON parses");
+        assert!(matches!(
+            legacy,
+            SpellEffectKind::PutPermanentFromHand { up_to_count: 1, .. }
+        ));
+
+        let hand_entry = |up_to_count| SpellEffectKind::PutPermanentFromHand {
+            filter: None,
+            max_mana_value: None,
+            up_to_count,
+        };
+        for up_to_count in 1..=7 {
+            assert!(hand_entry(up_to_count)
+                .validate(EffectContext::Ability)
+                .is_ok());
+        }
+        for up_to_count in [0, 8] {
+            assert!(hand_entry(up_to_count)
+                .validate(EffectContext::Ability)
+                .unwrap_err()
+                .contains("up_to_count must be in 1..=7"));
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    enum SerializedHandEntry {
+        PutPermanentFromHand {
+            filter: Option<()>,
+            max_mana_value: Option<()>,
+            up_to_count: u32,
+        },
     }
 }

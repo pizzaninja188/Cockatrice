@@ -22,10 +22,18 @@ impl GameEngine {
             ));
         };
         let hand = &self.state.players[player_index].hand;
+        let hand_entry = hand_choice.action == HandCardAction::PutOntoBattlefield;
+        let distinct = chosen
+            .iter()
+            .enumerate()
+            .all(|(index, object_id)| !chosen[..index].contains(object_id));
+        let within_hand_entry_bound = !hand_entry
+            || (pending.presentation.min == 0 && chosen.len() <= pending.presentation.max as usize);
         let valid = chosen.iter().all(|object_id| {
             let Some(object) = self.state.objects.get(object_id) else {
                 return false;
             };
+            let candidate_member = pending.presentation.candidates.contains(object_id);
             let generation_matches =
                 hand_choice
                     .candidate_generations
@@ -40,16 +48,32 @@ impl GameEngine {
                                 .unwrap_or(0)
                                 == *generation
                     });
-            object.owner == hand_choice.affected_player
+            let permanent = !hand_entry
+                || self
+                    .registry
+                    .get(&object.card_id)
+                    .is_some_and(|definition| {
+                        definition.matches_card_type_outside_stack(
+                            tricerules_card_model::primitives::CardTypeFilter::Land,
+                        ) || definition.matches_card_type_outside_stack(
+                            tricerules_card_model::primitives::CardTypeFilter::NonlandPermanent,
+                        )
+                    });
+            candidate_member
+                && generation_matches
+                && permanent
+                && object.owner == hand_choice.affected_player
                 && object.zone == Zone::Hand
                 && hand.contains(object_id)
-                && generation_matches
-        });
+        }) && distinct
+            && within_hand_entry_bound;
         if !valid {
             self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal(
-                "chosen hand card is stale or no longer legal",
-            ));
+            return Err(if hand_entry {
+                EngineError::Illegal("chosen hand-entry cohort is stale or no longer legal")
+            } else {
+                EngineError::Illegal("chosen hand card is stale or no longer legal")
+            });
         }
 
         if hand_choice.program_selection {
@@ -111,83 +135,43 @@ impl GameEngine {
             .map(|face| face.name.to_string())
             .unwrap_or_else(|| stack.item.card_id.clone());
         let mut events = vec![];
-        if hand_choice.action == HandCardAction::PutOntoBattlefield {
-            let Some(&object_id) = chosen.first() else {
+        if hand_entry {
+            if chosen.is_empty() {
                 return self.complete_parked_stack_with_previous(
                     stack,
                     EffectResult::default(),
                     events,
                 );
-            };
-            if chosen.len() != 1 {
-                self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal(
-                    "put-onto-battlefield hand choice selects at most one card",
-                ));
             }
-            let object = self
-                .state
-                .objects
-                .get(&object_id)
-                .expect("validated hand-choice object");
-            let owner = object.owner;
-            let object_label = object_display_name(&self.state, self.registry, object_id);
-            let controller = hand_choice.affected_player;
-            let completion = BattlefieldEntryCompletion::ResolutionEffect {
-                owner,
-                spell_label: card_name,
-                object_label,
-                from_zone: Zone::Hand,
-                triggered_return_generation: None,
-            };
-            let entry = BattlefieldEntryEvent {
-                entry_reveal_receipts: Vec::new(),
-                mana_colors_spent_to_cast: Default::default(),
-                prepared: false,
-                object_id,
-                deciding_player: controller,
-                destination_controller: controller,
-                battle_protector: None,
-                face_index: 0,
-                unlock_room_door: None,
-                chosen_x: 0,
-                cast_by: None,
-                cast_cost_receipts: Vec::new(),
-                player_life_snapshot: self.player_life_snapshot(),
-                tapped: false,
-                set_types: None,
-                chosen_basic_land_type: None,
-                chosen_opponents: Vec::new(),
-                chosen_creature_types: Vec::new(),
-                entry_counters: Default::default(),
-                entry_counter_placements: Vec::new(),
-                entry_counter_replacements_resolved: false,
-                entry_modifiers: Vec::new(),
-                entry_cause: hand_choice.entry_cause,
-                attached_to: None,
-                pending_copy_candidate: None,
-                pending_aura_recipient: None,
-                accepted_aura_recipient: None,
-                applied_effects: Vec::new(),
-            };
-            return match self.begin_battlefield_entry(
-                stack.item.clone(),
-                entry,
-                completion.clone(),
+            let entries = chosen
+                .iter()
+                .map(|&object_id| {
+                    let mut entry = resolution::zones::plain_return_entry(
+                        self,
+                        object_id,
+                        hand_choice.affected_player,
+                    );
+                    entry.entry_cause = hand_choice.entry_cause.clone();
+                    entry
+                })
+                .collect();
+            let Some(stack) = self.begin_zone_entry_batch(
+                stack,
+                entries,
+                Zone::Hand,
+                &card_name,
+                None,
                 &mut events,
-            )? {
-                super::super::replacement::BattlefieldEntryProgress::Parked => {
-                    self.transfer_entry_choice_resume(&stack);
-                    Ok(finish_with_events(self, events))
-                }
-                super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
-                    self.restore_skipped_battlefield_entry(&entry)?;
-                    self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
-                }
-                super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
-                    self.complete_pending_battlefield_entry(pending, *entry, completion, events)
-                }
+            )?
+            else {
+                return Ok(finish_with_events(self, events));
             };
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            );
         }
         let mut result = CardResultCohort::default();
         let mut discard_receipts = Vec::new();

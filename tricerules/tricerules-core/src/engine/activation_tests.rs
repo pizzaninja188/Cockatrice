@@ -302,6 +302,17 @@ const LOYALTY_X_TEST_WALKER: &str = r#"(
         costs: [LoyaltyX], effect: [GainLife(amount: "X", who: Controller)])],
 )"#;
 
+const LOYALTY_X_EXILE_TEST_WALKER: &str = r#"(
+    id: "loyalty_x_exile_test_walker", name: "Loyalty X Exile Test Walker",
+    face_id: "loyalty_x_exile_test_walker", supertypes: ["Legendary"],
+    types: ["Planeswalker"], loyalty: 1,
+    activated_abilities: [(ability_id: "minus_x", presentation: Fallback,
+        costs: [LoyaltyX], effect: [ExileAll(
+            kind: (kind: AnyPermanent),
+            max_mana_value_limit: Some(ActivatedAbilityX)
+        )])],
+)"#;
+
 const LOYALTY_X_CARTH_STATIC_FIXTURE: &str = r#"(
     id: "loyalty_x_carth_static_fixture", name: "Carth Loyalty Cost Fixture",
     face_id: "loyalty_x_carth_static_fixture", types: ["Artifact"],
@@ -4347,6 +4358,75 @@ fn loyalty_x_zero_is_payable_with_carth_and_consumes_the_loyalty_use() {
         .next()
         .unwrap();
     assert!(!engine.ability_activatable(walker, effective.slot as usize, &effective.definition));
+}
+
+#[test]
+fn loyalty_x_exile_uses_captured_x_after_cost_sba_removes_its_source() {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            LOYALTY_X_EXILE_TEST_WALKER,
+        ],
+        &[],
+    )
+    .expect("LoyaltyX ExileAll fixture compiles");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        602_315,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("two-player LoyaltyX ExileAll engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    let source = place_ready(&mut engine, 10, "Loyalty X Exile Test Walker");
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .expect("planeswalker source")
+        .set_counter(CounterKind::Loyalty, 1);
+    let forest = place_ready(&mut engine, 10, "Forest");
+    let bears = place_ready(&mut engine, 20, "Grizzly Bears");
+
+    let activation = activate_loyalty_x(&mut engine, source, 1)
+        .expect("the source can pay its last loyalty counter for X=1");
+    assert_public_loyalty_x_announcement(&activation, 1);
+    assert_eq!(engine.state.stack.last().unwrap().chosen_x, 1);
+    assert_eq!(
+        engine.state.objects[&source].zone,
+        Zone::Graveyard,
+        "state-based actions remove the source after its loyalty cost"
+    );
+
+    for _ in 0..2 {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(
+                actor,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("pass priority to resolve the announced ability");
+    }
+
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.objects[&forest].zone, Zone::Exile);
+    assert_eq!(
+        engine.state.objects[&bears].zone,
+        Zone::Battlefield,
+        "the resolving effect reads the stored X=1 after its source leaves"
+    );
 }
 
 #[test]

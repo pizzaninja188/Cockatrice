@@ -108,6 +108,7 @@ fn kodama_registers_its_complete_printed_identity() {
         [SpellEffectKind::PutPermanentFromHand {
             filter: None,
             max_mana_value: Some(ManaValueLimit::TriggerObject),
+            up_to_count: 1,
         }]
     ));
     // Partner's in-game effects are N/A: CR 702.124a applies before the game. The existing
@@ -222,6 +223,7 @@ fn kodama_trigger_object_ceiling_composes_with_an_or_card_filter() {
             ..Default::default()
         }),
         max_mana_value: Some(ManaValueLimit::TriggerObject),
+        up_to_count: 1,
     }];
 
     let choice = resolve_kodama_to_hand_choice(&mut engine);

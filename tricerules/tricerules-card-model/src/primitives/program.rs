@@ -7989,3 +7989,162 @@ mod target_exile_result_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod activated_x_mana_value_limit_program_rejections {
+    use super::*;
+    use crate::primitives::ManaValueLimit;
+
+    fn ability_definition() -> crate::AbilityDefinitionId {
+        crate::AbilityDefinitionId {
+            card_id: "ugin_program_fixture".into(),
+            face_id: crate::CardFaceId::new("ugin_program_fixture").expect("valid face ID"),
+            ability_path: vec![AbilityId::new("activated_01").expect("valid ability ID")],
+        }
+    }
+
+    fn owners() -> Vec<(ProgramOwnerId, EffectContext)> {
+        let face_id = crate::CardFaceId::new("ugin_program_fixture").expect("valid face ID");
+        let ability = ability_definition();
+        vec![
+            (
+                ProgramOwnerId::ability(ability.clone()),
+                EffectContext::Ability,
+            ),
+            (
+                ProgramOwnerId::ability_mode(
+                    ability,
+                    ModeId::new("mode_01").expect("valid mode ID"),
+                ),
+                EffectContext::Ability,
+            ),
+            (
+                ProgramOwnerId::face("ugin_program_fixture", face_id.clone()),
+                EffectContext::Spell,
+            ),
+            (
+                ProgramOwnerId::face_mode(
+                    "ugin_program_fixture",
+                    face_id,
+                    ModeId::new("mode_01").expect("valid mode ID"),
+                ),
+                EffectContext::Spell,
+            ),
+        ]
+    }
+
+    fn operation(effect: SpellEffectKind) -> Instruction {
+        Instruction {
+            id: "unsupported_operation".into(),
+            bind: Vec::new(),
+            input: None,
+            kind: InstructionKind::Perform(Box::new(effect)),
+        }
+    }
+
+    fn empty_block() -> AuthoredBlock {
+        AuthoredBlock {
+            steps: Vec::new(),
+            yields: Vec::new(),
+        }
+    }
+
+    fn program(effect: SpellEffectKind, nesting: u8) -> CardProgram {
+        let perform = operation(effect);
+        let instruction = match nesting {
+            0 => perform,
+            1 => Instruction {
+                id: "conditional".into(),
+                bind: Vec::new(),
+                input: None,
+                kind: InstructionKind::If {
+                    condition: Box::new(GameCondition::Void),
+                    yes: AuthoredBlock {
+                        steps: vec![perform],
+                        yields: Vec::new(),
+                    },
+                    no: empty_block(),
+                },
+            },
+            2 => {
+                let branch = |branch_id: &str| AuthoredChooseBranch {
+                    branch_id: ChoiceId::new(branch_id).expect("valid branch ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::Always,
+                    body: AuthoredBlock {
+                        steps: vec![perform.clone()],
+                        yields: Vec::new(),
+                    },
+                };
+                Instruction {
+                    id: "choice".into(),
+                    bind: Vec::new(),
+                    input: None,
+                    kind: InstructionKind::Choose {
+                        choice: ChoiceId::new("choice").expect("valid choice ID"),
+                        chooser: PlayerRecipient::Controller,
+                        optional: false,
+                        branches: vec![branch("first"), branch("second")],
+                        otherwise: empty_block(),
+                    },
+                }
+            }
+            _ => panic!("unsupported test nesting"),
+        };
+        CardProgram {
+            body: AuthoredBlock {
+                steps: vec![instruction],
+                yields: Vec::new(),
+            },
+            target_bindings: Vec::new(),
+            target_aliases: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn exile_all_and_hand_entry_stay_outside_all_program_owner_whitelists() {
+        let effects = [
+            SpellEffectKind::ExileAll {
+                kind: TargetFilter::default_creature(),
+                max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
+                until_source_leaves: false,
+            },
+            SpellEffectKind::PutPermanentFromHand {
+                filter: None,
+                max_mana_value: Some(ManaValueLimit::TriggerObject),
+                up_to_count: 1,
+            },
+            SpellEffectKind::MayBehold {
+                who: super::PlayerRecipient::Controller,
+                choice_id: ChoiceId::new("behold_probe").unwrap(),
+                criterion: crate::BeholdCriterion {
+                    required_subtype: "Elf".into(),
+                },
+                if_beheld: vec![SpellEffectKind::ExileAll {
+                    kind: TargetFilter::default_creature(),
+                    max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
+                    until_source_leaves: false,
+                }],
+            },
+        ];
+
+        for (owner, context) in owners() {
+            for effect in &effects {
+                for nesting in 0..=2 {
+                    let result = CompiledProgram::compile(
+                        owner.clone(),
+                        context,
+                        &program((*effect).clone(), nesting),
+                    );
+                    assert!(
+                        result.unwrap_err().contains(
+                            "effect is not in the resolution-program operation whitelist"
+                        ),
+                        "owner={owner:?}, nesting={nesting}, effect={effect:?}"
+                    );
+                }
+            }
+        }
+    }
+}

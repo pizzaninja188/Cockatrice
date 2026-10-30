@@ -11808,31 +11808,55 @@ TEST_F(RuledClientTest, EntryRevealHandPickRejectedAckRestoresSelectionAndDeclin
 
 TEST_F(RuledClientTest, EntryRevealEmptyOptionalHandPickCanDeclineAndRestoreRejectedAck)
 {
-    ruled::v1::RuledEventBatch batch;
-    (*batch.mutable_legal_by_player())[kLocalPlayer];
-    auto *choice = batch.add_events()->mutable_resolution_choice_required();
-    choice->set_deciding_player_id(kLocalPlayer);
-    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
-    choice->set_prompt_text("As Game Trail enters, reveal a qualifying card or choose none.");
-    choice->set_min(0);
-    choice->set_max(1);
-    apply(batch);
-    ASSERT_TRUE(state->isResolutionHandPickActive());
-    EXPECT_TRUE(state->resolutionHandPickConfirmable());
-    state->declinePendingClickChoice();
-    ASSERT_FALSE(host.sentCommands.isEmpty());
-    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
-    host.answerPendingAck(false);
-    EXPECT_TRUE(state->isResolutionHandPickActive());
-    EXPECT_TRUE(state->resolutionHandPickConfirmable());
-    state->submitResolutionHandPick();
-    host.answerPendingAck(true);
-    EXPECT_FALSE(state->isResolutionHandPickActive());
+    for (quint32 max = 1; max <= 7; ++max) {
+        state->clearSessionState();
+        host.sentCommands.clear();
+
+        ruled::v1::RuledEventBatch batch;
+        (*batch.mutable_legal_by_player())[kLocalPlayer];
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_prompt_text("As Game Trail enters, reveal a qualifying card or choose none.");
+        choice->set_min(0);
+        choice->set_max(max);
+        apply(batch);
+
+        ASSERT_TRUE(state->isResolutionHandPickActive()) << "max=" << max;
+        ASSERT_TRUE(state->pendingChoice.has_value());
+        EXPECT_EQ(state->pendingChoice->min, 0);
+        EXPECT_EQ(state->pendingChoice->max, static_cast<int>(max));
+        EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+        EXPECT_TRUE(state->resolutionHandPickConfirmable());
+
+        state->declinePendingClickChoice();
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        ASSERT_TRUE(host.sentCommands.last().has_submit_resolution_choice());
+        EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
+        host.answerPendingAck(false);
+
+        ASSERT_TRUE(state->isResolutionHandPickActive()) << "max=" << max;
+        ASSERT_TRUE(state->pendingChoice.has_value());
+        EXPECT_EQ(state->pendingChoice->min, 0);
+        EXPECT_EQ(state->pendingChoice->max, static_cast<int>(max));
+        EXPECT_EQ(state->resolutionHandPickSelected(), 0);
+        EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+        EXPECT_TRUE(state->resolutionHandPickConfirmable());
+
+        state->submitResolutionHandPick();
+        ASSERT_EQ(host.sentCommands.size(), 2);
+        EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
+        host.answerPendingAck(true);
+        EXPECT_FALSE(state->isResolutionHandPickActive()) << "max=" << max;
+    }
 }
 
 TEST_F(RuledClientTest, EntryRevealMalformedEmptyHandPickIsRejected)
 {
-    for (int variant = 0; variant < 7; ++variant) {
+    for (int variant = 0; variant < 25; ++variant) {
+        state->clearSessionState();
+        host.sentCommands.clear();
+
         ruled::v1::RuledEventBatch batch;
         (*batch.mutable_legal_by_player())[kLocalPlayer];
         auto *choice = batch.add_events()->mutable_resolution_choice_required();
@@ -11848,24 +11872,115 @@ TEST_F(RuledClientTest, EntryRevealMalformedEmptyHandPickIsRejected)
                 choice->set_max(0);
                 break;
             case 2:
-                choice->set_ordered(true);
+                choice->set_max(8);
                 break;
             case 3:
-                choice->add_candidate_names("Forest");
+                choice->set_ordered(true);
                 break;
             case 4:
-                choice->add_candidate_server_card_ids(41);
+                choice->set_unique_names(true);
                 break;
             case 5:
-                choice->add_candidate_selectable(true);
+                choice->add_candidate_object_ids(101u);
                 break;
             case 6:
-                choice->mutable_public_reveal();
+                choice->add_candidate_card_ids("forest");
+                break;
+            case 7:
+                choice->add_candidate_names("Forest");
+                break;
+            case 8:
+                choice->add_candidate_server_card_ids(41);
+                break;
+            case 9:
+                choice->add_candidate_selectable(true);
+                break;
+            case 10:
+                choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+                break;
+            case 11:
+                choice->add_candidate_player_ids(kLocalPlayer);
+                break;
+            case 12:
+                choice->add_candidate_token_identities();
+                break;
+            case 13:
+                choice->add_selection_slots()->set_label("slot");
+                break;
+            case 14:
+                choice->add_replacement_options()->set_effect_summary("Replacement");
+                break;
+            case 15:
+                choice->add_accepted_permanent_selections();
+                break;
+            case 16:
+                choice->add_selection_alternatives()->set_count(1);
+                break;
+            case 17:
+                choice->add_resolution_branches();
+                break;
+            case 18:
+                choice->add_combat_defender_options();
+                break;
+            case 19:
+                choice->set_waterbend(true);
+                break;
+            case 20:
+                choice->set_variable_mana_contribution(true);
+                break;
+            case 21:
+                choice->set_generic_mana_cost(1);
+                break;
+            case 22:
+                choice->set_payment_currently_legal(true);
+                break;
+            case 23:
+                choice->set_mana_cost("{U}");
+                break;
+            case 24:
+                choice->mutable_public_reveal()->set_zone_owner_player_id(kOpponent);
                 break;
         }
         apply(batch);
-        EXPECT_FALSE(state->isResolutionHandPickActive()) << variant;
+        EXPECT_FALSE(state->isResolutionHandPickActive()) << "variant=" << variant;
+        EXPECT_FALSE(state->pendingChoice.has_value()) << "variant=" << variant;
+        EXPECT_TRUE(host.sentCommands.isEmpty()) << "variant=" << variant;
     }
+}
+
+TEST_F(RuledClientTest, NonemptyHandPickStillHonorsPrivateEligibilityAndMaximum)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(0);
+    choice->set_max(2);
+    for (int i = 0; i < 4; ++i) {
+        choice->add_candidate_object_ids(501u + static_cast<quint32>(i));
+        choice->add_candidate_server_card_ids(41 + i);
+        choice->add_candidate_selectable(i != 3);
+    }
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->pendingChoice->max, 2);
+    state->toggleResolutionHandPickCard(41);
+    state->toggleResolutionHandPickCard(42);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 2);
+    state->toggleResolutionHandPickCard(43);
+    state->toggleResolutionHandPickCard(44);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 2);
+
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &answer = host.sentCommands.last().submit_resolution_choice();
+    ASSERT_EQ(answer.chosen_object_ids_size(), 2);
+    EXPECT_EQ(answer.chosen_object_ids(0), 501u);
+    EXPECT_EQ(answer.chosen_object_ids(1), 502u);
+    host.answerPendingAck(true);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
 TEST_F(RuledClientTest, EntryRevealHandPickLateRejectedAckCannotRestoreSupersededAuthority)

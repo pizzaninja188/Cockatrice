@@ -1713,12 +1713,15 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // Entry reveal must offer the same optional choice even when a private hand has no match.
     const bool isEmptyOptionalHandPick =
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS && rcr.candidate_object_ids_size() == 0 &&
-        rcr.min() == 0 && rcr.max() == 1 && !rcr.ordered() && !rcr.unique_names() && !rcr.has_public_reveal() &&
-        rcr.candidate_names_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+        rcr.min() == 0 && rcr.max() >= 1 && rcr.max() <= 7 && !rcr.ordered() && !rcr.unique_names() &&
+        !rcr.has_public_reveal() && rcr.candidate_card_ids_size() == 0 && rcr.candidate_names_size() == 0 &&
         rcr.candidate_server_card_ids_size() == 0 && rcr.candidate_selectable_size() == 0 &&
         rcr.candidate_source_zones_size() == 0 && rcr.candidate_player_ids_size() == 0 &&
-        rcr.candidate_token_identities_size() == 0 && rcr.selection_alternatives_size() == 0 &&
-        rcr.resolution_branches_size() == 0 && rcr.combat_defender_options_size() == 0;
+        rcr.candidate_token_identities_size() == 0 && rcr.selection_slots_size() == 0 &&
+        rcr.replacement_options_size() == 0 && rcr.accepted_permanent_selections_size() == 0 &&
+        rcr.selection_alternatives_size() == 0 && rcr.resolution_branches_size() == 0 &&
+        rcr.combat_defender_options_size() == 0 && !rcr.waterbend() && !rcr.variable_mana_contribution() &&
+        rcr.generic_mana_cost() == 0 && !rcr.payment_currently_legal() && rcr.mana_cost().empty();
     const bool isOptionalTargetObjectsChoice =
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS && rcr.min() == 0 && rcr.max() == 1;
     if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch && !isEmptyOptionalHandPick &&

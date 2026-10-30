@@ -1,0 +1,55 @@
+// Oracle identity and all three abilities are pinned to the reviewed Scryfall record
+// eecb3047-a563-441a-9175-200421981ac3. Core Set 2021 release notes confirm the X=0 rulings:
+// https://magic.wizards.com/en/news/feature/core-set-2021-and-jumpstart-release-notes-2020-06-20
+// Current Comprehensive Rules effective 2026-09-25: CR 107.3a and 606.4–606.6 (loyalty X),
+// 202.2f and 202.3 (current colors and mana value), 608.2f (simultaneous events), and 303.4f–g
+// (Aura entry and attachment).
+(
+  id: "ugin,_the_spirit_dragon",
+  name: "Ugin, the Spirit Dragon",
+  face_id: "ugin_the_spirit_dragon",
+  mana_cost: "{8}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Ugin"],
+  loyalty: 7,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Loyalty(2)],
+      effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [LoyaltyX],
+      effect: [ExileAll(
+        kind: (any_of: Some([
+          (kind: AnyPermanent, is_color: Some(White)),
+          (kind: AnyPermanent, is_color: Some(Blue)),
+          (kind: AnyPermanent, is_color: Some(Black)),
+          (kind: AnyPermanent, is_color: Some(Red)),
+          (kind: AnyPermanent, is_color: Some(Green)),
+        ])),
+        max_mana_value_limit: Some(ActivatedAbilityX),
+        until_source_leaves: false,
+      )],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-10)],
+      effect: [
+        GainLife(amount: 7, who: Controller),
+        Draw(who: Controller, count: 7),
+        PutPermanentFromHand(filter: None, up_to_count: 7),
+      ],
+    ),
+  ],
+)

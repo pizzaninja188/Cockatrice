@@ -74,12 +74,16 @@ mod destruction;
 #[cfg(test)]
 mod destruction_tests;
 mod dispatch;
+#[cfg(test)]
+mod hand_entry_cohort_tests;
 mod join_forces;
 mod kaya_multiscry;
 pub(in crate::engine) mod library_cohorts;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;
+#[cfg(test)]
+mod mana_value_limit_tests;
 mod mass;
 mod memory_jar;
 mod misc;

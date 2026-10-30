@@ -1978,16 +1978,25 @@ pub(super) fn put_permanent_from_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let (filter, max_mana_value) = match effect {
+    let (filter, max_mana_value, up_to_count) = match effect {
         SpellEffectKind::PutPermanentFromHand {
             filter,
             max_mana_value,
-        } => (filter, max_mana_value),
+            up_to_count,
+        } => (filter, max_mana_value, up_to_count),
         _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
-    let trigger_object_max_mana_value = max_mana_value.and_then(|_| {
-        super::super::targeting::trigger_object_mana_value(cx.engine, cx.top.trigger_context)
-    });
+    let trigger_object_max_mana_value = match max_mana_value {
+        None => None,
+        Some(tricerules_card_model::primitives::ManaValueLimit::TriggerObject) => {
+            super::super::targeting::trigger_object_mana_value(cx.engine, cx.top.trigger_context)
+        }
+        Some(tricerules_card_model::primitives::ManaValueLimit::ActivatedAbilityX) => {
+            return Err(EngineError::Illegal(
+                "PutPermanentFromHand cannot consume the activated-ability X bound",
+            ));
+        }
+    };
     let missing_trigger_object =
         max_mana_value.is_some() && trigger_object_max_mana_value.is_none();
     let candidates = if missing_trigger_object {
@@ -2033,7 +2042,7 @@ pub(super) fn put_permanent_from_hand(
         cx,
         cx.controller,
         HandCardChoiceSpec {
-            count: 1,
+            count: up_to_count,
             chooser: HandCardChooser::AffectedPlayer,
             card_filter: None,
             eligible_override: Some(candidates),
@@ -2194,10 +2203,21 @@ fn choose_hand_cards_for_player(
         .collect();
     let verb = hand_action_verb(action);
     let prompt = if action == HandCardAction::PutOntoBattlefield {
-        format!(
-            "P{deciding_player}: you may choose a {} from your hand to put onto the battlefield.",
-            put_prompt.unwrap_or("permanent card")
-        )
+        let put_prompt = put_prompt.unwrap_or("permanent card");
+        if count == 1 {
+            format!(
+                "P{deciding_player}: you may choose a {put_prompt} from your hand to put onto the battlefield."
+            )
+        } else {
+            let plural_prompt = if put_prompt == "land card" {
+                "land cards"
+            } else {
+                "permanent cards"
+            };
+            format!(
+                "P{deciding_player}: you may choose up to {count} {plural_prompt} from your hand to put onto the battlefield."
+            )
+        }
     } else if optional {
         format!("P{deciding_player}: you may choose a card for P{affected_player} to {verb}.")
     } else {

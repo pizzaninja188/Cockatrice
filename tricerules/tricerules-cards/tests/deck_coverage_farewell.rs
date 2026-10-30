@@ -47,6 +47,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
                 ..Default::default()
             },
             until_source_leaves: false,
+            max_mana_value_limit: None,
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
     }
@@ -57,6 +58,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
             ..Default::default()
         },
         until_source_leaves: false,
+        max_mana_value_limit: None,
     };
     assert!(effect.validate(EffectContext::Spell).is_err());
     assert!(SpellEffectKind::ExileAll {
@@ -65,6 +67,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
             ..Default::default()
         },
         until_source_leaves: false,
+        max_mana_value_limit: None,
     }
     .validate(EffectContext::Spell)
     .is_ok());

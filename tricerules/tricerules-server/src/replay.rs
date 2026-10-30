@@ -2715,6 +2715,455 @@ mod tests {
             .any(|card| card.object_id == revealed_object_id));
     }
 
+    fn ugin_pass_priority(session: &mut EngineSession, latest: IpcResponse) -> IpcResponse {
+        const UGIN_NAME: &str = "Ugin, the Spirit Dragon";
+        let mut player_id = session
+            .engine
+            .as_ref()
+            .expect("Ugin session has an engine")
+            .state
+            .priority_player_id();
+        let discard_count = {
+            let state = &session.engine.as_ref().unwrap().state;
+            if state.turn_step == tricerules_core::TurnStep::Cleanup
+                && !state.cleanup_priority_active
+                && state.cleanup_discard_player == Some(player_id)
+            {
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == player_id)
+                    .expect("cleanup actor is in the game")
+                    .hand
+                    .len()
+                    .saturating_sub(7)
+            } else {
+                0
+            }
+        };
+        if discard_count > 0 {
+            let legal_actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&player_id)
+                .expect("cleanup actor receives current legal actions");
+            let cleanup_offers = legal_actions
+                .hand_actions
+                .iter()
+                .filter(|offer| {
+                    offer.kind == HandActionKind::HandActionCleanupDiscard as i32
+                        && (player_id != 17 || offer.card_name != UGIN_NAME)
+                })
+                .take(discard_count)
+                .map(|offer| offer.hand_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                cleanup_offers.len(),
+                discard_count,
+                "cleanup offers include enough cards while preserving any Ugin in hand"
+            );
+            let after_discard = kaya_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                        hand_card_indices: cleanup_offers,
+                    })),
+                },
+            );
+            player_id = session
+                .engine
+                .as_ref()
+                .expect("Ugin session has an engine")
+                .state
+                .priority_player_id();
+            assert!(
+                kaya_batch(&after_discard)
+                    .legal_by_player
+                    .contains_key(&player_id),
+                "post-discard response publishes current actions for the new priority player"
+            );
+        }
+        kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PassPriority(PassPriority {})),
+            },
+        )
+    }
+
+    #[test]
+    fn ugin_normal_session_casts_from_current_offers_and_activates_plus_two() {
+        const UGIN_NAME: &str = "Ugin, the Spirit Dragon";
+        const UGIN_CARD_ID: &str = "ugin,_the_spirit_dragon";
+
+        let make_deck = |player_id: i32, ugin_pilot: bool| {
+            let mut mainboard_card_name = if ugin_pilot {
+                vec![UGIN_NAME.to_string(); 4]
+            } else {
+                Vec::new()
+            };
+            mainboard_card_name.extend(vec!["Forest".to_string(); 60 - mainboard_card_name.len()]);
+            PlayerDeck {
+                player_id,
+                mainboard_card_name,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            }
+        };
+        let player_decks = vec![make_deck(17, true), make_deck(29, false)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![UGIN_NAME.into(), "Forest".into()],
+                })),
+            })
+            .expect("deck validation leaves the session open");
+        assert!(
+            validation.ok,
+            "complete Ugin decks validate: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_031,
+                    seed: 20_261_029,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the normal game session open");
+        assert!(latest.ok, "normal Ugin GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the eligible starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+        for _ in 0..4 {
+            latest = ugin_pass_priority(&mut session, latest);
+        }
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+        }
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let ugin_from_view = |objects: &[BattlefieldObject]| {
+            objects
+                .iter()
+                .find(|object| object.card_id == UGIN_CARD_ID)
+                .cloned()
+        };
+        let mut ugin_cast = false;
+        for _ in 0..4_096 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active pilot receives current legal actions")
+                    .clone();
+                let land = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| action.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned();
+                if let Some(land) = land {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+
+                let ugin_spell = actions
+                    .hand_actions
+                    .iter()
+                    .find(|action| {
+                        action.kind == HandActionKind::HandActionCastSpell as i32
+                            && action.card_name == UGIN_NAME
+                    })
+                    .cloned();
+                let mana_sources = kaya_available_mana_abilities(&battlefield)
+                    .into_iter()
+                    .filter(|source| kaya_output_has_color(&source.3, 'G'))
+                    .collect::<Vec<_>>();
+                if let Some(spell) = ugin_spell.filter(|_| mana_sources.len() >= 8) {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                                announcement: Some(
+                                    tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                                        source: Some(CastSource {
+                                            location: Some(
+                                                tricerules_proto::ruled::v1::cast_source::Location::
+                                                    HandIndex(spell.hand_index),
+                                            ),
+                                            expected_zone_change_generation: None,
+                                        }),
+                                        face_index: spell.face_index,
+                                        cast_method: CastMethod::Normal as i32,
+                                        ..Default::default()
+                                    },
+                                ),
+                            })),
+                        },
+                    );
+
+                    let mut produced = PaymentMana::default();
+                    for (source_object_id, generation, ability_index, output) in
+                        mana_sources.into_iter().take(8)
+                    {
+                        let current_source = kaya_available_mana_abilities(&battlefield)
+                            .into_iter()
+                            .find(|source| {
+                                source.0 == source_object_id
+                                    && source.1 == generation
+                                    && source.2 == ability_index
+                            })
+                            .expect("current land view retains this untapped mana offer");
+                        assert_eq!(current_source.3, output);
+                        assert!(kaya_output_has_color(&output, 'G'));
+                        produced.g += 1;
+                        latest = kaya_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                    source_object_id,
+                                    ability_index,
+                                    source_zone: AbilitySourceZone::Battlefield as i32,
+                                    expected_zone_change_generation: generation,
+                                    ..Default::default()
+                                })),
+                            },
+                        );
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+
+                    let pending = kaya_batch(&latest)
+                        .legal_by_player
+                        .get(&17)
+                        .and_then(|actions| actions.pending_spell_cast.as_ref())
+                        .expect("current Ugin payment offer survives mana activation");
+                    let payment = pending
+                        .payment_preview
+                        .as_ref()
+                        .expect("pending Ugin cast publishes its payment preview");
+                    let transaction_id = pending.transaction_id;
+                    let revision = payment.revision;
+                    let payment_query = session
+                        .process(&IpcEnvelope {
+                            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                                player_id: 17,
+                                preview: Some(PreviewPayment {
+                                    transaction_id,
+                                    revision,
+                                    commit_spell_cast: Some(CommitSpellCast {
+                                        transaction_id,
+                                        payment: Some(PaymentSelection {
+                                            expected_state_revision: revision,
+                                            mana: Some(produced),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                            })),
+                        })
+                        .expect("Ugin payment query keeps the session open");
+                    assert!(
+                        payment_query.ok,
+                        "Ugin payment preview: {}",
+                        payment_query.error
+                    );
+                    let preview = payment_query
+                        .batch
+                        .and_then(|batch| batch.payment_preview)
+                        .expect("PaymentQuery returns a current Ugin payment preview");
+                    assert!(
+                        preview.valid && preview.complete,
+                        "Ugin payment: {preview:?}"
+                    );
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                                transaction_id,
+                                payment: preview.selection,
+                                restricted_mana: preview.restricted_mana,
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    for _ in 0..8 {
+                        if ugin_from_view(&battlefield).is_some() {
+                            ugin_cast = true;
+                            break;
+                        }
+                        latest = ugin_pass_priority(&mut session, latest);
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert!(ugin_cast, "Ugin resolves through ordinary priority passes");
+                    break;
+                }
+            }
+
+            latest = ugin_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(ugin_cast, "ordinary offers eventually cast Ugin");
+
+        let ugin = ugin_from_view(&battlefield).expect("current view publishes Ugin");
+        let plus_two = ugin
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == "activated_01"
+                    })
+                })
+            })
+            .expect("current Ugin view identifies +2 by stable ability ID");
+        assert!(plus_two.activatable, "current +2 ability offer is legal");
+        let plus_two_key = (u64::from(ugin.object_id) << 32) | u64::from(plus_two.ability_index);
+        let legal_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&17)
+            .expect("the Ugin controller receives current legal actions");
+        let target_group = legal_actions
+            .valid_targets_by_ability
+            .get(&plus_two_key)
+            .and_then(|targets| targets.groups.first())
+            .expect("the current stable +2 offer publishes its target group");
+        assert_eq!((target_group.min, target_group.max), (1, 1));
+        assert!(
+            target_group.can_target_opponent,
+            "the current +2 offer includes the active opponent as a legal target"
+        );
+
+        let opponent_life_before = session
+            .engine
+            .as_ref()
+            .unwrap()
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == 29)
+            .expect("opponent is in the normal game session")
+            .life;
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: ugin.object_id,
+                    ability_index: plus_two.ability_index,
+                    targets: vec![TargetRef {
+                        object_id: 29,
+                        group_index: 0,
+                        kind: TargetRefKind::Player as i32,
+                        ..Default::default()
+                    }],
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: ugin.zone_change_generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let current_ugin = ugin_from_view(&battlefield).expect("current view retains Ugin");
+        assert_eq!(current_ugin.loyalty, ugin.loyalty + 2);
+        for _ in 0..4 {
+            latest = ugin_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+            let opponent_life = session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == 29)
+                .expect("opponent is in the normal game session")
+                .life;
+            if opponent_life == opponent_life_before - 3 {
+                break;
+            }
+        }
+        let opponent_life = session
+            .engine
+            .as_ref()
+            .unwrap()
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == 29)
+            .expect("opponent is in the normal game session")
+            .life;
+        assert_eq!(opponent_life, opponent_life_before - 3);
+        assert!(session.engine.as_ref().unwrap().state.stack.is_empty());
+    }
+
     #[test]
     fn kaya_zero_legal_session_casts_from_offers_and_reaches_the_optional_scry_leaf() {
         let player_decks = vec![kaya_player_deck(17, true), kaya_player_deck(29, false)];

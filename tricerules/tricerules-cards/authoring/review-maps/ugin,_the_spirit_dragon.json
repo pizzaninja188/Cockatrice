@@ -1,0 +1,195 @@
+{
+  "format_version": 1,
+  "oracle_id": "eecb3047-a563-441a-9175-200421981ac3",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "ugin_the_spirit_dragon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost",
+        "/faces/0/supertypes/0",
+        "/faces/0/types/0",
+        "/faces/0/types/1",
+        "/faces/0/loyalty",
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0",
+        "/faces/0/activated_abilities/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "ugin_the_spirit_dragon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0",
+        "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/0",
+        "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/1",
+        "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/2",
+        "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/3",
+        "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/4"
+      ]
+    },
+    {
+      "face_id": "ugin_the_spirit_dragon",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/effect/0",
+        "/faces/0/activated_abilities/2/effect/1",
+        "/faces/0/activated_abilities/2/effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/DamageTarget/target/kind"
+    },
+    {
+      "symbol": "AbilityCost::LoyaltyX",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileAll",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/0/kind"
+    },
+    {
+      "symbol": "Color::White",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/0/is_color"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/1/kind"
+    },
+    {
+      "symbol": "Color::Blue",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/1/is_color"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/2/kind"
+    },
+    {
+      "symbol": "Color::Black",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/2/is_color"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/3/kind"
+    },
+    {
+      "symbol": "Color::Red",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/3/is_color"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/4/kind"
+    },
+    {
+      "symbol": "Color::Green",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/kind/any_of/4/is_color"
+    },
+    {
+      "symbol": "ManaValueLimit::ActivatedAbilityX",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileAll/max_mana_value_limit"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "Amount::Fixed(7)",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/GainLife/amount"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/2/effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::Controller",
+      "typed_path": "/faces/0/activated_abilities/2/effect/1/Draw/who"
+    },
+    {
+      "symbol": "Amount::Fixed(7)",
+      "typed_path": "/faces/0/activated_abilities/2/effect/1/Draw/count"
+    },
+    {
+      "symbol": "SpellEffectKind::PutPermanentFromHand",
+      "typed_path": "/faces/0/activated_abilities/2/effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_has_its_exact_identity_and_three_primitive_abilities",
+      "covers": "Exact card identity, mana cost, color, type line, starting loyalty, all three costs and primitive-list representations, +2 targeting shape, -X five-color union and captured-X bound, and ordered -10 life/draw/hand effects."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_plus_two_uses_engine_any_target_for_player_creature_planeswalker_and_battle",
+      "covers": "+2 pays loyalty and deals exactly three damage to an opposing player, creature, planeswalker and admitted Battle through actual registered ability commands."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_plus_two_rejects_a_land_and_fizzles_when_its_only_target_leaves",
+      "covers": "A plain land is rejected without loyalty payment; the actual +2 deals no damage when its sole creature target leaves before resolution."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_minus_x_exiles_all_five_colors_including_multicolor_once_at_the_limit",
+      "covers": "-X has no targets; each of five colors is exiled, the exact mana-value boundary is inclusive, a multicolor object changes generation once, and higher-value and colorless permanents remain."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_minus_x_uses_live_colors_when_the_ability_resolves",
+      "covers": "Prepared public layer-five color changes after actual activation determine exile eligibility at resolution, rather than activation-time colors."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_minus_x_zero_exiles_a_colored_zero_mana_token_but_keeps_colorless_ornithopter",
+      "covers": "X=0 exiles a colored zero-mana token exactly once before it ceases to exist; the colorless zero-mana creature remains."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_minus_x_keeps_announced_x_after_its_source_leaves",
+      "covers": "Paying all seven loyalty removes Ugin before resolution, while the stack retains announced X=7 and exiles an eligible colored permanent."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_ultimate_draws_seven_before_private_zero_to_seven_hand_choice",
+      "covers": "-10 gains seven life and draws seven before publishing the fixed optional 0..7 hand offer; newly drawn permanents are selectable, an instant is not, owner hand views are distinct, and choosing zero completes. Recipient redaction is covered separately by the reviewed relay regression."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_ultimate_rejects_eight_and_puts_exactly_seven_selected_permanents",
+      "covers": "The actual ultimate rejects eight selections atomically and accepts seven as one hand-origin entry cohort; life and draw effects occur once."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_ultimate_hand_cohort_uses_shared_entry_counters_aura_and_clone_choices",
+      "covers": "Actual Ugin hand entry uses the shared replacement and ordering paths: both entry-counter replacements apply, Aura and Clone offers exclude a coentrant and accept an established creature, and each entrant changes generation once."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_ultimate_aura_and_clone_cannot_use_a_same_cohort_creature",
+      "covers": "With no established creature, a coentrant cannot supply an Aura attachment or Clone copy source; the Aura remains in hand, the uncopied zero-toughness Clone dies, and the chosen creature enters."
+    },
+    {
+      "test": "scenario deck_coverage_ugin_spirit_dragon::ugin_test_ultimate_affordability_is_ten_or_nine_with_carth_and_keeps_carth_callback_visible",
+      "covers": "The printed -10 requires ten loyalty without Carth and nine with Carth, rejecting one less in each case. Source death retains the ultimate; the known Carth callback is explicitly completed before Ugin hand selection."
+    }
+  ]
+}

@@ -113,10 +113,43 @@ pub(super) fn exile_all(
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::ExileAll {
         kind,
+        max_mana_value_limit,
         until_source_leaves,
     } = effect
     else {
         return Err(EngineError::Illegal("mass exile dispatch mismatch"));
+    };
+    let dynamic_max_mana_value = match max_mana_value_limit {
+        None => None,
+        Some(tricerules_card_model::primitives::ManaValueLimit::ActivatedAbilityX) => {
+            let valid_loyalty_x_owner = !cx.top.is_triggered
+                && cx.top.activated_ability.as_ref().is_some_and(|ability| {
+                    ability
+                        .costs
+                        .iter()
+                        .filter(|cost| *cost == &AbilityCost::LoyaltyX)
+                        .count()
+                        == 1
+                });
+            if !valid_loyalty_x_owner {
+                return Err(EngineError::Illegal(
+                    "ExileAll announced-X bound requires an activated LoyaltyX owner",
+                ));
+            }
+            if cx.top.chosen_x > i32::MAX as u32 {
+                return Err(EngineError::Illegal(
+                    "ExileAll announced-X bound is outside the valid LoyaltyX range",
+                ));
+            }
+            // X was checked and captured when this ability was activated. Keep using the stack
+            // value even if paying its loyalty cost caused the source to leave by state-based action.
+            Some(cx.top.chosen_x)
+        }
+        Some(tricerules_card_model::primitives::ManaValueLimit::TriggerObject) => {
+            return Err(EngineError::Illegal(
+                "ExileAll cannot consume the TriggerObject mana-value bound",
+            ));
+        }
     };
     let engine = &mut *cx.engine;
     let watched_source = if until_source_leaves {
@@ -149,6 +182,13 @@ pub(super) fn exile_all(
     // same snapshot also binds each optional return observer to the generation created here.
     let victims = battlefield_objects_matching(engine, &kind)
         .into_iter()
+        .filter(|object_id| {
+            dynamic_max_mana_value.is_none_or(|maximum| {
+                engine
+                    .characteristics(*object_id)
+                    .is_some_and(|characteristics| characteristics.mana_value <= maximum)
+            })
+        })
         .map(|oid| {
             let movement =
                 prepare_zone_move(&engine.state, engine.registry, oid, Zone::Exile, None)?

@@ -50,6 +50,9 @@ mod deck_coverage_jace_cunning_castaway;
 #[path = "scenario/deck_coverage_jace_unraveler_of_secrets.rs"]
 mod deck_coverage_jace_unraveler_of_secrets;
 
+#[path = "scenario/deck_coverage_ugin_spirit_dragon.rs"]
+mod deck_coverage_ugin_spirit_dragon;
+
 #[path = "scenario/deck_coverage_onakke_oathkeeper.rs"]
 mod deck_coverage_onakke_oathkeeper;
 

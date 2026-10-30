@@ -552,6 +552,21 @@ impl ActivatedAbilityDef {
                     .into(),
             );
         }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_activated_ability_x_mana_value_limit)
+            && self
+                .costs
+                .iter()
+                .filter(|cost| matches!(cost, AbilityCost::LoyaltyX))
+                .count()
+                != 1
+        {
+            return Err(
+                "ExileAll ActivatedAbilityX requires exactly one activated LoyaltyX cost".into(),
+            );
+        }
         if (has_storage_counter_split_mana || has_x_storage_counter_cost)
             && self.storage_counter_split_mana().is_none()
         {
@@ -1943,6 +1958,14 @@ impl TriggeredAbilityDef {
             .collect::<Vec<_>>();
         if effects
             .iter()
+            .any(|effect| effect.uses_activated_ability_x_mana_value_limit())
+        {
+            return Err(
+                "ExileAll ActivatedAbilityX requires an activated LoyaltyX ability owner".into(),
+            );
+        }
+        if effects
+            .iter()
             .any(|effect| effect.contains_chain_veil_permission())
         {
             return Err("Chain Veil permission requires an activated ability".into());
@@ -2277,6 +2300,15 @@ impl ReflexiveTriggeredAbilityDef {
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_activated_ability_x_mana_value_limit)
+        {
+            return Err(
+                "ExileAll ActivatedAbilityX requires an activated LoyaltyX ability owner".into(),
+            );
+        }
         if self
             .effect
             .iter()
@@ -3349,6 +3381,287 @@ mod triggered_program_receipt_context_tests {
                     .unwrap_err()
                     .contains("activated ability program"),
                 "triggered programs cannot produce or consume this activated-program receipt"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod activated_x_exile_all_owner_tests {
+    use super::{
+        AbilityCost, ActivatedAbilityDef, ReflexiveTriggeredAbilityDef, SpellEffectKind,
+        TriggerCondition, TriggeredAbilityDef,
+    };
+    use crate::card_def::{ModalDef, ModeDef};
+    use crate::primitives::{
+        BeholdCriterion, CastCostReceiptCondition, EffectContext, EffectSubject, GameCondition,
+        ManaValueLimit, PlayerRecipient, TargetFilter,
+    };
+    use crate::{AbilityId, AbilityPresentation, ChoiceId, ModeId};
+
+    fn activated_x_ability() -> ActivatedAbilityDef {
+        ron::from_str(
+            r#"(ability_id: "minus_x", presentation: Fallback,
+                costs: [LoyaltyX], effect: [ExileAll(
+                    kind: (kind: AnyPermanent),
+                    max_mana_value_limit: Some(ActivatedAbilityX)
+                )])"#,
+        )
+        .expect("the approved LoyaltyX mass-exile contract parses")
+    }
+
+    fn exile_all_x() -> SpellEffectKind {
+        SpellEffectKind::ExileAll {
+            kind: TargetFilter::default_creature(),
+            max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
+            until_source_leaves: false,
+        }
+    }
+
+    fn same_owner_wrappers(
+        effect: &SpellEffectKind,
+    ) -> Vec<(&'static str, SpellEffectKind, &'static str)> {
+        vec![
+            (
+                "Conditional.effect",
+                SpellEffectKind::Conditional {
+                    condition: GameCondition::Void,
+                    effect: Box::new(effect.clone()),
+                },
+                "Conditional currently supports",
+            ),
+            (
+                "ConditionalCastCost.effect",
+                SpellEffectKind::ConditionalCastCost {
+                    condition: CastCostReceiptCondition {
+                        group_id: ChoiceId::new("bargain").unwrap(),
+                        option_id: ChoiceId::new("bargain").unwrap(),
+                        expected_selected: true,
+                    },
+                    effect: Box::new(effect.clone()),
+                },
+                "ConditionalCastCost currently supports",
+            ),
+            (
+                "MayBehold.if_beheld",
+                SpellEffectKind::MayBehold {
+                    who: PlayerRecipient::Controller,
+                    choice_id: ChoiceId::new("behold_probe").unwrap(),
+                    criterion: BeholdCriterion {
+                        required_subtype: "Elf".into(),
+                    },
+                    if_beheld: vec![effect.clone()],
+                },
+                "resolution MayBehold requires an authored Program",
+            ),
+        ]
+    }
+
+    fn modal_with(effect: SpellEffectKind) -> ModalDef {
+        let mode = |mode_id: &str, effects| ModeDef {
+            mode_id: ModeId::new(mode_id).expect("valid mode ID"),
+            presentation: AbilityPresentation::Fallback,
+            linked_cast_cost: None,
+            effects,
+            program: None,
+            targeting: None,
+        };
+        ModalDef {
+            min_modes: 1,
+            max_modes: 1,
+            all_modes_cast_cost: None,
+            trigger_mode_selection_restriction: None,
+            modes: vec![
+                mode("exile", vec![effect]),
+                mode("proliferate", vec![SpellEffectKind::Proliferate]),
+            ],
+        }
+    }
+
+    fn triggered(effect: Vec<SpellEffectKind>, modal: Option<ModalDef>) -> TriggeredAbilityDef {
+        TriggeredAbilityDef {
+            ability_id: AbilityId::new("triggered_probe").expect("valid ability ID"),
+            presentation: AbilityPresentation::Fallback,
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect,
+            program: None,
+            modal,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        }
+    }
+
+    fn reflexive(effect: Vec<SpellEffectKind>) -> ReflexiveTriggeredAbilityDef {
+        ReflexiveTriggeredAbilityDef {
+            ability_id: AbilityId::new("reflexive_probe").expect("valid ability ID"),
+            presentation: AbilityPresentation::Fallback,
+            effect,
+            targeting: None,
+            intervening_if: None,
+        }
+    }
+
+    #[test]
+    fn activated_loyalty_x_exile_all_accepts_the_announced_x_mana_value_limit() {
+        let ability = activated_x_ability();
+        let round_trip = ron::to_string(&ability).expect("the parsed ability serializes");
+        assert!(
+            round_trip.contains("max_mana_value_limit")
+                && round_trip.contains("ActivatedAbilityX"),
+            "the parsed model must retain the dynamic limit instead of silently discarding it: {round_trip}"
+        );
+        ability
+            .validate_shape()
+            .expect("one LoyaltyX owner authorizes the ExileAll dynamic ceiling");
+    }
+
+    #[test]
+    fn activated_loyalty_x_exile_all_is_valid_in_a_supported_legacy_modal_mode() {
+        let mut ability = activated_x_ability();
+        ability.effect.clear();
+        ability.modal = Some(modal_with(exile_all_x()));
+        ability
+            .validate_shape()
+            .expect("the legacy modal mode inherits exactly its activated LoyaltyX owner");
+    }
+
+    #[test]
+    fn activated_modal_programs_remain_rejected_with_a_loyalty_x_cost() {
+        let mut ability = activated_x_ability();
+        ability.effect.clear();
+        let mut modal = modal_with(SpellEffectKind::Proliferate);
+        modal.modes[0].effects.clear();
+        modal.modes[0].program = Some(crate::CardProgram {
+            body: crate::primitives::AuthoredBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            target_bindings: Vec::new(),
+            target_aliases: Vec::new(),
+        });
+        ability.modal = Some(modal);
+        assert!(ability
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated ability modes currently require legacy effect lists"));
+    }
+
+    #[test]
+    fn activated_exile_all_x_rejects_missing_multiple_or_mixed_x_costs() {
+        let mut missing = activated_x_ability();
+        missing.costs = vec![AbilityCost::Loyalty(-3)];
+        assert!(missing
+            .validate_shape()
+            .unwrap_err()
+            .contains("exactly one activated LoyaltyX"));
+
+        let mut multiple = activated_x_ability();
+        multiple.costs.push(AbilityCost::LoyaltyX);
+        assert!(multiple
+            .validate_shape()
+            .unwrap_err()
+            .contains("only one loyalty cost"));
+
+        let mut mixed = activated_x_ability();
+        mixed
+            .costs
+            .push(AbilityCost::Mana(crate::ManaCost::parse("{X}").unwrap()));
+        assert!(mixed
+            .validate_shape()
+            .unwrap_err()
+            .contains("cannot share the activated-ability X choice"));
+    }
+
+    #[test]
+    fn exile_all_activated_x_is_rejected_for_triggered_spell_and_reflexive_owners() {
+        for ability in [
+            triggered(vec![exile_all_x()], None),
+            triggered(Vec::new(), Some(modal_with(exile_all_x()))),
+        ] {
+            assert!(ability
+                .validate_shape()
+                .unwrap_err()
+                .contains("activated LoyaltyX ability owner"));
+        }
+
+        let spell_effect = exile_all_x();
+        assert!(spell_effect
+            .validate(EffectContext::Spell)
+            .unwrap_err()
+            .contains("activated ability owner"));
+        assert!(modal_with(exile_all_x())
+            .validate(EffectContext::Spell)
+            .unwrap_err()
+            .contains("activated ability owner"));
+
+        assert!(reflexive(vec![exile_all_x()])
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated LoyaltyX ability owner"));
+    }
+
+    #[test]
+    fn activated_loyalty_x_does_not_authorize_nested_triggered_or_reflexive_children() {
+        let triggered_child = triggered(vec![exile_all_x()], None);
+        let mut activated_parent = activated_x_ability();
+        activated_parent.effect = vec![SpellEffectKind::GrantTriggeredAbility {
+            subject: EffectSubject::Source,
+            ability: Box::new(triggered_child),
+        }];
+        assert!(activated_parent
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated LoyaltyX ability owner"));
+
+        let reflexive_child = reflexive(vec![exile_all_x()]);
+        let mut activated_parent = activated_x_ability();
+        activated_parent.effect = vec![SpellEffectKind::CreateReflexiveTrigger {
+            when: None,
+            ability: Box::new(reflexive_child),
+        }];
+        assert!(activated_parent
+            .validate_shape()
+            .unwrap_err()
+            .contains("activated LoyaltyX ability owner"));
+    }
+
+    #[test]
+    fn activated_x_limit_cannot_be_hidden_in_same_owner_effect_wrappers() {
+        for (label, wrapper, supported_wrapper_error) in same_owner_wrappers(&exile_all_x()) {
+            let mut activated_without_x = activated_x_ability();
+            activated_without_x.costs.clear();
+            activated_without_x.effect = vec![wrapper.clone()];
+            let error = activated_without_x.validate_shape().unwrap_err();
+            assert!(
+                error.contains("exactly one activated LoyaltyX cost"),
+                "missing-X {label} wrapper must fail at the activated owner boundary: {error}"
+            );
+
+            let error = triggered(vec![wrapper.clone()], None)
+                .validate_shape()
+                .unwrap_err();
+            assert!(
+                error.contains("activated LoyaltyX ability owner"),
+                "triggered {label} wrapper must keep its own owner: {error}"
+            );
+
+            let error = reflexive(vec![wrapper.clone()])
+                .validate_shape()
+                .unwrap_err();
+            assert!(
+                error.contains("activated LoyaltyX ability owner"),
+                "reflexive {label} wrapper must keep its own owner: {error}"
+            );
+
+            let mut activated_with_x = activated_x_ability();
+            activated_with_x.effect = vec![wrapper.clone()];
+            let error = activated_with_x.validate_shape().unwrap_err();
+            assert!(
+                error.contains(supported_wrapper_error),
+                "a valid LoyaltyX owner must not widen the existing {label} admission boundary: {error}"
             );
         }
     }

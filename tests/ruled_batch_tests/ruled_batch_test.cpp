@@ -5771,7 +5771,7 @@ TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyA
 TEST_F(RuledBatchTest, EntryRevealEmptyAndMatchingHandsHaveIdenticalOpponentAndSpectatorWaitingViews)
 {
     seedCardCatalog({"Forest", "Game Trail"});
-    addCardToHand(p1, QStringLiteral("Forest"));
+    Server_Card *forest = addCardToHand(p1, QStringLiteral("Forest"));
     ruled::v1::RuledPerPlayerView view;
     view.set_player_id(p1->getPlayerId());
     auto *hand = view.add_hand_cards();
@@ -5780,9 +5780,12 @@ TEST_F(RuledBatchTest, EntryRevealEmptyAndMatchingHandsHaveIdenticalOpponentAndS
     applyZoneView(p1, view, nullptr);
     auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
     insertParticipant(3, spectator);
+
     std::string previousOpponent;
     std::string previousSpectator;
-    for (const bool matching : {false, true}) {
+    // Empty, present-but-ineligible, and eligible private hand cohorts all publish the same
+    // optional public bounds and retain the same wait prompt for the other recipients.
+    for (const int cohort : {0, 1, 2}) {
         ruled::v1::IpcResponse response;
         response.set_ok(true);
         auto *batch = response.mutable_batch();
@@ -5795,42 +5798,93 @@ TEST_F(RuledBatchTest, EntryRevealEmptyAndMatchingHandsHaveIdenticalOpponentAndS
         choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
         choice->set_prompt_text("As Game Trail enters, reveal one qualifying card or choose none.");
         choice->set_min(0);
-        choice->set_max(1);
-        if (matching) {
+        choice->set_max(7);
+        if (cohort != 0) {
             choice->add_candidate_object_ids(501u);
             choice->add_candidate_card_ids("forest");
             choice->add_candidate_names("Forest");
-            choice->add_candidate_selectable(true);
+            choice->add_candidate_selectable(cohort == 2);
         }
+
+        const auto deciderView = redactFor(*batch, p1);
         const auto opponent = redactFor(*batch, p2);
         const auto spectatorView = redactFor(*batch, spectator);
-        if (matching) {
-            EXPECT_EQ(opponent.SerializeAsString(), previousOpponent);
-            EXPECT_EQ(spectatorView.SerializeAsString(), previousSpectator);
-        } else {
+        const auto *deciderChoice = onlyResolutionChoice(deciderView);
+        const auto *opponentChoice = onlyResolutionChoice(opponent);
+        const auto *spectatorChoice = onlyResolutionChoice(spectatorView);
+        ASSERT_NE(deciderChoice, nullptr);
+        ASSERT_NE(opponentChoice, nullptr);
+        ASSERT_NE(spectatorChoice, nullptr);
+        for (const auto *projected : {deciderChoice, opponentChoice, spectatorChoice}) {
+            EXPECT_EQ(projected->min(), 0u) << "cohort=" << cohort;
+            EXPECT_EQ(projected->max(), 7u) << "cohort=" << cohort;
+        }
+
+        const int expectedPrivateCount = cohort == 0 ? 0 : 1;
+        EXPECT_EQ(deciderChoice->candidate_object_ids_size(), expectedPrivateCount);
+        EXPECT_EQ(deciderChoice->candidate_card_ids_size(), expectedPrivateCount);
+        EXPECT_EQ(deciderChoice->candidate_names_size(), expectedPrivateCount);
+        EXPECT_EQ(deciderChoice->candidate_server_card_ids_size(), expectedPrivateCount);
+        EXPECT_EQ(deciderChoice->candidate_selectable_size(), expectedPrivateCount);
+        if (expectedPrivateCount == 1) {
+            EXPECT_EQ(deciderChoice->candidate_object_ids(0), 501u);
+            EXPECT_EQ(deciderChoice->candidate_card_ids(0), "forest");
+            EXPECT_EQ(deciderChoice->candidate_names(0), "Forest");
+            EXPECT_EQ(deciderChoice->candidate_server_card_ids(0), forest->getId());
+            EXPECT_EQ(deciderChoice->candidate_selectable(0), cohort == 2);
+        }
+
+        for (const auto *waiting : {opponentChoice, spectatorChoice}) {
+            EXPECT_EQ(waiting->candidate_object_ids_size(), 0);
+            EXPECT_EQ(waiting->candidate_card_ids_size(), 0);
+            EXPECT_EQ(waiting->candidate_names_size(), 0);
+            EXPECT_EQ(waiting->candidate_server_card_ids_size(), 0);
+            EXPECT_EQ(waiting->candidate_selectable_size(), 0);
+            EXPECT_EQ(waiting->candidate_source_zones_size(), 0);
+            EXPECT_EQ(waiting->candidate_player_ids_size(), 0);
+            EXPECT_EQ(waiting->candidate_token_identities_size(), 0);
+            EXPECT_EQ(waiting->prompt_text(), "Opponent is making a resolution choice.");
+        }
+
+        if (cohort == 0) {
             previousOpponent = opponent.SerializeAsString();
             previousSpectator = spectatorView.SerializeAsString();
+        } else {
+            EXPECT_EQ(opponent.SerializeAsString(), previousOpponent);
+            EXPECT_EQ(spectatorView.SerializeAsString(), previousSpectator);
         }
+
         updatePendingResolutionChoiceCache(response);
         for (Server_Player *recipient : {p1, p2, spectator}) {
             ResponseContainer reconnect(-1);
             game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
             ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
-            const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+            const auto *container =
+                dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
             ASSERT_NE(container, nullptr);
             ruled::v1::RuledEventBatch restored;
-            ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-            const auto it = std::find_if(restored.events().begin(), restored.events().end(),
-                                         [](const auto &event) { return event.has_resolution_choice_required(); });
-            ASSERT_NE(it, restored.events().end());
-            const auto &current = it->resolution_choice_required();
-            EXPECT_EQ(current.min(), 0u);
-            EXPECT_EQ(current.max(), 1u);
-            EXPECT_EQ(current.candidate_object_ids_size(), recipient == p1 && matching ? 1 : 0);
-            if (recipient != p1) {
-                EXPECT_EQ(current.prompt_text(), "Opponent is making a resolution choice.");
-                EXPECT_EQ(current.candidate_names_size(), 0);
-                EXPECT_EQ(current.candidate_server_card_ids_size(), 0);
+            ASSERT_TRUE(
+                restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+            const auto *restoredChoice = onlyResolutionChoice(restored);
+            ASSERT_NE(restoredChoice, nullptr);
+            EXPECT_EQ(restoredChoice->min(), 0u);
+            EXPECT_EQ(restoredChoice->max(), 7u);
+            EXPECT_EQ(restoredChoice->candidate_object_ids_size(),
+                      recipient == p1 && expectedPrivateCount == 1 ? 1 : 0);
+            if (recipient == p1 && expectedPrivateCount == 1) {
+                ASSERT_EQ(restoredChoice->candidate_card_ids_size(), 1);
+                EXPECT_EQ(restoredChoice->candidate_card_ids(0), "forest");
+                ASSERT_EQ(restoredChoice->candidate_names_size(), 1);
+                EXPECT_EQ(restoredChoice->candidate_names(0), "Forest");
+                ASSERT_EQ(restoredChoice->candidate_server_card_ids_size(), 1);
+                EXPECT_EQ(restoredChoice->candidate_server_card_ids(0), forest->getId());
+                ASSERT_EQ(restoredChoice->candidate_selectable_size(), 1);
+                EXPECT_EQ(restoredChoice->candidate_selectable(0), cohort == 2);
+            } else if (recipient != p1) {
+                EXPECT_EQ(restoredChoice->candidate_names_size(), 0);
+                EXPECT_EQ(restoredChoice->candidate_server_card_ids_size(), 0);
+                EXPECT_EQ(restoredChoice->candidate_selectable_size(), 0);
+                EXPECT_EQ(restoredChoice->prompt_text(), "Opponent is making a resolution choice.");
             }
         }
     }
