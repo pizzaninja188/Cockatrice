@@ -119,6 +119,123 @@ pub(super) fn apply_creature_type_removal(characteristics: &mut Characteristics)
     }
 }
 
+const PLANESWALKER_SUBTYPES: &[&str] = &[
+    "Ajani",
+    "Aminatou",
+    "Angrath",
+    "Arlinn",
+    "Ashiok",
+    "Bahamut",
+    "Basri",
+    "Bolas",
+    "Calix",
+    "Chandra",
+    "Comet",
+    "Dack",
+    "Dakkon",
+    "Daretti",
+    "Davriel",
+    "Dellian",
+    "Dihada",
+    "Domri",
+    "Dovin",
+    "Ellywick",
+    "Elminster",
+    "Elspeth",
+    "Estrid",
+    "Freyalise",
+    "Garruk",
+    "Gideon",
+    "Grist",
+    "Guff",
+    "Huatli",
+    "Jace",
+    "Jared",
+    "Jaya",
+    "Jeska",
+    "Kaito",
+    "Karn",
+    "Kasmina",
+    "Kaya",
+    "Kiora",
+    "Koth",
+    "Liliana",
+    "Lolth",
+    "Lukka",
+    "Minsc",
+    "Mordenkainen",
+    "Nahiri",
+    "Narset",
+    "Niko",
+    "Nissa",
+    "Nixilis",
+    "Oko",
+    "Quintorius",
+    "Ral",
+    "Rowan",
+    "Saheeli",
+    "Samut",
+    "Sarkhan",
+    "Serra",
+    "Sivitri",
+    "Sorin",
+    "Szat",
+    "Tamiyo",
+    "Tasha",
+    "Teferi",
+    "Teyo",
+    "Tezzeret",
+    "Tibalt",
+    "Tyvar",
+    "Ugin",
+    "Urza",
+    "Venser",
+    "Vivien",
+    "Vraska",
+    "Vronos",
+    "Will",
+    "Windgrace",
+    "Wrenn",
+    "Xenagos",
+    "Yanggu",
+    "Yanling",
+    "Zariel",
+];
+
+fn is_planeswalker_subtype(value: &str) -> bool {
+    PLANESWALKER_SUBTYPES.contains(&value)
+}
+
+/// Project CR 205.1a removal so dependency probes distinguish an effective type/subtype change
+/// from an instruction tag that is identical across two recipient snapshots. CR 205.3j's names
+/// are disjoint from the modeled land and creature subtype sets, but retain the cross-type rule
+/// explicitly for any shared subtype.
+pub(super) fn planeswalker_removal_signature(
+    characteristics: &Characteristics,
+) -> (bool, Vec<String>) {
+    let keeps_creature_subtypes =
+        characteristics.is_creature() || characteristics.has_type("Kindred");
+    let keeps_land_subtypes = characteristics.has_type("Land");
+    let removed_subtypes = characteristics
+        .types
+        .iter()
+        .filter(|value| is_planeswalker_subtype(value))
+        .filter(|value| {
+            !(keeps_creature_subtypes && is_creature_type(value)
+                || keeps_land_subtypes && is_land_subtype(value))
+        })
+        .cloned()
+        .collect();
+    (characteristics.has_type("Planeswalker"), removed_subtypes)
+}
+
+pub(super) fn apply_planeswalker_type_removal(characteristics: &mut Characteristics) {
+    let (_, removed_subtypes) = planeswalker_removal_signature(characteristics);
+    characteristics.types.retain(|value| {
+        value != "Planeswalker" && !removed_subtypes.iter().any(|removed| removed == value)
+    });
+}
+
 pub(super) fn apply_type_line_addition(
     characteristics: &mut Characteristics,
     addition: &tricerules_card_model::TypeLineAddition,
@@ -514,6 +631,55 @@ impl CharacteristicsEvaluator<'_> {
         }
     }
 
+    /// Luxior's exact attached-recipient quantity is intentionally separate from the generic
+    /// public/static count evaluator. It reads the recipient's physical counter map only after
+    /// proving the source incarnation and current attachment relation.
+    fn attached_object_counter_count(
+        &self,
+        effect: &ContinuousEffect,
+        recipient_id: ObjectId,
+    ) -> Option<i64> {
+        let source_id = effect.source_id?;
+        if !matches!(
+            &effect.affected,
+            AffectedScope::AttachedTo(attached_source) if *attached_source == source_id
+        ) {
+            return None;
+        }
+        let Some(TriggerAbilityOrigin::StaticGrant {
+            source_id: origin_source,
+            source_zone_change,
+            ..
+        }) = effect.trigger_grant_origin.as_ref()
+        else {
+            return None;
+        };
+        if *origin_source != source_id
+            || self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0)
+                != *source_zone_change
+        {
+            return None;
+        }
+        let source = self.state.objects.get(&source_id)?;
+        let recipient = self.state.objects.get(&recipient_id)?;
+        if source.zone != Zone::Battlefield
+            || source.phase_status.is_some()
+            || recipient.zone != Zone::Battlefield
+            || recipient.phase_status.is_some()
+            || source.attached_to != Some(AttachmentRecipient::Object(recipient_id))
+        {
+            return None;
+        }
+        Some(recipient.counters.values().fold(0_i64, |total, count| {
+            total.saturating_add(i64::from(*count))
+        }))
+    }
+
     /// Snapshot through CR 613 layer 5. Conditional layer-6/7 effects may inspect controller,
     /// type, and color through this boundary without recursively asking for their own result.
     fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
@@ -740,6 +906,7 @@ impl CharacteristicsEvaluator<'_> {
                     effect.kind,
                     ContinuousEffectKind::Layer4AddTypes(_)
                         | ContinuousEffectKind::Layer4RemoveCreature
+                        | ContinuousEffectKind::Layer4RemovePlaneswalker
                         | ContinuousEffectKind::Layer4SetTypeLine(_)
                         | ContinuousEffectKind::Layer4SetBasicLandType(_)
                         | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -767,6 +934,9 @@ impl CharacteristicsEvaluator<'_> {
                 }
                 ContinuousEffectKind::Layer4RemoveCreature => {
                     apply_creature_type_removal(result);
+                }
+                ContinuousEffectKind::Layer4RemovePlaneswalker => {
+                    apply_planeswalker_type_removal(result);
                 }
                 ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
                     apply_type_line_replacement(result, replacement);
@@ -1938,6 +2108,7 @@ fn is_earlier_characteristic_component(kind: &ContinuousEffectKind) -> bool {
         ContinuousEffectKind::Layer3SetName(_)
             | ContinuousEffectKind::Layer4AddTypes(_)
             | ContinuousEffectKind::Layer4RemoveCreature
+            | ContinuousEffectKind::Layer4RemovePlaneswalker
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -2695,23 +2866,26 @@ impl CharacteristicsEvaluator<'_> {
                 let Some(source_id) = effect.source_id else {
                     continue;
                 };
-                let source_controller = self.layer_2_controller(source_id, &mut Vec::new());
-                let context = ConditionContext {
-                    controller: source_controller,
-                    source_object_id: source_id,
-                    source_zone_change: self
-                        .state
-                        .zone_change_generation
-                        .get(&source_id)
-                        .copied()
-                        .unwrap_or(0),
-                    resolving_spell_id: None,
-                    stack_item: None,
-                    previous_effect_result: None,
+                let count = if matches!(count, CountExpression::AttachedObjectCounterCount) {
+                    self.attached_object_counter_count(effect, oid).unwrap_or(0)
+                } else {
+                    let source_controller = self.layer_2_controller(source_id, &mut Vec::new());
+                    let context = ConditionContext {
+                        controller: source_controller,
+                        source_object_id: source_id,
+                        source_zone_change: self
+                            .state
+                            .zone_change_generation
+                            .get(&source_id)
+                            .copied()
+                            .unwrap_or(0),
+                        resolving_spell_id: None,
+                        stack_item: None,
+                        previous_effect_result: None,
+                    };
+                    self.static_scaling_count(count, context, Some(early_view))
+                        .unwrap_or(0)
                 };
-                let count = self
-                    .static_scaling_count(count, context, Some(early_view))
-                    .unwrap_or(0);
                 if let Some(value) = &mut power {
                     *value = value.saturating_add((power_per_match as i64).saturating_mul(count));
                 }
@@ -2796,6 +2970,7 @@ mod tests {
     use tricerules_card_model::{CharacteristicDefiningAbility, TypeLineAddition};
 
     mod devotion_tests;
+    mod luxior_tests;
 
     fn early_layer_type_effect(
         affected: AffectedScope,

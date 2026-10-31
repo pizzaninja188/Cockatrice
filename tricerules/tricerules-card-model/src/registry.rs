@@ -1985,6 +1985,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             condition,
             add_types,
             set_types,
+            remove_planeswalker,
             set_name,
             set_colors,
             delta_power,
@@ -2018,6 +2019,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 && !remove_all_abilities
                 && add_types.is_empty()
                 && set_types.is_none()
+                && !remove_planeswalker
                 && set_name.is_none()
                 && set_colors.is_none()
                 && keywords.is_empty()
@@ -2040,12 +2042,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
             if let Some(expression) = count {
-                expression.validate_static_count().map_err(|reason| {
-                    RegistryError::InvalidCard {
+                expression
+                    .validate_attached_static_count()
+                    .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,
-                    }
-                })?;
+                    })?;
                 if *power_per_match == 0 && *toughness_per_match == 0 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
@@ -2058,6 +2060,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason: "AttachedModifier cannot both add and replace types".into(),
+                });
+            }
+            if set_types.is_some() && *remove_planeswalker {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason:
+                        "AttachedModifier cannot combine type replacement with planeswalker removal"
+                            .into(),
                 });
             }
             if !add_types.is_empty() {
@@ -5555,5 +5565,789 @@ mod source_loyalty_permission_tests {
                 "a face without its own authored loyalty-cost activation must be rejected"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod luxior_model_contract_tests {
+    use super::*;
+
+    const LUXIOR_MODEL_FIXTURE: &str = r#"(
+        id: "luxior_model_fixture",
+        name: "Luxior Model Fixture",
+        face_id: "luxior_model_fixture",
+        mana_cost: "{1}",
+        types: ["Artifact", "Equipment"],
+        supertypes: ["Legendary"],
+        static_abilities: [
+            (ability_id: "static_01", presentation: Fallback,
+                definition: AttachedModifier(
+                    count: Some(AttachedObjectCounterCount),
+                    power_per_match: 1, toughness_per_match: 1)),
+            (ability_id: "static_02", presentation: Fallback,
+                definition: AttachedModifier(
+                    add_types: (card_types: [Creature]), remove_planeswalker: true)),
+        ],
+        activated_abilities: [
+            (ability_id: "activated_01", presentation: Fallback,
+                costs: [Mana("{3}")],
+                effect: [Equip(target: (kind: Creature, controller: You))]),
+            (ability_id: "activated_02", presentation: Fallback,
+                costs: [Mana("{1}")],
+                effect: [EquipPlaneswalker(target:
+                    (kind: AnyPermanent, controller: You, permanent_types: [Planeswalker]))]),
+        ],
+    )"#;
+
+    fn raw_fixture() -> RawCardDefinition {
+        RON_OPTS
+            .from_str(LUXIOR_MODEL_FIXTURE)
+            .expect("the approved isolated fixture parses as RawCardDefinition")
+    }
+
+    fn admit_raw(raw: &RawCardDefinition) -> Result<CardRegistry, String> {
+        let serialized =
+            ron::ser::to_string(raw).expect("typed fixture mutations remain serializable");
+        CardRegistry::from_chunks_and_tokens(&[serialized.as_str()], &[])
+            .map_err(|error| error.to_string())
+    }
+
+    fn expect_rejected(raw: &RawCardDefinition, case: &str) {
+        let result = admit_raw(raw);
+        assert!(result.is_err(), "registry accepted {case}");
+    }
+
+    fn activated<'a>(
+        raw: &'a RawCardDefinition,
+        ability_id: &str,
+    ) -> &'a crate::ActivatedAbilityDef {
+        raw.activated_abilities
+            .iter()
+            .find(|ability| ability.ability_id.as_str() == ability_id)
+            .unwrap_or_else(|| panic!("fixture has activated ability {ability_id}"))
+    }
+
+    fn activated_mut<'a>(
+        raw: &'a mut RawCardDefinition,
+        ability_id: &str,
+    ) -> &'a mut crate::ActivatedAbilityDef {
+        raw.activated_abilities
+            .iter_mut()
+            .find(|ability| ability.ability_id.as_str() == ability_id)
+            .unwrap_or_else(|| panic!("fixture has activated ability {ability_id}"))
+    }
+
+    fn static_definition_mut<'a>(
+        raw: &'a mut RawCardDefinition,
+        ability_id: &str,
+    ) -> &'a mut StaticAbilityDef {
+        &mut raw
+            .static_abilities
+            .iter_mut()
+            .find(|ability| ability.ability_id.as_str() == ability_id)
+            .unwrap_or_else(|| panic!("fixture has static ability {ability_id}"))
+            .definition
+    }
+
+    fn equip_planeswalker_effect(raw: &RawCardDefinition) -> SpellEffectKind {
+        activated(raw, "activated_02").effect[0].clone()
+    }
+
+    fn mutate_planeswalker_target(
+        raw: &mut RawCardDefinition,
+        update: impl FnOnce(&mut TargetFilter),
+    ) {
+        let effect = activated_mut(raw, "activated_02")
+            .effect
+            .iter_mut()
+            .find_map(|effect| match effect {
+                SpellEffectKind::EquipPlaneswalker { target } => Some(target),
+                _ => None,
+            })
+            .expect("the direct EquipPlaneswalker effect is present");
+        update(effect);
+    }
+
+    fn target_group(
+        chooser: crate::primitives::TargetChooser,
+        min: u32,
+        max: u32,
+        effect_indices: Vec<u32>,
+    ) -> crate::primitives::TargetGroupDef {
+        crate::primitives::TargetGroupDef {
+            chooser,
+            min,
+            max,
+            prompt: "Choose a planeswalker you control".into(),
+            effect_indices,
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }
+    }
+
+    fn set_target_groups(
+        raw: &mut RawCardDefinition,
+        groups: Vec<crate::primitives::TargetGroupDef>,
+    ) {
+        activated_mut(raw, "activated_02").targeting = Some(TargetingDef { groups });
+    }
+
+    #[test]
+    fn luxior_model_fixture_parses_and_admits() {
+        let raw: RawCardDefinition = RON_OPTS
+            .from_str(LUXIOR_MODEL_FIXTURE)
+            .expect("the complete Luxior model fixture should parse");
+        assert_eq!(
+            raw.static_abilities
+                .iter()
+                .map(|ability| ability.ability_id.as_str())
+                .collect::<Vec<_>>(),
+            ["static_01", "static_02"],
+            "counter P/T and type change/removal retain separate static identities"
+        );
+        assert_eq!(
+            raw.activated_abilities
+                .iter()
+                .map(|ability| ability.ability_id.as_str())
+                .collect::<Vec<_>>(),
+            ["activated_01", "activated_02"]
+        );
+        assert_eq!(
+            raw.activated_abilities[0].costs,
+            [RON_OPTS.from_str::<AbilityCost>(r#"Mana("{3}")"#).unwrap()]
+        );
+        assert_eq!(
+            raw.activated_abilities[1].costs,
+            [RON_OPTS.from_str::<AbilityCost>(r#"Mana("{1}")"#).unwrap()]
+        );
+        assert!(matches!(
+            &raw.static_abilities[0].definition,
+            StaticAbilityDef::AttachedModifier {
+                count: Some(crate::primitives::CountExpression::AttachedObjectCounterCount),
+                power_per_match: 1,
+                toughness_per_match: 1,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &raw.static_abilities[1].definition,
+            StaticAbilityDef::AttachedModifier {
+                add_types,
+                remove_planeswalker: true,
+                count: None,
+                ..
+            } if add_types.card_types.as_slice()
+                == [crate::primitives::PermanentTypeFilter::Creature]
+        ));
+
+        let registry = CardRegistry::from_chunks_and_tokens(&[LUXIOR_MODEL_FIXTURE], &[])
+            .expect("the complete Luxior model fixture should pass registry admission");
+        let card = registry
+            .get("luxior_model_fixture")
+            .expect("the fixture card is registered");
+        let ability = &card.faces[0].activated_abilities[1];
+        assert_eq!(ability.timing, crate::primitives::ActivationTiming::Normal);
+        assert!(ability.is_equip());
+        assert!(ability.requires_sorcery_speed());
+        let roles = ability.effect[0].target_roles();
+        assert!(matches!(
+            roles.as_slice(),
+            [crate::primitives::TargetRole::Filtered(_)]
+        ));
+        let schema = TargetSchema::compile(&ability.effect, None)
+            .expect("omitted targeting infers the required singleton group");
+        assert_eq!(schema.groups.len(), 1);
+        assert_eq!(schema.groups[0].min, 1);
+        assert_eq!(schema.groups[0].max, 1);
+        assert_eq!(
+            schema.groups[0].chooser,
+            crate::primitives::TargetChooser::Controller
+        );
+        assert_eq!(schema.groups[0].bindings.len(), 1);
+        assert_eq!(schema.groups[0].bindings[0].effect_index, 0);
+        assert_eq!(schema.groups[0].bindings[0].role_index, 0);
+
+        let serialized = ron::ser::to_string(&raw).expect("new fields serialize");
+        let roundtrip: RawCardDefinition = RON_OPTS
+            .from_str(&serialized)
+            .expect("new fields roundtrip through RON");
+        assert!(matches!(
+            &roundtrip.static_abilities[0].definition,
+            StaticAbilityDef::AttachedModifier {
+                count: Some(crate::primitives::CountExpression::AttachedObjectCounterCount),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &roundtrip.static_abilities[1].definition,
+            StaticAbilityDef::AttachedModifier {
+                remove_planeswalker: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn equip_planeswalker_target_profile_and_schema_reject_near_misses() {
+        let base = raw_fixture();
+
+        let mut wrong_kind = base.clone();
+        mutate_planeswalker_target(&mut wrong_kind, |target| {
+            target.kind = TargetKind::Creature;
+        });
+        expect_rejected(&wrong_kind, "a Creature target kind");
+
+        let mut player = base.clone();
+        mutate_planeswalker_target(&mut player, |target| {
+            target.kind = TargetKind::AnyPlayer;
+        });
+        expect_rejected(&player, "a player target kind");
+
+        let mut wrong_controller = base.clone();
+        mutate_planeswalker_target(&mut wrong_controller, |target| {
+            target.controller = TargetController::Opponent;
+        });
+        expect_rejected(&wrong_controller, "an opponent-controlled target");
+
+        let mut missing_type = base.clone();
+        mutate_planeswalker_target(&mut missing_type, |target| {
+            target.permanent_types.clear();
+        });
+        expect_rejected(&missing_type, "a missing permanent type restriction");
+
+        let mut wrong_type = base.clone();
+        mutate_planeswalker_target(&mut wrong_type, |target| {
+            target.permanent_types = vec![crate::primitives::PermanentTypeFilter::Creature];
+        });
+        expect_rejected(&wrong_type, "a Creature type restriction");
+
+        let mut broad_types = base.clone();
+        mutate_planeswalker_target(&mut broad_types, |target| {
+            target.permanent_types = vec![
+                crate::primitives::PermanentTypeFilter::Planeswalker,
+                crate::primitives::PermanentTypeFilter::Creature,
+            ];
+        });
+        expect_rejected(
+            &broad_types,
+            "an OR-combined Creature and Planeswalker restriction",
+        );
+
+        let mut repeated_type = base.clone();
+        mutate_planeswalker_target(&mut repeated_type, |target| {
+            target.permanent_types = vec![
+                crate::primitives::PermanentTypeFilter::Planeswalker,
+                crate::primitives::PermanentTypeFilter::Planeswalker,
+            ];
+        });
+        expect_rejected(&repeated_type, "a repeated Planeswalker type restriction");
+
+        let mut disjunction = base.clone();
+        mutate_planeswalker_target(&mut disjunction, |target| {
+            target.any_of = Some(vec![TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                permanent_types: vec![crate::primitives::PermanentTypeFilter::Planeswalker],
+                ..TargetFilter::default()
+            }]);
+        });
+        expect_rejected(&disjunction, "an any_of target branch");
+
+        let mut extra_tap_filter = base.clone();
+        mutate_planeswalker_target(&mut extra_tap_filter, |target| {
+            target.tapped = Some(true);
+        });
+        expect_rejected(&extra_tap_filter, "an extra tapped restriction");
+
+        let mut extra_subtype = base.clone();
+        mutate_planeswalker_target(&mut extra_subtype, |target| {
+            target.required_subtypes.push("Human".into());
+        });
+        expect_rejected(&extra_subtype, "an extra subtype restriction");
+
+        let valid_explicit =
+            target_group(crate::primitives::TargetChooser::Controller, 1, 1, vec![0]);
+        let mut explicit_singleton = base.clone();
+        set_target_groups(&mut explicit_singleton, vec![valid_explicit.clone()]);
+        assert!(
+            admit_raw(&explicit_singleton).is_ok(),
+            "the authored mandatory controller-chosen singleton remains valid"
+        );
+
+        let cases = vec![
+            (
+                "optional target group",
+                vec![target_group(
+                    crate::primitives::TargetChooser::Controller,
+                    0,
+                    1,
+                    vec![0],
+                )],
+            ),
+            (
+                "multiple-target group",
+                vec![target_group(
+                    crate::primitives::TargetChooser::Controller,
+                    1,
+                    2,
+                    vec![0],
+                )],
+            ),
+            (
+                "opponent-chosen target group",
+                vec![target_group(
+                    crate::primitives::TargetChooser::ChosenOpponent,
+                    1,
+                    1,
+                    vec![0],
+                )],
+            ),
+            (
+                "missing target binding",
+                vec![target_group(
+                    crate::primitives::TargetChooser::Controller,
+                    1,
+                    1,
+                    vec![],
+                )],
+            ),
+            (
+                "unknown target binding",
+                vec![target_group(
+                    crate::primitives::TargetChooser::Controller,
+                    1,
+                    1,
+                    vec![1],
+                )],
+            ),
+            (
+                "duplicate target binding",
+                vec![target_group(
+                    crate::primitives::TargetChooser::Controller,
+                    1,
+                    1,
+                    vec![0, 0],
+                )],
+            ),
+        ];
+        for (label, groups) in cases {
+            let mut raw = base.clone();
+            set_target_groups(&mut raw, groups);
+            expect_rejected(&raw, label);
+        }
+
+        let mut graveyard_constraint =
+            target_group(crate::primitives::TargetChooser::Controller, 1, 1, vec![0]);
+        graveyard_constraint.same_graveyard = true;
+        let mut same_graveyard = base.clone();
+        set_target_groups(&mut same_graveyard, vec![graveyard_constraint]);
+        expect_rejected(&same_graveyard, "a graveyard-only group constraint");
+
+        let mut self_distinct =
+            target_group(crate::primitives::TargetChooser::Controller, 1, 1, vec![0]);
+        self_distinct.distinct_from = vec![0];
+        let mut distinct_group = base.clone();
+        set_target_groups(&mut distinct_group, vec![self_distinct]);
+        expect_rejected(&distinct_group, "an irrelevant distinctness constraint");
+
+        let mut extra_group = base.clone();
+        set_target_groups(
+            &mut extra_group,
+            vec![
+                valid_explicit.clone(),
+                target_group(crate::primitives::TargetChooser::Controller, 1, 1, vec![0]),
+            ],
+        );
+        expect_rejected(&extra_group, "an extra target group");
+
+        let mut mixed_group = base.clone();
+        activated_mut(&mut mixed_group, "activated_02")
+            .effect
+            .push(SpellEffectKind::GainLife {
+                who: crate::primitives::PlayerRecipient::Controller,
+                amount: crate::primitives::Amount::Fixed(1),
+            });
+        set_target_groups(
+            &mut mixed_group,
+            vec![target_group(
+                crate::primitives::TargetChooser::Controller,
+                1,
+                1,
+                vec![0, 1],
+            )],
+        );
+        expect_rejected(
+            &mixed_group,
+            "a target group that also binds an unrelated effect",
+        );
+    }
+
+    #[test]
+    fn equip_planeswalker_is_direct_battlefield_activated_only() {
+        let base = raw_fixture();
+
+        for zone in [
+            crate::primitives::AbilitySourceZone::Hand,
+            crate::primitives::AbilitySourceZone::Graveyard,
+        ] {
+            let mut raw = base.clone();
+            activated_mut(&mut raw, "activated_02").source_zone = zone;
+            expect_rejected(&raw, "a nonbattlefield EquipPlaneswalker source");
+        }
+
+        let effect = equip_planeswalker_effect(&base);
+        assert!(
+            effect.validate(EffectContext::Ability).is_err(),
+            "generic Ability context includes triggers and cannot prove activated ownership"
+        );
+        assert!(
+            effect.validate_activated_modal_mode_effect().is_err(),
+            "activated modal modes use generic validation and cannot admit EquipPlaneswalker"
+        );
+
+        let mut spell = base.clone();
+        spell.spell_effect.push(effect.clone());
+        expect_rejected(&spell, "EquipPlaneswalker on a spell");
+
+        let mut trigger = base.clone();
+        trigger
+            .triggered_abilities
+            .push(crate::primitives::TriggeredAbilityDef {
+                ability_id: crate::AbilityId::new("trigger_01").unwrap(),
+                presentation: crate::AbilityPresentation::Fallback,
+                trigger: crate::primitives::TriggerCondition::AtBeginningOfNextTurnUpkeep,
+                effect: vec![effect.clone()],
+                program: None,
+                modal: None,
+                targeting: None,
+                may: false,
+                intervening_if: None,
+                triggers_only_once: false,
+                max_triggers_per_turn: None,
+            });
+        expect_rejected(&trigger, "EquipPlaneswalker in a triggered ability");
+
+        let mut nested = base.clone();
+        activated_mut(&mut nested, "activated_02").effect[0] = SpellEffectKind::Conditional {
+            condition: crate::primitives::GameCondition::ControllerLibraryEmpty,
+            effect: Box::new(effect.clone()),
+        };
+        expect_rejected(&nested, "EquipPlaneswalker nested in a conditional effect");
+
+        let mut modal = base.clone();
+        let modal_ability = activated_mut(&mut modal, "activated_02");
+        modal_ability.effect.clear();
+        modal_ability.modal = Some(crate::card_def::ModalDef {
+            min_modes: 1,
+            max_modes: 1,
+            all_modes_cast_cost: None,
+            trigger_mode_selection_restriction: None,
+            modes: vec![
+                crate::card_def::ModeDef {
+                    mode_id: crate::ModeId::new("planeswalker_mode").unwrap(),
+                    presentation: crate::AbilityPresentation::Fallback,
+                    linked_cast_cost: None,
+                    effects: vec![effect.clone()],
+                    program: None,
+                    targeting: None,
+                },
+                crate::card_def::ModeDef {
+                    mode_id: crate::ModeId::new("life_mode").unwrap(),
+                    presentation: crate::AbilityPresentation::Fallback,
+                    linked_cast_cost: None,
+                    effects: vec![SpellEffectKind::GainLife {
+                        who: crate::primitives::PlayerRecipient::Controller,
+                        amount: crate::primitives::Amount::Fixed(1),
+                    }],
+                    program: None,
+                    targeting: None,
+                },
+            ],
+        });
+        expect_rejected(&modal, "EquipPlaneswalker in an activated modal mode");
+
+        let mut program = base.clone();
+        let program_ability = activated_mut(&mut program, "activated_02");
+        program_ability.effect.clear();
+        program_ability.program = Some(crate::CardProgram {
+            body: crate::primitives::AuthoredBlock {
+                steps: vec![crate::primitives::Instruction {
+                    id: "equip_01".into(),
+                    bind: Vec::new(),
+                    input: None,
+                    kind: crate::primitives::InstructionKind::Perform(Box::new(effect)),
+                }],
+                yields: Vec::new(),
+            },
+            target_bindings: Vec::new(),
+            target_aliases: Vec::new(),
+        });
+        expect_rejected(&program, "EquipPlaneswalker in an authored Program");
+    }
+
+    #[test]
+    fn attached_counter_and_planeswalker_modifier_validation_is_narrow() {
+        let base = raw_fixture();
+
+        let mut affine = base.clone();
+        if let StaticAbilityDef::AttachedModifier {
+            count,
+            power_per_match,
+            toughness_per_match,
+            ..
+        } = static_definition_mut(&mut affine, "static_01")
+        {
+            *count = Some(crate::primitives::CountExpression::Affine {
+                constant: 0,
+                terms: vec![crate::primitives::QuantityTerm {
+                    coefficient: 1,
+                    quantity: crate::primitives::CountExpression::AttachedObjectCounterCount,
+                }],
+            });
+            *power_per_match = 1;
+            *toughness_per_match = 1;
+        } else {
+            panic!("static_01 is an AttachedModifier");
+        }
+        expect_rejected(
+            &affine,
+            "an affine wrapper around AttachedObjectCounterCount",
+        );
+
+        let mut self_static = base.clone();
+        *static_definition_mut(&mut self_static, "static_01") =
+            StaticAbilityDef::CountScaledSelfPt {
+                count: crate::primitives::CountExpression::AttachedObjectCounterCount,
+                power_per_match: 1,
+                toughness_per_match: 0,
+            };
+        expect_rejected(
+            &self_static,
+            "AttachedObjectCounterCount on CountScaledSelfPt",
+        );
+
+        let mut cda = base.clone();
+        cda.static_abilities.clear();
+        cda.types = vec!["Creature".into()];
+        cda.characteristic_defining_abilities.push(
+            crate::IdentifiedAbility::fallback(
+                "cda_01",
+                crate::card_def::CharacteristicDefiningAbility::CountScaledPowerToughness {
+                    count: crate::primitives::CountExpression::AttachedObjectCounterCount,
+                    power_per_match: 1,
+                    toughness_per_match: 0,
+                },
+            )
+            .unwrap(),
+        );
+        expect_rejected(
+            &cda,
+            "AttachedObjectCounterCount on a characteristic-defining ability",
+        );
+
+        let mut no_op = base.clone();
+        if let StaticAbilityDef::AttachedModifier {
+            count,
+            power_per_match,
+            toughness_per_match,
+            ..
+        } = static_definition_mut(&mut no_op, "static_01")
+        {
+            *count = None;
+            *power_per_match = 0;
+            *toughness_per_match = 0;
+        } else {
+            panic!("static_01 is an AttachedModifier");
+        }
+        expect_rejected(&no_op, "an attached modifier with no changes");
+
+        let mut removal_only = base.clone();
+        if let StaticAbilityDef::AttachedModifier { add_types, .. } =
+            static_definition_mut(&mut removal_only, "static_02")
+        {
+            *add_types = crate::primitives::TypeLineAddition::default();
+        } else {
+            panic!("static_02 is an AttachedModifier");
+        }
+        assert!(
+            admit_raw(&removal_only).is_ok(),
+            "selective planeswalker removal alone counts as a real modification"
+        );
+
+        let mut replacement_and_removal = base.clone();
+        if let StaticAbilityDef::AttachedModifier {
+            add_types,
+            set_types,
+            remove_planeswalker,
+            ..
+        } = static_definition_mut(&mut replacement_and_removal, "static_02")
+        {
+            *add_types = crate::primitives::TypeLineAddition::default();
+            *set_types = Some(Box::new(crate::primitives::TypeLineReplacement {
+                card_types: vec![crate::primitives::PermanentTypeFilter::Creature],
+                creature_types: Vec::new(),
+                land_types: Vec::new(),
+            }));
+            *remove_planeswalker = true;
+        } else {
+            panic!("static_02 is an AttachedModifier");
+        }
+        expect_rejected(
+            &replacement_and_removal,
+            "type replacement combined with selective removal",
+        );
+    }
+
+    #[test]
+    fn attached_counter_count_is_rejected_outside_attached_static_count() {
+        const COUNT_REJECTION: &str =
+            "AttachedObjectCounterCount is only valid as an attached static modifier count";
+
+        let base = raw_fixture();
+        let count = crate::primitives::CountExpression::AttachedObjectCounterCount;
+        let amount = Amount::Count(count.clone());
+
+        assert_eq!(count.validate().unwrap_err(), COUNT_REJECTION);
+        assert_eq!(amount.validate().unwrap_err(), COUNT_REJECTION);
+        assert_eq!(
+            Amount::DivideRoundedDown {
+                amount: Box::new(amount.clone()),
+                divisor: 2,
+            }
+            .validate()
+            .unwrap_err(),
+            COUNT_REJECTION,
+            "the generic Amount wrapper must not admit the attached-only leaf"
+        );
+        assert_eq!(
+            crate::primitives::ActivatedCostModifier::GenericReduction {
+                amount: amount.clone(),
+            }
+            .validate()
+            .unwrap_err(),
+            COUNT_REJECTION,
+            "generic activated cost reductions reject the attached-only leaf"
+        );
+        assert_eq!(
+            amount.validate_entry(true).unwrap_err(),
+            COUNT_REJECTION,
+            "entry validation rejects the attached-only leaf"
+        );
+
+        let gain_life = || SpellEffectKind::GainLife {
+            amount: Amount::Count(count.clone()),
+            who: crate::primitives::PlayerRecipient::Controller,
+        };
+        assert_eq!(
+            gain_life().validate(EffectContext::Ability).unwrap_err(),
+            COUNT_REJECTION,
+            "generic ability effects reject the attached-only leaf"
+        );
+
+        let assert_registry_rejection = |raw: &RawCardDefinition, case: &str| {
+            let error = match admit_raw(raw) {
+                Ok(_) => panic!("registry accepted {case}"),
+                Err(error) => error,
+            };
+            assert!(
+                error.contains(COUNT_REJECTION),
+                "registry rejected {case} before the attached-count boundary: {error}"
+            );
+        };
+
+        let mut effect = base.clone();
+        let ability = activated_mut(&mut effect, "activated_01");
+        ability.effect = vec![gain_life()];
+        ability.targeting = None;
+        assert_registry_rejection(&effect, "an activated GainLife amount");
+
+        let mut cost = base.clone();
+        activated_mut(&mut cost, "activated_01").cost_modifiers =
+            vec![crate::primitives::ActivatedCostModifier::GenericReduction {
+                amount: amount.clone(),
+            }];
+        assert_registry_rejection(&cost, "an activated generic cost reduction");
+
+        let mut entry = base.clone();
+        *static_definition_mut(&mut entry, "static_01") = StaticAbilityDef::EntersWithCounters {
+            affected: crate::primitives::EntersWithCountersAffected::Self_,
+            counter: crate::primitives::CounterKind::PlusOnePlusOne,
+            amount: amount.clone(),
+            cast_cost_condition: None,
+        };
+        assert_registry_rejection(&entry, "an EntersWithCounters replacement");
+
+        let mut program = base.clone();
+        let ability = activated_mut(&mut program, "activated_01");
+        ability.effect.clear();
+        ability.targeting = None;
+        ability.program = Some(crate::CardProgram {
+            body: crate::primitives::AuthoredBlock {
+                steps: vec![crate::primitives::Instruction {
+                    id: "gain_01".into(),
+                    bind: Vec::new(),
+                    input: None,
+                    kind: crate::primitives::InstructionKind::Perform(Box::new(gain_life())),
+                }],
+                yields: Vec::new(),
+            },
+            target_bindings: Vec::new(),
+            target_aliases: Vec::new(),
+        });
+        assert_registry_rejection(&program, "a Program GainLife amount");
+
+        assert!(
+            RON_OPTS
+                .from_str::<crate::primitives::CountExpression>(
+                    "AttachedObjectCounterCount(count: 1)"
+                )
+                .is_err(),
+            "the parameterless count leaf rejects parameterized RON syntax"
+        );
+        assert!(
+            RON_OPTS
+                .from_str::<GameCondition>("AttachedObjectCounterCount")
+                .is_err(),
+            "GameCondition does not gain an AttachedObjectCounterCount tag"
+        );
+    }
+
+    #[test]
+    fn legacy_attached_modifier_defaults_and_omits_remove_planeswalker() {
+        let legacy_ron = r#"(
+            id: "legacy_attached_fixture",
+            name: "Legacy Attached Fixture",
+            face_id: "legacy_attached_fixture",
+            types: ["Artifact", "Equipment"],
+            static_abilities: [
+                (ability_id: "static_01", presentation: Fallback,
+                    definition: AttachedModifier(add_types: (card_types: [Creature]))),
+            ],
+        )"#;
+        let legacy: RawCardDefinition = RON_OPTS
+            .from_str(legacy_ron)
+            .expect("legacy AttachedModifier RON without the new field parses");
+        assert!(matches!(
+            &legacy.static_abilities[0].definition,
+            StaticAbilityDef::AttachedModifier {
+                remove_planeswalker: false,
+                ..
+            }
+        ));
+        assert!(admit_raw(&legacy).is_ok());
+        let serialized = ron::ser::to_string(&legacy).unwrap();
+        assert!(
+            !serialized.contains("remove_planeswalker"),
+            "the default false field stays omitted from serialized legacy RON"
+        );
+        let roundtrip: RawCardDefinition = RON_OPTS.from_str(&serialized).unwrap();
+        assert!(matches!(
+            &roundtrip.static_abilities[0].definition,
+            StaticAbilityDef::AttachedModifier {
+                remove_planeswalker: false,
+                ..
+            }
+        ));
     }
 }

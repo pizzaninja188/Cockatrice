@@ -379,6 +379,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::AttachSource { .. } => misc::attach_source(cx, effect)?,
         effect @ SpellEffectKind::AttachEquipment { .. } => misc::attach_equipment(cx, effect)?,
         effect @ SpellEffectKind::Equip { .. } => misc::equip(cx, effect)?,
+        effect @ SpellEffectKind::EquipPlaneswalker { .. } => misc::equip_planeswalker(cx, effect)?,
         effect @ SpellEffectKind::PreventNextDamage { .. } => {
             misc::prevent_next_damage(cx, effect)?
         }

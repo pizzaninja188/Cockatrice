@@ -1254,7 +1254,44 @@ impl TargetingDef {
     ) -> Result<(), String> {
         Self::validate_kaya_exile_target_binding(targeting, effects)?;
         let schema = TargetSchema::compile(effects, targeting)?;
+        Self::validate_equip_planeswalker_binding(effects, &schema, targeting)?;
         Self::validate_activation_schema(targeting, schema, source_zone, costs)
+    }
+
+    fn validate_equip_planeswalker_binding(
+        effects: &[SpellEffectKind],
+        schema: &TargetSchema<'_, '_>,
+        targeting: Option<&Self>,
+    ) -> Result<(), String> {
+        let mut equip_indices = effects.iter().enumerate().filter_map(|(index, effect)| {
+            matches!(effect, SpellEffectKind::EquipPlaneswalker { .. }).then_some(index)
+        });
+        let Some(effect_index) = equip_indices.next() else {
+            return Ok(());
+        };
+        if equip_indices.next().is_some() {
+            return Err("EquipPlaneswalker requires one effect-owned target group".into());
+        }
+        let [group] = schema.groups.as_slice() else {
+            return Err("EquipPlaneswalker requires exactly one target group".into());
+        };
+        let targeting_group_has_expansion = targeting.is_some_and(|definition| {
+            definition.groups.len() != 1 || definition.groups[0].cast_cost_expansion.is_some()
+        });
+        if group.min != 1
+            || group.max != 1
+            || group.chooser != TargetChooser::Controller
+            || group.bindings.len() != 1
+            || group.bindings[0].effect_index != effect_index
+            || group.bindings[0].role_index != 0
+            || !matches!(group.bindings[0].role, TargetRole::Filtered(_))
+            || !group.distinct_from.is_empty()
+            || group.same_graveyard
+            || targeting_group_has_expansion
+        {
+            return Err("EquipPlaneswalker requires one controller-chosen mandatory singleton group bound only to its target role".into());
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_activation_program(

@@ -2092,6 +2092,9 @@ impl GameEngine {
                     *counter,
                 ))
             }
+            CountExpression::AttachedObjectCounterCount => {
+                unreachable!("registry rejects attached-object counter counts outside attached static modifiers")
+            }
             CountExpression::DeclaredAttackers { players, filter } => self
                 .state
                 .turn_history

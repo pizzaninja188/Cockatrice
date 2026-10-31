@@ -1053,30 +1053,7 @@ pub(in crate::engine) fn attach_equipment_ids(
         return false;
     }
 
-    let recipient = AttachmentRecipient::Object(creature_id);
-    if engine.state.objects[&equipment_id].attached_to == Some(recipient) {
-        return true;
-    }
-    engine
-        .state
-        .objects
-        .get_mut(&equipment_id)
-        .expect("validated Equipment")
-        .attached_to = Some(recipient);
-    let timestamp = engine.state.command_index;
-    for continuous in &mut engine.state.continuous_effects {
-        if continuous.source_id == Some(equipment_id)
-            && continuous.duration == EffectDuration::WhileSourceOnBattlefield
-        {
-            continuous.timestamp = timestamp;
-        }
-    }
-    let equipment_name = object_display_name(&engine.state, engine.registry, equipment_id);
-    let creature_name = object_display_name(&engine.state, engine.registry, creature_id);
-    events.push(ev_log(format!(
-        "{spell_label} attaches {equipment_name} to {creature_name}."
-    )));
-    true
+    commit_equipment_attachment(engine, equipment_id, creature_id, spell_label, events)
 }
 
 pub(super) fn attach_source(
@@ -1097,6 +1074,104 @@ pub(super) fn equip(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     attach_equipment_source(cx, "equip ability")
+}
+
+pub(super) fn equip_planeswalker(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::EquipPlaneswalker { target } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(target_id) = cx.first_current_battlefield_target(0) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(equipment_id) = cx.top.source_permanent_id else {
+        cx.events.push(ev_log(format!(
+            "{}: equip planeswalker has no source permanent.",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx.engine.source_is_current_object(cx.top) {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let source = cx.engine.characteristics(equipment_id);
+    let source_is_attachable = source.as_ref().is_some_and(|characteristics| {
+        characteristics.has_type("Equipment") && !characteristics.is_creature()
+    });
+    let target_is_legal = super::super::targeting::target_filter_legal_at_resolution(
+        cx.engine,
+        &target,
+        target_id,
+        cx.top.controller,
+        TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+        cx.top.trigger_context,
+    );
+    let can_attach = equipment_id != target_id
+        && source_is_attachable
+        && target_is_legal
+        && cx
+            .engine
+            .characteristics(target_id)
+            .is_some_and(|characteristics| {
+                characteristics.has_type("Planeswalker")
+                    && characteristics.controller == cx.top.controller
+            })
+        && super::super::targeting::attachment_protection_legal(
+            cx.engine,
+            AttachmentRecipient::Object(target_id),
+            equipment_id,
+        );
+    if can_attach {
+        commit_equipment_attachment(
+            cx.engine,
+            equipment_id,
+            target_id,
+            cx.spell_label,
+            cx.events,
+        );
+    }
+    Ok(EffectOutcome::Continue)
+}
+
+/// Commit a pair after its operation-specific legality checks. Ordinary Equip and the exact
+/// planeswalker-only Equip path share only the relation/timestamp mutation.
+fn commit_equipment_attachment(
+    engine: &mut GameEngine,
+    equipment_id: ObjectId,
+    recipient_id: ObjectId,
+    spell_label: &str,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> bool {
+    let recipient = AttachmentRecipient::Object(recipient_id);
+    if engine
+        .state
+        .objects
+        .get(&equipment_id)
+        .is_some_and(|equipment| equipment.attached_to == Some(recipient))
+    {
+        return true;
+    }
+    let Some(equipment) = engine.state.objects.get_mut(&equipment_id) else {
+        return false;
+    };
+    equipment.attached_to = Some(recipient);
+    let timestamp = engine.state.command_index;
+    for continuous in &mut engine.state.continuous_effects {
+        if continuous.source_id == Some(equipment_id)
+            && continuous.duration == EffectDuration::WhileSourceOnBattlefield
+        {
+            continuous.timestamp = timestamp;
+        }
+    }
+    let equipment_name = object_display_name(&engine.state, engine.registry, equipment_id);
+    let recipient_name = object_display_name(&engine.state, engine.registry, recipient_id);
+    events.push(ev_log(format!(
+        "{spell_label} attaches {equipment_name} to {recipient_name}."
+    )));
+    true
 }
 
 pub(super) fn prevent_next_damage(

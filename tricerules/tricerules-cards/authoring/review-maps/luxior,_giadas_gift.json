@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f9263d7-916f-4535-95d2-888ab73cf339",
+  "spans": [
+    {
+      "face_id": "luxior_giada_s_gift",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "luxior_giada_s_gift",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/1"
+      ]
+    },
+    {
+      "face_id": "luxior_giada_s_gift",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "luxior_giada_s_gift",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CountExpression::AttachedObjectCounterCount",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/count"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::EquipPlaneswalker",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_luxior::luxior_has_exact_identity_and_four_oracle_mapped_abilities",
+      "covers": "Actual definition identity, face, mana cost, type line, absent base power/toughness, separate static ability roles, four Oracle line mappings, Equip costs and target filters."
+    },
+    {
+      "test": "scenario deck_coverage_luxior::luxior_casts_and_resolves_both_printed_equips",
+      "covers": "Actual {1} cast and both Equip costs, legal controller/type targets, sorcery timing and rejected commands preserving payment and stack state; loyalty activation remains usable once and re-equipping restores Ajani's planeswalker characteristics. Separate strict normal-session corroboration (executed r7, 1 passed): tricerules-server --lib replay::tests::luxior_normal_session_equips_ajani_activates_loyalty_and_reequips_ornithopter verifies legal deck/session reachability, actual spell payments, both Equip offers and exact payments, Ajani's zero-target loyalty change, and same-turn re-equipment/restoration."
+    },
+    {
+      "test": "scenario deck_coverage_luxior::luxior_counts_live_counter_kinds_without_setting_base_stats",
+      "covers": "Prepared actual-card table verifies all counter kinds contribute to the attached-object bonus, ordinary plus/minus counter deltas remain separate, counter changes recompute live power/toughness, an independent base-P/T effect is retained, and the counter bonus ends independently from the started type static."
+    },
+    {
+      "test": "scenario deck_coverage_luxior::luxior_separate_statics_preserve_layer_and_loyalty_sba_distinctions",
+      "covers": "Actual definition preserves Legendary while adding Creature and removing only Planeswalker; prepared other effects and source ability loss expose layer/static separation, and an accepted ordinary Equip resolution moves the source away before a zero-loyalty planeswalker SBA."
+    },
+    {
+      "test": "scenario deck_coverage_luxior::luxior_equip_resolution_preserves_controller_and_incarnation_boundaries",
+      "covers": "Prepared command outcomes distinguish activation controller from the current source controller and target controller; source-only control change preserves an accepted Equip while an illegal target control change prevents attachment."
+    },
+    {
+      "test": "scenario deck_coverage_luxior::luxior_recipient_departure_clears_public_link_and_statics_before_prepared_return",
+      "covers": "Actual Luxior's public attachment recipient is present before Ajani's zero-toughness departure and absent afterward on the same Luxior incarnation, with its internal link cleared; a later explicit Equip attaches to Ornithopter, while same-ObjectId/new-generation Ajani return remains explicitly prepared state and requires fresh Equip."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

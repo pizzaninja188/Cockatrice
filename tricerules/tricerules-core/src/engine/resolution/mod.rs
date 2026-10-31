@@ -62,6 +62,8 @@ pub(super) fn optional_triggered_ability_branch(
 }
 
 mod amass;
+#[cfg(test)]
+mod attachment_departure_tests;
 mod battlefield_returns;
 mod blight;
 mod boompile;
@@ -4428,6 +4430,14 @@ pub(super) fn commit_zone_move(
             let delayed =
                 state.dispatch_event_observers(ObservedGameEvent::LeavesBattlefield(object));
             state.stage_delayed_batch(delayed);
+        }
+        // An attachment's recipient relation is tied to this battlefield object. Clear inbound
+        // links only after the departure observers have captured their source snapshots, but
+        // before this ObjectId advances to a new zone-change generation.
+        for attachment in state.objects.values_mut() {
+            if attachment.attached_to == Some(AttachmentRecipient::Object(oid)) {
+                attachment.attached_to = None;
+            }
         }
     }
     // A move to the same named zone is still a zone change and creates a new object (CR 400.7).

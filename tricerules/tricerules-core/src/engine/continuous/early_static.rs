@@ -57,6 +57,7 @@ pub(in crate::engine) fn materialize_early_static_components(
         StaticAbilityDef::AttachedModifier {
             set_name,
             add_types,
+            remove_planeswalker,
             set_types,
             set_colors,
             condition,
@@ -74,6 +75,13 @@ pub(in crate::engine) fn materialize_early_static_components(
                 emit(
                     affected.clone(),
                     ContinuousEffectKind::Layer4AddTypes(add_types.clone()),
+                    condition.clone(),
+                );
+            }
+            if *remove_planeswalker {
+                emit(
+                    affected.clone(),
+                    ContinuousEffectKind::Layer4RemovePlaneswalker,
                     condition.clone(),
                 );
             }

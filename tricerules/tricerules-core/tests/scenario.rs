@@ -453,6 +453,8 @@ mod deck_coverage_liquimetal_torque;
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_lotus_petal.rs"]
 mod deck_coverage_lotus_petal;
+#[path = "scenario/deck_coverage_luxior.rs"]
+mod deck_coverage_luxior;
 #[path = "scenario/deck_coverage_mana_reflection.rs"]
 mod deck_coverage_mana_reflection;
 #[path = "scenario/deck_coverage_manifold_key.rs"]
@@ -778,6 +780,8 @@ mod issue_283_generated_graveyard_to_library_bottom;
 mod issue_284_generated_optional_basic_land_to_top;
 #[path = "scenario/issue_507_replicating_ring_program.rs"]
 mod issue_507_replicating_ring_program;
+#[path = "scenario/luxior_runtime.rs"]
+mod luxior_runtime;
 
 #[path = "scenario/issue_285_generated_attack_pump_indestructible.rs"]
 mod issue_285_generated_attack_pump_indestructible;

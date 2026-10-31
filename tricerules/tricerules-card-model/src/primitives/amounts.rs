@@ -69,6 +69,9 @@ pub enum CountExpression {
     /// last-known counters if it has departed. Other counter-based source quantities share
     /// this vocabulary without changing specialized immediate mana-output semantics.
     SourceCounterCount { counter: CounterKind },
+    /// Luxior's attached-object P/T modifier counts every physical counter entry on the currently
+    /// attached object. This specialized leaf is admitted only by AttachedModifier.count.
+    AttachedObjectCounterCount,
     /// Witchstalker Frenzy and Search Party Captain count distinct declared creatures.
     DeclaredAttackers {
         players: RelativePlayerSet,
@@ -189,6 +192,13 @@ impl CountExpression {
         }
     }
 
+    pub(crate) fn validate_attached_static_count(&self) -> Result<(), String> {
+        match self {
+            Self::AttachedObjectCounterCount => Ok(()),
+            _ => self.validate_static_count(),
+        }
+    }
+
     /// Whether a static P/T modifier can evaluate this count while computing characteristics.
     /// Battlefield counts read pre-layer-7 derived characteristics; graveyard counts read printed
     /// public card data (CR 404.2, 613.8); a hand count reads only its public size. Event, result,
@@ -247,6 +257,10 @@ impl CountExpression {
             | Self::SourcePower
             | Self::ControlledNoncreatureArtifactManaValueSum
             | Self::ManaColorsSpentToCast => Ok(()),
+            Self::AttachedObjectCounterCount => Err(
+                "AttachedObjectCounterCount is only valid as an attached static modifier count"
+                    .into(),
+            ),
             Self::ChosenTargetPower { .. } if allow_chosen_target_power => Ok(()),
             Self::ChosenTargetPower { .. } => {
                 Err("ChosenTargetPower requires a targeted PutCounters count".into())

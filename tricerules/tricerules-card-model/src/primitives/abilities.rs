@@ -324,9 +324,12 @@ impl ActivatedAbilityDef {
 
     /// CR 702.6a: equip has "Activate only as a sorcery" built in.
     pub fn is_equip(&self) -> bool {
-        self.effect
-            .iter()
-            .any(|e| matches!(e, SpellEffectKind::Equip { .. }))
+        self.effect.iter().any(|effect| {
+            matches!(
+                effect,
+                SpellEffectKind::Equip { .. } | SpellEffectKind::EquipPlaneswalker { .. }
+            )
+        })
     }
 
     pub fn is_loyalty_ability(&self) -> bool {
@@ -441,6 +444,14 @@ impl ActivatedAbilityDef {
         self.presentation.validate()?;
         if let Some(modal) = &self.modal {
             return self.validate_modal_shape(modal);
+        }
+        if self.source_zone != AbilitySourceZone::Battlefield
+            && self
+                .effect
+                .iter()
+                .any(|effect| matches!(effect, SpellEffectKind::EquipPlaneswalker { .. }))
+        {
+            return Err("EquipPlaneswalker requires a battlefield activated-ability source".into());
         }
         if self.effect.is_empty() && self.program.is_none() {
             return Err("activated ability must contain at least one effect".into());
@@ -774,7 +785,7 @@ impl ActivatedAbilityDef {
             if allow_activated_modal_mode_effect {
                 effect.validate_activated_modal_mode_effect()?;
             } else {
-                effect.validate(EffectContext::Ability)?;
+                effect.validate_direct_activated_legacy_effect()?;
             }
         }
         SpellEffectKind::validate_list(&self.effect)?;
@@ -3003,6 +3014,9 @@ pub enum StaticAbilityDef {
         /// CR 205.1a: replace all card types and subtypes while preserving supertypes.
         #[serde(default)]
         set_types: Option<Box<TypeLineReplacement>>,
+        /// CR 205.1a: remove only the Planeswalker card type while retaining other card types.
+        #[serde(default, skip_serializing_if = "is_false")]
+        remove_planeswalker: bool,
         /// CR 612.8: replace every name the attached object has.
         #[serde(default)]
         set_name: Option<String>,

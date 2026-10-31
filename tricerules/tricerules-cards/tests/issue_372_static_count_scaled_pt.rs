@@ -237,6 +237,7 @@ fn issue_372_song_payload_and_presentation_are_exact() {
             condition: None,
             add_types: TypeLineAddition::default(),
             set_types: None,
+            remove_planeswalker: false,
             set_name: None,
             set_colors: None,
             delta_power: 0,

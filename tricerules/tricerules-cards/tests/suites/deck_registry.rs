@@ -95,6 +95,8 @@ mod deck_coverage_land_type_pair;
 mod deck_coverage_liquimetal_torque;
 #[path = "../deck_coverage_lotus_petal.rs"]
 mod deck_coverage_lotus_petal;
+#[path = "../deck_coverage_luxior.rs"]
+mod deck_coverage_luxior;
 #[path = "../deck_coverage_manifold_key.rs"]
 mod deck_coverage_manifold_key;
 #[path = "../deck_coverage_memory_jar.rs"]

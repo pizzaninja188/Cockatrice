@@ -2368,6 +2368,12 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_equip")]
         target: TargetFilter,
     },
+    /// Luxior's specialized Equipment activation: attach this source to exactly one planeswalker
+    /// controlled by the activating player. It is a direct battlefield activated effect, never a
+    /// spell, trigger, nested wrapper, modal mode, or Program operation, and is sorcery-speed.
+    EquipPlaneswalker {
+        target: TargetFilter,
+    },
     /// CR 701.17: force the targeted player to sacrifice a permanent matching `filter` (default:
     /// any creature). The target is specified by `target` (kind must be AnyPlayer or
     /// OpponentPlayer — validated at registry load). The targeted player chooses which qualifying
@@ -4139,6 +4145,7 @@ impl SpellEffectKind {
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::AttachSource { target }
             | SpellEffectKind::Equip { target }
+            | SpellEffectKind::EquipPlaneswalker { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
             | SpellEffectKind::PreventNextDamage { target, .. }
             | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target }
@@ -4708,11 +4715,29 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(self, Self::EquipPlaneswalker { .. }) {
+            return Err(
+                "EquipPlaneswalker is supported only as a direct activated ability effect".into(),
+            );
+        }
         self.validate_inner(context, false, context == EffectContext::Ability)
     }
 
     /// Admission used only for a direct effect item in a nonmodal activated legacy effect list.
     pub(crate) fn validate_direct_activated_legacy_effect(&self) -> Result<(), String> {
+        if let Self::EquipPlaneswalker { target } = self {
+            let expected = TargetFilter {
+                kind: super::TargetKind::AnyPermanent,
+                controller: super::TargetController::You,
+                permanent_types: vec![super::PermanentTypeFilter::Planeswalker],
+                ..TargetFilter::default()
+            };
+            return if target == &expected {
+                Ok(())
+            } else {
+                Err("EquipPlaneswalker requires exactly an AnyPermanent target you control with only the Planeswalker type restriction".into())
+            };
+        }
         self.validate_inner(EffectContext::Ability, false, true)
     }
 
@@ -7154,6 +7179,9 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
+            SpellEffectKind::EquipPlaneswalker { .. } => Err(
+                "EquipPlaneswalker is supported only as a direct activated ability effect".into(),
+            ),
             // CR 701.19: Regenerate puts a shield on the target; it is an activated ability, not
             // a spell. Applying a regeneration shield via a spell would have no source permanent
             // to attach the replacement to and is a nonsensical card design — reject early.
@@ -7691,6 +7719,8 @@ pub enum ContinuousEffectKind {
     Layer4SetTypeLine(TypeLineReplacement),
     /// CR 205.1a / 613.1d: remove only Creature and its unshared correlated subtypes.
     Layer4RemoveCreature,
+    /// CR 205.1a / 613.1d: remove only the Planeswalker card type while preserving other types.
+    Layer4RemovePlaneswalker,
     /// CR 305.7 / 613.1d: retain card types, supertypes, and non-land subtypes; replace all land
     /// subtypes with one basic land type. The same rules operation suppresses printed/copiable
     /// abilities and supplies the type's intrinsic mana ability.

@@ -147,6 +147,7 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
         condition,
         add_types,
         set_types,
+        remove_planeswalker,
         set_name,
         set_colors,
         delta_power,
@@ -171,6 +172,7 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
     assert!(condition.is_none());
     assert_eq!(add_types, &TypeLineAddition::default());
     assert!(set_types.is_none());
+    assert!(!*remove_planeswalker);
     assert!(set_name.is_none());
     assert!(set_colors.is_none());
     assert_eq!((*delta_power, *delta_toughness), (1, 1));
@@ -262,6 +264,7 @@ fn issue_415_lead_pipe_static_and_death_trigger_are_exact() {
             condition: None,
             add_types: TypeLineAddition::default(),
             set_types: None,
+            remove_planeswalker: false,
             set_name: None,
             set_colors: None,
             delta_power: 2,

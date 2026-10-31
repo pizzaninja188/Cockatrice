@@ -3371,6 +3371,1589 @@ mod tests {
         )
     }
 
+    const LUXIOR_NORMAL_NAME: &str = "Luxior, Giada's Gift";
+    const LUXIOR_NORMAL_ID: &str = "luxior,_giadas_gift";
+    const AJANI_NORMAL_NAME: &str = "Ajani Steadfast";
+    const AJANI_NORMAL_ID: &str = "ajani_steadfast";
+    const ORNITHOPTER_NORMAL_NAME: &str = "Ornithopter";
+    const ORNITHOPTER_NORMAL_ID: &str = "ornithopter";
+
+    #[derive(Default)]
+    struct LuxiorNormalHandles {
+        luxior: Option<(u32, u64)>,
+        ajani: Option<(u32, u64)>,
+        ornithopter: Option<(u32, u64)>,
+    }
+
+    #[derive(Clone, Copy)]
+    struct LuxiorNormalCastPlan<'a> {
+        card_name: &'a str,
+        expected_total_cost: &'a str,
+        white_count: u32,
+    }
+
+    #[derive(Clone, Copy)]
+    struct LuxiorNormalEquipmentPlan<'a> {
+        stable_ability_id: &'a str,
+        target_object_id: u32,
+        white_count: u32,
+        expected_total_cost: &'a str,
+    }
+
+    fn luxior_normal_record_handle(
+        current: Option<&BattlefieldObject>,
+        previous: &mut Option<(u32, u64)>,
+        card_name: &str,
+    ) {
+        let Some(current) = current else {
+            return;
+        };
+        let current_handle = (current.object_id, current.zone_change_generation);
+        if let Some(previous_handle) = *previous {
+            assert_eq!(
+                previous_handle, current_handle,
+                "{card_name} keeps its public ObjectId and zone-change generation"
+            );
+        } else {
+            *previous = Some(current_handle);
+        }
+    }
+
+    fn luxior_normal_refresh_handles(
+        battlefield: &[BattlefieldObject],
+        handles: &mut LuxiorNormalHandles,
+    ) {
+        luxior_normal_record_handle(
+            battlefield
+                .iter()
+                .find(|object| object.card_id == LUXIOR_NORMAL_ID),
+            &mut handles.luxior,
+            LUXIOR_NORMAL_NAME,
+        );
+        luxior_normal_record_handle(
+            battlefield
+                .iter()
+                .find(|object| object.card_id == AJANI_NORMAL_ID),
+            &mut handles.ajani,
+            AJANI_NORMAL_NAME,
+        );
+        luxior_normal_record_handle(
+            battlefield
+                .iter()
+                .find(|object| object.card_id == ORNITHOPTER_NORMAL_ID),
+            &mut handles.ornithopter,
+            ORNITHOPTER_NORMAL_NAME,
+        );
+    }
+
+    fn luxior_normal_checkpoint(session: &EngineSession, label: &str, command_ordinal: usize) {
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine at each diagnostic checkpoint")
+            .state;
+        eprintln!(
+            "LUXIOR checkpoint={label} ordinal={command_ordinal} turn={} turn_instance={} active={} priority={} step={:?} stack={}",
+            state.turn,
+            state.turn_instance,
+            state.players[state.active_player_idx].id,
+            state.priority_player_id(),
+            state.turn_step,
+            state.stack.len()
+        );
+    }
+
+    fn luxior_normal_player_command(
+        session: &mut EngineSession,
+        player_id: i32,
+        command: RuledCommand,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+    ) -> IpcResponse {
+        let command_kind = match command.cmd.as_ref() {
+            Some(Cmd::ChooseStartingPlayer(_)) => "ChooseStartingPlayer",
+            Some(Cmd::Mulligan(_)) => "Mulligan",
+            Some(Cmd::PassPriority(_)) => "PassPriority",
+            Some(Cmd::DiscardToHandSize(_)) => "DiscardToHandSize",
+            Some(Cmd::PlayLand(_)) => "PlayLand",
+            Some(Cmd::BeginSpellCast(_)) => "BeginSpellCast",
+            Some(Cmd::CommitSpellCast(_)) => "CommitSpellCast",
+            Some(Cmd::ActivateAbility(_)) => "ActivateAbility",
+            _ => "Other",
+        };
+        luxior_normal_checkpoint(
+            session,
+            &format!("before IPC {command_kind} player={player_id}"),
+            *accepted_commands + 1,
+        );
+        let latest = kaya_player_command(session, player_id, command);
+        luxior_normal_checkpoint(
+            session,
+            &format!("after IPC {command_kind} player={player_id}"),
+            *accepted_commands + 1,
+        );
+        *accepted_commands += 1;
+        assert!(
+            *accepted_commands <= 8_192,
+            "Luxior normal pilot stays within its accepted-command bound"
+        );
+        kaya_capture_battlefield(&latest, 17, battlefield);
+        luxior_normal_refresh_handles(battlefield, handles);
+        luxior_normal_checkpoint(
+            session,
+            &format!("after view refresh {command_kind}"),
+            *accepted_commands,
+        );
+        latest
+    }
+
+    fn luxior_normal_pass_priority(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+    ) -> IpcResponse {
+        let mut player_id = session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine")
+            .state
+            .priority_player_id();
+        let discard_count = session
+            .engine
+            .as_ref()
+            .and_then(|engine| {
+                let state = &engine.state;
+                let player = state.players.iter().find(|player| player.id == player_id)?;
+                Some(
+                    if state.turn_step == tricerules_core::TurnStep::Cleanup
+                        && !state.cleanup_priority_active
+                        && state.cleanup_discard_player == Some(player_id)
+                    {
+                        player.hand.len().saturating_sub(7)
+                    } else {
+                        0
+                    },
+                )
+            })
+            .expect("priority player is present for the normal cleanup offer");
+        if discard_count > 0 {
+            let legal_actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&player_id)
+                .expect("cleanup player receives current legal actions");
+            let mut reserved_luxior = false;
+            let mut reserved_ajani = false;
+            let mut reserved_ornithopter = false;
+            let cleanup_offers = legal_actions
+                .hand_actions
+                .iter()
+                .filter(|offer| offer.kind == HandActionKind::HandActionCleanupDiscard as i32)
+                .filter_map(|offer| {
+                    if player_id == 17 {
+                        match offer.card_name.as_str() {
+                            LUXIOR_NORMAL_NAME if handles.luxior.is_none() && !reserved_luxior => {
+                                reserved_luxior = true;
+                                return None;
+                            }
+                            AJANI_NORMAL_NAME if handles.ajani.is_none() && !reserved_ajani => {
+                                reserved_ajani = true;
+                                return None;
+                            }
+                            ORNITHOPTER_NORMAL_NAME
+                                if handles.ornithopter.is_none() && !reserved_ornithopter =>
+                            {
+                                reserved_ornithopter = true;
+                                return None;
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(offer.hand_index)
+                })
+                .take(discard_count)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                cleanup_offers.len(),
+                discard_count,
+                "cleanup discards preserve one current copy of each still-needed pilot spell"
+            );
+            latest = luxior_normal_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                        hand_card_indices: cleanup_offers,
+                    })),
+                },
+                battlefield,
+                handles,
+                accepted_commands,
+            );
+            player_id = session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine after cleanup")
+                .state
+                .priority_player_id();
+            assert!(
+                kaya_batch(&latest).legal_by_player.contains_key(&player_id),
+                "post-cleanup response publishes current actions for the priority player"
+            );
+        }
+        luxior_normal_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PassPriority(PassPriority {})),
+            },
+            battlefield,
+            handles,
+            accepted_commands,
+        )
+    }
+
+    fn luxior_normal_resolve_stack(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+    ) -> IpcResponse {
+        for _ in 0..8 {
+            let stack_empty = session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine")
+                .state
+                .stack
+                .is_empty();
+            if stack_empty {
+                return latest;
+            }
+            latest = luxior_normal_pass_priority(
+                session,
+                latest,
+                battlefield,
+                handles,
+                accepted_commands,
+            );
+        }
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine")
+                .state
+                .stack
+                .is_empty(),
+            "ordinary priority passes resolve the pilot's spell or ability"
+        );
+        latest
+    }
+
+    fn luxior_normal_float_white(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+        white_count: u32,
+        context: &str,
+    ) -> (IpcResponse, PaymentMana) {
+        luxior_normal_assert_white_pool(session, 0, context);
+
+        let mana_sources = kaya_available_mana_abilities(battlefield)
+            .into_iter()
+            .filter(|source| kaya_output_has_color(&source.3, 'W'))
+            .collect::<Vec<_>>();
+        assert!(
+            mana_sources.len() >= white_count as usize,
+            "current untapped Plains can produce exactly {white_count} white mana for {context}"
+        );
+        for (index, (object_id, generation, ability_index, output)) in mana_sources
+            .into_iter()
+            .take(white_count as usize)
+            .enumerate()
+        {
+            let current_source = kaya_available_mana_abilities(battlefield)
+                .into_iter()
+                .find(|source| {
+                    source.0 == object_id && source.1 == generation && source.2 == ability_index
+                })
+                .expect("latest public battlefield retains this current Plains offer");
+            assert_eq!(current_source.3, output);
+            assert!(kaya_output_has_color(&output, 'W'));
+            latest = luxior_normal_player_command(
+                session,
+                17,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+                battlefield,
+                handles,
+                accepted_commands,
+            );
+            let pool = &session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine after mana activation")
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == 17)
+                .expect("pilot remains in the active session")
+                .mana_pool;
+            assert_eq!(
+                pool.white,
+                index as u32 + 1,
+                "{context} produces white only"
+            );
+            assert_eq!(pool.blue, 0);
+            assert_eq!(pool.black, 0);
+            assert_eq!(pool.red, 0);
+            assert_eq!(pool.green, 0);
+            assert_eq!(pool.colorless, 0);
+        }
+        let produced = PaymentMana {
+            w: white_count,
+            ..Default::default()
+        };
+        (latest, produced)
+    }
+
+    fn luxior_normal_public_permanent<'a>(
+        battlefield: &'a [BattlefieldObject],
+        card_id: &str,
+    ) -> &'a BattlefieldObject {
+        battlefield
+            .iter()
+            .find(|object| object.card_id == card_id)
+            .unwrap_or_else(|| panic!("current public battlefield includes {card_id}"))
+    }
+
+    fn luxior_normal_assert_white_pool(
+        session: &EngineSession,
+        expected_white: u32,
+        context: &str,
+    ) {
+        let pool = &session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine")
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == 17)
+            .expect("pilot remains in the active session")
+            .mana_pool;
+        assert_eq!(pool.white, expected_white, "{context} white pool");
+        assert_eq!(pool.blue, 0, "{context} has no blue mana");
+        assert_eq!(pool.black, 0, "{context} has no black mana");
+        assert_eq!(pool.red, 0, "{context} has no red mana");
+        assert_eq!(pool.green, 0, "{context} has no green mana");
+        assert_eq!(pool.colorless, 0, "{context} has no colorless mana");
+    }
+
+    fn luxior_normal_current_ability<'a>(
+        permanent: &'a BattlefieldObject,
+        stable_id: &str,
+    ) -> &'a tricerules_proto::ruled::v1::AbilityInfo {
+        permanent
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|component| {
+                        component.kind == PresentationPathKind::Ability as i32
+                            && component.id == stable_id
+                    })
+                })
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "current {} view publishes stable ability {stable_id}",
+                    permanent.card_id
+                )
+            })
+    }
+
+    fn luxior_normal_target_group(
+        latest: &IpcResponse,
+        source_object_id: u32,
+        ability_index: u32,
+    ) -> &tricerules_proto::ruled::v1::LegalTargetGroup {
+        let key = (u64::from(source_object_id) << 32) | u64::from(ability_index);
+        let legal_actions = kaya_batch(latest)
+            .legal_by_player
+            .get(&17)
+            .expect("pilot receives current target offers");
+        let groups = &legal_actions
+            .valid_targets_by_ability
+            .get(&key)
+            .unwrap_or_else(|| panic!("current source/index {key} publishes target offers"))
+            .groups;
+        assert_eq!(
+            groups.len(),
+            1,
+            "the current pilot ability has one target group"
+        );
+        &groups[0]
+    }
+
+    fn luxior_normal_target_ref(
+        group: &tricerules_proto::ruled::v1::LegalTargetGroup,
+        target: &BattlefieldObject,
+    ) -> TargetRef {
+        assert!(group.valid_permanent_ids.contains(&target.object_id));
+        let generation = group
+            .valid_permanent_targets
+            .iter()
+            .find(|candidate| candidate.object_id == target.object_id)
+            .map(|candidate| candidate.zone_change_generation)
+            .or_else(|| {
+                group
+                    .valid_permanent_ids
+                    .contains(&target.object_id)
+                    .then_some(target.zone_change_generation)
+            })
+            .expect("current public target candidate has its current generation receipt");
+        assert_eq!(generation, target.zone_change_generation);
+        TargetRef {
+            object_id: target.object_id,
+            group_index: group.group_index,
+            kind: TargetRefKind::Permanent as i32,
+            expected_zone_change_generation: Some(generation),
+            ..Default::default()
+        }
+    }
+
+    fn luxior_normal_cast_from_current_offer(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+        plan: LuxiorNormalCastPlan<'_>,
+    ) -> IpcResponse {
+        let LuxiorNormalCastPlan {
+            card_name,
+            expected_total_cost,
+            white_count,
+        } = plan;
+        let spell = kaya_batch(&latest)
+            .legal_by_player
+            .get(&17)
+            .expect("pilot receives current spell offers")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == card_name
+            })
+            .cloned()
+            .unwrap_or_else(|| panic!("current hand offer contains castable {card_name}"));
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine")
+                .state
+                .stack
+                .is_empty(),
+            "cast from the current empty-stack main-phase offer"
+        );
+        latest = luxior_normal_player_command(
+            session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    spell.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: spell.face_index,
+                        cast_method: CastMethod::Normal as i32,
+                        ..Default::default()
+                    }),
+                })),
+            },
+            battlefield,
+            handles,
+            accepted_commands,
+        );
+        let (next, produced) = luxior_normal_float_white(
+            session,
+            latest,
+            battlefield,
+            handles,
+            accepted_commands,
+            white_count,
+            card_name,
+        );
+        latest = next;
+
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&17)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("current spell transaction survives ordinary Plains mana activation");
+        let payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("current spell offer publishes its payment cost");
+        let transaction_id = pending.transaction_id;
+        let revision = payment.revision;
+        assert_eq!(payment.total_cost, expected_total_cost);
+        luxior_normal_checkpoint(
+            session,
+            &format!("before Spell PaymentQuery {card_name}"),
+            *accepted_commands,
+        );
+        let payment_query = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::PaymentQuery(PaymentQuery {
+                    player_id: 17,
+                    preview: Some(PreviewPayment {
+                        transaction_id,
+                        revision,
+                        commit_spell_cast: Some(CommitSpellCast {
+                            transaction_id,
+                            payment: Some(PaymentSelection {
+                                expected_state_revision: revision,
+                                mana: Some(produced),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                })),
+            })
+            .expect("spell payment query keeps the normal session open");
+        luxior_normal_checkpoint(
+            session,
+            &format!(
+                "after Spell PaymentQuery {card_name} ok={}",
+                payment_query.ok
+            ),
+            *accepted_commands,
+        );
+        assert!(
+            payment_query.ok,
+            "{card_name} payment preview: {}",
+            payment_query.error
+        );
+        let preview = payment_query
+            .batch
+            .and_then(|batch| batch.payment_preview)
+            .expect("PaymentQuery returns the current spell payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "{card_name} exact white payment is valid: {preview:?}"
+        );
+        assert_eq!(preview.total_cost, expected_total_cost);
+        let selection = preview
+            .selection
+            .as_ref()
+            .expect("complete spell preview returns an exact selection");
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        assert_eq!(produced.w, white_count);
+        let player = session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine before spell payment")
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == 17)
+            .expect("pilot remains in the active session");
+        assert_eq!(
+            player.mana_pool.white, white_count,
+            "{card_name} spends only the white mana floated from current Plains"
+        );
+        let transaction_id = preview.transaction_id;
+        latest = luxior_normal_player_command(
+            session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+            battlefield,
+            handles,
+            accepted_commands,
+        );
+        luxior_normal_assert_white_pool(session, 0, card_name);
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine after spell commit")
+            .state
+            .pending_spell_cast
+            .is_none());
+        luxior_normal_resolve_stack(session, latest, battlefield, handles, accepted_commands)
+    }
+
+    fn luxior_normal_activate_equipment(
+        session: &mut EngineSession,
+        latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        handles: &mut LuxiorNormalHandles,
+        accepted_commands: &mut usize,
+        preview_correlation: &mut u64,
+        plan: LuxiorNormalEquipmentPlan<'_>,
+    ) -> IpcResponse {
+        let LuxiorNormalEquipmentPlan {
+            stable_ability_id,
+            target_object_id,
+            white_count,
+            expected_total_cost,
+        } = plan;
+        let (mut latest, produced) = luxior_normal_float_white(
+            session,
+            latest,
+            battlefield,
+            handles,
+            accepted_commands,
+            white_count,
+            stable_ability_id,
+        );
+        let source_handle = handles
+            .luxior
+            .expect("Luxior public handle was captured from its resolved spell");
+        let source = battlefield
+            .iter()
+            .find(|object| {
+                object.object_id == source_handle.0
+                    && object.zone_change_generation == source_handle.1
+            })
+            .expect("latest battlefield retains the current Luxior incarnation");
+        let target = battlefield
+            .iter()
+            .find(|object| object.object_id == target_object_id)
+            .expect("latest battlefield retains the offered target incarnation");
+        let ability = luxior_normal_current_ability(source, stable_ability_id);
+        assert!(
+            ability.activatable,
+            "current {stable_ability_id} offer is usable"
+        );
+        assert_eq!(ability.mana_cost, expected_total_cost);
+        let target_group =
+            luxior_normal_target_group(&latest, source.object_id, ability.ability_index);
+        assert_eq!((target_group.min, target_group.max), (1, 1));
+        let activation = ActivateAbility {
+            source_object_id: source.object_id,
+            ability_index: ability.ability_index,
+            targets: vec![luxior_normal_target_ref(target_group, target)],
+            source_zone: AbilitySourceZone::Battlefield as i32,
+            expected_zone_change_generation: source.zone_change_generation,
+            ..Default::default()
+        };
+
+        // These IDs correlate a stateless preview response; ordinary Equip has no locked
+        // engine-owned ability transaction. The returned payment selection carries the exact
+        // current state revision used by ActivateAbility.
+        *preview_correlation += 1;
+        let correlation = *preview_correlation;
+        luxior_normal_checkpoint(
+            session,
+            &format!("before Equip PaymentQuery {stable_ability_id} target={target_object_id} without payment"),
+            *accepted_commands,
+        );
+        let initial_query = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::PaymentQuery(PaymentQuery {
+                    player_id: 17,
+                    preview: Some(PreviewPayment {
+                        transaction_id: correlation,
+                        revision: correlation,
+                        activate_ability: Some(activation.clone()),
+                        ..Default::default()
+                    }),
+                })),
+            })
+            .expect("initial Equip payment preview keeps the normal session open");
+        luxior_normal_checkpoint(
+            session,
+            &format!(
+                "after Equip PaymentQuery {stable_ability_id} target={target_object_id} ok={}",
+                initial_query.ok
+            ),
+            *accepted_commands,
+        );
+        assert!(
+            initial_query.ok,
+            "{stable_ability_id} payment preview: {}",
+            initial_query.error
+        );
+        let initial_preview = initial_query
+            .batch
+            .and_then(|batch| batch.payment_preview)
+            .expect("PaymentQuery returns the current stateless Equip cost preview");
+        assert!(
+            initial_preview.valid,
+            "{stable_ability_id} current cost preview is valid: {initial_preview:?}"
+        );
+        assert_eq!(initial_preview.total_cost, expected_total_cost);
+        let mut proposed_payment = initial_preview
+            .selection
+            .clone()
+            .expect("initial Equip preview returns its current state revision");
+        let expected_state_revision = proposed_payment.expected_state_revision;
+        proposed_payment.mana = Some(produced);
+        let mut selected_activation = activation.clone();
+        selected_activation.payment = Some(proposed_payment);
+        selected_activation.restricted_mana = initial_preview.restricted_mana.clone();
+        *preview_correlation += 1;
+        let correlation = *preview_correlation;
+        luxior_normal_checkpoint(
+            session,
+            &format!("before Equip PaymentQuery {stable_ability_id} target={target_object_id} with exact payment"),
+            *accepted_commands,
+        );
+        let payment_query = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::PaymentQuery(PaymentQuery {
+                    player_id: 17,
+                    preview: Some(PreviewPayment {
+                        transaction_id: correlation,
+                        revision: correlation,
+                        activate_ability: Some(selected_activation),
+                        ..Default::default()
+                    }),
+                })),
+            })
+            .expect("selected Equip payment preview keeps the normal session open");
+        luxior_normal_checkpoint(
+            session,
+            &format!(
+                "after Equip PaymentQuery {stable_ability_id} target={target_object_id} with exact payment ok={}",
+                payment_query.ok
+            ),
+            *accepted_commands,
+        );
+        assert!(
+            payment_query.ok,
+            "{stable_ability_id} selected payment preview: {}",
+            payment_query.error
+        );
+        let preview = payment_query
+            .batch
+            .and_then(|batch| batch.payment_preview)
+            .expect("PaymentQuery returns the selected stateless Equip preview");
+        assert!(
+            preview.valid && preview.complete,
+            "{stable_ability_id} exact white payment is valid: {preview:?}"
+        );
+        assert_eq!(preview.total_cost, expected_total_cost);
+        let selection = preview
+            .selection
+            .as_ref()
+            .expect("complete Equip preview returns a payment selection");
+        assert_eq!(selection.expected_state_revision, expected_state_revision);
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        assert_eq!(produced.w, white_count);
+        luxior_normal_assert_white_pool(session, white_count, stable_ability_id);
+
+        let stack_len_before = session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine before Equip activation")
+            .state
+            .stack
+            .len();
+        let mut activation = activation;
+        activation.payment = preview.selection;
+        activation.restricted_mana = preview.restricted_mana;
+        latest = luxior_normal_player_command(
+            session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(activation)),
+            },
+            battlefield,
+            handles,
+            accepted_commands,
+        );
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine after Equip activation")
+            .state;
+        assert_eq!(state.stack.len(), stack_len_before + 1);
+        assert!(state.pending_ability_activation.is_none());
+        luxior_normal_assert_white_pool(session, 0, stable_ability_id);
+        luxior_normal_resolve_stack(session, latest, battlefield, handles, accepted_commands)
+    }
+
+    #[test]
+    fn luxior_normal_session_equips_ajani_activates_loyalty_and_reequips_ornithopter() {
+        let mut pilot_deck = Vec::with_capacity(60);
+        pilot_deck.extend(vec![LUXIOR_NORMAL_NAME.to_string(); 4]);
+        pilot_deck.extend(vec![AJANI_NORMAL_NAME.to_string(); 4]);
+        pilot_deck.extend(vec![ORNITHOPTER_NORMAL_NAME.to_string(); 4]);
+        pilot_deck.extend(vec!["Plains".to_string(); 48]);
+        let player_decks = vec![
+            PlayerDeck {
+                player_id: 17,
+                mainboard_card_name: pilot_deck,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+            PlayerDeck {
+                player_id: 29,
+                mainboard_card_name: vec!["Plains".to_string(); 60],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+        ];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![
+                        LUXIOR_NORMAL_NAME.into(),
+                        AJANI_NORMAL_NAME.into(),
+                        ORNITHOPTER_NORMAL_NAME.into(),
+                        "Plains".into(),
+                    ],
+                })),
+            })
+            .expect("ValidateDeck keeps the Luxior session open");
+        assert!(
+            validation.ok,
+            "complete Luxior pilot deck validates: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_036,
+                    seed: 1,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the strict normal Luxior game open");
+        assert!(latest.ok, "normal Luxior GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+        let mut battlefield = Vec::new();
+        let mut handles = LuxiorNormalHandles::default();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        luxior_normal_refresh_handles(&battlefield, &mut handles);
+        let mut accepted_commands = 0usize;
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the current starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = luxior_normal_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+            &mut battlefield,
+            &mut handles,
+            &mut accepted_commands,
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = luxior_normal_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+                &mut battlefield,
+                &mut handles,
+                &mut accepted_commands,
+            );
+        }
+        for _ in 0..4 {
+            latest = luxior_normal_pass_priority(
+                &mut session,
+                latest,
+                &mut battlefield,
+                &mut handles,
+                &mut accepted_commands,
+            );
+        }
+        {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Luxior session has an engine")
+                .state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+            assert_eq!(state.priority_player_id(), 17);
+        }
+
+        let mut player17_turns = 0u32;
+        let mut last_player17_turn_instance = None;
+        let mut preview_correlation = 0u64;
+        let mut completed = false;
+        for _ in 0..8_192 {
+            let (active_player_id, priority_player_id, main_phase, turn_instance) = {
+                let state = &session
+                    .engine
+                    .as_ref()
+                    .expect("Luxior session has an engine")
+                    .state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                    state.turn_instance,
+                )
+            };
+            if active_player_id == 17
+                && main_phase
+                && last_player17_turn_instance != Some(turn_instance)
+            {
+                last_player17_turn_instance = Some(turn_instance);
+                player17_turns += 1;
+                assert!(
+                    player17_turns <= 54,
+                    "Luxior pilot stops by player 17 turn 54; last public battlefield={:?}",
+                    battlefield
+                        .iter()
+                        .map(|object| (
+                            object.card_id.as_str(),
+                            object.object_id,
+                            object.zone_change_generation
+                        ))
+                        .collect::<Vec<_>>()
+                );
+            }
+
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                if handles.luxior.is_some()
+                    && handles.ajani.is_some()
+                    && handles.ornithopter.is_some()
+                    && kaya_available_mana_abilities(&battlefield)
+                        .iter()
+                        .filter(|source| kaya_output_has_color(&source.3, 'W'))
+                        .count()
+                        >= 4
+                {
+                    let luxior = luxior_normal_public_permanent(&battlefield, LUXIOR_NORMAL_ID);
+                    let ajani = luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    let ornithopter =
+                        luxior_normal_public_permanent(&battlefield, ORNITHOPTER_NORMAL_ID);
+                    let ajani_object_id = ajani.object_id;
+                    let planeswalker_equip = luxior_normal_current_ability(luxior, "activated_01");
+                    let ordinary_equip = luxior_normal_current_ability(luxior, "activated_02");
+                    assert!(planeswalker_equip.activatable);
+                    assert!(ordinary_equip.activatable);
+                    assert_eq!(planeswalker_equip.mana_cost, "{1}");
+                    assert_eq!(ordinary_equip.mana_cost, "{3}");
+                    let planeswalker_targets = luxior_normal_target_group(
+                        &latest,
+                        luxior.object_id,
+                        planeswalker_equip.ability_index,
+                    );
+                    let ordinary_targets = luxior_normal_target_group(
+                        &latest,
+                        luxior.object_id,
+                        ordinary_equip.ability_index,
+                    );
+                    assert_eq!((planeswalker_targets.min, planeswalker_targets.max), (1, 1));
+                    assert_eq!((ordinary_targets.min, ordinary_targets.max), (1, 1));
+                    assert_eq!(
+                        planeswalker_targets.valid_permanent_ids,
+                        vec![ajani_object_id]
+                    );
+                    assert_eq!(
+                        ordinary_targets.valid_permanent_ids,
+                        vec![ornithopter.object_id]
+                    );
+                    assert!(!planeswalker_targets
+                        .valid_permanent_ids
+                        .contains(&ornithopter.object_id));
+                    assert!(!ordinary_targets
+                        .valid_permanent_ids
+                        .contains(&ajani_object_id));
+
+                    let combined_turn_instance = session
+                        .engine
+                        .as_ref()
+                        .expect("Luxior session has an engine before combined Equip sequence")
+                        .state
+                        .turn_instance;
+                    let opponent_life_before = session
+                        .engine
+                        .as_ref()
+                        .expect("Luxior session has an engine")
+                        .state
+                        .players
+                        .iter()
+                        .find(|player| player.id == 29)
+                        .expect("opponent remains in the normal game")
+                        .life;
+                    let pilot_life_before = session
+                        .engine
+                        .as_ref()
+                        .expect("Luxior session has an engine")
+                        .state
+                        .players
+                        .iter()
+                        .find(|player| player.id == 17)
+                        .expect("pilot remains in the normal game")
+                        .life;
+
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase before planeswalker Equip",
+                        accepted_commands,
+                    );
+                    latest = luxior_normal_activate_equipment(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        &mut handles,
+                        &mut accepted_commands,
+                        &mut preview_correlation,
+                        LuxiorNormalEquipmentPlan {
+                            stable_ability_id: "activated_01",
+                            target_object_id: ajani_object_id,
+                            white_count: 1,
+                            expected_total_cost: "{1}",
+                        },
+                    );
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase after planeswalker Equip resolution",
+                        accepted_commands,
+                    );
+                    let luxior = luxior_normal_public_permanent(&battlefield, LUXIOR_NORMAL_ID);
+                    let ajani = luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    assert_eq!(
+                        luxior
+                            .attachment_recipient
+                            .as_ref()
+                            .and_then(|recipient| recipient.recipient.as_ref()),
+                        Some(
+                            &tricerules_proto::ruled::v1::attachment_recipient::Recipient::ObjectId(
+                                ajani_object_id
+                            )
+                        )
+                    );
+                    assert_eq!(ajani.loyalty, 4);
+                    assert!(ajani.is_creature);
+                    assert!(!ajani.is_planeswalker);
+                    assert_eq!((ajani.power, ajani.toughness), (4, 4));
+                    {
+                        let engine = session
+                            .engine
+                            .as_ref()
+                            .expect("Luxior session has an engine");
+                        luxior_normal_checkpoint(
+                            &session,
+                            "before Ajani creature characteristics",
+                            accepted_commands,
+                        );
+                        let characteristics = engine.characteristics(ajani.object_id).unwrap();
+                        luxior_normal_checkpoint(
+                            &session,
+                            "after Ajani creature characteristics",
+                            accepted_commands,
+                        );
+                        assert!(characteristics.is_creature());
+                        assert!(!characteristics.has_type("Planeswalker"));
+                        assert!(!characteristics.has_type("Ajani"));
+                        assert!(characteristics.is_legendary());
+                        assert_eq!(
+                            (characteristics.power, characteristics.toughness),
+                            (Some(4), Some(4))
+                        );
+                        assert_eq!(
+                            engine.state.objects[&ajani.object_id]
+                                .counters
+                                .get(&tricerules_cards::primitives::CounterKind::Loyalty)
+                                .copied(),
+                            Some(4)
+                        );
+                    }
+                    let current_ajani =
+                        luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    let loyalty_plus_one =
+                        luxior_normal_current_ability(current_ajani, "activated_01");
+                    assert!(loyalty_plus_one.activatable);
+                    let loyalty_targets = luxior_normal_target_group(
+                        &latest,
+                        current_ajani.object_id,
+                        loyalty_plus_one.ability_index,
+                    );
+                    assert_eq!((loyalty_targets.min, loyalty_targets.max), (0, 1));
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase before Ajani loyalty activation",
+                        accepted_commands,
+                    );
+                    latest = luxior_normal_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                source_object_id: current_ajani.object_id,
+                                ability_index: loyalty_plus_one.ability_index,
+                                source_zone: AbilitySourceZone::Battlefield as i32,
+                                expected_zone_change_generation: current_ajani
+                                    .zone_change_generation,
+                                ..Default::default()
+                            })),
+                        },
+                        &mut battlefield,
+                        &mut handles,
+                        &mut accepted_commands,
+                    );
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase after Ajani loyalty cost",
+                        accepted_commands,
+                    );
+                    let current_ajani =
+                        luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    let current_ornithopter =
+                        luxior_normal_public_permanent(&battlefield, ORNITHOPTER_NORMAL_ID);
+                    assert_eq!(current_ajani.loyalty, 5);
+                    assert_eq!((current_ajani.power, current_ajani.toughness), (5, 5));
+                    assert_eq!(
+                        (current_ornithopter.power, current_ornithopter.toughness),
+                        (0, 2)
+                    );
+                    assert!(current_ornithopter
+                        .keywords
+                        .iter()
+                        .any(|keyword| keyword == "Flying"));
+                    assert!(
+                        !luxior_normal_current_ability(current_ajani, "activated_01").activatable
+                    );
+                    {
+                        let engine = session
+                            .engine
+                            .as_ref()
+                            .expect("Luxior session has an engine");
+                        luxior_normal_checkpoint(
+                            &session,
+                            "before Ajani post-cost characteristics",
+                            accepted_commands,
+                        );
+                        let characteristics =
+                            engine.characteristics(current_ajani.object_id).unwrap();
+                        luxior_normal_checkpoint(
+                            &session,
+                            "after Ajani post-cost characteristics",
+                            accepted_commands,
+                        );
+                        assert!(characteristics.is_creature());
+                        assert_eq!(
+                            (characteristics.power, characteristics.toughness),
+                            (Some(5), Some(5))
+                        );
+                        assert_eq!(
+                            engine.state.objects[&current_ajani.object_id]
+                                .counters
+                                .get(&tricerules_cards::primitives::CounterKind::Loyalty)
+                                .copied(),
+                            Some(5)
+                        );
+                        assert!(!engine.state.stack.is_empty());
+                    }
+                    latest = luxior_normal_resolve_stack(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        &mut handles,
+                        &mut accepted_commands,
+                    );
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase after Ajani loyalty resolution",
+                        accepted_commands,
+                    );
+                    assert!(session
+                        .engine
+                        .as_ref()
+                        .expect("Luxior session has an engine after Ajani resolves")
+                        .state
+                        .stack
+                        .is_empty());
+                    let current_luxior =
+                        luxior_normal_public_permanent(&battlefield, LUXIOR_NORMAL_ID);
+                    let current_ajani =
+                        luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    let current_ornithopter =
+                        luxior_normal_public_permanent(&battlefield, ORNITHOPTER_NORMAL_ID);
+                    let creature_targets = luxior_normal_target_group(
+                        &latest,
+                        current_luxior.object_id,
+                        luxior_normal_current_ability(current_luxior, "activated_02").ability_index,
+                    );
+                    let planeswalker_targets = luxior_normal_target_group(
+                        &latest,
+                        current_luxior.object_id,
+                        luxior_normal_current_ability(current_luxior, "activated_01").ability_index,
+                    );
+                    assert_eq!((creature_targets.min, creature_targets.max), (1, 1));
+                    assert!(creature_targets
+                        .valid_permanent_ids
+                        .contains(&current_ajani.object_id));
+                    let ornithopter_object_id = current_ornithopter.object_id;
+                    assert!(creature_targets
+                        .valid_permanent_ids
+                        .contains(&ornithopter_object_id));
+                    assert!(!creature_targets
+                        .valid_permanent_ids
+                        .contains(&current_luxior.object_id));
+                    assert!(!planeswalker_targets
+                        .valid_permanent_ids
+                        .contains(&current_ajani.object_id));
+                    assert!(!planeswalker_targets
+                        .valid_permanent_ids
+                        .contains(&ornithopter_object_id));
+
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase before ordinary Equip",
+                        accepted_commands,
+                    );
+                    latest = luxior_normal_activate_equipment(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        &mut handles,
+                        &mut accepted_commands,
+                        &mut preview_correlation,
+                        LuxiorNormalEquipmentPlan {
+                            stable_ability_id: "activated_02",
+                            target_object_id: ornithopter_object_id,
+                            white_count: 3,
+                            expected_total_cost: "{3}",
+                        },
+                    );
+                    luxior_normal_checkpoint(
+                        &session,
+                        "phase after ordinary Equip resolution",
+                        accepted_commands,
+                    );
+                    assert_eq!(
+                        session
+                            .engine
+                            .as_ref()
+                            .expect("Luxior session has an engine after re-equip")
+                            .state
+                            .turn_instance,
+                        combined_turn_instance,
+                        "both Equip resolutions and Ajani loyalty activation occur in the same turn"
+                    );
+                    assert_eq!(
+                        session
+                            .engine
+                            .as_ref()
+                            .expect("Luxior session has an engine after re-equip")
+                            .state
+                            .turn_step,
+                        tricerules_core::TurnStep::Main1
+                    );
+                    let current_luxior =
+                        luxior_normal_public_permanent(&battlefield, LUXIOR_NORMAL_ID);
+                    let current_ajani =
+                        luxior_normal_public_permanent(&battlefield, AJANI_NORMAL_ID);
+                    let current_ornithopter =
+                        luxior_normal_public_permanent(&battlefield, ORNITHOPTER_NORMAL_ID);
+                    assert_eq!(
+                        current_luxior
+                            .attachment_recipient
+                            .as_ref()
+                            .and_then(|recipient| recipient.recipient.as_ref()),
+                        Some(
+                            &tricerules_proto::ruled::v1::attachment_recipient::Recipient::ObjectId(
+                                current_ornithopter.object_id
+                            )
+                        )
+                    );
+                    assert_eq!(current_ajani.loyalty, 5);
+                    assert!(!current_ajani.is_creature);
+                    assert!(current_ajani.is_planeswalker);
+                    assert_eq!(current_ornithopter.loyalty, 0);
+                    assert!(current_ornithopter.is_creature);
+                    assert_eq!(
+                        (current_ornithopter.power, current_ornithopter.toughness),
+                        (0, 2)
+                    );
+                    assert!(current_ornithopter
+                        .keywords
+                        .iter()
+                        .any(|keyword| keyword == "Flying"));
+                    {
+                        let engine = session
+                            .engine
+                            .as_ref()
+                            .expect("Luxior session has an engine");
+                        luxior_normal_checkpoint(
+                            &session,
+                            "before final Ajani characteristics",
+                            accepted_commands,
+                        );
+                        let ajani_characteristics =
+                            engine.characteristics(current_ajani.object_id).unwrap();
+                        luxior_normal_checkpoint(
+                            &session,
+                            "after final Ajani characteristics",
+                            accepted_commands,
+                        );
+                        assert!(!ajani_characteristics.is_creature());
+                        assert!(ajani_characteristics.has_type("Planeswalker"));
+                        assert!(ajani_characteristics.has_type("Ajani"));
+                        assert!(ajani_characteristics.is_legendary());
+                        assert_eq!(
+                            (ajani_characteristics.power, ajani_characteristics.toughness),
+                            (None, None)
+                        );
+                        assert_eq!(
+                            engine.state.objects[&current_ajani.object_id]
+                                .counters
+                                .get(&tricerules_cards::primitives::CounterKind::Loyalty)
+                                .copied(),
+                            Some(5)
+                        );
+                        luxior_normal_checkpoint(
+                            &session,
+                            "before final Ornithopter characteristics",
+                            accepted_commands,
+                        );
+                        let ornithopter_characteristics = engine
+                            .characteristics(current_ornithopter.object_id)
+                            .unwrap();
+                        luxior_normal_checkpoint(
+                            &session,
+                            "after final Ornithopter characteristics",
+                            accepted_commands,
+                        );
+                        assert!(ornithopter_characteristics.is_artifact());
+                        assert!(ornithopter_characteristics.is_creature());
+                        assert!(ornithopter_characteristics.has_type("Thopter"));
+                        assert!(ornithopter_characteristics
+                            .has_keyword(tricerules_cards::primitives::Keyword::Flying));
+                        assert_eq!(
+                            (
+                                ornithopter_characteristics.power,
+                                ornithopter_characteristics.toughness
+                            ),
+                            (Some(0), Some(2))
+                        );
+                        assert!(engine.state.objects[&current_ornithopter.object_id]
+                            .counters
+                            .is_empty());
+                        assert!(engine.state.stack.is_empty());
+                        assert!(engine.state.pending_spell_cast.is_none());
+                        assert!(engine.state.pending_ability_activation.is_none());
+                        let player_idx = engine.state.player_idx(17).unwrap();
+                        for handle in [
+                            handles.luxior.expect("Luxior handle remains captured"),
+                            handles.ajani.expect("Ajani handle remains captured"),
+                            handles
+                                .ornithopter
+                                .expect("Ornithopter handle remains captured"),
+                        ] {
+                            assert!(engine.state.players[player_idx]
+                                .battlefield
+                                .contains(&handle.0));
+                        }
+                        assert_eq!(
+                            engine.state.players[player_idx]
+                                .battlefield
+                                .iter()
+                                .filter_map(|object_id| engine.state.objects.get(object_id))
+                                .filter(|object| object.card_id != "plains")
+                                .map(|object| object.card_id.as_str())
+                                .collect::<std::collections::BTreeSet<_>>(),
+                            [LUXIOR_NORMAL_ID, AJANI_NORMAL_ID, ORNITHOPTER_NORMAL_ID]
+                                .into_iter()
+                                .collect()
+                        );
+                        assert_eq!(
+                            engine
+                                .state
+                                .players
+                                .iter()
+                                .find(|player| player.id == 17)
+                                .unwrap()
+                                .life,
+                            pilot_life_before
+                        );
+                        assert_eq!(
+                            engine
+                                .state
+                                .players
+                                .iter()
+                                .find(|player| player.id == 29)
+                                .unwrap()
+                                .life,
+                            opponent_life_before
+                        );
+                    }
+                    let final_planeswalker_targets = luxior_normal_target_group(
+                        &latest,
+                        current_luxior.object_id,
+                        luxior_normal_current_ability(current_luxior, "activated_01").ability_index,
+                    );
+                    let final_creature_targets = luxior_normal_target_group(
+                        &latest,
+                        current_luxior.object_id,
+                        luxior_normal_current_ability(current_luxior, "activated_02").ability_index,
+                    );
+                    assert!(final_planeswalker_targets
+                        .valid_permanent_ids
+                        .contains(&current_ajani.object_id));
+                    assert!(!final_creature_targets
+                        .valid_permanent_ids
+                        .contains(&current_ajani.object_id));
+                    assert_eq!(
+                        final_creature_targets.valid_permanent_ids,
+                        vec![current_ornithopter.object_id]
+                    );
+                    assert!(
+                        !luxior_normal_current_ability(current_ajani, "activated_01").activatable
+                    );
+                    completed = true;
+                    break;
+                }
+
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("pilot receives current main-phase actions")
+                    .clone();
+                let pilot_plains_on_battlefield = battlefield
+                    .iter()
+                    .filter(|object| object.card_id == "plains")
+                    .count();
+                if pilot_plains_on_battlefield < 4 {
+                    if let Some(land) = actions
+                        .hand_actions
+                        .iter()
+                        .find(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32)
+                        .cloned()
+                    {
+                        latest = luxior_normal_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::PlayLand(PlayLand {
+                                    source: Some(LandSource {
+                                        location: Some(
+                                            tricerules_proto::ruled::v1::land_source::Location::
+                                                HandIndex(land.hand_index),
+                                        ),
+                                        ..Default::default()
+                                    }),
+                                    face_index: land.face_index,
+                                    ..Default::default()
+                                })),
+                            },
+                            &mut battlefield,
+                            &mut handles,
+                            &mut accepted_commands,
+                        );
+                        continue;
+                    }
+                }
+
+                let castable = [
+                    (ORNITHOPTER_NORMAL_NAME, handles.ornithopter, "{0}", 0),
+                    (LUXIOR_NORMAL_NAME, handles.luxior, "{1}", 1),
+                    (AJANI_NORMAL_NAME, handles.ajani, "{3}{W}", 4),
+                ];
+                let white_available = kaya_available_mana_abilities(&battlefield)
+                    .iter()
+                    .filter(|source| kaya_output_has_color(&source.3, 'W'))
+                    .count();
+                if let Some((card_name, None, expected_cost, white_count)) =
+                    castable.into_iter().find(|(card_name, handle, _, cost)| {
+                        handle.is_none()
+                            && *cost as usize <= white_available
+                            && actions.hand_actions.iter().any(|offer| {
+                                offer.kind == HandActionKind::HandActionCastSpell as i32
+                                    && offer.card_name == *card_name
+                            })
+                    })
+                {
+                    latest = luxior_normal_cast_from_current_offer(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        &mut handles,
+                        &mut accepted_commands,
+                        LuxiorNormalCastPlan {
+                            card_name,
+                            expected_total_cost: expected_cost,
+                            white_count,
+                        },
+                    );
+                    continue;
+                }
+            }
+
+            latest = luxior_normal_pass_priority(
+                &mut session,
+                latest,
+                &mut battlefield,
+                &mut handles,
+                &mut accepted_commands,
+            );
+        }
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("Luxior session has an engine after bounded progression")
+            .state;
+        assert!(
+            completed,
+            "normal Luxior pilot did not complete within 8192 accepted commands / 54 player-17 turns; commands={accepted_commands}, turns={player17_turns}, active={}, priority={}, step={:?}, battlefield={:?}",
+            state.players[state.active_player_idx].id,
+            state.priority_player_id(),
+            state.turn_step,
+            battlefield
+                .iter()
+                .map(|object| (object.card_id.as_str(), object.object_id, object.zone_change_generation))
+                .collect::<Vec<_>>()
+        );
+        assert!(accepted_commands <= 8_192);
+        assert_eq!(
+            player17_turns,
+            last_player17_turn_instance.map_or(0, |_| player17_turns)
+        );
+    }
+
     #[test]
     fn ugin_normal_session_casts_from_current_offers_and_activates_plus_two() {
         const UGIN_NAME: &str = "Ugin, the Spirit Dragon";

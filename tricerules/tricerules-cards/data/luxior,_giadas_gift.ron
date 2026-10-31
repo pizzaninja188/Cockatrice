@@ -1,0 +1,47 @@
+// Oracle ID: 2f9263d7-916f-4535-95d2-888ab73cf339; SNC #240.
+// Printing: https://api.scryfall.com/cards/1833662b-ccf3-4c16-9767-666d6407aa65
+// Rulings: https://api.scryfall.com/cards/1833662b-ccf3-4c16-9767-666d6407aa65/rulings
+// Frozen source: build/deck-coverage/oracle-cards-frozen-313-post-500.jsonl.gz
+// Source SHA-256: 84f4cd6a5da0810603de15ddbc943aedd1f79cfa62c6bb7f8807cfc74af5d9b6
+(
+  id: "luxior,_giadas_gift",
+  name: "Luxior, Giada's Gift",
+  face_id: "luxior_giada_s_gift",
+  mana_cost: "{1}",
+  supertypes: ["Legendary"],
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AttachedModifier(
+        count: Some(AttachedObjectCounterCount),
+        power_per_match: 1,
+        toughness_per_match: 1,
+      ),
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(
+        add_types: (card_types: [Creature]),
+        remove_planeswalker: true,
+      ),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Mana("{1}")],
+      effect: [EquipPlaneswalker(target:
+        (kind: AnyPermanent, controller: You, permanent_types: [Planeswalker]))],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([4]),
+      costs: [Mana("{3}")],
+      effect: [Equip(target: (kind: Creature, controller: You))],
+    ),
+  ],
+)

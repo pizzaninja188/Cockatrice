@@ -30,6 +30,10 @@ struct EarlyLayerInputs<'a> {
 #[derive(Clone, PartialEq, Eq)]
 enum TypeInstruction {
     RemoveCreature,
+    RemovePlaneswalker {
+        had_planeswalker_type: bool,
+        removed_subtypes: Vec<String>,
+    },
     Add(tricerules_card_model::TypeLineAddition),
     Set(tricerules_card_model::TypeLineReplacement),
     Basic(BasicLandType),
@@ -48,6 +52,7 @@ fn is_type_effect(kind: &ContinuousEffectKind) -> bool {
         kind,
         ContinuousEffectKind::Layer4AddTypes(_)
             | ContinuousEffectKind::Layer4RemoveCreature
+            | ContinuousEffectKind::Layer4RemovePlaneswalker
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -517,6 +522,14 @@ impl CharacteristicsEvaluator<'_> {
                 let result = &object.characteristics;
                 let instruction = match &effect.kind {
                     ContinuousEffectKind::Layer4RemoveCreature => TypeInstruction::RemoveCreature,
+                    ContinuousEffectKind::Layer4RemovePlaneswalker => {
+                        let (had_planeswalker_type, removed_subtypes) =
+                            planeswalker_removal_signature(result);
+                        TypeInstruction::RemovePlaneswalker {
+                            had_planeswalker_type,
+                            removed_subtypes,
+                        }
+                    }
                     ContinuousEffectKind::Layer4AddTypes(addition) => {
                         // Compare effective instructions, not whether an addition is redundant.
                         let mut addition = addition.clone();
@@ -620,6 +633,10 @@ impl CharacteristicsEvaluator<'_> {
             let removes_text = match instruction {
                 TypeInstruction::RemoveCreature => {
                     apply_creature_type_removal(result);
+                    false
+                }
+                TypeInstruction::RemovePlaneswalker { .. } => {
+                    apply_planeswalker_type_removal(result);
                     false
                 }
                 TypeInstruction::Add(addition) => {

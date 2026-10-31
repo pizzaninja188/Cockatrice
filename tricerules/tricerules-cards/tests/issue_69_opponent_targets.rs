@@ -43,6 +43,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
             condition: None,
             add_types: Default::default(),
             set_types: None,
+            remove_planeswalker: false,
             set_name: None,
             set_colors: None,
             set_power: None,

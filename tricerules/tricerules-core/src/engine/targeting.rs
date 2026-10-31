@@ -1847,6 +1847,23 @@ fn validate_effect_targets(
                 ));
             }
         }
+        SpellEffectKind::EquipPlaneswalker { target: filter } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
+                return Err(EngineError::Illegal(
+                    "equip planeswalker target must be a planeswalker you control on the battlefield",
+                ));
+            }
+        }
         SpellEffectKind::PreventNextDamage { target: filter, .. }
         | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter }
         | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target: filter } => {
@@ -2726,7 +2743,9 @@ fn spell_target_legality_error_with_context(
         // Ability-only effects (CR 702.6a equip, CR 701.19 regenerate). Registry load already
         // rejects them in `spell_effect`, so reaching here means a mis-routed call rather than a
         // bad target — reject rather than fall through to the fail-closed arm's generic message.
-        SpellEffectKind::Equip { .. } | SpellEffectKind::Regenerate { .. } => {
+        SpellEffectKind::Equip { .. }
+        | SpellEffectKind::EquipPlaneswalker { .. }
+        | SpellEffectKind::Regenerate { .. } => {
             return Err(EngineError::Illegal(
                 "this effect is only valid on an activated or triggered ability",
             ));

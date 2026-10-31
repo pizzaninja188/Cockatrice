@@ -1214,6 +1214,7 @@ impl GameEngine {
                     condition,
                     add_types: _,
                     set_types: _,
+                    remove_planeswalker: _,
                     set_name: _,
                     set_colors: _,
                     delta_power,

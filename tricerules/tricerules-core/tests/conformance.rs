@@ -481,6 +481,17 @@ fn fixture(case: &Case) -> GameEngine {
         _ => None,
     };
     let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
+    if case.card == "luxior,_giadas_gift" && case.face == 0 && case.ability == Some(0) {
+        let planeswalker = helpers::inject_permanent_on_battlefield(&mut e, 0, "ajani_steadfast");
+        e.state
+            .objects
+            .get_mut(&planeswalker)
+            .unwrap()
+            .counters
+            .insert(tricerules_cards::CounterKind::Loyalty, 4);
+        e.state.zone_change_generation.insert(planeswalker, 0);
+        e.initial_response_batch();
+    }
     if case.card == "nautiloid_ship" && case.ability == Some(0) {
         helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
         helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -601,6 +612,49 @@ fn teferi_minus_three_phased_out_object_preserves_zone_integrity() {
         ability: Some(1),
     };
     assert_eq!(evaluate(&case).unwrap(), Outcome::Exercised);
+}
+
+#[test]
+fn luxior_planeswalker_equip_has_a_complete_fixture() {
+    let case = Case {
+        card: "luxior,_giadas_gift".into(),
+        face: 0,
+        ability: Some(0),
+    };
+    let definition = tricerules_cards::registry::global()
+        .get(&case.card)
+        .expect("Luxior card definition");
+    assert_eq!(
+        definition.primary_face().activated_abilities[0]
+            .ability_id
+            .as_str(),
+        "activated_01",
+        "the reviewed Luxior ability index must remain anchored"
+    );
+    assert_eq!(
+        evaluate(&case).expect("evaluate Luxior planeswalker equipment fixture"),
+        Outcome::Exercised,
+        "{}",
+        case.key()
+    );
+
+    let engine = fixture(&case);
+    let ajani = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|object_id| engine.state.objects[object_id].card_id == "ajani_steadfast")
+        .expect("the Luxior fixture includes actual Ajani Steadfast");
+    assert_eq!(engine.state.objects[&ajani].controller, 0);
+    assert_eq!(
+        engine.state.objects[&ajani].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(
+        engine.state.objects[&ajani].counter_count(tricerules_cards::CounterKind::Loyalty),
+        4
+    );
+    assert_eq!(engine.state.zone_change_generation.get(&ajani), Some(&0));
 }
 
 #[test]
