@@ -103,6 +103,8 @@ mod deck_coverage_memory_jar;
 mod deck_coverage_oath_of_teferi;
 #[path = "../deck_coverage_onakke_oathkeeper.rs"]
 mod deck_coverage_onakke_oathkeeper;
+#[path = "../deck_coverage_ripples_of_potential.rs"]
+mod deck_coverage_ripples_of_potential;
 #[path = "../deck_coverage_teferi_master_of_time.rs"]
 mod deck_coverage_teferi_master_of_time;
 #[path = "../deck_coverage_teferi_temporal_archmage.rs"]

@@ -236,8 +236,41 @@ pub(super) fn execute_effect(
         }
         effect @ SpellEffectKind::DrainTarget { .. } => life::drain_target(cx, effect)?,
         effect @ SpellEffectKind::Exile { .. } => zones::exile(cx, effect)?,
-        SpellEffectKind::PhaseOut { .. } => {
-            if let Some(target) = cx.first_current_battlefield_target(0) {
+        SpellEffectKind::PhaseOut { subject } => {
+            if matches!(
+                subject,
+                tricerules_card_model::primitives::EffectSubject::PreviousEffectObjects
+            ) {
+                let Some(
+                    tricerules_card_model::primitives::ResultType::ProliferatedPermanentSelection {
+                        cardinality,
+                    },
+                ) = cx.previous_effect_result.input_result_type.as_ref()
+                else {
+                    return Err(EngineError::ProgramInvariant(
+                        "Program PhaseOut is missing its typed Proliferate selection",
+                    ));
+                };
+                if cardinality.min != 0 || cardinality.max.is_some() || cx.program_state.is_none() {
+                    return Err(EngineError::ProgramInvariant(
+                        "Program PhaseOut has an invalid typed Proliferate selection",
+                    ));
+                }
+                let Some(ProgramValue::ProliferatedPermanentSelection(selected)) =
+                    cx.previous_effect_result.program_value.as_ref()
+                else {
+                    return Err(EngineError::ProgramInvariant(
+                        "Program PhaseOut input is not its sealed permanent selection",
+                    ));
+                };
+                if selected != &cx.previous_effect_result.produced_objects {
+                    return Err(EngineError::ProgramInvariant(
+                        "Program PhaseOut objects differ from the sealed permanent selection",
+                    ));
+                }
+                cx.engine
+                    .phase_out_proliferated_permanents(selected, cx.controller, cx.events)?;
+            } else if let Some(target) = cx.first_current_battlefield_target(0) {
                 cx.engine
                     .phase_out_chosen_creature(target, cx.controller, cx.events)?;
             }
@@ -436,6 +469,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::AuraAttach { .. } => misc::aura_attach(cx, effect)?,
         effect @ SpellEffectKind::ChoosePermanents { .. } => {
             choices::choose_permanents(cx, effect)?
+        }
+        SpellEffectKind::ChooseProliferatedPermanents => {
+            choices::choose_proliferated_permanents(cx)?
         }
         SpellEffectKind::SelectHandCards { .. }
         | SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {

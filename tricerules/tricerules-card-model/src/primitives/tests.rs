@@ -11295,6 +11295,295 @@ fn program_accepts_resultless_proliferate_leaf() {
 }
 
 #[test]
+fn program_proliferate_can_opt_in_to_a_cohort_output() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "proliferate", bind: ["cohort"], input: None,
+             kind: Perform(Proliferate)),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("one explicit Program Proliferate cohort output compiles");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner keeps its compiled program");
+    let [cohort] = compiled.body.steps[0].outputs.as_slice() else {
+        panic!("one Program Proliferate cohort has exactly one output slot");
+    };
+    assert_eq!(
+        compiled.slot(*cohort).map(|slot| &slot.result_type),
+        Some(
+            &crate::primitives::ResultType::ProliferatedPermanentCohort {
+                cardinality: crate::primitives::Cardinality { min: 0, max: None },
+            }
+        )
+    );
+}
+
+#[test]
+fn program_proliferate_cohort_choice_and_phase_out_use_only_sealed_adjacent_results() {
+    let valid = program_fixture(
+        r#"(steps: [
+            (id: "proliferate", bind: ["cohort"], input: None,
+             kind: Perform(Proliferate)),
+            (id: "choose", bind: ["selected"], input: Some("cohort"),
+             kind: Perform(ChooseProliferatedPermanents)),
+            (id: "phase_out", bind: [], input: Some("selected"),
+             kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("Ripples binds its Proliferate receipts, chooses their subset, then phases it");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the exact fixture owner keeps its compiled program");
+    let [selected] = compiled.body.steps[1].outputs.as_slice() else {
+        panic!("the dedicated cohort chooser has exactly one output slot");
+    };
+    assert_eq!(
+        compiled.slot(*selected).map(|slot| &slot.result_type),
+        Some(
+            &crate::primitives::ResultType::ProliferatedPermanentSelection {
+                cardinality: crate::primitives::Cardinality { min: 0, max: None },
+            }
+        )
+    );
+
+    let two_outputs = program_fixture(
+        r#"(steps: [(id: "proliferate", bind: ["first", "second"], input: None,
+            kind: Perform(Proliferate))], yields: [])"#,
+    );
+    let reason = invalid_program_reason(&two_outputs);
+    assert!(
+        reason.contains("at most one permanent cohort result"),
+        "{reason}"
+    );
+
+    for (label, malformed) in [
+        (
+            "chooser without a receipt input",
+            program_fixture(
+                r#"(steps: [(id: "choose", bind: ["selected"], input: None,
+                    kind: Perform(ChooseProliferatedPermanents))], yields: [])"#,
+            ),
+        ),
+        (
+            "generic permanent selection cannot forge the receipt domain",
+            program_fixture(
+                r#"(steps: [
+                    (id: "choose_any", bind: ["any"], input: None,
+                     kind: Perform(ChoosePermanents(chooser: Controller,
+                        filter: (kind: AnyPermanent), min: 0, max: 1))),
+                    (id: "choose_receipted", bind: ["selected"], input: Some("any"),
+                     kind: Perform(ChooseProliferatedPermanents)),
+                ], yields: [])"#,
+            ),
+        ),
+        (
+            "PhaseOut cannot consume a generic permanent selection",
+            program_fixture(
+                r#"(steps: [
+                    (id: "choose_any", bind: ["any"], input: None,
+                     kind: Perform(ChoosePermanents(chooser: Controller,
+                        filter: (kind: AnyPermanent), min: 0, max: 1))),
+                    (id: "phase_out", bind: [], input: Some("any"),
+                     kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+                ], yields: [])"#,
+            ),
+        ),
+        (
+            "PhaseOut cannot escape the typed cohort selection",
+            program_fixture(
+                r#"(steps: [(id: "phase_out", bind: [], input: None,
+                    kind: Perform(PhaseOut(subject: PreviousEffectObjects)))], yields: [])"#,
+            ),
+        ),
+        (
+            "targeted PhaseOut remains outside CardProgram",
+            program_fixture(
+                r#"(steps: [(id: "phase_out", bind: [], input: None,
+                    kind: Perform(PhaseOut(subject: Chosen((kind: Creature,
+                        controller: NotYou)))))], yields: [])"#,
+            ),
+        ),
+    ] {
+        let reason = invalid_program_reason(&malformed);
+        assert!(
+            reason.contains("wrong type")
+                || reason.contains("requires an explicitly bound input")
+                || reason.contains("typed Proliferate selection form"),
+            "{label}: unexpected diagnostic: {reason}"
+        );
+    }
+
+    let direct_choice = crate::primitives::SpellEffectKind::ChooseProliferatedPermanents;
+    assert!(direct_choice
+        .validate(crate::primitives::EffectContext::Spell)
+        .is_err());
+    let direct_phase_out = crate::primitives::SpellEffectKind::PhaseOut {
+        subject: crate::primitives::EffectSubject::PreviousEffectObjects,
+    };
+    assert!(direct_phase_out
+        .validate(crate::primitives::EffectContext::Spell)
+        .is_err());
+    let teferi_phase_out: crate::primitives::SpellEffectKind =
+        ron::from_str("PhaseOut(subject: Chosen((kind: Creature, controller: NotYou)))")
+            .expect("Teferi's direct targeted PhaseOut form remains representable");
+    assert_eq!(
+        teferi_phase_out.validate(crate::primitives::EffectContext::Ability),
+        Ok(())
+    );
+}
+
+#[test]
+fn program_proliferated_results_require_direct_local_provenance_with_exact_diagnostics() {
+    use crate::primitives::{CompiledProgram, EffectContext};
+
+    let spell_owner = || {
+        crate::ProgramOwnerId::face(
+            "ripples_provenance_fixture",
+            crate::CardFaceId::new("ripples_provenance_fixture").unwrap(),
+        )
+    };
+    let compile_spell_error = |source: &str| {
+        let program: crate::CardProgram =
+            ron::from_str(source).expect("the typed provenance fixture parses");
+        CompiledProgram::compile(spell_owner(), EffectContext::Spell, &program)
+            .expect_err("the unsupported provenance path must be rejected")
+    };
+
+    let admitted_void: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [(id: "rp_void_if_admitted", kind: If(
+            condition: Void,
+            yes: (steps: [], yields: []), no: (steps: [], yields: []),
+        ))], yields: []))"#,
+    )
+    .expect("the positive Void condition fixture parses");
+    CompiledProgram::compile(spell_owner(), EffectContext::Spell, &admitted_void)
+        .expect("Void is independently admitted for a spell Program If");
+
+    let intervening_proliferate = compile_spell_error(
+        r#"(body: (steps: [
+            (id: "rp_case1_first_proliferate", bind: ["rp_case1_cohort"], input: None,
+                kind: Perform(Proliferate)),
+            (id: "rp_case1_intervening_proliferate", bind: [], input: None,
+                kind: Perform(Proliferate)),
+            (id: "rp_case1_choose_old_cohort", bind: ["rp_case1_selected"],
+                input: Some("rp_case1_cohort"),
+                kind: Perform(ChooseProliferatedPermanents)),
+        ], yields: []))"#,
+    );
+    assert_eq!(
+        intervening_proliferate,
+        "ChooseProliferatedPermanents requires the immediately preceding typed Program Proliferate cohort"
+    );
+
+    let intervening_resultless_proliferate = compile_spell_error(
+        r#"(body: (steps: [
+            (id: "rp_case2_proliferate", bind: ["rp_case2_cohort"], input: None,
+                kind: Perform(Proliferate)),
+            (id: "rp_case2_choose", bind: ["rp_case2_selected"],
+                input: Some("rp_case2_cohort"),
+                kind: Perform(ChooseProliferatedPermanents)),
+            (id: "rp_case2_intervening_proliferate", bind: [], input: None,
+                kind: Perform(Proliferate)),
+            (id: "rp_case2_phase_old_selection", bind: [],
+                input: Some("rp_case2_selected"),
+                kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+        ], yields: []))"#,
+    );
+    assert_eq!(
+        intervening_resultless_proliferate,
+        "Program PhaseOut requires the immediately preceding typed ProliferatedPermanentSelection"
+    );
+
+    let joined_cohort = compile_spell_error(
+        r#"(body: (steps: [
+            (id: "rp_case3_if_joins_cohort", bind: ["rp_case3_joined_cohort"], kind: If(
+                condition: Void,
+                yes: (steps: [
+                    (id: "rp_case3_yes_proliferate", bind: ["rp_case3_yes_cohort"],
+                        input: None, kind: Perform(Proliferate)),
+                ], yields: ["rp_case3_yes_cohort"]),
+                no: (steps: [
+                    (id: "rp_case3_no_proliferate", bind: ["rp_case3_no_cohort"],
+                        input: None, kind: Perform(Proliferate)),
+                ], yields: ["rp_case3_no_cohort"]),
+            )),
+            (id: "rp_case3_choose_joined_cohort", bind: ["rp_case3_selected"],
+                input: Some("rp_case3_joined_cohort"),
+                kind: Perform(ChooseProliferatedPermanents)),
+        ], yields: []))"#,
+    );
+    assert_eq!(
+        joined_cohort,
+        "ChooseProliferatedPermanents requires the immediately preceding typed Program Proliferate cohort"
+    );
+
+    let joined_selection = compile_spell_error(
+        r#"(body: (steps: [
+            (id: "rp_case4_if_joins_selection", bind: ["rp_case4_joined_selection"], kind: If(
+                condition: Void,
+                yes: (steps: [
+                    (id: "rp_case4_yes_proliferate", bind: ["rp_case4_yes_cohort"],
+                        input: None, kind: Perform(Proliferate)),
+                    (id: "rp_case4_yes_choose", bind: ["rp_case4_yes_selection"],
+                        input: Some("rp_case4_yes_cohort"),
+                        kind: Perform(ChooseProliferatedPermanents)),
+                ], yields: ["rp_case4_yes_selection"]),
+                no: (steps: [
+                    (id: "rp_case4_no_proliferate", bind: ["rp_case4_no_cohort"],
+                        input: None, kind: Perform(Proliferate)),
+                    (id: "rp_case4_no_choose", bind: ["rp_case4_no_selection"],
+                        input: Some("rp_case4_no_cohort"),
+                        kind: Perform(ChooseProliferatedPermanents)),
+                ], yields: ["rp_case4_no_selection"]),
+            )),
+            (id: "rp_case4_phase_joined_selection", bind: [],
+                input: Some("rp_case4_joined_selection"),
+                kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+        ], yields: []))"#,
+    );
+    assert_eq!(
+        joined_selection,
+        "Program PhaseOut requires the immediately preceding typed ProliferatedPermanentSelection"
+    );
+
+    let ability_program: crate::CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "rp_case5_ability_proliferate", bind: ["rp_case5_cohort"], input: None,
+                kind: Perform(Proliferate)),
+            (id: "rp_case5_ability_choose", bind: ["rp_case5_selected"],
+                input: Some("rp_case5_cohort"),
+                kind: Perform(ChooseProliferatedPermanents)),
+            (id: "rp_case5_ability_phase", bind: [], input: Some("rp_case5_selected"),
+                kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+        ], yields: []))"#,
+    )
+    .expect("the ability Program provenance fixture parses");
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "ripples_ability_fixture".into(),
+        face_id: crate::CardFaceId::new("ripples_ability_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let ability_error =
+        CompiledProgram::compile(ability_owner, EffectContext::Ability, &ability_program)
+            .expect_err("the Ripples second choice remains spell-Program-only");
+    assert_eq!(
+        ability_error,
+        "ChooseProliferatedPermanents is supported only in a spell Program"
+    );
+}
+
+#[test]
 fn program_ability_admits_two_source_effect_leaves_and_types_source_sacrifice() {
     let body = |leaf: &str, bind: &str| {
         format!(
@@ -22519,7 +22808,7 @@ fn phase_out_rejects_a_nested_reflexive_trigger_effect() {
 }
 
 #[test]
-fn phase_out_remains_outside_the_authored_program_operation_whitelist() {
+fn phase_out_program_requires_the_typed_ripples_selection_form() {
     let program: crate::CardProgram = ron::from_str(
         r#"(target_aliases: [], body: (steps: [
             (id: "phase", bind: [], input: None,
@@ -22539,6 +22828,6 @@ fn phase_out_remains_outside_the_authored_program_operation_whitelist() {
             crate::primitives::EffectContext::Ability,
             &program,
         ),
-        Err(reason) if reason == "effect is not in the resolution-program operation whitelist"
+        Err(reason) if reason == "PhaseOut in a CardProgram supports only the typed Proliferate selection form"
     ));
 }

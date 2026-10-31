@@ -2598,6 +2598,23 @@ impl GameEngine {
             } => (stack.clone(), candidate_generations.clone()),
             _ => unreachable!("permanent-choice continuation"),
         };
+        if let Some(program) = stack.program.as_ref() {
+            match self.current_program_perform(program) {
+                Ok(SpellEffectKind::ChooseProliferatedPermanents) => {
+                    return self.finish_proliferated_permanent_choice(
+                        pending,
+                        stack,
+                        candidate_generations,
+                        chosen,
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            }
+        }
         let mut produced_objects = Vec::with_capacity(chosen.len());
         for oid in chosen {
             let Some(expected_generation) = candidate_generations
@@ -2645,6 +2662,162 @@ impl GameEngine {
             stack,
             EffectResult {
                 produced_objects,
+                ..Default::default()
+            },
+            events,
+        )
+    }
+
+    fn finish_proliferated_permanent_choice(
+        &mut self,
+        pending: PendingResolution,
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let Some(program) = stack.program.as_ref() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice lost its typed Program",
+            ));
+        };
+        let (instruction, effect) = match self.current_compiled_perform_instruction(program) {
+            Ok(current) => current,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        if !matches!(effect, SpellEffectKind::ChooseProliferatedPermanents) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice continuation points at a different Program leaf",
+            ));
+        }
+        let Some(input) = instruction.input else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice leaf lost its cohort input",
+            ));
+        };
+        let Some(compiled) = self.registry.compiled_program_for_owner(&program.owner) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice Program disappeared",
+            ));
+        };
+        let Some(slot) = compiled.slot(input) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice cohort slot disappeared",
+            ));
+        };
+        if !matches!(
+            &slot.result_type,
+            tricerules_card_model::primitives::ResultType::ProliferatedPermanentCohort {
+                cardinality
+            } if cardinality.min == 0 && cardinality.max.is_none()
+        ) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice input is not the compiled receipt cohort type",
+            ));
+        }
+        let Some(Some(ProgramValue::ProliferatedPermanentCohort(cohort))) =
+            program.slots.get(input.0 as usize)
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate choice cohort slot is not sealed",
+            ));
+        };
+        let controller = stack.item.controller;
+        let controller_live = self
+            .state
+            .player_idx(controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let mut candidate_by_id = std::collections::BTreeMap::new();
+        for (object_id, generation) in &candidate_generations {
+            if candidate_by_id.insert(*object_id, *generation).is_some()
+                || !cohort.iter().any(|receipt| {
+                    receipt.object_id == *object_id && receipt.zone_change_generation == *generation
+                })
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::ProgramInvariant(
+                    "Proliferate choice offer is outside its sealed receipt cohort",
+                ));
+            }
+        }
+        if pending.deciding_player != controller
+            || pending.presentation.min != 0
+            || pending.presentation.ordered
+            || chosen.len() > pending.presentation.max as usize
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("invalid Proliferate permanent choice"));
+        }
+
+        let validated = (|| {
+            let mut seen = std::collections::BTreeSet::new();
+            let mut selected = Vec::with_capacity(chosen.len());
+            for object_id in chosen {
+                if !seen.insert(*object_id) {
+                    return Err(EngineError::Illegal(
+                        "duplicate Proliferate permanent choice",
+                    ));
+                }
+                let Some(expected_generation) = candidate_by_id.get(object_id).copied() else {
+                    return Err(EngineError::Illegal(
+                        "permanent was not offered by this Proliferate choice",
+                    ));
+                };
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let Some(object) = self.state.objects.get(object_id) else {
+                    return Err(EngineError::Illegal("stale Proliferate permanent choice"));
+                };
+                if !controller_live
+                    || current_generation != expected_generation
+                    || object.zone != Zone::Battlefield
+                    || object.phase_status.is_some()
+                    || self.controller_of(*object_id) != Some(controller)
+                {
+                    return Err(EngineError::Illegal("stale Proliferate permanent choice"));
+                }
+                selected.push(TriggerObjectRef {
+                    object_id: *object_id,
+                    zone_change_generation: expected_generation,
+                    controller_at_event: controller,
+                });
+            }
+            Ok(selected)
+        })();
+        let selected = match validated {
+            Ok(selected) => selected,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
+            }
+        };
+        let names = selected
+            .iter()
+            .map(|object| object_display_name(&self.state, self.registry, object.object_id))
+            .collect::<Vec<_>>();
+        let events = vec![ev_log(if selected.is_empty() {
+            format!("P{controller} chooses no permanents to phase out.")
+        } else {
+            format!("P{controller} chooses {} to phase out.", names.join(", "))
+        })];
+        self.complete_parked_stack_with_previous(
+            stack,
+            EffectResult {
+                produced_objects: selected.clone(),
+                program_value: Some(ProgramValue::ProliferatedPermanentSelection(selected)),
                 ..Default::default()
             },
             events,
@@ -3280,24 +3453,43 @@ impl GameEngine {
             .state
             .player_idx(stack.item.controller)
             .is_some_and(|index| !self.state.players[index].has_lost);
-        let current_effect = if controller_live {
-            match self.current_program_perform(&program) {
-                Ok(effect) => Some(effect),
-                Err(error) => {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(error);
-                }
+        let current_effect = match self.current_program_perform(&program) {
+            Ok(effect) => effect,
+            Err(error) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(error);
             }
-        } else {
-            None
         };
-        if !matches!(
-            current_effect,
-            Some(SpellEffectKind::ChoosePermanents {
-                chooser: PlayerRecipient::Controller,
-                ..
-            })
-        ) {
+        if !controller_live
+            && matches!(
+                &current_effect,
+                SpellEffectKind::ChooseProliferatedPermanents
+            )
+        {
+            self.state.pending_replacement_event = None;
+            let completed = self.complete_parked_stack_with_previous(
+                stack,
+                EffectResult {
+                    program_value: Some(ProgramValue::ProliferatedPermanentSelection(Vec::new())),
+                    ..Default::default()
+                },
+                vec![ev_log(
+                    "The departed Proliferate controller has no permanents available for its choice."
+                        .into(),
+                )],
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+        if !controller_live
+            || !matches!(
+                &current_effect,
+                SpellEffectKind::ChoosePermanents {
+                    chooser: PlayerRecipient::Controller,
+                    ..
+                } | SpellEffectKind::ChooseProliferatedPermanents
+            )
+        {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         }

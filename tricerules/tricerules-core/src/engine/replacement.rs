@@ -3459,7 +3459,10 @@ impl GameEngine {
         {
             return self.complete_parked_stack_with_previous(
                 stack,
-                crate::state::EffectResult::default(),
+                crate::state::EffectResult {
+                    counter_placements: receipts,
+                    ..Default::default()
+                },
                 events,
             );
         }

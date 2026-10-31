@@ -353,6 +353,16 @@ pub enum ResultType {
         filter: Box<TargetFilter>,
         cardinality: Cardinality,
     },
+    /// Exact-generation permanent receipts from one Program Proliferate instruction. This
+    /// sealed origin cannot be authored or widened to an arbitrary permanent set.
+    ProliferatedPermanentCohort {
+        cardinality: Cardinality,
+    },
+    /// Exact-generation subset chosen from a preceding Program Proliferate receipt cohort.
+    /// Only this typed subset may be consumed by Program PhaseOut.
+    ProliferatedPermanentSelection {
+        cardinality: Cardinality,
+    },
     /// Exact face-down permanent committed by one Manifest Dread instruction. `None` is a
     /// completed empty result; the typed slot remains distinct from an unwritten output.
     ManifestedPermanent {
@@ -2323,6 +2333,18 @@ impl Compiler<'_> {
                         &steps,
                         &self.slots,
                     )?;
+                    validate_proliferated_choice_input(
+                        effect.as_ref(),
+                        input,
+                        &steps,
+                        &self.slots,
+                    )?;
+                    validate_proliferated_phase_out_input(
+                        effect.as_ref(),
+                        input,
+                        &steps,
+                        &self.slots,
+                    )?;
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -4027,6 +4049,88 @@ fn validate_tap_chosen_permanents_input(
     Ok(())
 }
 
+fn validate_proliferated_choice_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    steps: &[CompiledInstruction],
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !matches!(effect, EffectOp::ChooseProliferatedPermanents) {
+        return Ok(());
+    }
+    let invalid = || {
+        "ChooseProliferatedPermanents requires the immediately preceding typed Program Proliferate cohort".to_string()
+    };
+    let input = input.ok_or_else(invalid)?;
+    let Some(ResultType::ProliferatedPermanentCohort {
+        cardinality: Cardinality { min: 0, max: None },
+    }) = slots.get(input.0 as usize).map(|slot| &slot.result_type)
+    else {
+        return Err(invalid());
+    };
+    let Some(producer) = steps.last() else {
+        return Err(invalid());
+    };
+    if producer.outputs.as_slice() != [input]
+        || producer.input.is_some()
+        || !matches!(
+            &producer.kind,
+            CompiledInstructionKind::Perform(producer_effect)
+                if matches!(producer_effect.as_ref(), EffectOp::Proliferate)
+        )
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn validate_proliferated_phase_out_input(
+    effect: &EffectOp,
+    input: Option<ResultSlotId>,
+    steps: &[CompiledInstruction],
+    slots: &[CompiledSlot],
+) -> Result<(), String> {
+    if !matches!(
+        effect,
+        EffectOp::PhaseOut {
+            subject: EffectSubject::PreviousEffectObjects,
+        }
+    ) {
+        return Ok(());
+    }
+    let invalid = || {
+        "Program PhaseOut requires the immediately preceding typed ProliferatedPermanentSelection"
+            .to_string()
+    };
+    let input = input.ok_or_else(invalid)?;
+    let Some(ResultType::ProliferatedPermanentSelection {
+        cardinality: Cardinality { min: 0, max: None },
+    }) = slots.get(input.0 as usize).map(|slot| &slot.result_type)
+    else {
+        return Err(invalid());
+    };
+    let Some(producer) = steps.last() else {
+        return Err(invalid());
+    };
+    let CompiledInstructionKind::Perform(producer_effect) = &producer.kind else {
+        return Err(invalid());
+    };
+    if producer.outputs.as_slice() != [input]
+        || !matches!(
+            producer_effect.as_ref(),
+            EffectOp::ChooseProliferatedPermanents
+        )
+    {
+        return Err(invalid());
+    }
+    validate_proliferated_choice_input(
+        producer_effect,
+        producer.input,
+        &steps[..steps.len() - 1],
+        slots,
+    )
+}
+
 fn is_generic_program_input_count_consumer(effect: &EffectOp) -> bool {
     matches!(
         effect,
@@ -4064,6 +4168,10 @@ fn compile_input(
         EffectOp::UntapChosenPermanents | EffectOp::TapChosenPermanents => {
             Some("PermanentSelection")
         }
+        EffectOp::ChooseProliferatedPermanents => Some("ProliferatedPermanentCohort"),
+        EffectOp::PhaseOut {
+            subject: EffectSubject::PreviousEffectObjects,
+        } => Some("ProliferatedPermanentSelection"),
         EffectOp::Untap {
             subject: EffectSubject::PreviousEffectObject,
         } => Some("PermanentSelection"),
@@ -4363,6 +4471,20 @@ fn compile_input(
                         }
                     )
                 }
+                EffectOp::ChooseProliferatedPermanents => matches!(
+                    &actual.result_type,
+                    ResultType::ProliferatedPermanentCohort {
+                        cardinality: Cardinality { min: 0, max: None },
+                    }
+                ),
+                EffectOp::PhaseOut {
+                    subject: EffectSubject::PreviousEffectObjects,
+                } => matches!(
+                    &actual.result_type,
+                    ResultType::ProliferatedPermanentSelection {
+                        cardinality: Cardinality { min: 0, max: None },
+                    }
+                ),
                 _ if token_copy_batch_consumer => {
                     matches!(actual.result_type, ResultType::TokenCopyBatch)
                 }
@@ -4601,6 +4723,18 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             chooser: *a,
             filter: af.clone(),
             cardinality: union(*ac, *bc),
+        },
+        (
+            ResultType::ProliferatedPermanentCohort { cardinality: a },
+            ResultType::ProliferatedPermanentCohort { cardinality: b },
+        ) => ResultType::ProliferatedPermanentCohort {
+            cardinality: union(*a, *b),
+        },
+        (
+            ResultType::ProliferatedPermanentSelection { cardinality: a },
+            ResultType::ProliferatedPermanentSelection { cardinality: b },
+        ) => ResultType::ProliferatedPermanentSelection {
+            cardinality: union(*a, *b),
         },
         (
             ResultType::HandSelection {
@@ -5104,8 +5238,35 @@ fn validate_and_result_types(
         }
         SpellEffectKind::Proliferate => {
             effect.validate(context)?;
+            match result_bind_count {
+                0 => Ok(Vec::new()),
+                1 => Ok(vec![ResultType::ProliferatedPermanentCohort {
+                    cardinality: Cardinality { min: 0, max: None },
+                }]),
+                _ => Err("Program Proliferate may bind at most one permanent cohort result".into()),
+            }
+        }
+        SpellEffectKind::ChooseProliferatedPermanents => {
+            if context != EffectContext::Spell {
+                return Err(
+                    "ChooseProliferatedPermanents is supported only in a spell Program".into(),
+                );
+            }
+            Ok(vec![ResultType::ProliferatedPermanentSelection {
+                cardinality: Cardinality { min: 0, max: None },
+            }])
+        }
+        SpellEffectKind::PhaseOut {
+            subject: EffectSubject::PreviousEffectObjects,
+        } => {
+            if context != EffectContext::Spell {
+                return Err("Program PhaseOut of selected proliferated permanents is spell-only".into());
+            }
             Ok(Vec::new())
         }
+        SpellEffectKind::PhaseOut { .. } => Err(
+            "PhaseOut in a CardProgram supports only the typed Proliferate selection form".into(),
+        ),
         SpellEffectKind::GrantKeywordsAll { filter, .. } => {
             effect.validate(context)?;
             if matches!(

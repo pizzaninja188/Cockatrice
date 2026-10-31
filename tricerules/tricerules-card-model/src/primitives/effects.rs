@@ -1282,6 +1282,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         constraints: Vec<PermanentChoiceConstraint>,
     },
+    /// Ripples of Potential's specialized second choice: choose zero or more of the exact
+    /// generation-bound permanents whose counters were successfully placed by its preceding
+    /// Proliferate instruction. This has no authored filter or maximum because the sealed
+    /// receipt cohort is its complete domain and the live candidate count supplies the bound.
+    /// It is available only inside a typed spell Program; generic permanent choices cannot
+    /// express this receipt-scoped domain.
+    ChooseProliferatedPermanents,
     /// Stage a reflexive triggered ability created by an action taken during this resolution.
     /// Paid branches may create it unconditionally; `when` binds "when you do" to the private
     /// typed result of the immediately preceding instruction.
@@ -4187,6 +4194,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MoveCohortPartition { .. }
             | SpellEffectKind::ShuffleLibrary { .. }
             | SpellEffectKind::ChoosePermanents { .. }
+            | SpellEffectKind::ChooseProliferatedPermanents
             | SpellEffectKind::SelectHandCards { .. }
             | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
             | SpellEffectKind::ChooseAndSacrifice { .. }
@@ -4903,6 +4911,11 @@ impl SpellEffectKind {
             return Err(
                 "DoubleYourCounters is valid only as a direct effect in an activated modal mode"
                     .into(),
+            );
+        }
+        if matches!(self, Self::ChooseProliferatedPermanents) {
+            return Err(
+                "ChooseProliferatedPermanents requires its typed spell Program input".into(),
             );
         }
         if matches!(self, Self::GrantChainVeilLoyaltyPermission)

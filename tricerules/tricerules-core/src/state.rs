@@ -1534,6 +1534,11 @@ pub(crate) enum ProgramValue {
     /// Optional exact-generation result from one committed counter placement. `None` records a
     /// completed attempt with no counters placed; it is distinct from an unwritten output slot.
     CounterPlacementReceipt(Option<CounterPlacementReceipt>),
+    /// Exact generations of permanents that received a positive counter placement during one
+    /// Program Proliferate instruction. The typed result cannot be authored or widened.
+    ProliferatedPermanentCohort(Vec<TriggerObjectRef>),
+    /// Exact subset selected from one Program Proliferate cohort for its following PhaseOut.
+    ProliferatedPermanentSelection(Vec<TriggerObjectRef>),
     DrawReceipt(Vec<TriggerObjectRef>),
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),

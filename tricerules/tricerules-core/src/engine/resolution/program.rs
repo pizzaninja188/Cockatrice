@@ -1424,6 +1424,13 @@ impl GameEngine {
                                 previous.produced_objects.push(*object);
                             }
                             ProgramValue::CounteredAbilitySource(None) => {}
+                            value @ ProgramValue::ProliferatedPermanentCohort(_) => {
+                                previous.program_value = Some(value.clone());
+                            }
+                            value @ ProgramValue::ProliferatedPermanentSelection(objects) => {
+                                previous.produced_objects = objects.clone();
+                                previous.program_value = Some(value.clone());
+                            }
                             value @ ProgramValue::CounterPlacementReceipt(_) => {
                                 previous.program_value = Some(value.clone());
                             }
@@ -2421,6 +2428,62 @@ fn counter_placement_receipt_proof(
     Ok(())
 }
 
+fn proliferated_permanent_cohort_output(
+    result: &EffectResult,
+    cardinality: &Cardinality,
+) -> Result<Vec<crate::state::TriggerObjectRef>, EngineError> {
+    if cardinality.min != 0 || cardinality.max.is_some() {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate cohort has an invalid compiled cardinality",
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let mut objects = Vec::new();
+    for receipt in &result.counter_placements {
+        if receipt.count == 0 || receipt.after.checked_sub(receipt.before) != Some(receipt.count) {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate cohort contains an invalid placement receipt",
+            ));
+        }
+        if seen.insert((
+            receipt.object.object_id,
+            receipt.object.zone_change_generation,
+        )) {
+            objects.push(receipt.object);
+        }
+    }
+    objects.sort_unstable_by_key(|object| (object.object_id, object.zone_change_generation));
+    Ok(objects)
+}
+
+fn proliferated_permanent_selection_output(
+    result: &EffectResult,
+    cardinality: &Cardinality,
+) -> Result<Vec<crate::state::TriggerObjectRef>, EngineError> {
+    if cardinality.min != 0 || cardinality.max.is_some() {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate selection has an invalid compiled cardinality",
+        ));
+    }
+    let Some(ProgramValue::ProliferatedPermanentSelection(objects)) = result.program_value.as_ref()
+    else {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate choice did not publish its typed selection",
+        ));
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for object in objects {
+        if !seen.insert((object.object_id, object.zone_change_generation)) {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate selection contains a duplicate permanent",
+            ));
+        }
+    }
+    let mut output = objects.clone();
+    output.sort_unstable_by_key(|object| (object.object_id, object.zone_change_generation));
+    Ok(output)
+}
+
 fn capture_program_outputs_inner(
     stack_context: Option<(&crate::engine::GameEngine, &StackItem)>,
     compiled: &CompiledProgram,
@@ -2482,6 +2545,17 @@ fn capture_program_outputs_inner(
                     cardinality,
                     top,
                 )?)
+            }
+            ResultType::ProliferatedPermanentCohort { cardinality } => {
+                ProgramValue::ProliferatedPermanentCohort(proliferated_permanent_cohort_output(
+                    result,
+                    cardinality,
+                )?)
+            }
+            ResultType::ProliferatedPermanentSelection { cardinality } => {
+                ProgramValue::ProliferatedPermanentSelection(
+                    proliferated_permanent_selection_output(result, cardinality)?,
+                )
             }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
@@ -10519,5 +10593,139 @@ mod invariant_rollback_tests {
             command_snapshot(&engine) == before,
             "an unwritten result rejection preserves the command snapshot"
         );
+    }
+}
+
+#[cfg(test)]
+mod ripples_output_capture_tests {
+    use super::*;
+    use crate::state::{CounterPlacementReceipt, EffectResult, ProgramRunState, ProgramValue};
+    use tricerules_card_model::primitives::{
+        Cardinality, CompiledBlock, CompiledSlot, EffectContext, ProgramTargetProjection,
+    };
+
+    fn compiled_cohort_program() -> CompiledProgram {
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "ripples_of_potential",
+            tricerules_card_model::CardFaceId::new("ripples_of_potential").unwrap(),
+        );
+        CompiledProgram {
+            owner,
+            context: EffectContext::Spell,
+            target_projection: ProgramTargetProjection::OwnerLocal,
+            required_inputs: Vec::new(),
+            target_bindings: Vec::new(),
+            group_inputs: Vec::new(),
+            body: CompiledBlock {
+                steps: Vec::new(),
+                yields: Vec::new(),
+            },
+            slots: vec![CompiledSlot {
+                id: ResultSlotId(0),
+                name: "proliferated".into(),
+                result_type: ResultType::ProliferatedPermanentCohort {
+                    cardinality: Cardinality { min: 0, max: None },
+                },
+            }],
+        }
+    }
+
+    fn run_for(compiled: &CompiledProgram) -> ProgramRunState {
+        ProgramRunState {
+            owner: compiled.owner.clone(),
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![None],
+            in_flight: None,
+            in_flight_produced_object_provenance: None,
+        }
+    }
+
+    fn placement(
+        object: crate::state::TriggerObjectRef,
+        counter: CounterKind,
+    ) -> CounterPlacementReceipt {
+        CounterPlacementReceipt {
+            object,
+            counter,
+            count: 1,
+            before: 0,
+            after: 1,
+        }
+    }
+
+    #[test]
+    fn proliferated_cohort_capture_is_receipt_derived_and_generation_bound() {
+        let compiled = compiled_cohort_program();
+        let mut run = run_for(&compiled);
+        let first = crate::state::TriggerObjectRef {
+            object_id: 11,
+            zone_change_generation: 3,
+            controller_at_event: 0,
+        };
+        let second = crate::state::TriggerObjectRef {
+            object_id: 12,
+            zone_change_generation: 9,
+            controller_at_event: 0,
+        };
+        let result = EffectResult {
+            counter_placements: vec![
+                placement(first, CounterKind::Quest),
+                placement(first, CounterKind::Charge),
+                placement(second, CounterKind::Quest),
+            ],
+            ..EffectResult::default()
+        };
+
+        capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
+            .expect("successful positive placements produce a typed cohort");
+
+        assert!(matches!(
+            run.slots[0].as_ref(),
+            Some(ProgramValue::ProliferatedPermanentCohort(objects))
+                if objects.len() == 2 && objects.contains(&first) && objects.contains(&second)
+        ));
+
+        run.slots[0] = None;
+        capture_program_outputs(
+            &compiled,
+            &mut run,
+            &[ResultSlotId(0)],
+            &EffectResult::default(),
+        )
+        .expect("a completed zero-placement result writes an empty typed cohort");
+        assert!(matches!(
+            run.slots[0].as_ref(),
+            Some(ProgramValue::ProliferatedPermanentCohort(objects)) if objects.is_empty()
+        ));
+    }
+
+    #[test]
+    fn proliferated_selection_capture_requires_its_sealed_value() {
+        let mut compiled = compiled_cohort_program();
+        compiled.slots[0].result_type = ResultType::ProliferatedPermanentSelection {
+            cardinality: Cardinality { min: 0, max: None },
+        };
+        let mut run = run_for(&compiled);
+        let selected = crate::state::TriggerObjectRef {
+            object_id: 14,
+            zone_change_generation: 6,
+            controller_at_event: 0,
+        };
+        let mut result = EffectResult {
+            program_value: Some(ProgramValue::PermanentSelection(vec![selected])),
+            ..Default::default()
+        };
+        assert!(capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result).is_err());
+        assert!(run.slots[0].is_none());
+
+        result.program_value = Some(ProgramValue::ProliferatedPermanentSelection(vec![selected]));
+        capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
+            .expect("only the specialized permanent choice publishes a typed selection");
+        assert!(matches!(
+            run.slots[0].as_ref(),
+            Some(ProgramValue::ProliferatedPermanentSelection(objects))
+                if objects.as_slice() == [selected]
+        ));
     }
 }

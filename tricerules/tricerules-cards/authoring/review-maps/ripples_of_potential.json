@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "oracle_id": "45bcebd0-5e93-4433-b92f-b4c161d04bd6",
+  "spans": [
+    {
+      "face_id": "ripples_of_potential",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/1/kind/Perform",
+        "/faces/0/spell_program/body/steps/2",
+        "/faces/0/spell_program/body/steps/2/kind/Perform"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseProliferatedPermanents",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "SpellEffectKind::PhaseOut",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform/PhaseOut"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_ripples_of_potential::ripples_has_exact_identity_and_typed_receipt_program_shape",
+      "covers": "Exact Oracle identity, name, mana cost, type, and the ordered Program Proliferate, sealed cohort choice, and PreviousEffectObjects PhaseOut shape."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::ripples_proliferates_then_phases_only_selected_receipted_permanents",
+      "covers": "The actual spell chooses an opponent for Poison and increments that player's counter, but players are absent from the second-choice domain; only current-controller receipt-bearing permanents are offered and a proper subset phases."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::zero_receipts_complete_without_opening_a_permanent_choice",
+      "covers": "A completed zero-placement Proliferate produces a typed empty cohort and resolves without a second choice."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::nonempty_receipt_offer_allows_choosing_zero",
+      "covers": "A nonempty second-choice domain has minimum zero; choosing none leaves the successful counter placement and phases no permanent."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::multiple_counter_kinds_and_doubling_produce_one_receipt_choice",
+      "covers": "Multiple counter kinds and doubled placement still produce one receipt-bound candidate, with counters unchanged by the later phase choice."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::all_receipted_artifact_land_and_planeswalker_are_selectable",
+      "covers": "The actual second choice can select all receipt-bearing candidates across a noncreature artifact, land, and planeswalker, preserving each counter total."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::suspended_counter_replacement_resumes_proliferate_before_opening_phase_choice",
+      "covers": "Two actual Doubling Seasons suspend a Proliferate placement for replacement ordering; the resumed placement completes once, binds its receipt, then phases the chosen recipient."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::prevented_counter_placements_do_not_enter_the_phase_out_cohort",
+      "covers": "Counter prevention that reduces placement to zero creates no receipt and no permanent choice."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::proliferated_permanent_answers_reject_duplicate_foreign_nonreceipt_and_stale_generation_atomically",
+      "covers": "Duplicate, foreign-controller, nonreceipt, and stale-incarnation answers are rejected without changing state or generation captures."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::selected_attachment_phases_directly_and_returns_to_its_exact_recipient",
+      "covers": "An independently selected attachment phases out directly and returns only to its exact saved recipient incarnation."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::selected_parent_and_attachment_phase_as_one_indirect_cohort_in_either_order",
+      "covers": "A selected parent and attachment phase as an indirect attachment cohort regardless of selection order, preserving counters and generations."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::controller_departure_finishes_begun_ripples_selection_empty",
+      "covers": "A departed spell controller receives no delegated second-choice menu and completes the begun resolution with an empty selected cohort."
+    },
+    {
+      "test": "scenario deck_coverage_ripples_of_potential::owner_departure_prunes_receipts_and_reissues_only_to_the_surviving_controller",
+      "covers": "A departed physical spell owner removes exact owned candidates and the source object while the surviving controller receives a fresh narrowed choice and completes the begun spell once."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

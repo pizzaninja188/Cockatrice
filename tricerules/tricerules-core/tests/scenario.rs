@@ -261,6 +261,8 @@ mod deck_coverage_teferi_temporal_archmage_commander;
 #[path = "scenario/deck_coverage_teferi_temporal_archmage_minus_ten.rs"]
 mod deck_coverage_teferi_temporal_archmage_minus_ten;
 
+#[path = "scenario/deck_coverage_ripples_of_potential.rs"]
+mod deck_coverage_ripples_of_potential;
 #[path = "scenario/deck_coverage_teferi_master_of_time.rs"]
 mod deck_coverage_teferi_master_of_time;
 

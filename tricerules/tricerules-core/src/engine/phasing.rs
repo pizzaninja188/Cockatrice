@@ -26,113 +26,213 @@ impl GameEngine {
         {
             return Ok(false);
         }
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        self.phase_out_selected_permanents(
+            &[crate::state::TriggerObjectRef {
+                object_id,
+                zone_change_generation: generation,
+                controller_at_event: root_characteristics.controller,
+            }],
+            events,
+        )
+    }
 
-        let phase_out_under = root_characteristics.controller;
-        let direct_attachment_snapshot = self
-            .is_phasing_attachment(object_id)
-            .then(|| self.snapshot_attachment_recipient(object_id))
-            .flatten();
+    /// Phase out the current, exact-generation Ripples selection as one simultaneous batch.
+    /// Every selected permanent is a root only when no selected ancestor also phases; the full
+    /// active attachment closure is captured before any member changes status.
+    pub(super) fn phase_out_proliferated_permanents(
+        &mut self,
+        selected: &[crate::state::TriggerObjectRef],
+        effect_controller: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let controller_live = self
+            .state
+            .player_idx(effect_controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if !controller_live {
+            return Ok(());
+        }
+        let current = selected
+            .iter()
+            .copied()
+            .filter(|reference| {
+                self.state
+                    .zone_change_generation
+                    .get(&reference.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == reference.zone_change_generation
+                    && self
+                        .state
+                        .objects
+                        .get(&reference.object_id)
+                        .is_some_and(|object| {
+                            object.zone == Zone::Battlefield && object.phase_status.is_none()
+                        })
+                    && self.controller_of(reference.object_id) == Some(effect_controller)
+            })
+            .collect::<Vec<_>>();
+        let _ = self.phase_out_selected_permanents(&current, events)?;
+        Ok(())
+    }
 
-        // Walk the active attachment graph to a fixed point. Each child keeps its immediate
-        // parent's incarnation, so a later phase-in cannot use an ultimate-root fallback if an
-        // intermediate attachment has left and returned as a new object generation.
-        let mut members = vec![(object_id, None)];
-        let mut visited = BTreeSet::new();
-        visited.insert(object_id);
-        let mut cursor = 0;
-        while cursor < members.len() {
-            let parent_id = members[cursor].0;
-            let parent_generation = self
+    fn phase_out_selected_permanents(
+        &mut self,
+        selected: &[crate::state::TriggerObjectRef],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let mut selected_generations = std::collections::BTreeMap::new();
+        for reference in selected {
+            let generation = self
                 .state
                 .zone_change_generation
-                .get(&parent_id)
+                .get(&reference.object_id)
                 .copied()
                 .unwrap_or(0);
-            let mut children = self
-                .state
-                .objects
-                .iter()
-                .filter_map(|(&candidate_id, candidate)| {
-                    (candidate.zone == Zone::Battlefield
-                        && candidate.phase_status.is_none()
-                        && candidate.attached_to == Some(AttachmentRecipient::Object(parent_id))
-                        && self.is_phasing_attachment(candidate_id))
-                    .then_some(candidate_id)
-                })
-                .collect::<Vec<_>>();
-            children.sort_unstable();
-            for child_id in children {
-                if visited.insert(child_id) {
-                    members.push((
-                        child_id,
-                        Some(PhasedOutParentRef {
-                            object_id: parent_id,
-                            zone_change_generation: parent_generation,
-                        }),
-                    ));
-                }
+            if generation != reference.zone_change_generation
+                || !self
+                    .state
+                    .objects
+                    .get(&reference.object_id)
+                    .is_some_and(|object| {
+                        object.zone == Zone::Battlefield && object.phase_status.is_none()
+                    })
+                || self.characteristics(reference.object_id).is_none()
+            {
+                continue;
             }
-            cursor += 1;
+            selected_generations
+                .entry(reference.object_id)
+                .or_insert(reference.zone_change_generation);
+        }
+        if selected_generations.is_empty() {
+            return Ok(false);
+        }
+
+        let roots = selected_generations
+            .keys()
+            .copied()
+            .filter(|object_id| {
+                !self.has_selected_phasing_ancestor(*object_id, &selected_generations)
+            })
+            .collect::<Vec<_>>();
+        let mut members = std::collections::BTreeMap::new();
+        for root_id in roots {
+            let root_generation = selected_generations[&root_id];
+            let Some(root_characteristics) = self.characteristics(root_id) else {
+                continue;
+            };
+            let phase_out_under = root_characteristics.controller;
+            let direct_attachment_snapshot = self
+                .is_phasing_attachment(root_id)
+                .then(|| self.snapshot_attachment_recipient(root_id))
+                .flatten();
+            members.insert(
+                root_id,
+                (
+                    None,
+                    root_generation,
+                    root_characteristics,
+                    phase_out_under,
+                    direct_attachment_snapshot,
+                ),
+            );
+
+            // Traverse from every root, preserving the immediate parent's exact incarnation for
+            // each indirect member. Child ordering is stable, and no status changes occur here.
+            let mut queue = vec![root_id];
+            let mut cursor = 0;
+            while cursor < queue.len() {
+                let parent_id = queue[cursor];
+                let parent_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&parent_id)
+                    .copied()
+                    .unwrap_or(0);
+                let mut children = self
+                    .state
+                    .objects
+                    .iter()
+                    .filter_map(|(&candidate_id, candidate)| {
+                        (candidate.zone == Zone::Battlefield
+                            && candidate.phase_status.is_none()
+                            && candidate.attached_to
+                                == Some(AttachmentRecipient::Object(parent_id))
+                            && self.is_phasing_attachment(candidate_id))
+                        .then_some(candidate_id)
+                    })
+                    .collect::<Vec<_>>();
+                children.sort_unstable();
+                for child_id in children {
+                    if members.contains_key(&child_id) {
+                        continue;
+                    }
+                    let Some(characteristics) = self.characteristics(child_id) else {
+                        continue;
+                    };
+                    let generation = self
+                        .state
+                        .zone_change_generation
+                        .get(&child_id)
+                        .copied()
+                        .unwrap_or(0);
+                    members.insert(
+                        child_id,
+                        (
+                            Some(PhasedOutParentRef {
+                                object_id: parent_id,
+                                zone_change_generation: parent_generation,
+                            }),
+                            generation,
+                            characteristics,
+                            phase_out_under,
+                            None,
+                        ),
+                    );
+                    queue.push(child_id);
+                }
+                cursor += 1;
+            }
+        }
+        if members.is_empty() {
+            return Ok(false);
         }
 
         // Freeze every member's characteristics before any status changes. Phasing preserves
-        // the same battlefield generation, so these receipts provide the otherwise-missing LKI.
-        let cohort = members
-            .into_iter()
-            .map(|(member_id, parent_ref)| {
-                let generation = self
-                    .state
-                    .zone_change_generation
-                    .get(&member_id)
-                    .copied()
-                    .unwrap_or(0);
-                self.characteristics(member_id)
-                    .map(|characteristics| (member_id, parent_ref, generation, characteristics))
-            })
-            .collect::<Option<Vec<_>>>();
-        let Some(cohort) = cohort else {
-            return Ok(false);
-        };
-        if cohort
-            .first()
-            .is_none_or(|(member_id, _, _, _)| *member_id != object_id)
-        {
-            return Ok(false);
-        }
-
-        for (member_id, _, generation, characteristics) in &cohort {
+        // each battlefield generation, so these receipts provide the otherwise-missing LKI.
+        for (&member_id, (_, generation, characteristics, _, _)) in &members {
             resolution::record_last_known_characteristics(
                 &mut self.state,
-                *member_id,
+                member_id,
                 *generation,
                 characteristics.clone(),
             );
         }
 
-        // CR 506.4 removes every member from the current combat before its active characteristics
-        // disappear. The event is emitted once for the exact object IDs that were participants.
-        let cohort_ids = cohort
-            .iter()
-            .map(|(member_id, _, _, _)| *member_id)
-            .collect::<Vec<_>>();
-        self.remove_combat_participants(&cohort_ids, events);
+        // CR 506.4 removes the complete selected/indirect cohort from combat in one operation.
+        let member_ids = members.keys().copied().collect::<Vec<_>>();
+        self.remove_combat_participants(&member_ids, events);
 
         // All members are marked before the index is rebuilt or any derived state is observed.
-        let prepared_members = cohort
+        let prepared_members = members
             .iter()
-            .map(|(member_id, _, generation, _)| (*member_id, *generation))
+            .map(|(&member_id, (_, generation, _, _, _))| (member_id, *generation))
             .collect::<Vec<_>>();
-        for (member_id, parent_ref, _, _) in cohort {
+        for (member_id, (parent_ref, _, _, phase_out_under, direct_attachment_snapshot)) in members
+        {
             if let Some(member) = self.state.objects.get_mut(&member_id) {
                 member.phase_status = Some(PhasedOutStatus {
                     phase_out_under,
                     phase_in_due_after_departed_turn: false,
                     phase_in_with: parent_ref,
-                    direct_attachment_snapshot: if member_id == object_id {
-                        direct_attachment_snapshot.clone()
-                    } else {
-                        None
-                    },
+                    direct_attachment_snapshot,
                 });
             }
         }
@@ -145,6 +245,48 @@ impl GameEngine {
         }
         self.reindex_battlefield_control(events)?;
         Ok(true)
+    }
+
+    fn has_selected_phasing_ancestor(
+        &self,
+        object_id: ObjectId,
+        selected_generations: &std::collections::BTreeMap<ObjectId, u64>,
+    ) -> bool {
+        let mut cursor = object_id;
+        let mut visited = std::collections::BTreeSet::new();
+        loop {
+            let Some(object) = self.state.objects.get(&cursor) else {
+                return false;
+            };
+            if object.zone != Zone::Battlefield
+                || object.phase_status.is_some()
+                || !self.is_phasing_attachment(cursor)
+            {
+                return false;
+            }
+            let Some(AttachmentRecipient::Object(parent_id)) = object.attached_to else {
+                return false;
+            };
+            if !visited.insert(parent_id) {
+                return false;
+            }
+            let Some(parent) = self.state.objects.get(&parent_id) else {
+                return false;
+            };
+            if parent.zone != Zone::Battlefield || parent.phase_status.is_some() {
+                return false;
+            }
+            let parent_generation = self
+                .state
+                .zone_change_generation
+                .get(&parent_id)
+                .copied()
+                .unwrap_or(0);
+            if selected_generations.get(&parent_id) == Some(&parent_generation) {
+                return true;
+            }
+            cursor = parent_id;
+        }
     }
 
     /// Phase in due roots and the indirect attachments whose exact immediate parent also

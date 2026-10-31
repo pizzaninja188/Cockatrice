@@ -161,10 +161,17 @@ impl GameEngine {
             return Ok(finish_with_events(self, logs));
         };
         let mut previous_result = stack.previous_result.clone();
-        previous_result.counter_placements.extend(receipts);
         if is_program || stack.program.is_some() {
-            self.complete_parked_stack_with_previous(stack, EffectResult::default(), logs)
+            self.complete_parked_stack_with_previous(
+                stack,
+                EffectResult {
+                    counter_placements: receipts,
+                    ..Default::default()
+                },
+                logs,
+            )
         } else {
+            previous_result.counter_placements.extend(receipts);
             self.complete_parked_resolution_with_previous(
                 stack.item,
                 stack.resume_effect_index,

@@ -550,6 +550,21 @@ impl GameEngine {
                             )
                     )
                 });
+        let preserve_ripples_permanent_choice =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| match &pending.continuation {
+                    ResolutionContinuation::PermanentChoice { stack, .. } => {
+                        stack.program.as_ref().is_some_and(|program| {
+                            matches!(
+                                self.current_program_perform(program),
+                                Ok(SpellEffectKind::ChooseProliferatedPermanents)
+                            )
+                        })
+                    }
+                    _ => false,
+                });
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
@@ -654,6 +669,15 @@ impl GameEngine {
                 ResolutionContinuation::ProgramProliferate { .. } => {
                     // CR 608.2m preserves the started typed instruction and its exact parent
                     // cursor. Its departed controller receives a delegated recipient choice.
+                    preserve = true;
+                }
+                ResolutionContinuation::PermanentChoice { .. }
+                    if preserve_ripples_permanent_choice =>
+                {
+                    // The typed Ripples choice has already begun resolving. Preserve it when
+                    // only the physical spell owner leaves so post-cleanup refresh can remove
+                    // their exact receipt candidates and reissue the surviving controller's
+                    // choice (CR 608.2m).
                     preserve = true;
                 }
                 ResolutionContinuation::CounterReplacement {

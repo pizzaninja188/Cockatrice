@@ -2032,6 +2032,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Discover { .. }
         | SpellEffectKind::Cascade { .. }
         | SpellEffectKind::ChoosePermanents { .. }
+        | SpellEffectKind::ChooseProliferatedPermanents
         | SpellEffectKind::ChooseAndSacrifice { .. }
         | SpellEffectKind::ChoosePermanentsByTypeAndSacrificeRest { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }

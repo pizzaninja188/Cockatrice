@@ -1,0 +1,19 @@
+// Oracle ID 45bcebd0-5e93-4433-b92f-b4c161d04bd6; exact Oracle text refreshed 2026-10-31.
+// Oracle: https://api.scryfall.com/cards/45bcebd0-5e93-4433-b92f-b4c161d04bd6
+// Rulings: https://api.scryfall.com/cards/45bcebd0-5e93-4433-b92f-b4c161d04bd6/rulings
+// CR 701.34 (Proliferate), 702.26g–i (direct and indirect phasing), and 608.2m (continued resolution).
+(
+  id: "ripples_of_potential",
+  name: "Ripples of Potential",
+  face_id: "ripples_of_potential",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "proliferate", bind: ["cohort"], input: None,
+     kind: Perform(Proliferate)),
+    (id: "choose_permanents", bind: ["selected"], input: Some("cohort"),
+     kind: Perform(ChooseProliferatedPermanents)),
+    (id: "phase_out", bind: [], input: Some("selected"),
+     kind: Perform(PhaseOut(subject: PreviousEffectObjects))),
+  ], yields: []), target_bindings: [])),
+)

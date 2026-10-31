@@ -1659,6 +1659,223 @@ mod tests {
             })
     }
 
+    fn ripples_pilot_pass_priority(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+    ) -> IpcResponse {
+        const CHASM_NAME: &str = "Chasm Skulker";
+        const RIPPLES_NAME: &str = "Ripples of Potential";
+
+        let mut player_id = session
+            .engine
+            .as_ref()
+            .expect("Ripples pilot session has an engine")
+            .state
+            .priority_player_id();
+        let discard_count = {
+            let state = &session.engine.as_ref().unwrap().state;
+            if state.turn_step == tricerules_core::TurnStep::Cleanup
+                && !state.cleanup_priority_active
+                && state.cleanup_discard_player == Some(player_id)
+            {
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == player_id)
+                    .expect("Ripples cleanup actor is in the game")
+                    .hand
+                    .len()
+                    .saturating_sub(7)
+            } else {
+                0
+            }
+        };
+        if discard_count > 0 {
+            let legal_actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&player_id)
+                .expect("current cleanup actor receives hand offers");
+            let cleanup_offers = legal_actions
+                .hand_actions
+                .iter()
+                .filter(|offer| {
+                    offer.kind == HandActionKind::HandActionCleanupDiscard as i32
+                        && (player_id != 17
+                            || ![CHASM_NAME, RIPPLES_NAME].contains(&offer.card_name.as_str()))
+                })
+                .take(discard_count)
+                .map(|offer| offer.hand_index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                cleanup_offers.len(),
+                discard_count,
+                "current cleanup offers include enough cards while preserving pilot spells"
+            );
+            latest = kaya_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                        hand_card_indices: cleanup_offers,
+                    })),
+                },
+            );
+            player_id = session.engine.as_ref().unwrap().state.priority_player_id();
+            assert!(
+                kaya_batch(&latest).legal_by_player.contains_key(&player_id),
+                "post-discard response publishes current priority actions"
+            );
+        }
+        kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PassPriority(PassPriority {})),
+            },
+        )
+    }
+
+    fn ripples_pilot_cast_from_current_islands(
+        session: &mut EngineSession,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        player_id: i32,
+        card_name: &str,
+        mana_count: u32,
+    ) -> IpcResponse {
+        let spell = kaya_batch(&latest)
+            .legal_by_player
+            .get(&player_id)
+            .expect("active pilot receives current legal actions")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == card_name
+            })
+            .cloned()
+            .expect("spell is in the current cast-spell hand offers");
+        let mana_sources = kaya_available_mana_abilities(battlefield)
+            .into_iter()
+            .filter(|source| kaya_output_has_color(&source.3, 'U'))
+            .collect::<Vec<_>>();
+        assert!(
+            mana_sources.len() >= mana_count as usize,
+            "current Islands provide enough blue mana for {card_name}"
+        );
+
+        latest = kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    spell.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: spell.face_index,
+                        cast_method: CastMethod::Normal as i32,
+                        ..Default::default()
+                    }),
+                })),
+            },
+        );
+
+        let mut produced = PaymentMana::default();
+        for (object_id, generation, ability_index, output) in
+            mana_sources.into_iter().take(mana_count as usize)
+        {
+            let current_source = kaya_available_mana_abilities(battlefield)
+                .into_iter()
+                .find(|source| {
+                    source.0 == object_id && source.1 == generation && source.2 == ability_index
+                })
+                .expect("latest battlefield view retains the current Island mana offer");
+            assert_eq!(current_source.3, output);
+            assert!(kaya_output_has_color(&output, 'U'));
+            produced.u += 1;
+            latest = kaya_player_command(
+                session,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+            );
+            kaya_capture_battlefield(&latest, player_id, battlefield);
+        }
+        assert_eq!(produced.u, mana_count);
+
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&player_id)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("current spell payment offer survives Island activations");
+        let payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("pending spell cast publishes its current payment preview");
+        let transaction_id = pending.transaction_id;
+        let revision = payment.revision;
+        let payment_query = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::PaymentQuery(PaymentQuery {
+                    player_id,
+                    preview: Some(PreviewPayment {
+                        transaction_id,
+                        revision,
+                        commit_spell_cast: Some(CommitSpellCast {
+                            transaction_id,
+                            payment: Some(PaymentSelection {
+                                expected_state_revision: revision,
+                                mana: Some(produced),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                })),
+            })
+            .expect("PaymentQuery keeps the Ripples pilot session open");
+        assert!(
+            payment_query.ok,
+            "{card_name} payment preview: {}",
+            payment_query.error
+        );
+        let preview = payment_query
+            .batch
+            .and_then(|batch| batch.payment_preview)
+            .expect("PaymentQuery returns the current spell payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "{card_name} payment: {preview:?}"
+        );
+        latest = kaya_player_command(
+            session,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, player_id, battlefield);
+        latest
+    }
+
     #[test]
     fn jace_normal_session_reaches_triggered_private_discard() {
         const JACE_NAME: &str = "Jace, Cunning Castaway";
@@ -3936,5 +4153,471 @@ mod tests {
             .events
             .iter()
             .all(|event| !matches!(event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
+    }
+
+    #[test]
+    fn ripples_actual_card_casts_from_normal_offers_and_phases_out_chasm_skulker() {
+        const CHASM_NAME: &str = "Chasm Skulker";
+        const CHASM_CARD_ID: &str = "chasm_skulker";
+        const RIPPLES_NAME: &str = "Ripples of Potential";
+        const RIPPLES_CARD_ID: &str = "ripples_of_potential";
+
+        let make_deck = |player_id: i32, pilot: bool| {
+            let mut mainboard_card_name = if pilot {
+                vec![CHASM_NAME.to_string(); 4]
+            } else {
+                Vec::new()
+            };
+            if pilot {
+                mainboard_card_name.extend(vec![RIPPLES_NAME.to_string(); 4]);
+            }
+            mainboard_card_name.extend(vec![
+                if pilot { "Island" } else { "Forest" }.to_string();
+                60 - mainboard_card_name.len()
+            ]);
+            PlayerDeck {
+                player_id,
+                mainboard_card_name,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            }
+        };
+        let player_decks = vec![make_deck(17, true), make_deck(29, false)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+        assert_eq!(player_decks[1].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![
+                        CHASM_NAME.into(),
+                        RIPPLES_NAME.into(),
+                        "Island".into(),
+                        "Forest".into(),
+                    ],
+                })),
+            })
+            .expect("deck validation keeps the normal Ripples session open");
+        assert!(
+            validation.ok,
+            "complete normal Ripples decks validate: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_033,
+                    seed: 1,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("SessionStart keeps the normal Ripples session open");
+        assert!(latest.ok, "normal Ripples GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+
+        let starting = kaya_starting_player_offer(&latest)
+            .expect("GameStart publishes the eligible starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+        for _ in 0..4 {
+            latest = ripples_pilot_pass_priority(&mut session, latest);
+        }
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.players[state.active_player_idx].id, 17);
+        }
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let chasm_from_view = |objects: &[BattlefieldObject]| {
+            objects
+                .iter()
+                .find(|object| object.card_id == CHASM_CARD_ID)
+                .cloned()
+        };
+        let mut chasm_cast = false;
+        for _ in 0..8_192 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active pilot receives current legal actions")
+                    .clone();
+                if let Some(land) = actions
+                    .hand_actions
+                    .iter()
+                    .find(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned()
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+
+                let has_chasm_offer = actions.hand_actions.iter().any(|offer| {
+                    offer.kind == HandActionKind::HandActionCastSpell as i32
+                        && offer.card_name == CHASM_NAME
+                });
+                let blue_sources = kaya_available_mana_abilities(&battlefield)
+                    .into_iter()
+                    .filter(|source| kaya_output_has_color(&source.3, 'U'))
+                    .count();
+                if has_chasm_offer && blue_sources >= 3 {
+                    latest = ripples_pilot_cast_from_current_islands(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        17,
+                        CHASM_NAME,
+                        3,
+                    );
+                    for _ in 0..8 {
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                        if chasm_from_view(&battlefield).is_some() {
+                            chasm_cast = true;
+                            break;
+                        }
+                        latest = ripples_pilot_pass_priority(&mut session, latest);
+                    }
+                    assert!(
+                        chasm_cast,
+                        "Chasm resolves through ordinary priority passes"
+                    );
+                    break;
+                }
+            }
+            latest = ripples_pilot_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(chasm_cast, "ordinary current offers eventually cast Chasm");
+
+        let chasm = chasm_from_view(&battlefield).expect("current view publishes Chasm");
+        let chasm_object_id = chasm.object_id;
+        let chasm_generation = chasm.zone_change_generation;
+        let chasm_counter_total = |session: &EngineSession| {
+            session
+                .engine
+                .as_ref()
+                .expect("Ripples session has an engine")
+                .state
+                .objects
+                .get(&chasm_object_id)
+                .expect("Chasm keeps its engine object identity")
+                .counter_count(tricerules_cards::primitives::CounterKind::PlusOnePlusOne)
+        };
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(
+                state
+                    .zone_change_generation
+                    .get(&chasm_object_id)
+                    .copied()
+                    .unwrap_or(0),
+                chasm_generation,
+                "omitted generations use the engine's zero default"
+            );
+            assert_eq!(chasm_counter_total(&session), 0);
+        }
+        let (mut previous_hand_size, mut previous_library_size) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            let player = state.player_idx(17).expect("pilot is in the session");
+            (
+                state.players[player].hand.len(),
+                state.players[player].library.len(),
+            )
+        };
+        let mut natural_draw_observed = false;
+        let mut draw_trigger_resolved = false;
+        for _ in 0..8_192 {
+            latest = ripples_pilot_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+            let state = &session.engine.as_ref().unwrap().state;
+            let player = state.player_idx(17).expect("pilot remains in the session");
+            let hand_size = state.players[player].hand.len();
+            let library_size = state.players[player].library.len();
+            if !natural_draw_observed
+                && hand_size == previous_hand_size + 1
+                && library_size.checked_add(1) == Some(previous_library_size)
+            {
+                natural_draw_observed = true;
+            }
+            previous_hand_size = hand_size;
+            previous_library_size = library_size;
+            let counter_total = chasm_counter_total(&session);
+            if natural_draw_observed && counter_total == 1 {
+                let at_pilot_main = state.players[state.active_player_idx].id == 17
+                    && state.priority_player_id() == 17
+                    && state.turn_step == tricerules_core::TurnStep::Main1;
+                if at_pilot_main && state.stack.is_empty() && state.pending_resolution.is_none() {
+                    draw_trigger_resolved = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            natural_draw_observed,
+            "a later ordinary P17 draw moves one card from library to hand"
+        );
+        assert!(
+            draw_trigger_resolved,
+            "Chasm's real draw trigger resolves before the pilot Main1"
+        );
+        assert_eq!(chasm_counter_total(&session), 1);
+
+        let mut ripples_cast = false;
+        for _ in 0..8_192 {
+            let (active_player_id, priority_player_id, main_phase) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+            if active_player_id == 17 && priority_player_id == 17 && main_phase {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("active pilot receives current legal actions")
+                    .clone();
+                if let Some(land) = actions
+                    .hand_actions
+                    .iter()
+                    .find(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned()
+                {
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::PlayLand(PlayLand {
+                                source: Some(LandSource {
+                                    location: Some(
+                                        tricerules_proto::ruled::v1::land_source::Location::
+                                            HandIndex(land.hand_index),
+                                    ),
+                                    ..Default::default()
+                                }),
+                                face_index: land.face_index,
+                                ..Default::default()
+                            })),
+                        },
+                    );
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+                let has_ripples_offer = actions.hand_actions.iter().any(|offer| {
+                    offer.kind == HandActionKind::HandActionCastSpell as i32
+                        && offer.card_name == RIPPLES_NAME
+                });
+                let blue_sources = kaya_available_mana_abilities(&battlefield)
+                    .into_iter()
+                    .filter(|source| kaya_output_has_color(&source.3, 'U'))
+                    .count();
+                if has_ripples_offer && blue_sources >= 2 {
+                    latest = ripples_pilot_cast_from_current_islands(
+                        &mut session,
+                        latest,
+                        &mut battlefield,
+                        17,
+                        RIPPLES_NAME,
+                        2,
+                    );
+                    ripples_cast = true;
+                    break;
+                }
+            }
+            latest = ripples_pilot_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(
+            ripples_cast,
+            "ordinary current offers eventually cast Ripples"
+        );
+        assert_eq!(chasm_counter_total(&session), 1);
+        let ripples_stack_id = session
+            .engine
+            .as_ref()
+            .unwrap()
+            .state
+            .stack
+            .last()
+            .expect("actual Ripples is awaiting normal resolution")
+            .id;
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&ripples_stack_id].card_id,
+            RIPPLES_CARD_ID
+        );
+
+        let mut resolution_batches = Vec::new();
+        let mut proliferate_offer = None;
+        for _ in 0..8 {
+            latest = ripples_pilot_pass_priority(&mut session, latest);
+            let batch = kaya_batch(&latest).clone();
+            proliferate_offer = kaya_choice(&latest, ChoiceKind::Proliferate);
+            resolution_batches.push(batch);
+            if proliferate_offer.is_some() {
+                break;
+            }
+        }
+        let proliferate_offer = proliferate_offer
+            .expect("a returned post-command batch publishes the Proliferate choice");
+        assert!(!resolution_batches.is_empty());
+        assert_ne!(proliferate_offer.resolution_prompt_id, 0);
+        assert_eq!(proliferate_offer.deciding_player_id, 17);
+        assert_eq!((proliferate_offer.min, proliferate_offer.max), (0, 1));
+        assert_eq!(
+            proliferate_offer.candidate_object_ids,
+            vec![chasm_object_id],
+            "the real counter-bearing Chasm is the current Proliferate recipient"
+        );
+        assert_eq!(chasm_counter_total(&session), 1);
+
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: proliferate_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![chasm_object_id],
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+        );
+        resolution_batches.push(kaya_batch(&latest).clone());
+        let permanent_offer = kaya_choice(&latest, ChoiceKind::PermanentObjects)
+            .expect("the response to Proliferate immediately publishes the phase-out subset");
+        assert_ne!(permanent_offer.resolution_prompt_id, 0);
+        assert_ne!(
+            permanent_offer.resolution_prompt_id, proliferate_offer.resolution_prompt_id,
+            "the second choice has a fresh prompt ID"
+        );
+        assert_eq!(permanent_offer.deciding_player_id, 17);
+        assert_eq!((permanent_offer.min, permanent_offer.max), (0, 1));
+        assert_eq!(
+            permanent_offer.candidate_object_ids,
+            vec![chasm_object_id],
+            "the phase-out subset refers to the same receipted Chasm"
+        );
+        assert_eq!(
+            chasm_counter_total(&session),
+            2,
+            "Proliferate increments the counter before the second choice"
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            let parked_stack_id = state
+                .pending_resolution
+                .as_ref()
+                .and_then(|pending| pending.continuation.stack())
+                .map(|stack| stack.item.id);
+            assert_eq!(parked_stack_id, Some(ripples_stack_id));
+        }
+
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: permanent_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![chasm_object_id],
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+        );
+        let final_batch = kaya_batch(&latest);
+        assert!(final_batch.events.iter().any(|event| {
+            matches!(
+                event.ev.as_ref(),
+                Some(Ev::StackResolved(resolved)) if resolved.object_id == ripples_stack_id
+            )
+        }));
+        assert!(final_batch
+            .events
+            .iter()
+            .all(|event| !matches!(event.ev, Some(Ev::ResolutionChoiceRequired(_)))));
+        let state = &session.engine.as_ref().unwrap().state;
+        assert!(
+            state.stack.is_empty(),
+            "Ripples completed its stack resolution"
+        );
+        assert!(
+            state.pending_resolution.is_none(),
+            "Ripples continuation completed"
+        );
+        let chasm_object = state
+            .objects
+            .get(&chasm_object_id)
+            .expect("phasing preserves the Chasm object identity");
+        assert!(
+            chasm_object.phase_status.is_some(),
+            "the selected Chasm is actually phased out"
+        );
+        assert_eq!(
+            state
+                .zone_change_generation
+                .get(&chasm_object_id)
+                .copied()
+                .unwrap_or(0),
+            chasm_generation,
+            "phasing preserves Chasm's zone-change generation"
+        );
+        assert_eq!(
+            chasm_object.counter_count(tricerules_cards::primitives::CounterKind::PlusOnePlusOne),
+            2,
+            "phasing preserves both +1/+1 counters"
+        );
     }
 }

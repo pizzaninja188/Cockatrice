@@ -3112,7 +3112,7 @@ impl GameEngine {
                 SpellEffectKind::ChoosePermanents {
                     chooser: tricerules_card_model::primitives::PlayerRecipient::Controller,
                     ..
-                }
+                } | SpellEffectKind::ChooseProliferatedPermanents
             ),
             ResolutionContinuation::BeholdChoice { .. } => {
                 matches!(effect, SpellEffectKind::MayBehold { .. })
@@ -16714,6 +16714,197 @@ mod hideaway_authoring_tests {
         assert!(
             registry.is_ok(),
             "Hideaway paired ability should validate: {registry:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod ripples_proliferated_choice_tests {
+    use super::*;
+    use tricerules_card_model::primitives::Cardinality;
+
+    fn put_on_battlefield(
+        engine: &mut GameEngine,
+        player_index: usize,
+        card_id: &str,
+    ) -> crate::state::TriggerObjectRef {
+        let player = engine.state.players[player_index].id;
+        let object_id = *engine.state.players[player_index]
+            .hand
+            .first()
+            .expect("fixture hand has another card");
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture card")
+            .card_id = card_id.into();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Battlefield,
+            Some(player),
+        )
+        .expect("fixture permanent enters the battlefield");
+        crate::state::TriggerObjectRef {
+            object_id,
+            zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            controller_at_event: player,
+        }
+    }
+
+    fn stack_spell(engine: &mut GameEngine) -> StackItem {
+        let object_id = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("fixture hand has a stack object");
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture card")
+            .card_id = "brainstorm".into();
+        super::super::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Stack,
+            None,
+        )
+        .expect("fixture card moves to the stack");
+        let mut top = engine.observer_return_item(object_id, 0);
+        top.id = object_id;
+        top.controller = 0;
+        top.card_id = "brainstorm".into();
+        top
+    }
+
+    #[test]
+    fn proliferated_choice_offers_only_current_controller_receipts_as_nontargets() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            90_214,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        engine.state.opening = None;
+        let top = stack_spell(&mut engine);
+        let current_own = put_on_battlefield(&mut engine, 0, "forest");
+        let opponent = put_on_battlefield(&mut engine, 1, "forest");
+        let unreceipted_own = put_on_battlefield(&mut engine, 0, "sol_ring");
+        let phased_out_own = put_on_battlefield(&mut engine, 0, "island");
+        let stale_own = put_on_battlefield(&mut engine, 0, "mountain");
+        engine
+            .state
+            .objects
+            .get_mut(&phased_out_own.object_id)
+            .expect("phased-out fixture")
+            .phase_status = Some(crate::state::PhasedOutStatus {
+            phase_out_under: 0,
+            phase_in_due_after_departed_turn: false,
+            phase_in_with: None,
+            direct_attachment_snapshot: None,
+        });
+
+        let cohort = vec![
+            crate::state::TriggerObjectRef {
+                controller_at_event: 1,
+                ..current_own
+            },
+            crate::state::TriggerObjectRef {
+                controller_at_event: 0,
+                ..opponent
+            },
+            phased_out_own,
+            crate::state::TriggerObjectRef {
+                zone_change_generation: stale_own.zone_change_generation.saturating_sub(1),
+                ..stale_own
+            },
+        ];
+        let previous = EffectResult {
+            input_result_type: Some(ResultType::ProliferatedPermanentCohort {
+                cardinality: Cardinality { min: 0, max: None },
+            }),
+            program_value: Some(crate::state::ProgramValue::ProliferatedPermanentCohort(
+                cohort,
+            )),
+            ..Default::default()
+        };
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "ripples_of_potential",
+            tricerules_card_model::CardFaceId::new("ripples_of_potential").unwrap(),
+        );
+        let program_state = ProgramRunState {
+            owner,
+            pending_owners: Vec::new(),
+            frames: Vec::new(),
+            slots: vec![None],
+            in_flight: Some(Vec::new()),
+            in_flight_produced_object_provenance: None,
+        };
+        let mut events = Vec::new();
+        let mut effect_result = EffectResult::default();
+        let empty_targets = [];
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &empty_targets,
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "Ripples of Potential",
+            previous_effect_result: &previous,
+            resume_previous_result: None,
+            effect_result: &mut effect_result,
+            effect_index: 1,
+            program_state: Some(program_state),
+        };
+
+        assert!(matches!(
+            dispatch::execute_effect(&mut cx, SpellEffectKind::ChooseProliferatedPermanents)
+                .expect("the typed chooser is a nontargeting Program choice"),
+            EffectOutcome::Suspended
+        ));
+        drop(cx);
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("eligible receipt cohort opens a choice");
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(pending.presentation.min, 0);
+        assert_eq!(pending.presentation.max, 1);
+        assert_eq!(pending.presentation.candidates, vec![current_own.object_id]);
+        assert!(!pending.presentation.ordered);
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::PermanentObjects
+        );
+        let offered = events
+            .iter()
+            .find_map(|event| match event.ev.as_ref()? {
+                rv1::ruled_event::Ev::ResolutionChoiceRequired(choice) => Some(choice),
+                _ => None,
+            })
+            .expect("nontargeting permanent menu event");
+        assert_eq!(offered.candidate_object_ids, vec![current_own.object_id]);
+        assert!(offered.candidate_player_ids.is_empty());
+        assert_eq!(offered.min, 0);
+        assert_eq!(offered.max, 1);
+        assert_ne!(
+            offered.candidate_object_ids,
+            vec![unreceipted_own.object_id]
         );
     }
 }

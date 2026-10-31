@@ -665,6 +665,147 @@ pub(super) fn choose_permanents(
     Ok(EffectOutcome::Suspended)
 }
 
+/// Offer only the exact permanent incarnations that received positive counter-placement receipts
+/// from this Program Proliferate. This is a nontargeting choice and intentionally does not derive
+/// its domain from the battlefield's current counter state.
+pub(super) fn choose_proliferated_permanents(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let Some(tricerules_card_model::primitives::ResultType::ProliferatedPermanentCohort {
+        cardinality,
+    }) = cx.previous_effect_result.input_result_type.as_ref()
+    else {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate choice is missing its typed cohort input",
+        ));
+    };
+    if cardinality.min != 0 || cardinality.max.is_some() || cx.program_state.is_none() {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate choice has an invalid typed input or execution context",
+        ));
+    }
+    let Some(ProgramValue::ProliferatedPermanentCohort(cohort)) =
+        cx.previous_effect_result.program_value.as_ref()
+    else {
+        return Err(EngineError::ProgramInvariant(
+            "Proliferate choice input is not its sealed receipt cohort",
+        ));
+    };
+
+    let controller_live = cx
+        .engine
+        .state
+        .player_idx(cx.top.controller)
+        .is_some_and(|index| !cx.engine.state.players[index].has_lost);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut candidates = cohort
+        .iter()
+        .filter(|receipt| {
+            if !seen.insert((receipt.object_id, receipt.zone_change_generation)) {
+                return false;
+            }
+            if !controller_live
+                || cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&receipt.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != receipt.zone_change_generation
+            {
+                return false;
+            }
+            let Some(object) = cx.engine.state.objects.get(&receipt.object_id) else {
+                return false;
+            };
+            object.zone == Zone::Battlefield
+                && object.phase_status.is_none()
+                && cx.engine.controller_of(receipt.object_id) == Some(cx.top.controller)
+        })
+        .map(|receipt| (receipt.object_id, receipt.zone_change_generation))
+        .collect::<Vec<_>>();
+    candidates.sort_unstable();
+
+    if candidates.is_empty() {
+        cx.effect_result.program_value =
+            Some(ProgramValue::ProliferatedPermanentSelection(Vec::new()));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let candidate_ids = candidates
+        .iter()
+        .map(|(object_id, _)| *object_id)
+        .collect::<Vec<_>>();
+    let candidate_card_ids = candidate_ids
+        .iter()
+        .map(|object_id| {
+            cx.engine
+                .state
+                .objects
+                .get(object_id)
+                .map(|object| object.card_id.clone())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+    let candidate_names = candidate_ids
+        .iter()
+        .map(|object_id| {
+            cx.engine
+                .state
+                .objects
+                .get(object_id)
+                .and_then(|object| cx.engine.registry.get(&object.card_id))
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| "[object]".to_string())
+        })
+        .collect::<Vec<_>>();
+    let max = u32::try_from(candidates.len()).map_err(|_| {
+        EngineError::ProgramInvariant("Proliferate choice candidate count is unrepresentable")
+    })?;
+    let prompt = "Choose any number of permanents that received counters from this Proliferate to phase out.".to_string();
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
+                variable_mana_contribution: false,
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: cx.top.controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
+                candidate_object_ids: candidate_ids.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min: 0,
+                max,
+                ..Default::default()
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: cx.top.controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: candidate_ids,
+            min: 0,
+            max,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::PermanentObjects,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::PermanentChoice {
+            stack: cx.parked_stack(),
+            candidate_generations: candidates,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(super) fn may_behold(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
