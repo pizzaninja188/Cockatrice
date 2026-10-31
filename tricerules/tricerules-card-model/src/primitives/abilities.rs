@@ -2741,6 +2741,10 @@ pub enum StaticAbilityDef {
     /// planeswalkers to two. Multiple sources do not accumulate. This does not represent the
     /// separate, consumable as-though permissions created by The Chain Veil.
     ControllerMayActivatePlaneswalkerLoyaltyTwicePerTurn,
+    /// Teferi, Master of Time permits only its own loyalty abilities to be activated as though
+    /// they had instant timing (CR 606.3). This source-bound rule differs from the player-wide
+    /// emblem permission of Teferi, Temporal Archmage and Teferi's Talent.
+    SourceLoyaltyAbilitiesAtInstantTiming,
     /// Carth the Lion adds one to the signed loyalty cost of each planeswalker loyalty
     /// ability its controller activates. Multiple active instances accumulate. This specialized
     /// rule combines with the printed cost before payment rather than placing a separate counter.

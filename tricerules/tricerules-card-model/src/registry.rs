@@ -1218,6 +1218,16 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if matches!(
+            ability,
+            StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming
+        ) && !face_activated_abilities(face).any(|activated| activated.is_loyalty_ability())
+        {
+            return Err(RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason: "SourceLoyaltyAbilitiesAtInstantTiming requires an authored loyalty-cost activated ability on the same face".into(),
+            });
+        }
         if let StaticAbilityDef::ControllerSpellsCannotBeCountered { spell_filter } = ability {
             spell_filter
                 .validate()
@@ -5491,5 +5501,59 @@ mod delayed_trigger_this_turn_profile_tests {
             "the child id cannot reuse its parent activation id: {}",
             rejection_debug(&collision)
         );
+    }
+}
+
+#[cfg(test)]
+mod source_loyalty_permission_tests {
+    use super::*;
+
+    fn permission_card(activated_abilities: &str) -> String {
+        format!(
+            r#"(id: "source_loyalty_permission_probe", name: "Source Loyalty Permission Probe",
+                face_id: "source_loyalty_permission_probe", types: ["Planeswalker"], loyalty: Some(3),
+                static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                    definition: SourceLoyaltyAbilitiesAtInstantTiming)],
+                {activated_abilities})"#
+        )
+    }
+
+    #[test]
+    fn serialized_unit_variant_is_recognized() {
+        let definition: StaticAbilityDef = RON_OPTS
+            .from_str("SourceLoyaltyAbilitiesAtInstantTiming")
+            .expect("the serialized self-source timing definition is recognized");
+        assert_eq!(
+            format!("{definition:?}"),
+            "SourceLoyaltyAbilitiesAtInstantTiming"
+        );
+    }
+
+    #[test]
+    fn permission_requires_an_authored_loyalty_ability_on_the_same_face() {
+        let valid = permission_card(
+            r#"activated_abilities: [(ability_id: "plus_01", presentation: Fallback,
+                costs: [Loyalty(1)], effect: [GainLife(amount: 1)])]"#,
+        );
+        let _: RawCardDefinition = RON_OPTS
+            .from_str(&valid)
+            .expect("raw valid face parses before registry admission");
+        CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+            .expect("a face with its own authored loyalty ability is a valid owner");
+
+        for activated_abilities in [
+            "",
+            r#"activated_abilities: [(ability_id: "tap_01", presentation: Fallback,
+                costs: [Tap], effect: [])]"#,
+        ] {
+            let unowned = permission_card(activated_abilities);
+            let _: RawCardDefinition = RON_OPTS
+                .from_str(&unowned)
+                .expect("raw owner-negative face parses before registry admission");
+            assert!(
+                CardRegistry::from_chunks_and_tokens(&[&unowned], &[]).is_err(),
+                "a face without its own authored loyalty-cost activation must be rejected"
+            );
+        }
     }
 }

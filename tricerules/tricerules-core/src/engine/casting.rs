@@ -3169,7 +3169,8 @@ impl GameEngine {
         batch
     }
 
-    /// Teferi's static emblem waives only the default sorcery timing of loyalty abilities.
+    /// Teferi's emblem gives its controller a broad loyalty permission, while Teferi, Master of
+    /// Time's static definition gives the permission only to its own active loyalty abilities.
     /// Explicit SorcerySpeed and Equip instructions retain their own timing restriction.
     fn planeswalker_loyalty_instant_timing_allowed(
         &self,
@@ -3195,14 +3196,26 @@ impl GameEngine {
         let Some(characteristics) = self.characteristics(permanent_id) else {
             return false;
         };
-        characteristics.controller == actor
-            && characteristics.has_type("Planeswalker")
+        if characteristics.controller != actor {
+            return false;
+        }
+        let emblem_permission = characteristics.has_type("Planeswalker")
             && self.state.static_emblems.iter().any(|emblem| {
                 emblem.controller == actor
                     && emblem
                         .effects
                         .contains(&StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming)
-            })
+            });
+        let source_permission = self
+            .active_static_ability_definitions(permanent_id)
+            .iter()
+            .any(|definition| {
+                matches!(
+                    definition,
+                    StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming
+                )
+            });
+        emblem_permission || source_permission
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
@@ -6252,6 +6265,401 @@ mod cast_snapshot_tests {
         assert_eq!(fact.occurrence.zone_change_generation, Some(generation + 1));
         resolve(&mut e);
         assert_eq!(e.state.players[0].life, 24);
+    }
+
+    const SOURCE_LOYALTY_TIMING_PROBE: &str = r#"(
+        id: "source_loyalty_timing_probe", name: "Source Loyalty Timing Probe",
+        face_id: "source_loyalty_timing_probe", types: ["Planeswalker"], loyalty: Some(3),
+        static_abilities: [(ability_id: "static_01", presentation: Fallback,
+            definition: SourceLoyaltyAbilitiesAtInstantTiming)],
+        activated_abilities: [
+            (ability_id: "plus_01", presentation: Fallback,
+                costs: [Loyalty(1)], effect: [GainLife(amount: 1)]),
+            (ability_id: "strict_01", presentation: Fallback,
+                costs: [Loyalty(1)], effect: [GainLife(amount: 1)], timing: SorcerySpeed)
+        ]
+    )"#;
+
+    const ORDINARY_LOYALTY_TIMING_PROBE: &str = r#"(
+        id: "ordinary_loyalty_timing_probe", name: "Ordinary Loyalty Timing Probe",
+        face_id: "ordinary_loyalty_timing_probe", types: ["Planeswalker"], loyalty: Some(3),
+        activated_abilities: [(ability_id: "plus_01", presentation: Fallback,
+            costs: [Loyalty(1)], effect: [GainLife(amount: 1)])]
+    )"#;
+
+    const EQUIP_TIMING_PROBE: &str = r#"(
+        id: "equip_timing_probe", name: "Equip Timing Probe",
+        face_id: "equip_timing_probe", types: ["Artifact", "Equipment"],
+        activated_abilities: [(ability_id: "equip_01", presentation: Fallback,
+            costs: [Mana("{2}")],
+            effect: [Equip(target: (kind: Creature, controller: You))])]
+    )"#;
+
+    fn source_loyalty_timing_fixture() -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+        let mut e = engine_with_extra(
+            "",
+            &[
+                SOURCE_LOYALTY_TIMING_PROBE,
+                ORDINARY_LOYALTY_TIMING_PROBE,
+                EQUIP_TIMING_PROBE,
+            ],
+        );
+        let source = add(&mut e, 1, "source_loyalty_timing_probe", Zone::Battlefield);
+        let ordinary = add(
+            &mut e,
+            1,
+            "ordinary_loyalty_timing_probe",
+            Zone::Battlefield,
+        );
+        let equip = add(&mut e, 1, "equip_timing_probe", Zone::Battlefield);
+        e.state
+            .objects
+            .get_mut(&source)
+            .expect("source was inserted into the fixture")
+            .set_counter(CounterKind::Loyalty, 3);
+        e.state
+            .objects
+            .get_mut(&ordinary)
+            .expect("comparison walker was inserted into the fixture")
+            .set_counter(CounterKind::Loyalty, 3);
+        e.reconcile_activated_ability_slots();
+        e.state.turn_step = TurnStep::Upkeep;
+        e.state.players[0].mana_pool.black = 1;
+        let stack_spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        let active_player = e.state.players[0].id;
+        e.apply_scenario_command(active_player, &command(&e, stack_spell))
+            .expect("the active player puts an instant on the stack during upkeep");
+        e.apply_scenario_command(
+            active_player,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+            },
+        )
+        .expect("priority passes to the source controller while the instant remains on stack");
+        (e, source, ordinary, equip)
+    }
+
+    fn active_ability_by_id(
+        engine: &GameEngine,
+        source: ObjectId,
+        ability_id: &str,
+    ) -> (u32, tricerules_card_model::ActivatedAbilityDef) {
+        let ability = engine
+            .effective_activated_abilities(source)
+            .into_iter()
+            .find(|ability| ability.definition.ability_id.as_str() == ability_id)
+            .unwrap_or_else(|| panic!("missing active ability {ability_id} on {source}"));
+        (ability.slot, ability.definition)
+    }
+
+    fn add_temporal_archmage_timing_emblem(engine: &mut GameEngine, controller: PlayerId) {
+        engine
+            .state
+            .static_emblems
+            .push(crate::state::StaticEmblemInstance {
+                object_id: u32::MAX,
+                controller,
+                emblem_id: "teferi_temporal_archmage_emblem".into(),
+                display_name: "Teferi's Emblem".into(),
+                effects: vec![StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming],
+                triggered_ability: None,
+            });
+    }
+
+    fn activate_command(engine: &GameEngine, source: ObjectId, ability_index: u32) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: source,
+                    ability_index,
+                    source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&source)
+                        .copied()
+                        .unwrap_or_default(),
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_is_usable_during_an_opponents_priority_window() {
+        let (mut e, source, ordinary, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        assert_eq!(e.state.active_player_id(), e.state.players[0].id);
+        assert_eq!(e.state.priority_player_id(), actor);
+        assert_eq!(e.state.stack.len(), 1);
+        assert_eq!(e.state.objects[&source].zone, Zone::Battlefield);
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3
+        );
+
+        let (source_slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        assert!(
+            e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability),
+            "the source's active static permission allows its loyalty ability at instant timing"
+        );
+        assert!(e.ability_activatable(source, source_slot as usize, &ability));
+
+        let (strict_slot, strict_ability) = active_ability_by_id(&e, source, "strict_01");
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, actor, &strict_ability));
+        assert!(!e.ability_activatable(source, strict_slot as usize, &strict_ability));
+        let strict_error = e
+            .apply_scenario_command(actor, &activate_command(&e, source, strict_slot))
+            .expect_err("the source rule does not waive explicit SorcerySpeed timing");
+        assert!(strict_error
+            .to_string()
+            .contains("ability only at sorcery speed"));
+
+        e.apply_scenario_command(actor, &activate_command(&e, source, source_slot))
+            .expect("the source controller activates its loyalty ability over another spell");
+        assert_eq!(e.state.stack.len(), 2);
+
+        assert_eq!(e.state.objects[&ordinary].zone, Zone::Battlefield);
+        assert_eq!(
+            e.state.objects[&ordinary].counter_count(CounterKind::Loyalty),
+            3
+        );
+        let (ordinary_slot, ordinary_ability) = active_ability_by_id(&e, ordinary, "plus_01");
+        assert!(
+            !e.ability_activatable(ordinary, ordinary_slot as usize, &ordinary_ability),
+            "the self-only permission does not grant instant timing to another planeswalker"
+        );
+        let ordinary_error = e
+            .apply_scenario_command(actor, &activate_command(&e, ordinary, ordinary_slot))
+            .expect_err("the ordinary planeswalker remains sorcery timed");
+        assert!(ordinary_error
+            .to_string()
+            .contains("ability only at sorcery speed"));
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_preserves_emblem_breadth_and_equip_limit() {
+        let (mut e, _, ordinary, equip) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        add_temporal_archmage_timing_emblem(&mut e, actor);
+
+        let (ordinary_slot, ordinary_ability) = active_ability_by_id(&e, ordinary, "plus_01");
+        assert!(e.planeswalker_loyalty_instant_timing_allowed(ordinary, actor, &ordinary_ability));
+        e.apply_scenario_command(actor, &activate_command(&e, ordinary, ordinary_slot))
+            .expect("the emblem still grants its controller instant timing on any walker");
+
+        let (equip_slot, equip_ability) = active_ability_by_id(&e, equip, "equip_01");
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(equip, actor, &equip_ability));
+        assert!(!e.ability_activatable(equip, equip_slot as usize, &equip_ability));
+        let error = e
+            .apply_scenario_command(actor, &activate_command(&e, equip, equip_slot))
+            .expect_err("the emblem does not waive Equip's sorcery-speed restriction");
+        assert!(error.to_string().contains("ability only at sorcery speed"));
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_checks_actor_priority_pending_choice_and_untap_step() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        let other_player = e.state.players[0].id;
+        let (slot, ability) = active_ability_by_id(&e, source, "plus_01");
+
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, other_player, &ability));
+        e.state.priority_idx = 0;
+        let no_priority_error = e
+            .apply_scenario_command(actor, &activate_command(&e, source, slot))
+            .expect_err("the source controller cannot activate without priority");
+        assert!(no_priority_error.to_string().contains("not your priority"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3
+        );
+        assert!(e.state.activation_uses_this_turn.is_empty());
+
+        let wrong_controller_error = e
+            .apply_scenario_command(other_player, &activate_command(&e, source, slot))
+            .expect_err("another player cannot activate the source's loyalty ability");
+        assert!(wrong_controller_error
+            .to_string()
+            .contains("ability source is not in its authored zone"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3
+        );
+
+        e.state.priority_idx = 1;
+        e.state.pending_ability_activation = Some(rv1::PendingAbilityActivation::default());
+        let no_priority_error = e
+            .apply_scenario_command(actor, &activate_command(&e, source, slot))
+            .expect_err("no player receives priority while an activation choice is pending");
+        assert!(no_priority_error
+            .to_string()
+            .contains("pending ability activation"));
+        e.state.pending_ability_activation = None;
+
+        e.state.turn_step = TurnStep::Untap;
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
+        assert!(!e.ability_activatable(source, slot as usize, &ability));
+        let untap_error = e
+            .apply_scenario_command(actor, &activate_command(&e, source, slot))
+            .expect_err("the source rule does not create priority during the untap step");
+        assert!(untap_error
+            .to_string()
+            .contains("ability only at sorcery speed"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3
+        );
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_limit_survives_a_layer_two_control_change() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let original_controller = e.state.players[1].id;
+        let new_controller = e.state.players[0].id;
+        let (slot, _) = active_ability_by_id(&e, source, "plus_01");
+        e.apply_scenario_command(original_controller, &activate_command(&e, source, slot))
+            .expect("the source controller uses its one loyalty activation");
+
+        let usage_key = e.activation_use_key(source, ActivationUseIdentity::Loyalty);
+        assert_eq!(
+            e.state.activation_uses_this_turn.get(&usage_key),
+            Some(&1),
+            "the successful activation is recorded against this object for the turn"
+        );
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(new_controller),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1_000_000,
+        });
+        e.reindex_battlefield_control(&mut Vec::new());
+        assert_eq!(e.controller_of(source), Some(new_controller));
+        assert_eq!(e.state.objects[&source].controller, new_controller);
+
+        e.state.priority_idx = 0;
+        let (new_slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        assert!(e.planeswalker_loyalty_instant_timing_allowed(source, new_controller, &ability));
+        assert!(!e.activation_limit_allows(source, new_slot as usize, &ability));
+        let error = e
+            .apply_scenario_command(new_controller, &activate_command(&e, source, new_slot))
+            .expect_err("changing control does not reset this permanent's turn allowance");
+        assert!(error.to_string().contains("activation limit reached"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            4
+        );
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_survives_a_current_type_change() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Artifact],
+                    creature_types: Vec::new(),
+                    land_types: Vec::new(),
+                },
+            ),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1_000_000,
+        });
+
+        let current = e
+            .characteristics(source)
+            .expect("the source remains on the battlefield");
+        assert!(current.has_type("Artifact"));
+        assert!(!current.has_type("Planeswalker"));
+        let (slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        assert!(e
+            .active_static_ability_definitions(source)
+            .iter()
+            .any(|definition| matches!(
+                definition,
+                StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming
+            )));
+        assert!(e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
+        e.apply_scenario_command(actor, &activate_command(&e, source, slot))
+            .expect("CR 606.2 keys loyalty status to its cost, not the current type line");
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_uses_active_definitions_after_ability_removal() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        let (slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        assert!(e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
+
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1_000_000,
+        });
+
+        assert!(!e
+            .active_static_ability_definitions(source)
+            .iter()
+            .any(|definition| matches!(
+                definition,
+                StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming
+            )));
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
+        assert!(!e.ability_activatable(source, slot as usize, &ability));
+        assert!(e.effective_activated_abilities(source).is_empty());
+    }
+
+    #[test]
+    fn self_source_loyalty_timing_ends_after_departure_or_stale_generation() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        let (slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        let stale_command = activate_command(&e, source, slot);
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or_default();
+        e.state
+            .zone_change_generation
+            .insert(source, generation + 1);
+
+        let stale_error = e
+            .apply_scenario_command(actor, &stale_command)
+            .expect_err("the previous source generation cannot activate");
+        assert!(stale_error
+            .to_string()
+            .contains("stale ability source generation"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3
+        );
+
+        super::super::resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the source leaves through the existing zone-change funnel");
+        assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
+        assert!(e.active_static_ability_definitions(source).is_empty());
     }
 }
 
