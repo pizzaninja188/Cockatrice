@@ -22413,3 +22413,132 @@ fn token_copy_exception_accepts_explicit_colorless_override() {
         Ok(())
     );
 }
+
+fn phase_out_profile_fixture() -> crate::primitives::SpellEffectKind {
+    crate::primitives::SpellEffectKind::PhaseOut {
+        subject: crate::primitives::EffectSubject::Chosen(Box::new(
+            crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                controller: crate::primitives::TargetController::NotYou,
+                ..Default::default()
+            },
+        )),
+    }
+}
+
+#[test]
+fn phase_out_accepts_only_the_direct_ability_profile() {
+    let effect = phase_out_profile_fixture();
+    assert_eq!(
+        effect.validate(crate::primitives::EffectContext::Ability),
+        Ok(()),
+        "Teferi's exact chosen Creature/NotYou instruction is admitted on its ability"
+    );
+    assert_eq!(
+        effect
+            .validate(crate::primitives::EffectContext::Spell)
+            .unwrap_err(),
+        "PhaseOut requires a direct ability effect"
+    );
+}
+
+#[test]
+fn phase_out_rejects_target_profiles_that_include_only_opponents() {
+    let effect = crate::primitives::SpellEffectKind::PhaseOut {
+        subject: crate::primitives::EffectSubject::Chosen(Box::new(
+            crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                controller: crate::primitives::TargetController::Opponent,
+                ..Default::default()
+            },
+        )),
+    };
+    assert_eq!(
+        effect
+            .validate(crate::primitives::EffectContext::Ability)
+            .unwrap_err(),
+        "PhaseOut requires one chosen creature target you do not control"
+    );
+}
+
+#[test]
+fn phase_out_rejects_modal_granted_activated_ability_bypass() {
+    let effect: crate::primitives::SpellEffectKind = ron::from_str(
+        r#"ApplyPermanentModifier(
+            subject: Source,
+            modifier: GrantActivatedAbility((
+                ability_id: "granted_modal",
+                presentation: Fallback,
+                source_zone: Battlefield,
+                costs: [],
+                effect: [],
+                modal: Some((min_modes: 1, max_modes: 1, modes: [
+                    (mode_id: "phase_out", presentation: Fallback,
+                        effects: [PhaseOut(subject: Chosen((
+                            kind: Creature, controller: NotYou
+                        )))],
+                        targeting: Some((groups: [(
+                            min: 1, max: 1, prompt: "Choose target creature",
+                            effect_indices: [0]
+                        )]))),
+                    (mode_id: "draw", presentation: Fallback,
+                        effects: [Draw(who: Controller, count: 1)])
+                ]))
+            )),
+            duration: UntilEndOfTurn
+        )"#,
+    )
+    .expect("modal granted-ability PhaseOut fixture parses");
+
+    assert_eq!(
+        effect
+            .validate(crate::primitives::EffectContext::Ability)
+            .unwrap_err(),
+        "PhaseOut is supported only as a direct ability effect"
+    );
+}
+
+#[test]
+fn phase_out_rejects_a_nested_reflexive_trigger_effect() {
+    let effect: crate::primitives::SpellEffectKind = ron::from_str(
+        r#"CreateReflexiveTrigger(ability: (
+            ability_id: "reflexive_01", presentation: Fallback,
+            effect: [PhaseOut(subject: Chosen((kind: Creature, controller: NotYou)))],
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose target creature", effect_indices: [0])]))
+        ))"#,
+    )
+    .expect("nested reflexive PhaseOut fixture parses");
+
+    assert_eq!(
+        effect
+            .validate(crate::primitives::EffectContext::Ability)
+            .unwrap_err(),
+        "PhaseOut is supported only as a direct ability effect"
+    );
+}
+
+#[test]
+fn phase_out_remains_outside_the_authored_program_operation_whitelist() {
+    let program: crate::CardProgram = ron::from_str(
+        r#"(target_aliases: [], body: (steps: [
+            (id: "phase", bind: [], input: None,
+                kind: Perform(PhaseOut(subject: Chosen((kind: Creature, controller: NotYou))))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("program PhaseOut fixture parses before whitelist validation");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "phase_out_program_fixture".into(),
+        face_id: crate::CardFaceId::new("phase_out_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+    });
+
+    assert!(matches!(
+        crate::primitives::CompiledProgram::compile(
+            owner,
+            crate::primitives::EffectContext::Ability,
+            &program,
+        ),
+        Err(reason) if reason == "effect is not in the resolution-program operation whitelist"
+    ));
+}

@@ -24,12 +24,13 @@ use crate::state::{
     PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder,
     PendingWardPayment, PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
-    ProgramCardPartition, ProgramCardRef, ProgramPartitionMovePlan, ProgramRunState, ProgramValue,
-    ReplacementPriority, ResolutionContinuation, RoomState, SimultaneousEntryBatch,
-    SpellCastMethod, StackItem, StackObjectRef, StackPresentation, StackTarget, StagedTrigger,
-    StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry, TokenEntryBatchOptions,
-    TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey,
-    TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
+    PreparedPermanentDesignation, ProgramCardPartition, ProgramCardRef, ProgramPartitionMovePlan,
+    ProgramRunState, ProgramValue, ReplacementPriority, ResolutionContinuation, RoomState,
+    SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
+    StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
+    TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
+    TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use crate::state::{DoubleFacedToken, TokenCopySnapshot};
 use prost::Message;
@@ -227,6 +228,7 @@ mod mass_sacrifice;
 mod multikicker_tests;
 mod opening;
 mod payment;
+mod phasing;
 mod preparation;
 mod presentation;
 mod priority;
@@ -1403,11 +1405,12 @@ struct PlayerBattlefieldSnapshot {
 struct BattlefieldObjectSnapshot {
     chosen_opponent_labels: Vec<String>,
     chosen_creature_type_labels: Vec<String>,
-    preparation: Option<ObjectId>,
+    preparation: Option<PreparedPermanentDesignation>,
+    phased_out: bool,
     object_id: ObjectId,
     card_id: String,
     owner: PlayerId,
-    controller: PlayerId,
+    controller: Option<PlayerId>,
     zone: Zone,
     tapped: bool,
     summoning_sick: bool,
@@ -1692,6 +1695,7 @@ fn new_object_from_card(
         must_block_if_able: face.must_block_if_able,
         face_up_index: 0,
         face_down: false,
+        phase_status: None,
     }
 }
 
@@ -2075,7 +2079,7 @@ impl GameEngine {
         self.state
             .objects
             .get(&object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
+            .is_some_and(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             && self
                 .state
                 .zone_change_generation

@@ -498,7 +498,9 @@ impl TargetSourceIdentity {
                 .state
                 .objects
                 .get(&self.object_id)
-                .is_some_and(|object| object.zone == self.expected_zone)
+                .is_some_and(|object| {
+                    object.zone == self.expected_zone && object.phase_status.is_none()
+                })
         {
             return engine
                 .characteristics(self.object_id)
@@ -533,7 +535,7 @@ fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
         .state
         .objects
         .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
         && engine.characteristics(tid).is_some_and(|value| {
             value.is_creature() || value.has_type("Planeswalker") || value.has_type("Battle")
         })
@@ -544,7 +546,7 @@ fn destroy_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
         .state
         .objects
         .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
         && engine
             .characteristics(tid)
             .is_some_and(|value| value.is_creature())
@@ -562,7 +564,7 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
     state
         .objects
         .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
 }
 
 /// Check if `oid` is a legal graveyard target for a [`GraveyardFilter`].
@@ -873,7 +875,7 @@ pub(super) fn attachment_filter_legal(
     let Some(object) = engine.state.objects.get(&oid) else {
         return false;
     };
-    if object.zone != Zone::Battlefield {
+    if object.zone != Zone::Battlefield || object.phase_status.is_some() {
         return false;
     }
     let Some(characteristics) = engine.characteristics(oid) else {
@@ -946,7 +948,11 @@ pub(super) fn equipment_attachment_legal(
     let Some(recipient_object) = engine.state.objects.get(&recipient_id) else {
         return false;
     };
-    if equipment_object.zone != Zone::Battlefield || recipient_object.zone != Zone::Battlefield {
+    if equipment_object.zone != Zone::Battlefield
+        || equipment_object.phase_status.is_some()
+        || recipient_object.zone != Zone::Battlefield
+        || recipient_object.phase_status.is_some()
+    {
         return false;
     }
     let Some(equipment) = engine.characteristics(equipment_id) else {
@@ -1008,7 +1014,7 @@ pub(super) fn object_matches_mass_filter(
     let Some(o) = engine.state.objects.get(&oid) else {
         return false;
     };
-    if o.zone != Zone::Battlefield {
+    if o.zone != Zone::Battlefield || o.phase_status.is_some() {
         return false;
     }
     let Some(characteristics) = engine.characteristics(oid) else {
@@ -1405,6 +1411,9 @@ fn validate_effect_targets(
             subject: EffectSubject::TargetAlias(_),
             ..
         }
+        | SpellEffectKind::PhaseOut {
+            subject: EffectSubject::TargetAlias(_),
+        }
         | SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::TargetAlias(_),
         } => {
@@ -1486,6 +1495,38 @@ fn validate_effect_targets(
                     "target must be a creature on the battlefield",
                 ));
             }
+        }
+        SpellEffectKind::PhaseOut {
+            subject: EffectSubject::Chosen(_),
+        } => {
+            let roles = effect.target_roles();
+            let [TargetRole::Filtered(filter)] = roles.as_slice() else {
+                return Err(EngineError::Illegal("PhaseOut requires one filtered creature target"));
+            };
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("PhaseOut requires exactly one target"));
+            }
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
+                return Err(EngineError::Illegal(
+                    "PhaseOut target must be a creature the ability controller does not control",
+                ));
+            }
+        }
+        SpellEffectKind::PhaseOut {
+            subject: EffectSubject::Source
+            | EffectSubject::AttachedObject
+            | EffectSubject::TriggerObject
+            | EffectSubject::PreviousEffectObject
+            | EffectSubject::PreviousEffectObjects,
+        } => {
+            return Err(EngineError::Illegal("PhaseOut requires one chosen creature target"));
         }
         SpellEffectKind::TapOrUntap { target: _ }
         | SpellEffectKind::SkipNextUntap { target: _ }
@@ -4123,6 +4164,134 @@ mod tests {
     }
     use super::*;
     use tricerules_card_model::{primitives::TargetGroupDef, CounterKind};
+
+    #[test]
+    fn phased_out_target_source_quality_uses_saved_lki() {
+        let decks = Some(vec![vec!["forest".into(); 7], vec!["forest".into(); 7]]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026103101,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
+        let source_id = engine.state.players[0].hand[0];
+        engine.state.players[0].hand.retain(|&id| id != source_id);
+        engine.state.players[0].battlefield.push(source_id);
+        engine.state.objects.get_mut(&source_id).unwrap().zone = Zone::Battlefield;
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let source = TargetSourceIdentity::current(&engine, source_id);
+        engine.state.last_known_colors_by_generation.insert(
+            (source_id, generation),
+            vec![tricerules_card_model::Color::Blue],
+        );
+        engine
+            .state
+            .last_known_types_by_generation
+            .insert((source_id, generation), vec!["Artifact".into()]);
+        engine
+            .state
+            .objects
+            .get_mut(&source_id)
+            .unwrap()
+            .phase_status = Some(crate::state::PhasedOutStatus {
+            phase_out_under: 0,
+            phase_in_due_after_departed_turn: false,
+            phase_in_with: None,
+            direct_attachment_snapshot: None,
+        });
+
+        assert_eq!(
+            source.quality_values(&engine),
+            (
+                vec![tricerules_card_model::Color::Blue],
+                vec!["Artifact".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn phased_out_object_is_not_a_target_mass_or_attachment_recipient() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026103102,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
+        let target = engine.state.players[0].hand[0];
+        engine.state.players[0].hand.retain(|&id| id != target);
+        engine.state.players[0].battlefield.push(target);
+        engine.state.objects.get_mut(&target).unwrap().zone = Zone::Battlefield;
+        let equipment = engine.state.players[1].hand[0];
+        engine.state.players[1].hand.retain(|&id| id != equipment);
+        engine.state.players[1].battlefield.push(equipment);
+        let equipment_object = engine.state.objects.get_mut(&equipment).unwrap();
+        equipment_object.card_id = "bonesplitter".into();
+        equipment_object.zone = Zone::Battlefield;
+
+        let filter = issue_176_target("(kind: Creature)");
+        let source = TargetSourceIdentity::current(&engine, u32::MAX);
+        assert!(target_filter_legal_at_resolution(
+            &engine,
+            &filter,
+            target,
+            1,
+            source,
+            TriggerContext::default()
+        ));
+        assert!(object_matches_mass_filter(&engine, target, &filter));
+        assert!(attachment_filter_legal(
+            &engine,
+            &filter,
+            AttachmentRecipient::Object(target),
+            u32::MAX,
+            1
+        ));
+        assert!(equipment_attachment_legal(&engine, equipment, target));
+
+        engine.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        let target_legal = target_filter_legal_at_resolution(
+            &engine,
+            &filter,
+            target,
+            1,
+            source,
+            TriggerContext::default(),
+        );
+        let mass_legal = object_matches_mass_filter(&engine, target, &filter);
+        let attachment_legal = attachment_filter_legal(
+            &engine,
+            &filter,
+            AttachmentRecipient::Object(target),
+            u32::MAX,
+            1,
+        );
+        let equipment_legal = equipment_attachment_legal(&engine, equipment, target);
+        assert!(
+            !target_legal && !mass_legal && !attachment_legal && !equipment_legal,
+            "phased-out recipient remained legal: target={target_legal}, mass={mass_legal}, attachment={attachment_legal}, equipment={equipment_legal}"
+        );
+    }
 
     #[test]
     fn artifact_exchange_targets_require_a_current_same_player_pair() {

@@ -4,6 +4,45 @@ namespace ruled_e2e
 {
 namespace
 {
+class TeferiPhaseInObserver final : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+
+    int phaseInController = -1;
+    quint32 phaseInObjectId = 0;
+    quint32 phaseInAttachmentId = 0;
+    ruled::v1::PhaseId phaseInSnapshotPhase = ruled::v1::PHASE_ID_UNSPECIFIED;
+    std::optional<Permanent> targetAtUntap;
+    std::optional<Permanent> attachmentAtUntap;
+
+    void onRuledEvent(const ruled::v1::RuledEvent &ev) override
+    {
+        OpeningDriver::onRuledEvent(ev);
+        const bool beforeDraw = phase == ruled::v1::PHASE_ID_UNTAP || phase == ruled::v1::PHASE_ID_UPKEEP;
+        if (!ev.has_zone_view() || ev.zone_view().battlefields_unchanged() || !beforeDraw ||
+            activePlayer != phaseInController || phaseInObjectId == 0 || phaseInAttachmentId == 0) {
+            return;
+        }
+        const auto battlefield = battlefieldByPlayer.find(phaseInController);
+        if (battlefield == battlefieldByPlayer.end()) {
+            return;
+        }
+        const auto target = std::find_if(battlefield->second.begin(), battlefield->second.end(), [&](const auto &object) {
+            return object.oid == phaseInObjectId;
+        });
+        const auto attachment = std::find_if(battlefield->second.begin(), battlefield->second.end(), [&](const auto &object) {
+            return object.oid == phaseInAttachmentId;
+        });
+        if (target != battlefield->second.end() && attachment != battlefield->second.end() && !target->phasedOut &&
+            !attachment->phasedOut) {
+            phaseInSnapshotPhase = phase;
+            targetAtUntap = *target;
+            attachmentAtUntap = *attachment;
+        }
+    }
+};
+
 TEST_F(RuledE2ESmokeTest, PropagandaAttackPaymentIsPrivateCancelableAndCommittedWithExactMana)
 {
     const auto started = startServers();
@@ -658,6 +697,478 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSpecialCastReac
     EXPECT_EQ(observer->defense, -1);
     EXPECT_EQ(p1.serverCardByEngineOid[battleOid], exiledPhysicalId);
     EXPECT_EQ(p2.serverCardByEngineOid[battleOid], exiledPhysicalId);
+}
+
+TEST_F(RuledE2ESmokeTest, TeferiPhasesOutAttackingCreatureAndAttachmentWithoutPhysicalMovement)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    TeferiPhaseInObserver p1(true, QStringLiteral("teferiphasep1"), &transcript);
+    TeferiPhaseInObserver p2(false, QStringLiteral("teferiphasep2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Teferi phase game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Teferi phase game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.activePlayer == p1.myId && p2.activePlayer == p1.myId && p1.priorityPlayer == p1.myId &&
+            p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.activePlayer, p1.myId);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto publishTeferiPhaseStops = [](OpeningDriver &client) -> ::testing::AssertionResult {
+        ruled::v1::RuledCommand command;
+        auto *policy = command.mutable_set_auto_pass_policy();
+        // Retain the actual pre-draw Upkeep view, the P2 attacker declaration, and P1's
+        // post-declaration response window. Re-publish Main1 because this replaces the policy.
+        for (const ruled::v1::PhaseId phase : {ruled::v1::PHASE_ID_MAIN1, ruled::v1::PHASE_ID_UPKEEP,
+                                               ruled::v1::PHASE_ID_DECLARE_ATTACKERS,
+                                               ruled::v1::PHASE_ID_DECLARE_BLOCKERS}) {
+            policy->add_stop_on_own_turn(phase);
+            policy->add_stop_on_opponent_turn(phase);
+        }
+        const quint64 commandId = client.nextCmdId;
+        client.sendRuled(command, QStringLiteral("publish Teferi Upkeep and combat stops"));
+        const auto responseReady = client.pumpUntil(
+            [&] { return client.responses.count(commandId) > 0; }, 10000, "Teferi phase-stop policy response");
+        if (!responseReady) {
+            return responseReady;
+        }
+        if (client.responses.at(commandId).response_code() != Response::RespOk) {
+            return ::testing::AssertionFailure()
+                   << "Teferi phase-stop policy failed with code " << client.responses.at(commandId).response_code();
+        }
+        return ::testing::AssertionSuccess();
+    };
+    auto put = [&](int playerId, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *placement = command.mutable_dev_command()->mutable_put_card_in_zone();
+        command.mutable_dev_command()->set_target_player_id(playerId);
+        placement->set_card_name(cardName);
+        placement->set_zone(zone);
+        placement->set_ready(ready);
+        return send(p1, command, QStringLiteral("Teferi phase setup: put %1").arg(QString::fromLatin1(cardName)));
+    };
+    auto addBlueMana = [&](int playerId, int amount) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(playerId);
+        dev->mutable_add_mana()->set_u(amount);
+        return send(p1, command, QStringLiteral("Teferi phase setup: add blue mana"));
+    };
+    auto pass = [&](OpeningDriver &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("pass Teferi phase priority"));
+    };
+    auto passCurrent = [&]() {
+        OpeningDriver *active = p1.activePlayer == p1.myId ? &p1 : p2.activePlayer == p2.myId ? &p2 : nullptr;
+        if (active) {
+            const auto cleanupDiscards = active->handActions(ruled::v1::HAND_ACTION_CLEANUP_DISCARD);
+            if (cleanupDiscards.size() > 7) {
+                ruled::v1::RuledCommand discard;
+                auto *selection = discard.mutable_discard_to_hand_size();
+                for (int i = 0; i < cleanupDiscards.size() - 7; ++i) {
+                    selection->add_hand_card_indices(cleanupDiscards.at(i)->hand_index());
+                }
+                return send(*active, discard, QStringLiteral("discard to cleanup hand size"));
+            }
+        }
+        if (p1.phase == ruled::v1::PHASE_ID_CLEANUP && p2.phase == ruled::v1::PHASE_ID_CLEANUP &&
+            p1.stackDepth == 0 && p2.stackDepth == 0 && !p1.pendingChoice.has_value() &&
+            !p2.pendingChoice.has_value()) {
+            // Cleanup has no ordinary pass window. Pump for engine-driven turn progression instead
+            // of submitting a stale pass from the preceding combat step.
+            p1.pump(25);
+            p2.pump(25);
+            return true;
+        }
+        if (p1.priorityPlayer == p1.myId) {
+            return pass(p1);
+        }
+        if (p1.priorityPlayer == p2.myId) {
+            return pass(p2);
+        }
+        p1.pump(25);
+        p2.pump(25);
+        return true;
+    };
+    auto waitFor = [&](const std::function<bool()> &predicate, int timeoutMs) {
+        QElapsedTimer wait;
+        wait.start();
+        while (!predicate() && wait.elapsed() < timeoutMs) {
+            p1.pump(25);
+            p2.pump(25);
+            if (predicate()) {
+                break;
+            }
+            if ((p1.priorityPlayer == p1.myId || p1.priorityPlayer == p2.myId) && !passCurrent()) {
+                return false;
+            }
+        }
+        return predicate();
+    };
+    auto advanceTo = [&](ruled::v1::PhaseId phase, int activePlayer) {
+        return waitFor(
+            [&] {
+                return p1.phase == phase && p2.phase == phase && p1.activePlayer == activePlayer &&
+                       p2.activePlayer == activePlayer;
+            },
+            30000);
+    };
+    auto settleStack = [&] {
+        return waitFor([&] { return p1.stackDepth == 0 && p2.stackDepth == 0; }, 15000);
+    };
+    auto find = [](const OpeningDriver &client, int controller, const QString &cardId)
+        -> std::optional<OpeningDriver::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto object = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                         [&](const auto &permanent) { return permanent.cardId == cardId; });
+        return object == battlefield->second.end() ? std::nullopt : std::optional(*object);
+    };
+    auto findByOid = [](const OpeningDriver &client, int controller, quint32 oid)
+        -> std::optional<OpeningDriver::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto object = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                         [oid](const auto &permanent) { return permanent.oid == oid; });
+        return object == battlefield->second.end() ? std::nullopt : std::optional(*object);
+    };
+    auto opponentHandNamesAreRedacted = [](const OpeningDriver &observer) {
+        const auto names = observer.physicalHandNamesByPlayer.find(observer.oppId);
+        return names != observer.physicalHandNamesByPlayer.end() &&
+               std::all_of(names->second.begin(), names->second.end(), [](const std::string &name) { return name.empty(); });
+    };
+    auto plusOneCounterCount = [](const QString &annotation) -> std::optional<int> {
+        static const QRegularExpression counterPattern(QStringLiteral(R"(^([0-9]+) \+1/\+1 counter\(s\)$)"));
+        const auto match = counterPattern.match(annotation);
+        if (!match.hasMatch()) {
+            return std::nullopt;
+        }
+        bool ok = false;
+        const int count = match.captured(1).toInt(&ok);
+        return ok ? std::optional<int>(count) : std::nullopt;
+    };
+    auto movedPhysicalCardSince = [](const OpeningDriver &client, size_t firstEvent, int ownerId, int physicalId) {
+        for (size_t i = firstEvent; i < client.physicalMoveEvents.size(); ++i) {
+            const auto &move = client.physicalMoveEvents[i];
+            if ((move.start_player_id() == ownerId && move.card_id() == physicalId) ||
+                (move.target_player_id() == ownerId && move.new_card_id() == physicalId)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // The fixture seeds a real opponent creature and attached Equipment; all Teferi cast and
+    // loyalty commands below still come from current engine offers.
+    ASSERT_TRUE(put(p2.myId, "Chasm Skulker", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    auto chasm = find(p1, p2.myId, QStringLiteral("chasm_skulker"));
+    ASSERT_TRUE(chasm.has_value());
+    const quint32 chasmOid = chasm->oid;
+    ASSERT_TRUE(put(p2.myId, "Meltstrider's Gear", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(p2.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p2.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &attachGroup = p2.pendingTriggerTarget->targets().groups(0);
+    ASSERT_NE(std::find(attachGroup.valid_permanent_ids().begin(), attachGroup.valid_permanent_ids().end(), chasmOid),
+              attachGroup.valid_permanent_ids().end());
+    ruled::v1::RuledCommand chooseGearTarget;
+    auto *gearTarget = chooseGearTarget.mutable_choose_trigger_target()->add_targets();
+    gearTarget->set_object_id(chasmOid);
+    gearTarget->set_group_index(attachGroup.group_index());
+    gearTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    p2.pendingTriggerTarget.reset();
+    ASSERT_TRUE(send(p2, chooseGearTarget, QStringLiteral("attach Meltstrider's Gear to Chasm Skulker")));
+    ASSERT_TRUE(settleStack());
+    // Stack depth reaches zero before the follow-up public zone-view snapshot necessarily arrives.
+    // Pump only while waiting for the attachment observation so this setup wait cannot pass priority.
+    QElapsedTimer attachmentObservationWait;
+    attachmentObservationWait.start();
+    auto attachedGear = find(p1, p2.myId, QStringLiteral("meltstrider's_gear"));
+    while ((!attachedGear.has_value() || attachedGear->attachmentObjectId != chasmOid) &&
+           attachmentObservationWait.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+        attachedGear = find(p1, p2.myId, QStringLiteral("meltstrider's_gear"));
+    }
+    QStringList observedBattlefieldIds;
+    const auto observedBattlefield = p1.battlefieldByPlayer.find(p2.myId);
+    if (observedBattlefield != p1.battlefieldByPlayer.end()) {
+        for (const auto &permanent : observedBattlefield->second) {
+            observedBattlefieldIds.append(QStringLiteral("%1[oid=%2,attachment=%3]")
+                                              .arg(permanent.cardId)
+                                              .arg(permanent.oid)
+                                              .arg(permanent.attachmentObjectId));
+        }
+    }
+    ASSERT_TRUE(attachedGear.has_value()) << "Observed battlefield: " << observedBattlefieldIds.join(", ").toStdString();
+    ASSERT_EQ(attachedGear->attachmentObjectId, chasmOid);
+
+    ASSERT_TRUE(put(p1.myId, "Teferi, Master of Time", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(addBlueMana(p1.myId, 4));
+    const auto *teferiCastOffer = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                                QStringLiteral("Teferi, Master of Time"));
+    ASSERT_NE(teferiCastOffer, nullptr);
+    ruled::v1::RuledCommand castTeferi;
+    castTeferi.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    castTeferi.mutable_cast_spell()->mutable_source()->set_hand_index(teferiCastOffer->hand_index());
+    ASSERT_TRUE(send(p1, castTeferi, QStringLiteral("cast Teferi from the current hand offer")));
+    ASSERT_EQ(p1.stackDepth, 1);
+    ASSERT_EQ(p2.stackDepth, 1);
+    ASSERT_TRUE(settleStack());
+    ASSERT_TRUE(publishTeferiPhaseStops(p1));
+    ASSERT_TRUE(publishTeferiPhaseStops(p2));
+
+    const auto teferi = find(p1, p1.myId, QStringLiteral("teferi,_master_of_time"));
+    ASSERT_TRUE(teferi.has_value());
+    ASSERT_EQ(teferi->loyalty, 3);
+    const quint32 teferiOid = teferi->oid;
+    const quint64 teferiGeneration = teferi->generation;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(teferiOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(teferiOid));
+    const int teferiPhysicalId = p1.serverCardByEngineOid.at(teferiOid);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(teferiOid), teferiPhysicalId);
+    ASSERT_TRUE(find(p2, p1.myId, QStringLiteral("teferi,_master_of_time")).has_value());
+    EXPECT_EQ(find(p2, p1.myId, QStringLiteral("teferi,_master_of_time"))->generation, teferiGeneration);
+
+    p1.phaseInController = p2.myId;
+    p2.phaseInController = p2.myId;
+    p1.phaseInObjectId = chasmOid;
+    p2.phaseInObjectId = chasmOid;
+    const auto chasmGear = find(p1, p2.myId, QStringLiteral("meltstrider's_gear"));
+    ASSERT_TRUE(chasmGear.has_value());
+    const quint32 gearOid = chasmGear->oid;
+    p1.phaseInAttachmentId = gearOid;
+    p2.phaseInAttachmentId = gearOid;
+
+    // Capture a real unphased battlefield zone view at P2's Upkeep before the draw.
+    ASSERT_TRUE(advanceTo(ruled::v1::PHASE_ID_UPKEEP, p2.myId));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.phaseInSnapshotPhase == ruled::v1::PHASE_ID_UPKEEP; }, 10000,
+                             "P1 actual Upkeep battlefield view"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.phaseInSnapshotPhase == ruled::v1::PHASE_ID_UPKEEP; }, 10000,
+                             "P2 actual Upkeep battlefield view"));
+    ASSERT_TRUE(p1.targetAtUntap.has_value());
+    ASSERT_TRUE(p2.targetAtUntap.has_value());
+    const QString countersAtUpkeep = p1.targetAtUntap->countersAnnotation;
+    EXPECT_EQ(p2.targetAtUntap->countersAnnotation, countersAtUpkeep);
+
+    // P2's first draw triggers Chasm Skulker's real +1/+1 counter ability.
+    ASSERT_TRUE(advanceTo(ruled::v1::PHASE_ID_MAIN1, p2.myId));
+    ASSERT_TRUE(settleStack());
+    chasm = find(p1, p2.myId, QStringLiteral("chasm_skulker"));
+    ASSERT_TRUE(chasm.has_value());
+    const auto countersBefore = plusOneCounterCount(chasm->countersAnnotation);
+    ASSERT_TRUE(countersBefore.has_value()) << chasm->countersAnnotation.toStdString();
+    ASSERT_EQ(*countersBefore, 1);
+    EXPECT_NE(chasm->countersAnnotation, countersAtUpkeep);
+    EXPECT_EQ(find(p2, p2.myId, QStringLiteral("chasm_skulker"))->countersAnnotation, chasm->countersAnnotation);
+    EXPECT_EQ(find(p1, p2.myId, QStringLiteral("meltstrider's_gear"))->attachmentObjectId, chasmOid);
+
+    ASSERT_TRUE(advanceTo(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, p2.myId));
+    chasm = find(p2, p2.myId, QStringLiteral("chasm_skulker"));
+    ASSERT_TRUE(chasm.has_value());
+    EXPECT_FALSE(chasm->sick);
+    const auto attackerOffer = std::find_if(
+        p2.latestLegal.legal_attack_assignments().begin(), p2.latestLegal.legal_attack_assignments().end(),
+        [&](const auto &assignment) {
+            return assignment.attacker_object_id() == chasmOid &&
+                   assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                   assignment.defender().object_id() == teferiOid;
+        });
+    ASSERT_NE(attackerOffer, p2.latestLegal.legal_attack_assignments().end());
+    const ruled::v1::AttackAssignment attackAtTeferi = *attackerOffer;
+    ruled::v1::RuledCommand declare;
+    *declare.mutable_declare_attackers()->add_assignments() = attackAtTeferi;
+    ASSERT_TRUE(send(p2, declare, QStringLiteral("declare Chasm Skulker attacking Teferi")));
+    for (TeferiPhaseInObserver *client : {&p1, &p2}) {
+        ASSERT_NE(std::find_if(client->latestDeclaredAttackAssignments.begin(),
+                               client->latestDeclaredAttackAssignments.end(), [&](const auto &assignment) {
+                                   return assignment.attacker_object_id() == chasmOid &&
+                                          assignment.defender().object_id() == teferiOid;
+                               }),
+                  client->latestDeclaredAttackAssignments.end());
+        ASSERT_TRUE(client->serverCardByEngineOid.count(chasmOid));
+        ASSERT_TRUE(client->serverCardByEngineOid.count(gearOid));
+    }
+    const int chasmPhysicalId = p1.serverCardByEngineOid.at(chasmOid);
+    const int gearPhysicalId = p1.serverCardByEngineOid.at(gearOid);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(chasmOid), chasmPhysicalId);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(gearOid), gearPhysicalId);
+    for (TeferiPhaseInObserver *client : {&p1, &p2}) {
+        EXPECT_TRUE(client->physicallyAttackingCardsByPlayer.count({p2.myId, chasmPhysicalId}));
+    }
+    // P2 passes after declaring attackers so P1 receives priority before combat damage.
+    ASSERT_TRUE(pass(p2));
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+
+    const auto currentTeferi = find(p1, p1.myId, QStringLiteral("teferi,_master_of_time"));
+    ASSERT_TRUE(currentTeferi.has_value());
+    int minusThreeIndex = -1;
+    int targetGroupIndex = -1;
+    const auto &targetOffers = p1.latestLegal.valid_targets_by_ability();
+    for (const quint32 abilityIndex : currentTeferi->abilityIndices) {
+        const quint64 key = (static_cast<quint64>(currentTeferi->oid) << 32) | abilityIndex;
+        const auto offered = targetOffers.find(key);
+        if (offered == targetOffers.end()) {
+            continue;
+        }
+        for (const auto &group : offered->second.groups()) {
+            if (std::find(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end(), chasmOid) !=
+                group.valid_permanent_ids().end()) {
+                ASSERT_EQ(group.min(), 1);
+                ASSERT_EQ(group.max(), 1);
+                minusThreeIndex = static_cast<int>(abilityIndex);
+                targetGroupIndex = group.group_index();
+            }
+        }
+    }
+    ASSERT_GE(minusThreeIndex, 0) << "current opponent-turn offer must target the attacking Chasm";
+    ASSERT_GE(targetGroupIndex, 0);
+    const size_t p1MovesBeforePhase = p1.physicalMoveEvents.size();
+    const size_t p2MovesBeforePhase = p2.physicalMoveEvents.size();
+    ruled::v1::RuledCommand phaseOut;
+    auto *activate = phaseOut.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(activate, teferiOid);
+    activate->set_ability_index(static_cast<quint32>(minusThreeIndex));
+    auto *target = activate->add_targets();
+    target->set_object_id(chasmOid);
+    target->set_group_index(targetGroupIndex);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(send(p1, phaseOut, QStringLiteral("activate Teferi -3 during the opponent's attack")));
+    ASSERT_EQ(p1.stackDepth, 1);
+    ASSERT_EQ(p2.stackDepth, 1);
+    ASSERT_TRUE(settleStack());
+
+    auto assertPhasedPair = [&](const TeferiPhaseInObserver &client) {
+        const auto targetView = findByOid(client, p2.myId, chasmOid);
+        const auto attachmentView = findByOid(client, p2.myId, gearOid);
+        ASSERT_TRUE(targetView.has_value());
+        ASSERT_TRUE(attachmentView.has_value());
+        EXPECT_TRUE(targetView->phasedOut);
+        EXPECT_TRUE(attachmentView->phasedOut);
+        EXPECT_EQ(targetView->generation, chasm->generation);
+        EXPECT_EQ(attachmentView->generation, chasmGear->generation);
+        EXPECT_EQ(attachmentView->attachmentObjectId, chasmOid);
+        const auto currentCount = plusOneCounterCount(targetView->countersAnnotation);
+        ASSERT_TRUE(currentCount.has_value()) << targetView->countersAnnotation.toStdString();
+        EXPECT_EQ(*currentCount, *countersBefore);
+        EXPECT_EQ(targetView->countersAnnotation, chasm->countersAnnotation);
+        ASSERT_TRUE(client.serverCardByEngineOid.count(chasmOid));
+        ASSERT_TRUE(client.serverCardByEngineOid.count(gearOid));
+        EXPECT_EQ(client.serverCardByEngineOid.at(chasmOid), chasmPhysicalId);
+        EXPECT_EQ(client.serverCardByEngineOid.at(gearOid), gearPhysicalId);
+        EXPECT_FALSE(client.physicallyAttackingCardsByPlayer.count({p2.myId, chasmPhysicalId}));
+        EXPECT_NE(std::find(client.removedFromCombatObjectIds.begin(), client.removedFromCombatObjectIds.end(), chasmOid),
+                  client.removedFromCombatObjectIds.end());
+        EXPECT_TRUE(opponentHandNamesAreRedacted(client));
+    };
+    for (const TeferiPhaseInObserver *client : {&p1, &p2}) {
+        assertPhasedPair(*client);
+    }
+    EXPECT_FALSE(movedPhysicalCardSince(p1, p1MovesBeforePhase, p2.myId, chasmPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p1, p1MovesBeforePhase, p2.myId, gearPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p2, p2MovesBeforePhase, p2.myId, chasmPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p2, p2MovesBeforePhase, p2.myId, gearPhysicalId));
+
+    // The phased permanent stays out through the other player's turn.
+    ASSERT_TRUE(advanceTo(ruled::v1::PHASE_ID_MAIN1, p1.myId));
+    for (const TeferiPhaseInObserver *client : {&p1, &p2}) {
+        const auto stillOut = findByOid(*client, p2.myId, chasmOid);
+        ASSERT_TRUE(stillOut.has_value());
+        EXPECT_TRUE(stillOut->phasedOut);
+        EXPECT_TRUE(opponentHandNamesAreRedacted(*client));
+    }
+
+    // Observe both seat snapshots during P2's untap/upkeep, before its next draw can add a new
+    // counter to the returned Chasm.
+    ASSERT_TRUE(advanceTo(ruled::v1::PHASE_ID_MAIN1, p2.myId));
+    ASSERT_TRUE(settleStack());
+    for (const TeferiPhaseInObserver *client : {&p1, &p2}) {
+        ASSERT_TRUE(client->targetAtUntap.has_value());
+        ASSERT_TRUE(client->attachmentAtUntap.has_value());
+        EXPECT_TRUE(client->phaseInSnapshotPhase == ruled::v1::PHASE_ID_UNTAP ||
+                    client->phaseInSnapshotPhase == ruled::v1::PHASE_ID_UPKEEP);
+        EXPECT_EQ(client->targetAtUntap->oid, chasmOid);
+        EXPECT_EQ(client->targetAtUntap->generation, chasm->generation);
+        EXPECT_FALSE(client->targetAtUntap->phasedOut);
+        EXPECT_EQ(client->attachmentAtUntap->oid, gearOid);
+        EXPECT_EQ(client->attachmentAtUntap->generation, chasmGear->generation);
+        EXPECT_FALSE(client->attachmentAtUntap->phasedOut);
+        EXPECT_EQ(client->attachmentAtUntap->attachmentObjectId, chasmOid);
+        const auto returnedCount = plusOneCounterCount(client->targetAtUntap->countersAnnotation);
+        ASSERT_TRUE(returnedCount.has_value()) << client->targetAtUntap->countersAnnotation.toStdString();
+        EXPECT_EQ(*returnedCount, *countersBefore);
+        EXPECT_EQ(client->targetAtUntap->countersAnnotation, chasm->countersAnnotation);
+
+        const auto returnedNow = findByOid(*client, p2.myId, chasmOid);
+        const auto gearNow = findByOid(*client, p2.myId, gearOid);
+        ASSERT_TRUE(returnedNow.has_value());
+        ASSERT_TRUE(gearNow.has_value());
+        EXPECT_FALSE(returnedNow->phasedOut);
+        EXPECT_FALSE(gearNow->phasedOut);
+        EXPECT_EQ(returnedNow->generation, chasm->generation);
+        EXPECT_EQ(gearNow->generation, chasmGear->generation);
+        EXPECT_EQ(gearNow->attachmentObjectId, chasmOid);
+        EXPECT_EQ(client->serverCardByEngineOid.at(chasmOid), chasmPhysicalId);
+        EXPECT_EQ(client->serverCardByEngineOid.at(gearOid), gearPhysicalId);
+        EXPECT_TRUE(opponentHandNamesAreRedacted(*client));
+    }
+    EXPECT_FALSE(movedPhysicalCardSince(p1, p1MovesBeforePhase, p2.myId, chasmPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p1, p1MovesBeforePhase, p2.myId, gearPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p2, p2MovesBeforePhase, p2.myId, chasmPhysicalId));
+    EXPECT_FALSE(movedPhysicalCardSince(p2, p2MovesBeforePhase, p2.myId, gearPhysicalId));
+
+    // The first draw after phase-in legitimately adds one more Chasm counter.
+    for (const TeferiPhaseInObserver *client : {&p1, &p2}) {
+        const auto nextDrawCount = plusOneCounterCount(findByOid(*client, p2.myId, chasmOid)->countersAnnotation);
+        ASSERT_TRUE(nextDrawCount.has_value());
+        EXPECT_EQ(*nextDrawCount, *countersBefore + 1);
+    }
 }
 
 TEST_F(RuledE2ESmokeTest, KaitoStaticEmblemCreatesPresentationTokenForBothClients)

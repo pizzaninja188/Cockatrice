@@ -236,6 +236,13 @@ pub(super) fn execute_effect(
         }
         effect @ SpellEffectKind::DrainTarget { .. } => life::drain_target(cx, effect)?,
         effect @ SpellEffectKind::Exile { .. } => zones::exile(cx, effect)?,
+        SpellEffectKind::PhaseOut { .. } => {
+            if let Some(target) = cx.first_current_battlefield_target(0) {
+                cx.engine
+                    .phase_out_chosen_creature(target, cx.controller, cx.events)?;
+            }
+            EffectOutcome::Continue
+        }
         effect @ SpellEffectKind::ExileWithOwnerCastPermission { .. } => {
             zones::exile_with_owner_cast_permission(cx, effect)?
         }

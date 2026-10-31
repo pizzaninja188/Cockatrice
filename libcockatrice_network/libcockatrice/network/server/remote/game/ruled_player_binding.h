@@ -49,6 +49,9 @@ struct RuledPlayerBinding
     QHash<quint32, bool> engineOidToTrample;
     QHash<quint32, bool> engineOidToCreature;
     QHash<quint32, bool> engineOidToFaceDown;
+    // Public CR 702.26 status for the current battlefield incarnation. The identity remains
+    // bound to the same physical Server_Card while phased out; this is presentation state only.
+    QHash<quint32, bool> engineOidToPhasedOut;
     QHash<quint32, quint64> engineOidToZoneChangeGeneration;
     QHash<quint32, QString> engineOidToUnderlyingCardId;
     // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
@@ -99,6 +102,10 @@ struct RuledPlayerBinding
     bool isEngineOidFaceDown(quint32 engineOid) const
     {
         return engineOidToFaceDown.value(engineOid, false);
+    }
+    bool isEngineOidPhasedOut(quint32 engineOid) const
+    {
+        return engineOidToPhasedOut.value(engineOid, false);
     }
     quint64 engineOidZoneChangeGeneration(quint32 engineOid) const
     {

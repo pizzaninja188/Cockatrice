@@ -50,6 +50,8 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 [[nodiscard]] bool isRuledGame(const AbstractGame *game);
 [[nodiscard]] bool isRuledGameForPlayer(const Player *player);
 [[nodiscard]] bool isRuledGameForCard(const CardItem *card);
+/// True when a ruled battlefield CardItem has the public engine status phased out.
+[[nodiscard]] bool isPhasedOutCard(const CardItem *card);
 
 /// The ruled view model for this game, or nullptr when the game is freeform / unavailable.
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);

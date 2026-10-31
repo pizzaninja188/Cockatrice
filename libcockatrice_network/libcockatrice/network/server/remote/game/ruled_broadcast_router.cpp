@@ -322,26 +322,17 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         batch->mutable_resolution_prompt_state()->CopyFrom(*currentResolutionPromptState);
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
-    const bool restoreFullIdentityMaps =
-        opening || casting || !currentStackPresentations.isEmpty() ||
-        (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST);
-    if (restoreFullIdentityMaps) {
-        appendServerObjectMaps(snapshot);
-        // Reconnecting an existing seat does not change the broadcast participant set. Still
-        // restore its hand identities if the normal delta map was elided.
-        const bool hasHandMap = std::any_of(batch->events().begin(), batch->events().end(),
-                                            [](const auto &event) { return event.has_hand_slot_map(); });
-        if (!hasHandMap && hasLastBroadcastHandSlotMap)
-            batch->add_events()->mutable_hand_slot_map()->CopyFrom(lastBroadcastHandSlotMap);
-    } else {
-        // Reconnects need the complete private face-down map even when idle and even when it is
-        // empty. That full replacement restores authorized Hideaway identities and prunes stale
-        // lookups retained by a reconnecting client.
-        const bool hasFaceDownMap = std::any_of(batch->events().begin(), batch->events().end(),
-                                                [](const auto &event) { return event.has_face_down_object_map(); });
-        if (!hasFaceDownMap)
-            appendFaceDownObjectMap(snapshot);
-    }
+    // Every join/reconnect needs a complete identity-map replacement, including an idle seat.
+    // Public battlefield status (such as phasing) lives in BattlefieldObjectMap, while the
+    // recipient redactor keeps face-down identities private. appendServerObjectMaps also emits
+    // the complete face-down map, replacing stale private lookups on the joining client.
+    appendServerObjectMaps(snapshot);
+    // Reconnecting an existing seat does not change the broadcast participant set. Still restore
+    // its hand identities if the ordinary delta map was elided.
+    const bool hasHandMap = std::any_of(batch->events().begin(), batch->events().end(),
+                                        [](const auto &event) { return event.has_hand_slot_map(); });
+    if (!hasHandMap && hasLastBroadcastHandSlotMap)
+        batch->add_events()->mutable_hand_slot_map()->CopyFrom(lastBroadcastHandSlotMap);
     // Maps and the latest zone view precede the complete stack replay. Any pending resolution
     // choice follows it: a replayed copy must not clear a newer copy-target prompt.
     const ruled::v1::RuledEventBatch prior = *batch;
@@ -490,6 +481,7 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
                         entry->add_keywords("Trample");
                     }
                     entry->set_is_creature(binding.isEngineOidCreature(engineOid));
+                    entry->set_phased_out(binding.isEngineOidPhasedOut(engineOid));
                     ++ordinal;
                 }
             }

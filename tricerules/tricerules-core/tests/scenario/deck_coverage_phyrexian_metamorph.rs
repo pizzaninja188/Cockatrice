@@ -248,7 +248,7 @@ fn phyrexian_metamorph_source_filter_is_optional_untargeted_artifact_or_creature
     let creature = inject_creature_on_battlefield(&mut engine, 1, "slippery_bogle");
     let artifact = inject_creature_on_battlefield(&mut engine, 1, "sol_ring");
     let land = inject_creature_on_battlefield(&mut engine, 1, "forest");
-    let enchantment = inject_creature_on_battlefield(&mut engine, 1, "omniscience");
+    let enchantment = inject_creature_on_battlefield(&mut engine, 1, "propaganda");
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     let prompt = &engine
         .state

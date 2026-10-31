@@ -25,6 +25,7 @@ struct ObservedState
         int toughness = 0;
         int faceIndex = 0;
         bool faceDown = false;
+        bool phasedOut = false;
         quint64 generation = 0;
         int loyalty = -1;
         int defense = -1;
@@ -67,9 +68,11 @@ struct ObservedState
     std::vector<ruled::v1::AttackAssignment> latestAttackPreviewAssignments;
     std::vector<ruled::v1::AttackAssignment> latestDeclaredAttackAssignments;
     std::vector<ruled::v1::AttackAssignment> latestAddedAttackAssignments;
+    std::vector<quint32> removedFromCombatObjectIds;
     // Physical card ids are scoped to the player, including across opposing land choices.
     std::set<std::pair<int, int>> physicallyTappedCardIds;
     std::set<int> physicallyAttackingCardIds;
+    std::set<std::pair<int, int>> physicallyAttackingCardsByPlayer;
     std::map<std::pair<int, int>, std::pair<int, QString>> physicalRowAndPt;
     std::vector<Event_CreateToken> physicalCreateTokenEvents;
     std::vector<Event_MoveCard> physicalMoveEvents;

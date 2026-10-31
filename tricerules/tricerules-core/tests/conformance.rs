@@ -594,6 +594,16 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
 }
 
 #[test]
+fn teferi_minus_three_phased_out_object_preserves_zone_integrity() {
+    let case = Case {
+        card: "teferi,_master_of_time".into(),
+        face: 0,
+        ability: Some(1),
+    };
+    assert_eq!(evaluate(&case).unwrap(), Outcome::Exercised);
+}
+
+#[test]
 fn primevals_glorious_rebirth_has_a_qualified_nonempty_return_fixture() {
     let case = Case {
         card: "primevals_glorious_rebirth".into(),
@@ -1272,6 +1282,25 @@ fn choice_driver_is_deterministic_and_integrity_detects_duplicates() {
     e.state.players[0].graveyard.push(oid);
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         integrity::assert_zone_integrity(&e, e.state.objects.len(), "duplicate fixture")
+    }))
+    .is_err());
+}
+
+#[test]
+fn integrity_rejects_missing_nonphased_physical_objects() {
+    let case = Case {
+        card: "grizzly_bears".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    e.state.players[0].hand.remove(0);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        integrity::assert_zone_integrity(
+            &e,
+            e.state.objects.len(),
+            "missing physical object fixture",
+        )
     }))
     .is_err());
 }

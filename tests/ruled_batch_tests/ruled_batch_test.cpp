@@ -41,6 +41,7 @@
 #include <array>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
+#include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
@@ -3430,6 +3431,65 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
     EXPECT_EQ(findCardByEngineOid(p1, 102u), wolf);
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, PhasedOutBattleMapRetainsPhysicalBindingAndUsesProtectorAnchorWithoutController)
+{
+    constexpr quint32 battleOid = 13101u;
+    constexpr quint64 generation = 37u;
+    seedCardCatalog({"Invasion of Zendikar"});
+
+    // The physical card starts on the source seat's table with an established engine binding.
+    // The synthetic source view retains the Battle on that seat, while its protector is the target
+    // physical table. Controller is deliberately absent: map player_id below is a display anchor,
+    // not evidence from which a controller can be inferred.
+    Server_Card *physicalBattle = addCardToTable(p1, "Invasion of Zendikar");
+    const int physicalCardId = physicalBattle->getId();
+    auto initialView = buildPerPlayerView(p1, {battleOid}, {false});
+    initialView.mutable_battlefield_objects(0)->set_zone_change_generation(generation);
+    applyZoneView(p1, initialView, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto *sourceView = zoneView->add_per_player();
+    sourceView->set_player_id(p1->getPlayerId());
+    auto *object = sourceView->add_battlefield_objects();
+    object->set_object_id(battleOid);
+    object->set_card_id("invasion_of_zendikar");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_zone_change_generation(generation);
+    object->set_is_battle(true);
+    object->set_battle_protector_player_id(p2->getPlayerId());
+    object->set_phased_out(true);
+    ASSERT_FALSE(object->has_controller_player_id());
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    ASSERT_TRUE(callBatchApply(response).zoneViewApplied);
+    EXPECT_EQ(physicalBattle->getZone(), p2->getZones().value(ZoneNames::TABLE));
+    EXPECT_EQ(physicalBattle->getId(), physicalCardId);
+    EXPECT_EQ(bindingFor(p2).engineOidToServerCardId.value(battleOid, -1), physicalCardId);
+    EXPECT_EQ(bindingFor(p2).engineOidToZoneChangeGeneration.value(battleOid, 0u), generation);
+    EXPECT_TRUE(bindingFor(p2).isEngineOidPhasedOut(battleOid));
+    EXPECT_FALSE(physicalBattle->getAnnotation().contains(QStringLiteral("Owner:")));
+    EXPECT_FALSE(physicalBattle->getAnnotation().contains(QStringLiteral("Battle controller:")))
+        << "the physical protector table is only a display anchor, not a controller fallback";
+
+    const ruled::v1::RuledEventBatch maps = appendedServerMaps();
+    const ruled::v1::BattlefieldObjectMap::Entry *row = nullptr;
+    for (const auto &event : maps.events()) {
+        if (!event.has_battlefield_object_map())
+            continue;
+        for (const auto &candidate : event.battlefield_object_map().entries()) {
+            if (candidate.engine_object_id() == battleOid)
+                row = &candidate;
+        }
+    }
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->engine_object_id(), battleOid);
+    EXPECT_EQ(row->server_card_id(), physicalCardId);
+    EXPECT_EQ(row->player_id(), p2->getPlayerId());
+    EXPECT_TRUE(row->phased_out());
 }
 
 TEST_F(RuledBatchTest, EnduringStoryViewCreatesOneOrdinaryUnboundBattlefieldToken)
@@ -8346,6 +8406,267 @@ TEST_F(RuledBatchTest, FaceDownBattlefieldViewHidesRetainedPrototypeDesignation)
     verifyRedacted(p2);
 }
 
+TEST_F(RuledBatchTest, ReconnectRestoresPhasedStatusAndKeepsFaceDownIdentityPrivateOnBothSurfaces)
+{
+    constexpr quint32 p1Oid = 13201u;
+    constexpr quint32 p2Oid = 13202u;
+    constexpr quint64 p1Generation = 41u;
+    constexpr quint64 p2Generation = 52u;
+    seedCardCatalog({"Island", "Hill Giant"});
+
+    Server_Card *p1Hidden = addCardToTable(p1, "Island");
+    Server_Card *p2Hidden = addCardToTable(p2, "Hill Giant");
+    p1Hidden->setFaceDown(true);
+    p2Hidden->setFaceDown(true);
+
+    ruled::v1::IpcResponse retained;
+    retained.set_ok(true);
+    auto *zoneView = retained.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1View = buildPerPlayerView(p1, {p1Oid}, {false});
+    auto *p1Object = p1View.mutable_battlefield_objects(0);
+    p1Object->set_zone_change_generation(p1Generation);
+    p1Object->set_face_down(true);
+    p1Object->set_phased_out(true);
+    auto p2View = buildPerPlayerView(p2, {p2Oid}, {false});
+    auto *p2Object = p2View.mutable_battlefield_objects(0);
+    p2Object->set_zone_change_generation(p2Generation);
+    p2Object->set_face_down(true);
+    p2Object->set_phased_out(true);
+    ASSERT_FALSE(p1Object->has_controller_player_id());
+    ASSERT_FALSE(p2Object->has_controller_player_id());
+    *zoneView->add_per_player() = p1View;
+    *zoneView->add_per_player() = p2View;
+
+    ASSERT_TRUE(callBatchApply(retained).zoneViewApplied);
+    EXPECT_EQ(findCardByEngineOid(p1, p1Oid), p1Hidden);
+    EXPECT_EQ(findCardByEngineOid(p2, p2Oid), p2Hidden);
+    updatePendingResolutionChoiceCache(retained);
+
+    // Reconnect must use the same opaque battlefield handles the live face-down snapshot used.
+    // This prepares the relay's identity epochs and captures the projected ZoneView contract.
+    ASSERT_TRUE(prepareIdentityBatch(retained.batch()));
+
+    struct ExpectedProjectedObject
+    {
+        int serverCardId = -1;
+        quint32 opaqueObjectId = 0;
+        quint64 opaqueGeneration = 0;
+    };
+
+    struct ReconnectMapState
+    {
+        bool hasBattlefieldMap = false;
+        bool hasFaceDownMap = false;
+        bool hasZoneView = false;
+        ruled::v1::BattlefieldObjectMap battlefieldMap;
+        ruled::v1::FaceDownObjectMap faceDownMap;
+        ruled::v1::ZoneViewSync zoneView;
+    };
+
+    const auto decodeRuledPayloads = [](const ResponseContainer &response) {
+        QList<ruled::v1::RuledEventBatch> payloads;
+        for (const auto &queued : response.getPostResponseQueue()) {
+            const auto *container = dynamic_cast<const GameEventContainer *>(queued.second);
+            if (!container) {
+                continue;
+            }
+            for (const auto &gameEvent : container->event_list()) {
+                if (!gameEvent.HasExtension(Event_RuledPayload::ext)) {
+                    continue;
+                }
+                ruled::v1::RuledEventBatch batch;
+                if (batch.ParseFromString(gameEvent.GetExtension(Event_RuledPayload::ext).payload())) {
+                    payloads.append(std::move(batch));
+                }
+            }
+        }
+        return payloads;
+    };
+
+    // These maps are full replacements in the client. Replay every queued payload in order,
+    // replacing only when that map is present so a later private-only payload cannot erase a
+    // previously restored public battlefield map.
+    const auto accumulateReconnectMaps = [](const QList<ruled::v1::RuledEventBatch> &payloads) {
+        ReconnectMapState state;
+        for (const auto &batch : payloads) {
+            for (const auto &event : batch.events()) {
+                if (event.has_battlefield_object_map()) {
+                    state.battlefieldMap.CopyFrom(event.battlefield_object_map());
+                    state.hasBattlefieldMap = true;
+                }
+                if (event.has_face_down_object_map()) {
+                    state.faceDownMap.CopyFrom(event.face_down_object_map());
+                    state.hasFaceDownMap = true;
+                }
+                if (event.has_zone_view()) {
+                    state.zoneView.CopyFrom(event.zone_view());
+                    state.hasZoneView = true;
+                }
+            }
+        }
+        return state;
+    };
+
+    for (Server_Player *viewer : {p1, p2}) {
+        const quint32 ownOid = viewer == p1 ? p1Oid : p2Oid;
+        const quint32 opponentOid = viewer == p1 ? p2Oid : p1Oid;
+        const quint64 ownGeneration = viewer == p1 ? p1Generation : p2Generation;
+        const int ownCardId = viewer == p1 ? p1Hidden->getId() : p2Hidden->getId();
+        const std::string ownName = viewer == p1 ? "Island" : "Hill Giant";
+        const std::string opponentName = viewer == p1 ? "Hill Giant" : "Island";
+
+        const ruled::v1::RuledEventBatch projectedRetained = redactFor(retained.batch(), viewer);
+        const auto retainedView = std::find_if(projectedRetained.events().begin(), projectedRetained.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(retainedView, projectedRetained.events().end());
+        ASSERT_EQ(retainedView->zone_view().per_player_size(), 2);
+        QHash<int, ExpectedProjectedObject> expectedByTablePlayerId;
+        for (const auto &playerView : retainedView->zone_view().per_player()) {
+            ASSERT_EQ(playerView.battlefield_objects_size(), 1);
+            const auto &object = playerView.battlefield_objects(0);
+            EXPECT_TRUE(object.face_down());
+            EXPECT_TRUE(object.phased_out());
+            EXPECT_FALSE(object.has_controller_player_id());
+            if (playerView.player_id() == p1->getPlayerId()) {
+                EXPECT_NE(object.object_id(), p1Oid);
+                EXPECT_NE(object.zone_change_generation(), p1Generation);
+                expectedByTablePlayerId.insert(
+                    p1->getPlayerId(), {p1Hidden->getId(), object.object_id(), object.zone_change_generation()});
+            } else {
+                ASSERT_EQ(playerView.player_id(), p2->getPlayerId());
+                EXPECT_NE(object.object_id(), p2Oid);
+                EXPECT_NE(object.zone_change_generation(), p2Generation);
+                expectedByTablePlayerId.insert(
+                    p2->getPlayerId(), {p2Hidden->getId(), object.object_id(), object.zone_change_generation()});
+            }
+        }
+        ASSERT_EQ(expectedByTablePlayerId.size(), 2);
+
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(viewer, reconnect, true);
+
+        bool sawPhysicalGameState = false;
+        int ruledPayloadQueueIndex = -1;
+        int physicalStateQueueIndex = -1;
+        int queueIndex = 0;
+        for (const auto &queued : reconnect.getPostResponseQueue()) {
+            const auto *container = dynamic_cast<const GameEventContainer *>(queued.second);
+            if (!container) {
+                ++queueIndex;
+                continue;
+            }
+            for (const auto &gameEvent : container->event_list()) {
+                if (gameEvent.HasExtension(Event_GameStateChanged::ext)) {
+                    sawPhysicalGameState = true;
+                    physicalStateQueueIndex = queueIndex;
+                    const auto &physicalState = gameEvent.GetExtension(Event_GameStateChanged::ext);
+                    bool sawP1Card = false;
+                    bool sawP2Card = false;
+                    for (const auto &playerInfo : physicalState.player_list()) {
+                        const int playerId = playerInfo.has_properties() && playerInfo.properties().has_player_id()
+                                                 ? playerInfo.properties().player_id()
+                                                 : -1;
+                        for (const auto &zone : playerInfo.zone_list()) {
+                            if (zone.name() != "table") {
+                                continue;
+                            }
+                            for (const auto &card : zone.card_list()) {
+                                if (playerId == p1->getPlayerId() && card.id() == p1Hidden->getId()) {
+                                    sawP1Card = true;
+                                    EXPECT_TRUE(card.face_down());
+                                    EXPECT_TRUE(card.name().empty());
+                                    EXPECT_TRUE(card.provider_id().empty());
+                                }
+                                if (playerId == p2->getPlayerId() && card.id() == p2Hidden->getId()) {
+                                    sawP2Card = true;
+                                    EXPECT_TRUE(card.face_down());
+                                    EXPECT_TRUE(card.name().empty());
+                                    EXPECT_TRUE(card.provider_id().empty());
+                                }
+                            }
+                        }
+                    }
+                    EXPECT_TRUE(sawP1Card);
+                    EXPECT_TRUE(sawP2Card);
+                    const std::string physicalBytes = physicalState.SerializeAsString();
+                    EXPECT_EQ(physicalBytes.find("Island"), std::string::npos);
+                    EXPECT_EQ(physicalBytes.find("Hill Giant"), std::string::npos);
+                }
+                if (gameEvent.HasExtension(Event_RuledPayload::ext)) {
+                    if (ruledPayloadQueueIndex < 0) {
+                        ruledPayloadQueueIndex = queueIndex;
+                    }
+                }
+            }
+            ++queueIndex;
+        }
+        ASSERT_TRUE(sawPhysicalGameState);
+        const QList<ruled::v1::RuledEventBatch> restoredPayloads = decodeRuledPayloads(reconnect);
+        ASSERT_EQ(restoredPayloads.size(), 1)
+            << "createGameJoinedEvent should queue one ruled reconnect snapshot after GameStateChanged";
+        EXPECT_LT(physicalStateQueueIndex, ruledPayloadQueueIndex);
+        const ReconnectMapState restored = accumulateReconnectMaps(restoredPayloads);
+        ASSERT_TRUE(restored.hasFaceDownMap);
+
+        const auto ownIdentity = expectedByTablePlayerId.value(viewer->getPlayerId());
+        EXPECT_EQ(ownIdentity.serverCardId, ownCardId);
+        ASSERT_EQ(restored.faceDownMap.entries_size(), 1);
+        const auto &ownMapEntry = restored.faceDownMap.entries(0);
+        EXPECT_EQ(ownMapEntry.viewer_player_id(), viewer->getPlayerId());
+        EXPECT_EQ(ownMapEntry.engine_object_id(), ownIdentity.opaqueObjectId);
+        EXPECT_EQ(ownMapEntry.zone_change_generation(), ownIdentity.opaqueGeneration);
+        EXPECT_NE(ownMapEntry.engine_object_id(), ownOid);
+        EXPECT_NE(ownMapEntry.zone_change_generation(), ownGeneration);
+        EXPECT_EQ(ownMapEntry.server_card_id(), ownCardId);
+        EXPECT_EQ(ownMapEntry.zone_player_id(), viewer->getPlayerId());
+        EXPECT_EQ(ownMapEntry.card_name(), ownName);
+        EXPECT_NE(ownMapEntry.engine_object_id(), opponentOid);
+
+        std::string restoredBytes;
+        for (const auto &batch : restoredPayloads) {
+            restoredBytes += batch.SerializeAsString();
+        }
+        EXPECT_NE(restoredBytes.find(ownName), std::string::npos);
+        EXPECT_EQ(restoredBytes.find(opponentName), std::string::npos);
+
+        ASSERT_TRUE(restored.hasBattlefieldMap);
+        const ruled::v1::BattlefieldObjectMap::Entry *p1Row = nullptr;
+        const ruled::v1::BattlefieldObjectMap::Entry *p2Row = nullptr;
+        for (const auto &entry : restored.battlefieldMap.entries()) {
+            if (entry.server_card_id() == p1Hidden->getId() && entry.player_id() == p1->getPlayerId()) {
+                p1Row = &entry;
+            }
+            if (entry.server_card_id() == p2Hidden->getId() && entry.player_id() == p2->getPlayerId()) {
+                p2Row = &entry;
+            }
+            EXPECT_TRUE(entry.card_id().empty()) << "server-only card ids must not reach either seat";
+        }
+        ASSERT_NE(p1Row, nullptr);
+        ASSERT_NE(p2Row, nullptr);
+        const auto p1Identity = expectedByTablePlayerId.value(p1->getPlayerId());
+        const auto p2Identity = expectedByTablePlayerId.value(p2->getPlayerId());
+        EXPECT_EQ(p1Row->server_card_id(), p1Identity.serverCardId);
+        EXPECT_EQ(p2Row->server_card_id(), p2Identity.serverCardId);
+        EXPECT_EQ(p1Row->engine_object_id(), p1Identity.opaqueObjectId);
+        EXPECT_EQ(p2Row->engine_object_id(), p2Identity.opaqueObjectId);
+        EXPECT_NE(p1Row->engine_object_id(), p1Oid);
+        EXPECT_NE(p2Row->engine_object_id(), p2Oid);
+        EXPECT_TRUE(p1Row->phased_out());
+        EXPECT_TRUE(p2Row->phased_out());
+
+        // A second idle reconnect keeps the same protected handles while replacing the same maps.
+        ResponseContainer repeatedReconnect(-1);
+        game->createGameJoinedEvent(viewer, repeatedReconnect, true);
+        const auto repeatedPayloads = decodeRuledPayloads(repeatedReconnect);
+        ASSERT_EQ(repeatedPayloads.size(), 1);
+        const ReconnectMapState repeated = accumulateReconnectMaps(repeatedPayloads);
+        ASSERT_TRUE(repeated.hasBattlefieldMap);
+        ASSERT_TRUE(repeated.hasFaceDownMap);
+        EXPECT_EQ(repeated.battlefieldMap.SerializeAsString(), restored.battlefieldMap.SerializeAsString());
+        EXPECT_EQ(repeated.faceDownMap.SerializeAsString(), restored.faceDownMap.SerializeAsString());
+    }
+}
+
 TEST_F(RuledBatchTest, HideawayExileIdentityUsesEngineLookRightsAndHidesReconnectPrintingIdentity)
 {
     Server_Card *card = addCardToExile(p1, "Island");
@@ -10413,6 +10734,66 @@ TEST_F(RuledBatchTest, UnvalidatedFaceDownMapAndUnknownFieldsFailClosedWithoutIs
     prompt->set_active(true);
     prompt->GetReflection()->MutableUnknownFields(prompt)->AddVarint(500, 1);
     EXPECT_FALSE(redactFor(unknownPrompt, p2).has_resolution_prompt_state());
+}
+
+TEST_F(RuledBatchTest, PreparationStateCopyIdentityRequiresPairedOidAndGenerationPresence)
+{
+    constexpr quint32 copyOid = 11050u;
+    constexpr quint32 subjectOid = 11051u;
+    ruled::v1::RuledEventBatch seed;
+    auto *knownCopy = seed.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    knownCopy->set_object_id(copyOid);
+    knownCopy->set_zone_change_generation(0u);
+    ASSERT_TRUE(prepareIdentityBatch(seed));
+    const auto projectedSeed = redactFor(seed, p2);
+    ASSERT_EQ(projectedSeed.events_size(), 1);
+    ASSERT_TRUE(projectedSeed.events(0).has_zone_view());
+    const quint32 knownCopyHandle =
+        projectedSeed.events(0).zone_view().per_player(0).battlefield_objects(0).object_id();
+
+    const auto makeBatch = [&](bool includeCopyOid, bool includeCopyGeneration) {
+        ruled::v1::RuledEventBatch batch;
+        auto *subject = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+        subject->set_object_id(subjectOid);
+        subject->set_zone_change_generation(1u);
+        auto *preparation = subject->mutable_preparation();
+        if (includeCopyOid)
+            preparation->set_copy_object_id(copyOid);
+        if (includeCopyGeneration)
+            preparation->set_copy_zone_change_generation(0u);
+        return batch;
+    };
+
+    auto absent = makeBatch(false, false);
+    ASSERT_TRUE(prepareIdentityBatch(absent));
+    const auto projectedAbsent = redactFor(absent, p2);
+    ASSERT_EQ(projectedAbsent.events_size(), 1);
+    const auto &absentPreparation = projectedAbsent.events(0).zone_view().per_player(0).battlefield_objects(0).preparation();
+    EXPECT_FALSE(absentPreparation.has_copy_object_id());
+    EXPECT_FALSE(absentPreparation.has_copy_zone_change_generation());
+
+    auto bothPresent = makeBatch(true, true);
+    ASSERT_TRUE(prepareIdentityBatch(bothPresent));
+    const auto projectedBothPresent = redactFor(bothPresent, p2);
+    ASSERT_EQ(projectedBothPresent.events_size(), 1);
+    const auto &completePreparation =
+        projectedBothPresent.events(0).zone_view().per_player(0).battlefield_objects(0).preparation();
+    ASSERT_TRUE(completePreparation.has_copy_object_id());
+    ASSERT_TRUE(completePreparation.has_copy_zone_change_generation());
+    EXPECT_EQ(completePreparation.copy_object_id(), knownCopyHandle);
+    EXPECT_EQ(completePreparation.copy_zone_change_generation(), 0u);
+
+    auto oidOnly = makeBatch(true, false);
+    ASSERT_TRUE(prepareIdentityBatch(oidOnly));
+    const auto rejectedOidOnly = redactFor(oidOnly, p2);
+    EXPECT_EQ(rejectedOidOnly.events_size(), 0)
+        << "a copied-object id without its paired generation is malformed metadata";
+
+    auto generationOnly = makeBatch(false, true);
+    ASSERT_TRUE(prepareIdentityBatch(generationOnly));
+    const auto rejectedGenerationOnly = redactFor(generationOnly, p2);
+    EXPECT_EQ(rejectedGenerationOnly.events_size(), 0)
+        << "a copied-object generation without its paired id is malformed metadata";
 }
 
 TEST_F(RuledBatchTest, IdentityHandlesAvoidPlayerAndLaterObjectCollisions)

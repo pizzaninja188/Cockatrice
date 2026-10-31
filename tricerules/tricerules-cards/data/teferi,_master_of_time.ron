@@ -1,0 +1,51 @@
+// Oracle ID e802fb53-7cf5-46bc-8a0b-f99cf5c20f74.
+// CR 606.3's timing permission is bound only to this permanent's loyalty abilities.
+// The +1 reuses the ordered draw/discard Program; the -3 uses the closed chosen-Creature PhaseOut form.
+(
+  id: "teferi,_master_of_time",
+  name: "Teferi, Master of Time",
+  face_id: "teferi_master_of_time",
+  mana_cost: "{2}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Teferi"],
+  loyalty: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SourceLoyaltyAbilitiesAtInstantTiming,
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(1)],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(count: 1))),
+        (id: "discard_one", kind: Perform(Discard(quantity: Exact(1)))),
+      ]))),
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-3)],
+      effect: [
+        PhaseOut(subject: Chosen((kind: Creature, controller: NotYou))),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature you don't control",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([4]),
+      costs: [Loyalty(-10)],
+      effect: [TakeExtraTurns(count: 2)],
+    ),
+  ],
+)

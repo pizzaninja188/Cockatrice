@@ -73,7 +73,7 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        const QByteArray expected("7739bcd085cdf94cb5f78e182027962b7540069f4c5dbd7cba30802d76f87b65");
+        const QByteArray expected("a2e9a2e2a31c34cf05647e9209722205d88086a91946933ef1fc83b8e28a28c1");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -542,6 +542,11 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         const auto *submission = static_cast<const ruled::v1::SubmitResolutionChoice *>(message);
         if (!context.choice || !context.choice->resolution_prompt_id() ||
             submission->resolution_prompt_id() != context.choice->resolution_prompt_id())
+            return false;
+    }
+    if (type == QLatin1String("PreparationState")) {
+        const auto *preparation = static_cast<const ruled::v1::PreparationState *>(message);
+        if (preparation->has_copy_object_id() != preparation->has_copy_zone_change_generation())
             return false;
     }
 

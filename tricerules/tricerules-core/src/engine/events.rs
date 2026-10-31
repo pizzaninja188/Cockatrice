@@ -572,6 +572,34 @@ impl GameEngine {
 
     /// One player's zone view. `include_private` fills the server-only hand and library; when
     /// false the caller is asserting they are unchanged and sets `private_zones_unchanged`.
+    /// The rules control index contains active permanents only. Phased permanents are merged back
+    /// into their last physical display table; a Battle keeps its protector-table projection.
+    fn battlefield_view_ids(&self, player_id: PlayerId) -> Vec<ObjectId> {
+        let mut object_ids = self
+            .state
+            .player_idx(player_id)
+            .map(|index| self.state.players[index].battlefield.clone())
+            .unwrap_or_default();
+        object_ids.extend(self.state.objects.values().filter_map(|object| {
+            if object.zone != Zone::Battlefield || object.phase_status.is_none() {
+                return None;
+            }
+            // While phased out, controller is retained only as the physical display anchor that
+            // was in effect at phase-out. It is never sent as a current controller or used for
+            // rules decisions. Battles keep the separate protector-table presentation anchor.
+            let display_player = self
+                .state
+                .battle_protectors
+                .get(&object.id)
+                .copied()
+                .unwrap_or(object.controller);
+            (display_player == player_id).then_some(object.id)
+        }));
+        object_ids.sort_unstable();
+        object_ids.dedup();
+        object_ids
+    }
+
     fn per_player_view(
         &self,
         idx: usize,
@@ -580,6 +608,7 @@ impl GameEngine {
         first_strike_step_pending: bool,
     ) -> rv1::RuledPerPlayerView {
         let p = &self.state.players[idx];
+        let battlefield_object_ids = self.battlefield_view_ids(p.id);
         // CR 401.5: a pending cast from the top of this library has moved that top card to the
         // stack, so its newly exposed successor stays concealed until the cast is committed or
         // canceled. A hand cast or an announced ability whose costs have not changed this library
@@ -733,7 +762,7 @@ impl GameEngine {
                 Vec::new()
             },
             battlefield_objects: if include_battlefield {
-                p.battlefield
+                battlefield_object_ids
                     .iter()
                     .map(|&oid| {
                         let Some(object) = self.state.objects.get(&oid) else {
@@ -742,7 +771,9 @@ impl GameEngine {
                                 ..Default::default()
                             };
                         };
-                        let characteristics = self.characteristics(oid);
+                        let phased_out = object.phase_status.is_some();
+                        let characteristics =
+                            (!phased_out).then(|| self.characteristics(oid)).flatten();
                         let is_creature = characteristics
                             .as_ref()
                             .is_some_and(Characteristics::is_creature);
@@ -757,47 +788,56 @@ impl GameEngine {
                             face.as_deref(),
                         );
                         let copiable_values = self.copiable_values_for(oid);
-                        let activated_abilities = self
-                            .effective_activated_abilities(oid)
+                        let activated_abilities = if phased_out {
+                            Vec::new()
+                        } else {
+                            self.effective_activated_abilities(oid)
+                                .into_iter()
+                                .map(|effective| {
+                                    super::legal_actions::activated_ability_info(
+                                        self, oid, &effective,
+                                    )
+                                })
+                                .collect()
+                        };
+                        let keywords = if phased_out {
+                            Vec::new()
+                        } else {
+                            [
+                                tricerules_card_model::Keyword::Flying,
+                                tricerules_card_model::Keyword::Reach,
+                                tricerules_card_model::Keyword::Intimidate,
+                                tricerules_card_model::Keyword::Vigilance,
+                                tricerules_card_model::Keyword::Lifelink,
+                                tricerules_card_model::Keyword::Haste,
+                                tricerules_card_model::Keyword::Deathtouch,
+                                tricerules_card_model::Keyword::Menace,
+                                tricerules_card_model::Keyword::Trample,
+                                tricerules_card_model::Keyword::FirstStrike,
+                                tricerules_card_model::Keyword::DoubleStrike,
+                                tricerules_card_model::Keyword::Indestructible,
+                                tricerules_card_model::Keyword::Hexproof,
+                                tricerules_card_model::Keyword::Shroud,
+                                tricerules_card_model::Keyword::Defender,
+                                tricerules_card_model::Keyword::Flash,
+                            ]
                             .into_iter()
-                            .map(|effective| {
-                                super::legal_actions::activated_ability_info(self, oid, &effective)
+                            .filter(|&keyword| {
+                                characteristics
+                                    .as_ref()
+                                    .is_some_and(|value| value.has_keyword(keyword))
                             })
-                            .collect();
-                        let keywords = [
-                            tricerules_card_model::Keyword::Flying,
-                            tricerules_card_model::Keyword::Reach,
-                            tricerules_card_model::Keyword::Intimidate,
-                            tricerules_card_model::Keyword::Vigilance,
-                            tricerules_card_model::Keyword::Lifelink,
-                            tricerules_card_model::Keyword::Haste,
-                            tricerules_card_model::Keyword::Deathtouch,
-                            tricerules_card_model::Keyword::Menace,
-                            tricerules_card_model::Keyword::Trample,
-                            tricerules_card_model::Keyword::FirstStrike,
-                            tricerules_card_model::Keyword::DoubleStrike,
-                            tricerules_card_model::Keyword::Indestructible,
-                            tricerules_card_model::Keyword::Hexproof,
-                            tricerules_card_model::Keyword::Shroud,
-                            tricerules_card_model::Keyword::Defender,
-                            tricerules_card_model::Keyword::Flash,
-                        ]
-                        .into_iter()
-                        .filter(|&keyword| {
-                            characteristics
-                                .as_ref()
-                                .is_some_and(|value| value.has_keyword(keyword))
-                        })
-                        .map(|keyword| match keyword {
-                            tricerules_card_model::Keyword::FirstStrike => {
-                                "FirstStrike".to_string()
-                            }
-                            tricerules_card_model::Keyword::DoubleStrike => {
-                                "DoubleStrike".to_string()
-                            }
-                            _ => keyword.as_str().to_string(),
-                        })
-                        .collect();
+                            .map(|keyword| match keyword {
+                                tricerules_card_model::Keyword::FirstStrike => {
+                                    "FirstStrike".to_string()
+                                }
+                                tricerules_card_model::Keyword::DoubleStrike => {
+                                    "DoubleStrike".to_string()
+                                }
+                                _ => keyword.as_str().to_string(),
+                            })
+                            .collect()
+                        };
                         let effective_display_name = if object.face_down {
                             "Face-down creature".to_string()
                         } else if let Some(name) = characteristics.as_ref().and_then(|value| {
@@ -909,7 +949,7 @@ impl GameEngine {
                                 .battle_protectors
                                 .get(&oid)
                                 .copied(),
-                            controller_player_id: Some(object.controller),
+                            controller_player_id: (!phased_out).then_some(object.controller),
                             preparation: self.preparation_view(oid),
                             token_identity: object
                                 .is_token()
@@ -919,6 +959,7 @@ impl GameEngine {
                             prototyped: copiable_values
                                 .as_ref()
                                 .map_or(object.prototyped, |values| values.prototyped),
+                            phased_out,
                         }
                     })
                     .collect()
@@ -1018,19 +1059,20 @@ impl GameEngine {
             .iter()
             .map(|player| PlayerBattlefieldSnapshot {
                 player_id: player.id,
-                object_ids: player.battlefield.clone(),
-                objects: player
-                    .battlefield
+                object_ids: self.battlefield_view_ids(player.id),
+                objects: self
+                    .battlefield_view_ids(player.id)
                     .iter()
                     .filter_map(|oid| self.state.objects.get(oid))
                     .map(|object| BattlefieldObjectSnapshot {
                         chosen_opponent_labels: self.chosen_opponent_labels(object.id),
                         chosen_creature_type_labels: self.chosen_creature_type_labels(object.id),
-                        preparation: self.state.prepared_permanents.get(&object.id).copied(),
+                        preparation: self.prepared_designation_view(object.id),
+                        phased_out: object.phase_status.is_some(),
                         object_id: object.id,
                         card_id: object.card_id.clone(),
                         owner: object.owner,
-                        controller: object.controller,
+                        controller: object.phase_status.is_none().then_some(object.controller),
                         zone: object.zone,
                         tapped: object.tapped,
                         summoning_sick: object.summoning_sick,
@@ -1618,6 +1660,158 @@ mod library_card_projection_tests {
             engine.state.objects.contains_key(&token),
             "projection never deletes tokens"
         );
+    }
+}
+
+#[cfg(test)]
+mod phased_battlefield_view_tests {
+    use super::*;
+
+    fn per_player(event: &RuledEvent, player_id: PlayerId) -> &rv1::RuledPerPlayerView {
+        let Some(rv1::ruled_event::Ev::ZoneView(view)) = &event.ev else {
+            panic!("zone view");
+        };
+        view.per_player
+            .iter()
+            .find(|player| player.player_id == player_id)
+            .unwrap()
+    }
+
+    fn animated_battle() -> (GameEngine, ObjectId) {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            702_260,
+            &[3, 11],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        engine.state.players.push(PlayerState::new(299, 20));
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let definition = engine
+            .registry
+            .get("invasion_of_ulgrotha_grandmother_ravi_sengir")
+            .unwrap();
+        engine.state.objects.insert(
+            id,
+            new_object_from_card(
+                id,
+                3,
+                &definition.id,
+                Zone::Battlefield,
+                definition.primary_face(),
+            ),
+        );
+        engine.state.players[0].battlefield.push(id);
+        engine.state.zone_change_generation.insert(id, 1);
+        engine.state.battle_protectors.insert(id, 11);
+        let mut values = engine.copiable_values_for(id).unwrap();
+        values.face.types.push("Creature".into());
+        values.face.power = Some(5);
+        values.face.toughness = Some(5);
+        engine.state.objects.get_mut(&id).unwrap().copiable_values = Some(values);
+        engine.state.objects.get_mut(&id).unwrap().tapped = true;
+        engine
+            .state
+            .objects
+            .get_mut(&id)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Defense, 3);
+        (engine, id)
+    }
+
+    #[test]
+    fn phased_animated_battle_stays_on_its_protectors_table_without_live_rules_data() {
+        let (mut engine, id) = animated_battle();
+        let before = engine.ev_zone_view_sync();
+        assert!(per_player(&before, 3)
+            .battlefield_objects
+            .iter()
+            .any(|object| object.object_id == id));
+
+        assert!(engine
+            .phase_out_chosen_creature(id, 11, &mut Vec::new())
+            .unwrap());
+        let event = engine.ev_zone_view_sync_tracked();
+        let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = &event.ev else {
+            panic!("zone view");
+        };
+        assert!(!zone_view.battlefields_unchanged);
+        assert!(!per_player(&event, 3)
+            .battlefield_objects
+            .iter()
+            .any(|object| object.object_id == id));
+        let view = per_player(&event, 11);
+        let object = view
+            .battlefield_objects
+            .iter()
+            .find(|object| object.object_id == id)
+            .expect("out Battle remains on its protector's physical display table");
+        assert!(object.phased_out);
+        assert_eq!(object.controller_player_id, None);
+        assert_eq!(object.battle_protector_player_id, Some(11));
+        assert_eq!(object.zone_change_generation, 1);
+        assert!(!object.is_creature);
+        assert_eq!((object.power, object.toughness, object.damage), (0, 0, 0));
+        assert!(object.keywords.is_empty());
+        assert!(object.activated_abilities.is_empty());
+        assert_eq!(object.defense, 3);
+        assert!(object.tapped);
+        assert!(!object.effective_display_name.is_empty());
+    }
+
+    #[test]
+    fn phased_face_down_permanent_remains_anonymous_and_changes_tracked_snapshot() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            702_261,
+            &[3, 11],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let definition = engine.registry.get("grizzly_bears").unwrap();
+        let mut object = new_object_from_card(
+            id,
+            3,
+            &definition.id,
+            Zone::Battlefield,
+            definition.primary_face(),
+        );
+        object.face_down = true;
+        engine.state.objects.insert(id, object);
+        engine.state.players[0].battlefield.push(id);
+        engine.state.zone_change_generation.insert(id, 1);
+        engine.ev_zone_view_sync();
+
+        assert!(engine
+            .phase_out_chosen_creature(id, 11, &mut Vec::new())
+            .unwrap());
+        let event = engine.ev_zone_view_sync_tracked();
+        let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = &event.ev else {
+            panic!("zone view");
+        };
+        assert!(!zone_view.battlefields_unchanged);
+        let object = per_player(&event, 3)
+            .battlefield_objects
+            .iter()
+            .find(|object| object.object_id == id)
+            .expect("phased face-down object remains physically represented");
+        assert!(object.phased_out);
+        assert_eq!(object.controller_player_id, None);
+        assert!(object.face_down);
+        assert_eq!(object.effective_display_name, "Face-down creature");
+        assert!(object.copy_annotation.is_empty());
+        assert!(!object.is_creature);
+        assert_eq!((object.power, object.toughness), (0, 0));
+        assert!(object.keywords.is_empty());
+        assert!(object.activated_abilities.is_empty());
     }
 }
 

@@ -436,16 +436,14 @@ impl GameEngine {
                 match event.recipient {
                     DamageRecipient::Player(player) => player == controller,
                     DamageRecipient::Permanent(recipient) => {
-                        self.state
-                            .objects
-                            .get(&recipient)
-                            .is_some_and(|object| object.zone == Zone::Battlefield)
-                            && self
-                                .characteristics(recipient)
-                                .is_some_and(|characteristics| {
-                                    characteristics.controller == controller
-                                        && characteristics.has_type("Planeswalker")
-                                })
+                        self.state.objects.get(&recipient).is_some_and(|object| {
+                            object.zone == Zone::Battlefield && object.phase_status.is_none()
+                        }) && self
+                            .characteristics(recipient)
+                            .is_some_and(|characteristics| {
+                                characteristics.controller == controller
+                                    && characteristics.has_type("Planeswalker")
+                            })
                     }
                 }
             }
@@ -1469,7 +1467,7 @@ impl GameEngine {
             .state
             .objects
             .get(&source)
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .and_then(|_| self.controller_of(source))
         {
             event.source.controller = controller;
@@ -1669,17 +1667,15 @@ impl GameEngine {
         };
         let event = &damage.spec.event;
         let current_permanent = |oid, generation| {
-            self.state
-                .objects
-                .get(&oid)
-                .is_some_and(|object| object.zone == Zone::Battlefield)
-                && Some(
-                    self.state
-                        .zone_change_generation
-                        .get(&oid)
-                        .copied()
-                        .unwrap_or(0),
-                ) == generation
+            self.state.objects.get(&oid).is_some_and(|object| {
+                object.zone == Zone::Battlefield && object.phase_status.is_none()
+            }) && Some(
+                self.state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0),
+            ) == generation
         };
         if !current_permanent(event.source.object_id, event.source.zone_change_generation)
             || !current_permanent(
@@ -1764,12 +1760,10 @@ impl GameEngine {
                 .player_idx(player)
                 .is_some_and(|index| !self.state.players[index].has_lost),
             DamageRecipient::Permanent(oid) => {
-                self.state
-                    .objects
-                    .get(&oid)
-                    .is_some_and(|object| object.zone == Zone::Battlefield)
-                    && self.damage_recipient_generation(&damage.spec.event)
-                        == damage.recipient_generation
+                self.state.objects.get(&oid).is_some_and(|object| {
+                    object.zone == Zone::Battlefield && object.phase_status.is_none()
+                }) && self.damage_recipient_generation(&damage.spec.event)
+                    == damage.recipient_generation
             }
         }
     }
@@ -2166,6 +2160,7 @@ impl GameEngine {
                     return Ok(0);
                 };
                 if object.zone != Zone::Battlefield
+                    || object.phase_status.is_some()
                     || !(is_creature || is_planeswalker || is_battle)
                 {
                     return Ok(0);
@@ -2398,6 +2393,65 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_stack_damage_is_cancelled_when_permanent_phases_out() {
+        let decks = Some(vec![vec!["plains".into(); 7], vec!["plains".into(); 7]]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_100,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let recipient = move_bear_to_battlefield(&mut engine);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&recipient)
+            .copied()
+            .unwrap_or(0);
+        let damage = PendingDamageEvent {
+            spec: DamageSpec {
+                event: DamageEvent::noncombat(
+                    recipient,
+                    0,
+                    "phased target damage",
+                    DamageRecipient::Permanent(recipient),
+                    1,
+                ),
+                source_has_deathtouch: false,
+                source_has_lifelink: false,
+            },
+            remaining: 1,
+            prevented_total: 0,
+            applied_applications: Vec::new(),
+            prevention_debits: Vec::new(),
+            counter_placement_proposals: Vec::new(),
+            additional_counter_logs: Vec::new(),
+            combat: None,
+            recipient_generation: Some(generation),
+        };
+
+        assert!(engine.stack_damage_occurrence_survives(&damage));
+        engine
+            .state
+            .objects
+            .get_mut(&recipient)
+            .unwrap()
+            .phase_status = Some(crate::state::PhasedOutStatus {
+            phase_out_under: 0,
+            phase_in_due_after_departed_turn: false,
+            phase_in_with: None,
+            direct_attachment_snapshot: None,
+        });
+        assert!(
+            !engine.stack_damage_occurrence_survives(&damage),
+            "phased-out permanent is no longer a pending damage recipient"
+        );
+    }
 
     #[test]
     fn prevention_counter_replacement_is_ordered_before_the_remaining_simultaneous_damage() {

@@ -814,18 +814,34 @@ public:
     // Public-zone casts use the engine ObjectId as their index and share the hand cast shape.
     RuledHandActionSet zoneCastActions;
     QHash<quint32, quint32> preparedCopyBySourceOid;
+    QHash<quint32, quint64> preparedCopyGenerationBySourceOid;
     QHash<quint32, quint32> preparationCastCopyBySourceOid;
     QHash<quint32, quint64> preparationCastGenerationBySourceOid;
-    [[nodiscard]] quint32 preparationCastCopy(quint32 sourceOid) const
+    [[nodiscard]] std::optional<quint32> preparationCastCopy(quint32 sourceOid) const
     {
+        if (!preparedCopyBySourceOid.contains(sourceOid) ||
+            !preparedCopyGenerationBySourceOid.contains(sourceOid) ||
+            !preparationCastCopyBySourceOid.contains(sourceOid) ||
+            !preparationCastGenerationBySourceOid.contains(sourceOid) ||
+            !battlefieldGenerationByOid.contains(sourceOid)) {
+            return std::nullopt;
+        }
+
         const quint32 copy = preparationCastCopyBySourceOid.value(sourceOid);
-        return copy != 0 && preparedCopyBySourceOid.value(sourceOid) == copy &&
-                       battlefieldGenerationByOid.contains(sourceOid) &&
-                       battlefieldGenerationByOid.value(sourceOid) ==
-                           preparationCastGenerationBySourceOid.value(sourceOid) &&
-                       isZoneActionLegal(copy, RuledCastSource::Exile)
-                   ? copy
-                   : 0;
+        const quint64 copyGeneration = preparedCopyGenerationBySourceOid.value(sourceOid);
+        const quint64 sourceGeneration = preparationCastGenerationBySourceOid.value(sourceOid);
+        if (copy == 0 || preparedCopyBySourceOid.value(sourceOid) != copy ||
+            battlefieldGenerationByOid.value(sourceOid) != sourceGeneration ||
+            !isZoneActionLegal(copy, RuledCastSource::Exile)) {
+            return std::nullopt;
+        }
+
+        const auto options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(copy));
+        const bool hasCurrentCopyGenerationOffer =
+            std::any_of(options.cbegin(), options.cend(), [copyGeneration](const RuledFaceOption &option) {
+                return option.zoneChangeGeneration == copyGeneration;
+            });
+        return hasCurrentCopyGenerationOffer ? std::optional<quint32>{copy} : std::nullopt;
     }
     QHash<int, RuledCastSource> zoneCastSourceByOid;
     QMap<RuledCastActionKey, QString> zoneCastCostsByCastKey;
@@ -883,6 +899,8 @@ public:
     // Engine ObjectId -> creature-ness from BattlefieldObjectMap entries. Engine-authoritative
     // (tricerules registry), so engine tokens with no Oracle entry are still combat-eligible.
     QHash<quint32, bool> engineOidCreature;
+    // Public CR 702.26 status from the latest complete BattlefieldObjectMap replacement.
+    QHash<quint32, bool> engineOidPhasedOut;
     // Current viewer-private face-down display identity keyed by physical zone player and
     // Server_Card.id. The CardItem remains face down; hover/menu consumers consult this map.
     QHash<quint64, QString> privateFaceDownNameByOwnedCard;
@@ -1215,6 +1233,10 @@ public:
     [[nodiscard]] bool isEngineOidCreature(quint32 engineOid) const
     {
         return engineOidCreature.value(engineOid, false);
+    }
+    [[nodiscard]] bool isEngineOidPhasedOut(quint32 engineOid) const
+    {
+        return engineOidPhasedOut.value(engineOid, false);
     }
     [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
     {

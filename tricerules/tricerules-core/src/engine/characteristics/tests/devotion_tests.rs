@@ -1,6 +1,14 @@
 use super::*;
 
 fn compound_devotion_engine(support: &str, support_id: &str) -> (GameEngine, ObjectId, ObjectId) {
+    compound_devotion_engine_for_controller(support, support_id, 0)
+}
+
+fn compound_devotion_engine_for_controller(
+    support: &str,
+    support_id: &str,
+    controller: PlayerId,
+) -> (GameEngine, ObjectId, ObjectId) {
     let god = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../tricerules-cards/data/nylea_god_of_the_hunt.ron"
@@ -18,12 +26,18 @@ fn compound_devotion_engine(support: &str, support_id: &str) -> (GameEngine, Obj
     engine.registry = Box::leak(Box::new(registry));
     engine.state.opening = None;
     engine.state.turn_step = TurnStep::DeclareBlockers;
-    let god = insert_fixture(&mut engine, 0, "nylea,_god_of_the_hunt", Zone::Battlefield);
+    let god = insert_fixture(
+        &mut engine,
+        controller,
+        "nylea,_god_of_the_hunt",
+        Zone::Battlefield,
+    );
     engine.emit_static_abilities_on_enter(god);
-    let support = insert_fixture(&mut engine, 0, support_id, Zone::Battlefield);
+    let support = insert_fixture(&mut engine, controller, support_id, Zone::Battlefield);
     engine.emit_static_abilities_on_enter(support);
     assert!(engine.characteristics(god).unwrap().is_creature());
-    devotion_combat(&mut engine, god, vec![]);
+    let defender = if controller == 0 { 1 } else { 0 };
+    devotion_combat_with_defender(&mut engine, god, vec![], defender);
     (engine, god, support)
 }
 
@@ -544,10 +558,19 @@ fn devotion_remove_creature_preserves_artifact_and_legendary_in_both_timestamp_o
 }
 
 fn devotion_combat(engine: &mut GameEngine, attacker: ObjectId, blockers: Vec<ObjectId>) {
+    devotion_combat_with_defender(engine, attacker, blockers, 1);
+}
+
+fn devotion_combat_with_defender(
+    engine: &mut GameEngine,
+    attacker: ObjectId,
+    blockers: Vec<ObjectId>,
+    defending_player: PlayerId,
+) {
     let assignment = CombatAttackAssignment {
         attacker: engine.trigger_object_ref(attacker).unwrap(),
-        defender: CombatDefenderTarget::Player(1),
-        defending_player: 1,
+        defender: CombatDefenderTarget::Player(defending_player),
+        defending_player,
     };
     let blocker_map = if blockers.is_empty() {
         HashMap::new()
@@ -614,6 +637,51 @@ fn devotion_instruction_boundary_removes_attacker_before_supporter_returns() {
         removals,
         vec![vec![god]],
         "recovered type never rejoins combat"
+    );
+}
+
+#[test]
+fn phase_out_excludes_green_creature_from_devotion_and_phase_in_restores_nylea() {
+    let support = r#"(id: "devotion_pip_creature", name: "Devotion Pip Creature",
+        face_id: "devotion_pip_creature", mana_cost: "{G}{G}{G}{G}",
+        types: ["Creature"], power: Some(2), toughness: Some(2))"#;
+    let (mut engine, god, support) =
+        compound_devotion_engine_for_controller(support, "devotion_pip_creature", 1);
+    assert_eq!(
+        devotion_value(&engine.state, engine.registry, 1, Color::Green, None),
+        5
+    );
+    assert!(engine.characteristics(god).unwrap().is_creature());
+    assert_eq!(engine.state.combat.as_ref().unwrap().attacking, vec![god]);
+
+    let mut events = Vec::new();
+    assert!(
+        engine
+            .phase_out_chosen_creature(support, 0, &mut events)
+            .unwrap(),
+        "player 0 phases out the opponent's supporting creature"
+    );
+    assert_eq!(
+        devotion_value(&engine.state, engine.registry, 1, Color::Green, None),
+        1,
+        "a phased-out permanent's mana symbols do not count toward devotion"
+    );
+    assert!(!engine.characteristics(god).unwrap().is_creature());
+    engine
+        .drain_immediate_observer_actions(None, &mut events)
+        .unwrap();
+    assert!(engine.state.combat.as_ref().unwrap().attacking.is_empty());
+
+    engine.phase_in_due_permanents(1, &mut events).unwrap();
+    assert!(engine.state.objects[&support].phase_status.is_none());
+    assert_eq!(
+        devotion_value(&engine.state, engine.registry, 1, Color::Green, None),
+        5
+    );
+    assert!(engine.characteristics(god).unwrap().is_creature());
+    assert!(
+        engine.state.combat.as_ref().unwrap().attacking.is_empty(),
+        "Nylea regains creature type but does not rejoin combat"
     );
 }
 
@@ -726,7 +794,9 @@ fn devotion_control_reindex_removes_other_god_whose_supporter_changed_control() 
             7,
         ));
     let mut events = vec![];
-    engine.reindex_battlefield_control(&mut events);
+    engine
+        .reindex_battlefield_control(&mut events)
+        .expect("reindex changed devotion controller");
     assert_eq!(engine.state.objects[&support].controller, 1);
     assert!(engine.state.combat.as_ref().unwrap().attacking.is_empty());
     assert!(events.iter().any(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::RemovedFromCombat(removed)) if removed.object_ids == vec![god])));

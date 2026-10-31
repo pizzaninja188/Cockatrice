@@ -2715,6 +2715,368 @@ mod tests {
             .any(|card| card.object_id == revealed_object_id));
     }
 
+    #[test]
+    fn teferi_master_of_time_casts_and_resolves_plus_one_from_normal_offers() {
+        const NAME: &str = "Teferi, Master of Time";
+        const CARD_ID: &str = "teferi,_master_of_time";
+        let make_deck = |player_id: i32, pilot: bool| {
+            let count = if pilot { 4 } else { 0 };
+            let mut cards = vec![NAME.to_string(); count];
+            let lands = 60 - cards.len();
+            cards.extend(vec![
+                if pilot { "Island" } else { "Forest" }.to_string();
+                lands
+            ]);
+            PlayerDeck {
+                player_id,
+                mainboard_card_name: cards,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            }
+        };
+        let player_decks = vec![make_deck(17, true), make_deck(29, false)];
+        assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: vec![NAME.into(), "Island".into(), "Forest".into()],
+                })),
+            })
+            .expect("deck validation keeps the normal session open");
+        assert!(
+            validation.ok,
+            "Teferi deck validation: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+        let mut latest = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    game_id: 7_281_032,
+                    seed: 20_261_032,
+                    player_ids: vec![17, 29],
+                    player_decks,
+                    dev_commands_enabled: false,
+                    diagnostic_capture_enabled: false,
+                    ..Default::default()
+                })),
+            })
+            .expect("normal SessionStart keeps the session open");
+        assert!(latest.ok, "Teferi GameStart: {}", latest.error);
+        assert!(!latest.effective_dev_commands_enabled);
+        let starting = kaya_starting_player_offer(&latest).expect("starting-player offer");
+        assert!(starting.eligible_starting_player_ids.contains(&17));
+        latest = kaya_player_command(
+            &mut session,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 17,
+                })),
+            },
+        );
+        while let Some(opening) = kaya_mulligan_offer(&latest) {
+            latest = kaya_player_command(
+                &mut session,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            );
+        }
+        for _ in 0..4 {
+            latest = kaya_pass_priority(&mut session, latest);
+        }
+        let state = &session.engine.as_ref().unwrap().state;
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(state.players[state.active_player_idx].id, 17);
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        let teferi_from_view = |view: &[BattlefieldObject]| {
+            view.iter()
+                .find(|object| object.card_id == CARD_ID)
+                .cloned()
+        };
+        let mut cast = false;
+        for _ in 0..4096 {
+            let (active, priority, main1) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                (
+                    state.players[state.active_player_idx].id,
+                    state.priority_player_id(),
+                    state.turn_step == tricerules_core::TurnStep::Main1,
+                )
+            };
+            if active == 17 && priority == 17 && main1 {
+                let actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&17)
+                    .expect("current pilot actions")
+                    .clone();
+                if let Some(land) = actions
+                    .hand_actions
+                    .iter()
+                    .find(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32)
+                    .cloned()
+                {
+                    latest = kaya_player_command(&mut session, 17, RuledCommand {
+                        cmd: Some(Cmd::PlayLand(PlayLand {
+                            source: Some(LandSource {
+                                location: Some(tricerules_proto::ruled::v1::land_source::Location::HandIndex(land.hand_index)),
+                                ..Default::default()
+                            }), face_index: land.face_index, ..Default::default()
+                        })),
+                    });
+                    kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    continue;
+                }
+                let spell = actions
+                    .hand_actions
+                    .iter()
+                    .find(|offer| {
+                        offer.kind == HandActionKind::HandActionCastSpell as i32
+                            && offer.card_name == NAME
+                    })
+                    .cloned();
+                let mana = kaya_available_mana_abilities(&battlefield)
+                    .into_iter()
+                    .filter(|source| kaya_output_has_color(&source.3, 'U'))
+                    .collect::<Vec<_>>();
+                if let Some(spell) = spell.filter(|_| mana.len() >= 4) {
+                    latest = kaya_player_command(&mut session, 17, RuledCommand {
+                        cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                            announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                                source: Some(CastSource {
+                                    location: Some(tricerules_proto::ruled::v1::cast_source::Location::HandIndex(spell.hand_index)),
+                                    expected_zone_change_generation: None,
+                                }),
+                                face_index: spell.face_index,
+                                cast_method: CastMethod::Normal as i32,
+                                ..Default::default()
+                            }),
+                        })),
+                    });
+                    let mut produced = PaymentMana::default();
+                    for (object_id, generation, ability_index, output) in mana.into_iter().take(4) {
+                        let current_source = kaya_available_mana_abilities(&battlefield)
+                            .into_iter()
+                            .find(|source| {
+                                source.0 == object_id
+                                    && source.1 == generation
+                                    && source.2 == ability_index
+                            })
+                            .expect("current Teferi view retains this untapped Island offer");
+                        assert_eq!(current_source.3, output);
+                        assert!(
+                            kaya_output_has_color(&output, 'U'),
+                            "Island offers blue mana: {output}"
+                        );
+                        produced.u += 1;
+                        latest = kaya_player_command(
+                            &mut session,
+                            17,
+                            RuledCommand {
+                                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                                    source_object_id: object_id,
+                                    ability_index,
+                                    source_zone: AbilitySourceZone::Battlefield as i32,
+                                    expected_zone_change_generation: generation,
+                                    ..Default::default()
+                                })),
+                            },
+                        );
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                    }
+                    assert_eq!(produced.u, 4);
+                    let pending = kaya_batch(&latest).legal_by_player[&17]
+                        .pending_spell_cast
+                        .as_ref()
+                        .expect("current Teferi cast retains its payment transaction");
+                    let transaction_id = pending.transaction_id;
+                    let revision = pending
+                        .payment_preview
+                        .as_ref()
+                        .expect("payment preview")
+                        .revision;
+                    let response = session
+                        .process(&IpcEnvelope {
+                            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                                player_id: 17,
+                                preview: Some(PreviewPayment {
+                                    transaction_id,
+                                    revision,
+                                    commit_spell_cast: Some(CommitSpellCast {
+                                        transaction_id,
+                                        payment: Some(PaymentSelection {
+                                            expected_state_revision: revision,
+                                            mana: Some(produced),
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                            })),
+                        })
+                        .expect("PaymentQuery keeps the Teferi session open");
+                    assert!(response.ok, "Teferi payment preview: {}", response.error);
+                    let preview = response
+                        .batch
+                        .and_then(|batch| batch.payment_preview)
+                        .expect("PaymentQuery returns Teferi's preview");
+                    assert!(
+                        preview.valid && preview.complete,
+                        "Teferi payment: {preview:?}"
+                    );
+                    latest = kaya_player_command(
+                        &mut session,
+                        17,
+                        RuledCommand {
+                            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                                transaction_id,
+                                payment: preview.selection,
+                                restricted_mana: preview.restricted_mana,
+                            })),
+                        },
+                    );
+                    for _ in 0..8 {
+                        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+                        if teferi_from_view(&battlefield).is_some() {
+                            cast = true;
+                            break;
+                        }
+                        latest = kaya_pass_priority(&mut session, latest);
+                    }
+                    assert!(cast, "Teferi resolves through ordinary priority passes");
+                    break;
+                }
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        }
+        assert!(cast, "normal offers eventually cast Teferi");
+        let teferi = teferi_from_view(&battlefield).expect("Teferi is on the current battlefield");
+        assert_eq!(teferi.loyalty, 3);
+        let plus_one = teferi
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|part| {
+                        part.kind == PresentationPathKind::Ability as i32
+                            && part.id == "activated_01"
+                    })
+                })
+            })
+            .expect("current Teferi view identifies +1 by stable ability ID");
+        assert!(
+            plus_one.activatable,
+            "current engine offer makes Teferi's +1 legal"
+        );
+        let (object_id, generation, ability_index) = (
+            teferi.object_id,
+            teferi.zone_change_generation,
+            plus_one.ability_index,
+        );
+        let (hand_before, library_before, draws_before) = {
+            let engine = session.engine.as_ref().unwrap();
+            let player = engine.state.player_idx(17).unwrap();
+            (
+                engine.state.players[player].hand.len(),
+                engine.state.players[player].library.len(),
+                engine.state.turn_history.current.player(17).cards_drawn,
+            )
+        };
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: object_id,
+                    ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: generation,
+                    ..Default::default()
+                })),
+            },
+        );
+        kaya_capture_battlefield(&latest, 17, &mut battlefield);
+        assert_eq!(teferi_from_view(&battlefield).unwrap().loyalty, 4);
+        assert_eq!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .stack
+                .last()
+                .and_then(|item| item.source_permanent_id),
+            Some(object_id)
+        );
+        let mut choice = kaya_choice(&latest, ChoiceKind::HandCards);
+        for _ in 0..8 {
+            if choice.is_some() {
+                break;
+            }
+            latest = kaya_pass_priority(&mut session, latest);
+            kaya_capture_battlefield(&latest, 17, &mut battlefield);
+            choice = kaya_choice(&latest, ChoiceKind::HandCards);
+        }
+        let choice = choice.expect("+1 draw reaches its private mandatory discard offer");
+        assert_eq!(choice.deciding_player_id, 17);
+        assert_ne!(choice.resolution_prompt_id, 0);
+        assert_eq!((choice.min, choice.max), (1, 1));
+        let discarded = *choice
+            .candidate_object_ids
+            .first()
+            .expect("current discard has a candidate");
+        {
+            let engine = session.engine.as_ref().unwrap();
+            let player = engine.state.player_idx(17).unwrap();
+            assert_eq!(engine.state.players[player].hand.len(), hand_before + 1);
+            assert_eq!(
+                engine.state.players[player].library.len(),
+                library_before - 1
+            );
+            assert_eq!(
+                engine.state.turn_history.current.player(17).cards_drawn,
+                draws_before + 1
+            );
+            assert!(engine.state.players[player].hand.contains(&discarded));
+        }
+        latest = kaya_player_command(
+            &mut session,
+            17,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: choice.resolution_prompt_id,
+                    chosen_object_ids: vec![discarded],
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+        );
+        assert!(kaya_choice(&latest, ChoiceKind::HandCards).is_none());
+        let engine = session.engine.as_ref().unwrap();
+        let player = engine.state.player_idx(17).unwrap();
+        assert!(engine.state.players[player].graveyard.contains(&discarded));
+        assert_eq!(engine.state.players[player].hand.len(), hand_before);
+        assert_eq!(
+            engine.state.players[player].library.len(),
+            library_before - 1
+        );
+        assert_eq!(
+            engine.state.turn_history.current.player(17).cards_drawn,
+            draws_before + 1
+        );
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
     fn ugin_pass_priority(session: &mut EngineSession, latest: IpcResponse) -> IpcResponse {
         const UGIN_NAME: &str = "Ugin, the Spirit Dragon";
         let mut player_id = session

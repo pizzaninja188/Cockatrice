@@ -83,8 +83,10 @@ void ObservedState::observePhysicalEvent(const GameEvent &ev)
         } else if (attr.attribute() == AttrAttacking) {
             if (attr.attr_value() == "1") {
                 physicallyAttackingCardIds.insert(attr.card_id());
+                physicallyAttackingCardsByPlayer.insert({ev.player_id(), attr.card_id()});
             } else {
                 physicallyAttackingCardIds.erase(attr.card_id());
+                physicallyAttackingCardsByPlayer.erase({ev.player_id(), attr.card_id()});
             }
         } else if (attr.attribute() == AttrAnnotation) {
             annotationByServerCardId[attr.card_id()] = QString::fromStdString(attr.attr_value());
@@ -126,6 +128,10 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
     } else if (ev.has_attackers_added()) {
         latestAddedAttackAssignments.assign(ev.attackers_added().assignments().begin(),
                                             ev.attackers_added().assignments().end());
+    } else if (ev.has_removed_from_combat()) {
+        removedFromCombatObjectIds.insert(removedFromCombatObjectIds.end(),
+                                          ev.removed_from_combat().object_ids().begin(),
+                                          ev.removed_from_combat().object_ids().end());
     } else if (ev.has_attackers_preview()) {
         latestAttackPreviewAssignments.assign(ev.attackers_preview().assignments().begin(),
                                               ev.attackers_preview().assignments().end());
@@ -211,6 +217,7 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
                     perm.toughness = static_cast<int>(battlefieldObject.toughness());
                     perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
                     perm.faceDown = battlefieldObject.face_down();
+                    perm.phasedOut = battlefieldObject.phased_out();
                     perm.generation = battlefieldObject.zone_change_generation();
                     perm.loyalty =
                         battlefieldObject.is_planeswalker() ? static_cast<int>(battlefieldObject.loyalty()) : -1;

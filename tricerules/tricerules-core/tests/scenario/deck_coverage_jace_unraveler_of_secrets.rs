@@ -851,7 +851,10 @@ fn jace_emblem_counters_an_actually_cast_preparation_copy() {
         .expect("cast Infirmary Healer");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&healer].zone, Zone::Battlefield);
-    let prepared = engine.state.prepared_permanents[&healer];
+    let prepared = engine.state.prepared_permanents[&healer]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
 
     advance_to_main_for(&mut engine, 0);
     let marker = create_jace_emblem(&mut engine, jace);

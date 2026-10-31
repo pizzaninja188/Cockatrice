@@ -173,6 +173,7 @@ pub(super) fn devotion_value(
         .iter()
         .filter(|(oid, object)| {
             object.zone == Zone::Battlefield
+                && object.phase_status.is_none()
                 && excluded_entrant != Some(**oid)
                 && !object.face_down
                 && evaluator.layer_2_controller(**oid, &mut Vec::new()) == controller
@@ -214,7 +215,31 @@ pub(super) fn characteristics_from(
     registry: &'static CardRegistry,
     oid: ObjectId,
 ) -> Option<Characteristics> {
+    if state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.phase_status.is_some())
+    {
+        return None;
+    }
     CharacteristicsEvaluator { state, registry }.characteristics(oid)
+}
+
+/// CR 800.4c's out-of-index reconciliation still needs the controller that live layer-2
+/// effects assign to a phased object. Keep this derived value private to that rule hook; a phased
+/// permanent has no current characteristics or controller for ordinary game actions.
+pub(super) fn phased_out_controller_for_reconciliation(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Option<PlayerId> {
+    state
+        .objects
+        .get(&oid)
+        .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_some())?;
+    CharacteristicsEvaluator { state, registry }
+        .characteristics(oid)
+        .map(|characteristics| characteristics.controller)
 }
 
 pub(super) fn entry_characteristics_through_layer_5(
@@ -655,11 +680,13 @@ impl CharacteristicsEvaluator<'_> {
             .enumerate()
             .filter(|(_, effect)| {
                 matches!(effect.kind, ContinuousEffectKind::Layer2Control { .. })
+                    && static_source_identity_is_current(self.state, self.registry, effect)
                     && match effect.affected {
                         AffectedScope::Single(id) => id == oid,
                         AffectedScope::AttachedTo(source_id) => {
                             self.state.objects.get(&source_id).is_some_and(|source| {
                                 source.zone == Zone::Battlefield
+                                    && source.phase_status.is_none()
                                     && source.attached_to == Some(AttachmentRecipient::Object(oid))
                             })
                         }
@@ -681,7 +708,10 @@ impl CharacteristicsEvaluator<'_> {
                             self.state
                                 .objects
                                 .get(&source)
-                                .filter(|object| object.zone == Zone::Battlefield)
+                                .filter(|object| {
+                                    object.zone == Zone::Battlefield
+                                        && object.phase_status.is_none()
+                                })
                                 .map(|_| self.layer_2_controller(source, visiting))
                         })
                         .unwrap_or(controller),
@@ -1605,6 +1635,7 @@ pub(super) fn printed_static_source_is_available(
 ) -> bool {
     state.objects.get(&source).is_some_and(|object| {
         object.zone == Zone::Battlefield
+            && object.phase_status.is_none()
             && !object.face_down
             && printed_rules_text_is_present(state, registry, source)
             && effective_face_from(state, registry, source).is_some()
@@ -1891,6 +1922,7 @@ fn static_source_identity_is_current(
                 Zone::Battlefield
             }
             && !source.face_down
+            && source.phase_status.is_none()
             && state
                 .zone_change_generation
                 .get(source_id)
@@ -2802,6 +2834,37 @@ mod tests {
         engine.state.players[0].graveyard.push(object_id);
         engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
         engine.state.zone_change_generation.insert(object_id, 2);
+    }
+
+    #[test]
+    fn phased_out_goblin_chieftain_suppresses_and_restores_materialized_grants() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            30_510,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let recipient = insert_fixture(&mut engine, 1, "goblin_trailblazer", Zone::Battlefield);
+        let source = insert_fixture(&mut engine, 1, "goblin_chieftain", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        assert_eq!(engine.effective_power(recipient), Some(2));
+        assert!(engine.effective_has_keyword(recipient, Keyword::Haste));
+
+        let mut events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(source, 0, &mut events)
+            .expect("phase out the opponent's Goblin Chieftain"));
+        assert_eq!(
+            engine.effective_power(recipient),
+            Some(1),
+            "the phased-out Chieftain no longer contributes its +1/+1 grant"
+        );
+        assert!(!engine.effective_has_keyword(recipient, Keyword::Haste));
+
+        engine.phase_in_due_permanents(1, &mut events).unwrap();
+        assert_eq!(engine.effective_power(recipient), Some(2));
+        assert!(engine.effective_has_keyword(recipient, Keyword::Haste));
     }
 
     #[test]
@@ -4409,6 +4472,7 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         engine.state.players[0].battlefield.push(oid);
@@ -4530,6 +4594,7 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         engine.state.continuous_effects.extend([
@@ -4606,6 +4671,7 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         engine.state.continuous_effects.push(ContinuousEffect {
@@ -4665,6 +4731,7 @@ mod tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
+            phase_status: None,
         };
         let target = engine.state.next_object_id;
         let control_aura = target + 1;
@@ -4755,6 +4822,7 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         for (timestamp, controller) in [(1, 1), (2, 0)] {
@@ -4815,6 +4883,7 @@ mod tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
+            phase_status: None,
         };
         let source = engine.state.next_object_id;
         let mine = source + 1;
@@ -4957,6 +5026,7 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         match zone {

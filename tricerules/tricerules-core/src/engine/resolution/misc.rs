@@ -538,7 +538,7 @@ pub(super) fn gain_control(
         duration,
         timestamp: cx.engine.state.command_index,
     });
-    cx.engine.reindex_battlefield_control(cx.events);
+    cx.engine.reindex_battlefield_control(cx.events)?;
     cx.events.push(ev_log(format!(
         "{} changes control of {} {duration_label}",
         cx.spell_label,
@@ -578,7 +578,7 @@ pub(super) fn give_control_of_source_to_attacking_player(
         duration: EffectDuration::Indefinite,
         timestamp: cx.engine.state.command_index,
     });
-    cx.engine.reindex_battlefield_control(cx.events);
+    cx.engine.reindex_battlefield_control(cx.events)?;
     cx.events.push(ev_log(format!(
         "P{attacking_player} gains control of {}.",
         object_display_name(&cx.engine.state, cx.engine.registry, source_id)

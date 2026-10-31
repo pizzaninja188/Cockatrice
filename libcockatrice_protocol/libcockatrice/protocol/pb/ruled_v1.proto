@@ -2178,8 +2178,8 @@ message PreparationSource {
   uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 message PreparationState {
-  uint32 copy_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  uint64 copy_zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional uint32 copy_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional uint64 copy_zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 message PrepareSpellCopyView {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
@@ -2240,6 +2240,8 @@ message BattlefieldObject {
   // Absent for nontokens. Face-down tokens contain only anonymous public characteristics.
   TokenIdentity token_identity = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   bool prototyped = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // CR 702.26: the permanent remains physically represented but is not currently on the battlefield.
+  bool phased_out = 32 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message RoomDoorState {
@@ -2504,6 +2506,7 @@ message BattlefieldObjectMap {
     // engine-minted tokens (which have no Oracle entry) can be declared as attackers/blockers.
     bool is_creature = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     repeated string keywords = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    bool phased_out = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
   repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }

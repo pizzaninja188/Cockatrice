@@ -194,6 +194,20 @@ RuledClientState *stateForCard(const CardItem *card)
     return stateFor(card->getOwner()->getGame());
 }
 
+bool isPhasedOutCard(const CardItem *card)
+{
+    if (!card || !card->getOwner() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE) {
+        return false;
+    }
+    const RuledClientState *state = stateForCard(card);
+    if (!state) {
+        return false;
+    }
+    const int playerId = card->getOwner()->getPlayerInfo()->getId();
+    const quint32 oid = state->engineOidForCardId(playerId, card->getId());
+    return oid != 0 && state->isEngineOidPhasedOut(oid);
+}
+
 // ---------------------------------------------------------------------------------------
 // CardItem lookup
 // ---------------------------------------------------------------------------------------
@@ -405,6 +419,9 @@ RuledTargetItemKind classifySpellTargetItem(AbstractGame *game, RuledClientState
     if (findGraveyardCardItemByEngineOid(game, targetOid)) {
         return RuledTargetItemKind::Graveyard;
     }
+    if (state->isEngineOidPhasedOut(targetOid)) {
+        return RuledTargetItemKind::Unknown;
+    }
     if (findBattlefieldCardItemByEngineOid(game, targetOid)) {
         return RuledTargetItemKind::Battlefield;
     }
@@ -425,6 +442,9 @@ resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targ
         case RuledTargetItemKind::Graveyard:
             return findGraveyardCardItemByEngineOid(game, targetOid);
         case RuledTargetItemKind::Battlefield:
+            if (state->isEngineOidPhasedOut(targetOid)) {
+                return nullptr;
+            }
             return findBattlefieldCardItemByEngineOid(game, targetOid);
         case RuledTargetItemKind::Unknown:
             break;
@@ -500,7 +520,7 @@ bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *car
 
 bool isCombatEligibleCreature(const CardItem *card)
 {
-    if (!card || !card->getZone()) {
+    if (!card || !card->getZone() || isPhasedOutCard(card)) {
         return false;
     }
     if (card->getZone()->getName() != ZoneNames::TABLE) {
@@ -548,6 +568,9 @@ quint32 combatObjectOid(const CardItem *card, RuledClientState **outState)
 
 bool tryHandleCombatRightClick(CardItem *card)
 {
+    if (isPhasedOutCard(card)) {
+        return true;
+    }
     RuledClientState *state = nullptr;
     const quint32 oid = combatObjectOid(card, &state);
     if (oid == 0 || !isCombatEligibleCreature(card)) {
@@ -570,6 +593,9 @@ bool tryHandleCombatRightClick(CardItem *card)
 
 bool tryHandleCombatClick(CardItem *card)
 {
+    if (isPhasedOutCard(card)) {
+        return true;
+    }
     RuledClientState *state = nullptr;
     const quint32 oid = combatObjectOid(card, &state);
     if (oid == 0) {

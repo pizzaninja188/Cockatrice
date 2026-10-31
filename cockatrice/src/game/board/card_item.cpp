@@ -11,6 +11,7 @@
 #include "../player/player_manager.h"
 #include "../ruled/ruled_actions.h"
 #include "../ruled/ruled_card_display_identity.h"
+#include "../ruled/ruled_card_phasing_painter.h"
 #include "../ruled/ruled_client_state.h"
 #include "../ruled/ruled_payment_ui.h"
 #include "../ruled/ruled_token_display.h"
@@ -125,6 +126,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     }
 
     const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
+    const bool phasedOut =
+        ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidPhasedOut(ruledOid);
     QString displayedPt = pt;
     const bool prototyped = ruledHandler && ruledOid != 0 && ruledHandler->isPrototyped(ruledOid);
     if (prototyped && inTableZone) {
@@ -250,7 +253,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         painter->restore();
     }
 
-    if (ruledHandler) {
+    if (ruledHandler && !phasedOut) {
         if (ruledOid != 0) {
             QColor outlineColor;
             const auto ruledPhase = ruledHandler->getCombatPhase();
@@ -426,6 +429,14 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
+    }
+
+    if (phasedOut) {
+        RuledCardPhasingPainter::paintPhasedOut(
+            painter, shape(), translatedSize, scaleFactor, tr("PHASED OUT"),
+            [this, translatedSize](QPainter *target) {
+                transformPainter(target, translatedSize, this->tapAngle);
+            });
     }
 
     painter->restore();
@@ -663,6 +674,11 @@ void CardItem::drawAttachArrow()
 
 void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (RuledActions::isPhasedOutCard(this)) {
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
     if (event->buttons().testFlag(Qt::RightButton)) {
         if ((event->screenPos() - event->buttonDownScreenPos(Qt::RightButton)).manhattanLength() <
             2 * QApplication::startDragDistance())
@@ -724,6 +740,11 @@ static bool isTableLandSingleClickLegal(const CardItem *card);
 void CardItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     ruledTargetPressConsumed = false;
+    if (event->button() != Qt::MiddleButton && RuledActions::isPhasedOutCard(this)) {
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
         auto *manager = owner->getGame()->getPlayerManager();
         Player *local = manager ? manager->getPlayers().value(manager->getLocalPlayerId(), nullptr) : nullptr;
@@ -749,6 +770,9 @@ void CardItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void CardItem::playCard(bool faceDown)
 {
+    if (RuledActions::isPhasedOutCard(this)) {
+        return;
+    }
     if (RuledActions::tryHandlePublicZonePlay(this)) {
         return;
     }
@@ -816,6 +840,9 @@ static bool isTableLandSingleClickLegal(const CardItem *card)
  */
 void CardItem::handleClickedToPlay(bool shiftHeld)
 {
+    if (RuledActions::isPhasedOutCard(this)) {
+        return;
+    }
     if (RuledActions::isReplacementEffectCard(this))
         return;
     if (isUnwritableRevealZone(zone)) {
@@ -838,6 +865,11 @@ void CardItem::handleClickedToPlay(bool shiftHeld)
 
 void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (event->button() != Qt::MiddleButton && RuledActions::isPhasedOutCard(this)) {
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
     if (RuledActions::tryHandleReplacementEffectClick(this, event->button() == Qt::LeftButton &&
                                                                 isStationaryLeftRelease(event))) {
         AbstractCardItem::mouseReleaseEvent(event);
@@ -1000,6 +1032,10 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
 void CardItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (RuledActions::isPhasedOutCard(this)) {
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && ruledTargetPressConsumed) {
         ruledTargetPressConsumed = false;
         event->accept();

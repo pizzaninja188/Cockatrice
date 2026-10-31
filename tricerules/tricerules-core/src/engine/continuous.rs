@@ -147,12 +147,9 @@ impl GameEngine {
         &self,
         oid: ObjectId,
     ) -> Vec<tricerules_card_model::IdentifiedStaticAbility> {
-        let Some(_object) = self
-            .state
-            .objects
-            .get(&oid)
-            .filter(|object| object.zone == Zone::Battlefield && !object.face_down)
-        else {
+        let Some(_object) = self.state.objects.get(&oid).filter(|object| {
+            object.zone == Zone::Battlefield && object.phase_status.is_none() && !object.face_down
+        }) else {
             return Vec::new();
         };
         if let Some(faces) = self.room_faces(oid) {
@@ -349,7 +346,7 @@ impl GameEngine {
             .state
             .objects
             .get_mut(&target)
-            .filter(|o| o.zone == Zone::Battlefield)
+            .filter(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
         else {
             return 0;
         };
@@ -379,20 +376,16 @@ impl GameEngine {
         kind: CounterKind,
     ) -> Option<u32> {
         if source == destination
-            || !self
-                .state
-                .objects
-                .get(&destination)
-                .is_some_and(|object| object.zone == Zone::Battlefield)
+            || !self.state.objects.get(&destination).is_some_and(|object| {
+                object.zone == Zone::Battlefield && object.phase_status.is_none()
+            })
         {
             return None;
         }
         let (before, timestamp) = {
-            let source_object = self
-                .state
-                .objects
-                .get(&source)
-                .filter(|object| object.zone == Zone::Battlefield)?;
+            let source_object = self.state.objects.get(&source).filter(|object| {
+                object.zone == Zone::Battlefield && object.phase_status.is_none()
+            })?;
             (
                 source_object.counter_count(kind),
                 source_object.counter_timestamps.get(&kind).copied(),
@@ -444,7 +437,7 @@ impl GameEngine {
             .state
             .objects
             .get(&target)
-            .is_some_and(|o| o.zone == Zone::Battlefield)
+            .is_some_and(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
         {
             return false;
         }
@@ -1871,7 +1864,7 @@ impl GameEngine {
             .state
             .objects
             .get(&source_id)
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
         else {
             return Vec::new();
         };
@@ -2007,7 +2000,7 @@ impl GameEngine {
     }
 
     /// CR 514.2: drain ordinary turn effects and extended effects ending during this cleanup.
-    pub(super) fn cleanup_until_end_of_turn_effects(&mut self) {
+    pub(super) fn cleanup_until_end_of_turn_effects(&mut self) -> Result<(), EngineError> {
         let active_player = self.state.active_player_id();
         let turn_instance = self.state.turn_instance;
         self.state
@@ -2020,6 +2013,9 @@ impl GameEngine {
                 } => player != active_player || created_turn_instance >= turn_instance,
                 _ => true,
             });
+        // A phased-out object's default controller can leave when a temporary control effect
+        // expires. Reconcile it synchronously before cleanup advances to any other rules work.
+        self.reconcile_phased_out_default_controller_departures()?;
         self.state.active_event_observers.retain(|observer| {
             !matches!(
                 observer.matcher,
@@ -2028,6 +2024,7 @@ impl GameEngine {
                     | EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn { .. }
             )
         });
+        Ok(())
     }
 
     /// CR 707.2 / 614.12: expire a committed temporary entry-copy effect, restoring its exact
@@ -2207,7 +2204,7 @@ impl GameEngine {
             .state
             .objects
             .values()
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .filter_map(|object| {
                 self.characteristics(object.id)
                     .map(|snapshot| (object.id, snapshot))
@@ -2364,6 +2361,7 @@ mod issue_461_activation_prohibition_tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
+            phase_status: None,
         }
     }
 
@@ -3328,6 +3326,7 @@ mod issue_499_effect_counter_replacement_tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
+            phase_status: None,
         }
     }
 
@@ -3399,6 +3398,119 @@ mod issue_499_effect_counter_replacement_tests {
                 "origin {origin:?}"
             );
         }
+    }
+
+    #[test]
+    fn phased_out_permanent_cannot_receive_counters() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            499_120,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new engine");
+        let target = 20;
+        engine
+            .state
+            .objects
+            .insert(target, fixture_object(target, "forest"));
+        engine.state.players[0].battlefield.push(target);
+
+        assert!(engine.can_receive_counters(target));
+        engine.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        assert!(
+            !engine.can_receive_counters(target),
+            "a phased-out permanent has no active counter-receiving status"
+        );
+    }
+
+    #[test]
+    fn phased_out_permanent_cannot_have_counters_removed() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            499_122,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new engine");
+        let target = 20;
+        let mut object = fixture_object(target, "forest");
+        object.set_counter(CounterKind::Storage, 2);
+        engine.state.objects.insert(target, object);
+        engine.state.players[0].battlefield.push(target);
+        engine.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+
+        assert_eq!(
+            engine.remove_counters(target, CounterKind::Storage, 1),
+            0,
+            "an effect cannot remove counters from a phased-out permanent"
+        );
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Storage),
+            2,
+            "phasing preserves the permanent's counter bag"
+        );
+    }
+
+    #[test]
+    fn phased_out_permanent_cannot_supply_a_counter_move() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            499_121,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new engine");
+        let source = 20;
+        let destination = 21;
+        engine
+            .state
+            .objects
+            .insert(source, fixture_object(source, "forest"));
+        engine
+            .state
+            .objects
+            .insert(destination, fixture_object(destination, "forest"));
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .set_counter(CounterKind::Storage, 1);
+        engine.state.players[0]
+            .battlefield
+            .extend([source, destination]);
+
+        assert!(engine.counter_move_can_complete(source, destination, CounterKind::Storage));
+        engine.state.objects.get_mut(&source).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        assert!(
+            !engine.counter_move_can_complete(source, destination, CounterKind::Storage),
+            "a phased-out permanent cannot supply a counter to a move effect"
+        );
     }
 }
 

@@ -1372,7 +1372,9 @@ fn activated_modal_self_counter_uses_captured_controller_after_source_control_ch
         .expect("source remains on the battlefield")
         .base_controller = 20;
     let mut control_events = Vec::new();
-    engine.reindex_battlefield_control(&mut control_events);
+    engine
+        .reindex_battlefield_control(&mut control_events)
+        .expect("reindex after control effect");
     assert_eq!(engine.state.objects[&source].controller, 20);
     assert!(!engine.state.players[0].battlefield.contains(&source));
     assert!(engine.state.players[1].battlefield.contains(&source));
@@ -4258,6 +4260,33 @@ fn arena_staged_terminal_game_abandons_announcement() {
     assert!(batch.legal_by_player.is_empty());
     assert!(!engine.state.objects[&legacy.source_object_id].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+}
+
+#[test]
+fn phased_out_source_has_no_effective_activated_abilities() {
+    let (mut engine, command) = choice_engine();
+    let source_id = command.source_object_id;
+    assert!(
+        !engine.effective_activated_abilities(source_id).is_empty(),
+        "the fixture source has a live activated ability before phasing"
+    );
+
+    engine
+        .state
+        .objects
+        .get_mut(&source_id)
+        .unwrap()
+        .phase_status = Some(crate::state::PhasedOutStatus {
+        phase_out_under: 10,
+        phase_in_due_after_departed_turn: false,
+        phase_in_with: None,
+        direct_attachment_snapshot: None,
+    });
+
+    assert!(
+        engine.effective_activated_abilities(source_id).is_empty(),
+        "a phased-out permanent has no live activated abilities"
+    );
 }
 
 #[test]

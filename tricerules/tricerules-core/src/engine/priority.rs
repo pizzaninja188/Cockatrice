@@ -1253,11 +1253,14 @@ impl GameEngine {
                 } if controller == player)
             });
         }
+        // CR 800.4c must settle phased-out objects as soon as all control effects for departed
+        // players have ended, without briefly restoring them to the active battlefield index.
+        self.reconcile_phased_out_default_controller_departures()?;
         // A player can leave during a parked replacement choice, before the next SBA pass.
         // Retire their emblem effects now so the pending damage menu is refreshed correctly.
         self.remove_departed_emblems(&departed_set);
         self.discard_departed_triggered_abilities();
-        self.reindex_battlefield_control(events);
+        self.reindex_battlefield_control(events)?;
         self.reconcile_departed_target_hand_discard_program(events)?;
         let stranded: Vec<_> = self
             .state
@@ -1265,6 +1268,7 @@ impl GameEngine {
             .iter()
             .filter_map(|(&id, object)| {
                 (object.zone == Zone::Battlefield
+                    && object.phase_status.is_none()
                     && self
                         .state
                         .players
@@ -1446,7 +1450,7 @@ impl GameEngine {
         });
         batch.events.push(ev_log(format!("P{player} conceded")));
         // Apply the concession's already-ended control durations before it determines a winner.
-        self.reindex_battlefield_control(&mut batch.events);
+        self.reindex_battlefield_control(&mut batch.events)?;
         // Concession takes effect immediately, but a parked instruction/payment must not
         // turn a surviving player's intermediate life value into an early SBA loss.
         let still_in: Vec<_> = self
@@ -1469,7 +1473,7 @@ impl GameEngine {
         }
         self.reconcile_departed_players(&mut batch.events)?;
         self.reconcile_pending_linked_exile_after_departure(&mut batch.events)?;
-        self.reindex_battlefield_control(&mut batch.events);
+        self.reindex_battlefield_control(&mut batch.events)?;
         self.reconcile_draw_departure(&mut batch.events)?;
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
@@ -2018,6 +2022,20 @@ impl GameEngine {
         self.state.extra_turn_queue = newest;
     }
 
+    /// CR 702.26n: when a departed player's next turn would begin, schedule phased roots under
+    /// that player for the next real untap step. Indirect attachments return only with their root.
+    fn mark_phased_out_permanents_due_after_departed_turn(&mut self, departed_player: PlayerId) {
+        for object in self.state.objects.values_mut() {
+            if object.zone == Zone::Battlefield {
+                if let Some(status) = object.phase_status.as_mut() {
+                    if status.phase_out_under == departed_player {
+                        status.phase_in_due_after_departed_turn = true;
+                    }
+                }
+            }
+        }
+    }
+
     /// Select the next real turn after cleanup, omitting lost seats at their would-begin boundary.
     /// Returns true when the selected turn is extra; normal turns retain the ordinary seat cursor.
     fn select_next_turn_after_cleanup(&mut self) -> Result<bool, EngineError> {
@@ -2039,6 +2057,7 @@ impl GameEngine {
                     "extra turn references an unknown player",
                 ))?;
                 if self.state.players[index].has_lost {
+                    self.mark_phased_out_permanents_due_after_departed_turn(player);
                     expire_until_turn_start_effects(&mut self.state, player);
                     continue;
                 }
@@ -2051,6 +2070,7 @@ impl GameEngine {
                     "normal turn cursor references an unknown player",
                 ))?;
                 if self.state.players[index].has_lost {
+                    self.mark_phased_out_permanents_due_after_departed_turn(player);
                     expire_until_turn_start_effects(&mut self.state, player);
                     let next = (index + 1) % seat_count;
                     self.state.normal_turn_resume_player = Some(self.state.players[next].id);
@@ -2068,6 +2088,7 @@ impl GameEngine {
                     self.state.active_player_idx = index;
                     return Ok(false);
                 }
+                self.mark_phased_out_permanents_due_after_departed_turn(player);
                 expire_until_turn_start_effects(&mut self.state, player);
                 index = (index + 1) % seat_count;
             }
@@ -2081,7 +2102,7 @@ impl GameEngine {
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.cleanup_discard_player = None;
-        self.cleanup_until_end_of_turn_effects();
+        self.cleanup_until_end_of_turn_effects()?;
         self.state.chain_veil_permissions.clear();
         self.cleanup_temporary_copies();
         let ending_turn_instance = self.state.turn_instance;
@@ -2090,7 +2111,7 @@ impl GameEngine {
             .retain(|permission| {
                 permission.expires_at_cleanup_turn_instance != Some(ending_turn_instance)
             });
-        self.reindex_battlefield_control(&mut ev);
+        self.reindex_battlefield_control(&mut ev)?;
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
         self.state.cleanup_sba_performed |= self.apply_sbas_and_report(&mut ev)?;
@@ -2144,13 +2165,17 @@ impl GameEngine {
         self.state.turn_step = TurnStep::Untap;
         ev.push(ev_phase(self, rv1::PhaseId::Untap));
 
+        // CR 702.26m: phase in due permanents before preparing or applying any untap. Indirect
+        // attachments return only through the exact immediate-parent incarnation closure.
+        self.phase_in_due_permanents(ap, &mut ev)?;
+
         // CR 502.3: membership, source availability, restrictions and replacement outcomes all
         // read the same boundary. No tapped/counter/skip/sickness mutation precedes preparation.
         let active_cohort = self
             .state
             .objects
             .values()
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .filter(|object| {
                 self.characteristics(object.id)
                     .is_some_and(|c| c.controller == ap)

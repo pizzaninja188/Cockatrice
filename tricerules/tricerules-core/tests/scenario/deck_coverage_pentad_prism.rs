@@ -516,7 +516,10 @@ fn pentad_prism_palette_preparation_is_paid_but_its_observer_does_not_match_arti
     let mut engine = setup(202_610_228);
     inject_card_into_hand(&mut engine, 0, "pigment_wrangler_striking_palette");
     let wrangler = move_ready_to_battlefield(&mut engine, 0, "pigment_wrangler_striking_palette");
-    let palette = engine.state.prepared_permanents[&wrangler];
+    let palette = engine.state.prepared_permanents[&wrangler]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         &mut engine,
         0,

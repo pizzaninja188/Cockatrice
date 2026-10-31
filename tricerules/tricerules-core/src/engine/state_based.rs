@@ -1,7 +1,7 @@
 use super::events::ev_log;
 use super::resolution::{
-    commit_zone_move, consume_regen_shield, destroy_permanent, permanent_moved_event,
-    prepare_zone_move, PreparedZoneMove,
+    commit_zone_move, consume_regen_shield, destroy_permanent, move_object_to_zone,
+    permanent_moved_event, prepare_zone_move, PreparedZoneMove,
 };
 use super::*;
 use crate::state::{
@@ -125,6 +125,11 @@ impl GameEngine {
                         player.id,
                         object.zone
                     );
+                    assert!(
+                        object.phase_status.is_none(),
+                        "phased-out oid {oid} is present in P{}'s active battlefield list",
+                        player.id
+                    );
                     assert_eq!(
                         object.controller, player.id,
                         "oid {oid} is in P{}'s battlefield list but is controlled by P{}",
@@ -134,6 +139,18 @@ impl GameEngine {
             }
             for (oid, object) in &self.state.objects {
                 if object.zone != Zone::Battlefield {
+                    continue;
+                }
+                if object.phase_status.is_some() {
+                    let listed = self
+                        .state
+                        .players
+                        .iter()
+                        .any(|player| player.battlefield.contains(oid));
+                    assert!(
+                        !listed,
+                        "phased-out oid {oid} must be absent from every active battlefield list"
+                    );
                     continue;
                 }
                 let listed = self
@@ -183,7 +200,7 @@ impl GameEngine {
             )
         });
         let mut changed = self.state.continuous_effects.len() != effect_count;
-        changed |= self.reindex_battlefield_control(out);
+        changed |= self.reindex_battlefield_control(out)?;
         changed |= self.refresh_enduring_story_designations();
         changed |= self.remove_departed_emblems(&lost_players);
         if self.state.pending_resolution.is_some() {
@@ -230,7 +247,7 @@ impl GameEngine {
             .state
             .objects
             .iter()
-            .filter(|(_, object)| object.zone == Zone::Battlefield)
+            .filter(|(_, object)| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .map(|(id, _)| *id)
             .collect();
         candidate_ids.sort_unstable();
@@ -367,11 +384,10 @@ impl GameEngine {
                     ) => {
                         for &(object_id, _) in candidates {
                             if object_id != *keep_id
-                                && self
-                                    .state
-                                    .objects
-                                    .get(&object_id)
-                                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                                && self.state.objects.get(&object_id).is_some_and(|object| {
+                                    object.zone == Zone::Battlefield
+                                        && object.phase_status.is_none()
+                                })
                                 && planned_zone_move_ids.insert(object_id)
                             {
                                 prepare_state_based_zone_move(
@@ -391,7 +407,7 @@ impl GameEngine {
         // Counter cancellation and deaths are one simultaneous SBA set. Capture all death decisions
         // and last-known characteristics before removing either kind of counter.
         for o in self.state.objects.values_mut() {
-            if o.zone != Zone::Battlefield {
+            if o.zone != Zone::Battlefield || o.phase_status.is_some() {
                 continue;
             }
             let plus = o.counter_count(CounterKind::PlusOnePlusOne);
@@ -412,7 +428,7 @@ impl GameEngine {
         // indestructible creature must not die during a later check merely because it lost
         // indestructible after surviving old deathtouch damage.
         for object in self.state.objects.values_mut() {
-            if object.zone == Zone::Battlefield {
+            if object.zone == Zone::Battlefield && object.phase_status.is_none() {
                 object.deathtouch_damage = false;
             }
         }
@@ -481,7 +497,7 @@ impl GameEngine {
             let Some(object) = self.state.objects.get(&id) else {
                 continue;
             };
-            if object.zone != Zone::Battlefield {
+            if object.zone != Zone::Battlefield || object.phase_status.is_some() {
                 continue;
             }
             let owner = object.owner;
@@ -555,11 +571,10 @@ impl GameEngine {
                     ) => {
                         for &(object_id, _) in candidates {
                             if object_id == *keep_id
-                                || !self
-                                    .state
-                                    .objects
-                                    .get(&object_id)
-                                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                                || !self.state.objects.get(&object_id).is_some_and(|object| {
+                                    object.zone == Zone::Battlefield
+                                        && object.phase_status.is_none()
+                                })
                             {
                                 continue;
                             }
@@ -625,6 +640,7 @@ impl GameEngine {
             .iter()
             .filter(|(_, eq)| {
                 eq.zone == Zone::Battlefield
+                    && eq.phase_status.is_none()
                     && eq.attached_to.is_some_and(|recipient| {
                         self.characteristics(eq.id).is_some_and(|value| {
                             if value.has_type("Equipment") {
@@ -660,28 +676,55 @@ impl GameEngine {
             .keys()
             .copied()
             .filter(|id| {
-                let linked_exile_copy = self
+                let active_copy = self
                     .state
                     .prepared_permanents
                     .values()
-                    .any(|copy| copy == id)
-                    && self
-                        .state
-                        .objects
-                        .get(id)
-                        .is_some_and(|copy| copy.zone == Zone::Exile)
-                    && self
-                        .state
+                    .find_map(|designation| {
+                        designation
+                            .active_exile_copy
+                            .filter(|copy| copy.object_id == *id)
+                    });
+                let linked_exile_copy = active_copy.is_some_and(|copy_ref| {
+                    self.state
                         .zone_change_generation
                         .get(id)
                         .copied()
                         .unwrap_or(0)
-                        == 0;
+                        == copy_ref.zone_change_generation
+                        && self
+                            .state
+                            .objects
+                            .get(id)
+                            .is_some_and(|copy| copy.zone == Zone::Exile)
+                });
                 let on_stack = self.state.stack.iter().any(|item| item.id == *id);
                 !(on_stack || linked_exile_copy)
             })
             .collect();
         for id in spent_copies {
+            let preparation_source = self
+                .state
+                .prepare_spell_sources
+                .get(&id)
+                .map(|source| (source.object_id, source.zone_change_generation));
+            if let Some((source_id, source_generation)) = preparation_source {
+                if let Some(designation) = self
+                    .state
+                    .prepared_permanents
+                    .get_mut(&source_id)
+                    .filter(|designation| {
+                        designation.source_zone_change_generation == source_generation
+                            && designation
+                                .active_exile_copy
+                                .is_some_and(|copy_ref| copy_ref.object_id == id)
+                    })
+                {
+                    // A displaced linked copy ceases to be active, but it does not end the
+                    // source's prepared designation (CR 722.3c).
+                    designation.active_exile_copy = None;
+                }
+            }
             self.state.prepare_spell_sources.remove(&id);
             self.state.zone_change_generation.remove(&id);
             self.state.class_levels.remove(&id);
@@ -735,6 +778,7 @@ impl GameEngine {
             .iter()
             .filter(|(_, o)| {
                 o.zone == Zone::Battlefield
+                    && o.phase_status.is_none()
                     && self
                         .characteristics(o.id)
                         .is_some_and(|value| value.is_aura())
@@ -911,7 +955,7 @@ impl GameEngine {
 
         let mut legends: BTreeMap<(PlayerId, String), Vec<(ObjectId, u64)>> = BTreeMap::new();
         for (&object_id, object) in &self.state.objects {
-            if object.zone != Zone::Battlefield {
+            if object.zone != Zone::Battlefield || object.phase_status.is_some() {
                 continue;
             }
             let Some(characteristics) = self.characteristics(object_id) else {
@@ -1211,11 +1255,18 @@ impl GameEngine {
 
     /// Materialize CR 613 layer-2 control into the battlefield control index. Characteristics
     /// remain the authority; `GameObject::controller` is the settled cache used by hot paths.
-    pub(super) fn reindex_battlefield_control(&mut self, out: &mut Vec<rv1::RuledEvent>) -> bool {
+    pub(super) fn reindex_battlefield_control(
+        &mut self,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
         let mut ordered = Vec::new();
         for player in &self.state.players {
             for &oid in &player.battlefield {
-                if !ordered.contains(&oid) {
+                if !ordered.contains(&oid)
+                    && self.state.objects.get(&oid).is_some_and(|object| {
+                        object.zone == Zone::Battlefield && object.phase_status.is_none()
+                    })
+                {
                     ordered.push(oid);
                 }
             }
@@ -1224,7 +1275,11 @@ impl GameEngine {
             .state
             .objects
             .iter()
-            .filter(|(oid, object)| object.zone == Zone::Battlefield && !ordered.contains(oid))
+            .filter(|(oid, object)| {
+                object.zone == Zone::Battlefield
+                    && object.phase_status.is_none()
+                    && !ordered.contains(oid)
+            })
             .map(|(oid, _)| *oid)
             .collect();
         missing.sort_unstable();
@@ -1238,7 +1293,9 @@ impl GameEngine {
                     self.state
                         .objects
                         .get(&oid)
-                        .filter(|object| object.zone == Zone::Battlefield)
+                        .filter(|object| {
+                            object.zone == Zone::Battlefield && object.phase_status.is_none()
+                        })
                         .and_then(|_| {
                             self.characteristics(oid)
                                 .map(|value| (oid, value.controller))
@@ -1258,18 +1315,20 @@ impl GameEngine {
                     else {
                         return None;
                     };
-                    let source_is_current = self
-                        .state
-                        .objects
-                        .get(source_object_id)
-                        .is_some_and(|source| source.zone == Zone::Battlefield)
-                        && self
-                            .state
-                            .zone_change_generation
+                    let source_is_current =
+                        self.state
+                            .objects
                             .get(source_object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == *source_zone_change_generation;
+                            .is_some_and(|source| {
+                                source.zone == Zone::Battlefield && source.phase_status.is_none()
+                            })
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(source_object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == *source_zone_change_generation;
                     let source_controller = desired.iter().find_map(|&(object_id, current)| {
                         (object_id == *source_object_id).then_some(current)
                     });
@@ -1325,19 +1384,32 @@ impl GameEngine {
                 }
             }
         }
-        if changed_ids.is_empty() {
+        let desired_battlefield: Vec<Vec<ObjectId>> = self
+            .state
+            .players
+            .iter()
+            .map(|player| {
+                desired
+                    .iter()
+                    .filter_map(|&(oid, controller)| (controller == player.id).then_some(oid))
+                    .collect()
+            })
+            .collect();
+        let battlefield_index_changed = self
+            .state
+            .players
+            .iter()
+            .zip(&desired_battlefield)
+            .any(|(player, desired)| player.battlefield != *desired);
+        if changed_ids.is_empty() && !battlefield_index_changed {
             self.refresh_hideaway_look_permissions();
             self.reconcile_combat_characteristics(out);
-            return expired_source_control_duration;
+            let reconciled = self.reconcile_phased_out_default_controller_departures()?;
+            return Ok(expired_source_control_duration || reconciled);
         }
 
-        for player in &mut self.state.players {
-            player.battlefield.clear();
-        }
-        for (oid, controller) in desired {
-            if let Some(index) = self.state.player_idx(controller) {
-                self.state.players[index].battlefield.push(oid);
-            }
+        for (player, desired) in self.state.players.iter_mut().zip(desired_battlefield) {
+            player.battlefield = desired;
         }
 
         self.remove_combat_participants(&changed_ids, out);
@@ -1363,7 +1435,54 @@ impl GameEngine {
             self.state.stage_delayed_batch(delayed);
         }
         self.refresh_hideaway_look_permissions();
-        true
+        self.reconcile_phased_out_default_controller_departures()?;
+        Ok(true)
+    }
+
+    /// CR 800.4c: an out-of-index permanent whose default controller has left must be exiled
+    /// when its last remaining control effect no longer gives it to a player in the game. Rebuild
+    /// the effective controller from base control and live effects; the cached controller may be
+    /// stale because phasing deliberately removes this object from the active control index.
+    pub(super) fn reconcile_phased_out_default_controller_departures(
+        &mut self,
+    ) -> Result<bool, EngineError> {
+        let candidates = self
+            .state
+            .objects
+            .iter()
+            .filter_map(|(&object_id, object)| {
+                if object.zone != Zone::Battlefield || object.phase_status.is_none() {
+                    return None;
+                }
+                let default_controller_is_in_game = self
+                    .state
+                    .player_idx(object.base_controller)
+                    .is_some_and(|index| !self.state.players[index].has_lost);
+                (!default_controller_is_in_game).then_some(object_id)
+            })
+            .collect::<Vec<_>>();
+
+        let mut exiled_any = false;
+        for object_id in candidates {
+            let current_controller =
+                super::characteristics::phased_out_controller_for_reconciliation(
+                    &self.state,
+                    self.registry,
+                    object_id,
+                );
+            let control_still_belongs_to_a_live_player =
+                current_controller.is_some_and(|controller| {
+                    self.state
+                        .player_idx(controller)
+                        .is_some_and(|index| !self.state.players[index].has_lost)
+                });
+            if control_still_belongs_to_a_live_player {
+                continue;
+            }
+            move_object_to_zone(&mut self.state, self.registry, object_id, Zone::Exile, None)?;
+            exiled_any = true;
+        }
+        Ok(exiled_any)
     }
 }
 
@@ -2073,6 +2192,7 @@ mod sba_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();
@@ -2340,6 +2460,350 @@ mod sba_tests {
     }
 
     #[test]
+    fn phased_out_object_remains_battlefield_but_is_removed_from_active_control_index() {
+        let mut e = engine();
+        let target = add_creature(&mut e, 0, 2, 0);
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        e.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+
+        let mut out = vec![];
+        e.reindex_battlefield_control(&mut out)
+            .expect("phase-out reindex");
+
+        let object = e
+            .state
+            .objects
+            .get(&target)
+            .expect("target remains present");
+        assert_eq!(object.zone, Zone::Battlefield);
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation
+        );
+        assert!(e
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+    }
+
+    #[test]
+    fn phased_out_object_is_not_current_battlefield_generation() {
+        let mut e = engine();
+        let target = add_creature(&mut e, 0, 2, 0);
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        e.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+
+        assert!(!e.object_is_current_battlefield_generation(target, generation));
+    }
+
+    #[test]
+    fn departed_default_controller_out_object_is_exiled_when_last_control_effect_expires() {
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            800_404,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        e.state.opening = None;
+        let target = add_creature(&mut e, 1, 2, 0);
+        let object = e.state.objects.get_mut(&target).unwrap();
+        object.base_controller = 0;
+        object.controller = 2;
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(2),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 10,
+        });
+        e.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 2,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        e.state.players[0].has_lost = true;
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex after departure");
+
+        assert_eq!(e.state.objects[&target].owner, 1);
+        assert_eq!(e.state.objects[&target].base_controller, 0);
+        assert_eq!(e.state.objects[&target].controller, 2);
+        assert_eq!(
+            super::super::characteristics::phased_out_controller_for_reconciliation(
+                &e.state, e.registry, target,
+            ),
+            Some(2),
+            "the surviving control effect keeps this out object alive before cleanup"
+        );
+        assert!(e
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+
+        e.cleanup_until_end_of_turn_effects()
+            .expect("cleanup and reconcile phased control");
+
+        assert_eq!(
+            e.state.objects[&target].zone,
+            Zone::Exile,
+            "ownership and stale controller cache cannot replace the departed base controller"
+        );
+        assert!(e.state.objects[&target].phase_status.is_none());
+        assert!(e
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+    }
+
+    #[test]
+    fn phased_out_static_control_source_does_not_preserve_default_control_after_departure() {
+        let mut e = engine();
+        e.state.opening = None;
+        let target = add_creature(&mut e, 0, 2, 0);
+        let control_source = add_registered_permanent(&mut e, 1, "mind_control");
+        e.state
+            .objects
+            .get_mut(&control_source)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(target));
+        e.emit_static_abilities_on_enter(control_source);
+        assert_eq!(e.controller_of(target), Some(1));
+
+        let mut events = Vec::new();
+        assert!(e
+            .phase_out_chosen_creature(target, 0, &mut events)
+            .expect("phase out the opponent-controlled creature"));
+        assert!(e.state.objects[&target].phase_status.is_some());
+        assert!(e.state.objects[&control_source].phase_status.is_some());
+        let default_controller_index = e.state.player_idx(0).unwrap();
+        e.state.players[default_controller_index].has_lost = true;
+        assert_eq!(
+            super::super::characteristics::phased_out_controller_for_reconciliation(
+                &e.state, e.registry, target,
+            ),
+            Some(0),
+            "the phased-out static control source no longer controls its phased-out recipient"
+        );
+
+        e.reconcile_phased_out_default_controller_departures()
+            .expect("reconcile the out object after its default controller leaves");
+        assert_eq!(e.state.objects[&target].zone, Zone::Exile);
+    }
+
+    #[test]
+    fn phased_out_default_controller_waits_for_remaining_surviving_control_effect() {
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            800_405,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        e.state.opening = None;
+        let target = add_creature(&mut e, 1, 2, 0);
+        let source = add_creature(&mut e, 1, 2, 0);
+        let source_generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        e.state.objects.get_mut(&target).unwrap().base_controller = 0;
+        e.state.objects.get_mut(&target).unwrap().controller = 2;
+        e.state.continuous_effects.extend([
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(1),
+                },
+                condition: None,
+                duration: EffectDuration::WhileSourceControlledBy {
+                    source_object_id: source,
+                    source_zone_change_generation: source_generation,
+                    controller: 1,
+                },
+                timestamp: 5,
+            },
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(2),
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 10,
+            },
+        ]);
+        e.state.objects.get_mut(&target).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 2,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        e.state.players[0].has_lost = true;
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex after default controller departure");
+
+        assert_eq!(
+            super::super::characteristics::phased_out_controller_for_reconciliation(
+                &e.state, e.registry, target,
+            ),
+            Some(2),
+            "the later temporary effect controls the out permanent before cleanup"
+        );
+        e.cleanup_until_end_of_turn_effects()
+            .expect("expire temporary control and reconcile");
+        assert_eq!(e.state.objects[&target].zone, Zone::Battlefield);
+        assert!(e.state.objects[&target].phase_status.is_some());
+        assert_eq!(
+            super::super::characteristics::phased_out_controller_for_reconciliation(
+                &e.state, e.registry, target,
+            ),
+            Some(1),
+            "the remaining source-bound control effect still grants control to B"
+        );
+        assert!(e
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(2),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 20,
+        });
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("expire false source-bound control and reconcile");
+
+        assert_eq!(e.state.objects[&target].zone, Zone::Exile);
+        assert!(e.state.objects[&target].phase_status.is_none());
+        assert!(e
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+    }
+
+    #[test]
+    fn phased_out_creature_and_attached_equipment_skip_sbas() {
+        let mut e = engine();
+        let creature = add_creature(&mut e, 0, 2, 2);
+        let equipment = add_creature(&mut e, 0, 2, 0);
+        e.state.objects.get_mut(&equipment).unwrap().card_id = "bonesplitter".into();
+        e.state.objects.get_mut(&equipment).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(creature));
+        let creature_generation = e
+            .state
+            .zone_change_generation
+            .get(&creature)
+            .copied()
+            .unwrap_or(0);
+        let equipment_generation = e
+            .state
+            .zone_change_generation
+            .get(&equipment)
+            .copied()
+            .unwrap_or(0);
+        e.state.objects.get_mut(&creature).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        e.state.objects.get_mut(&equipment).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: Some(crate::state::PhasedOutParentRef {
+                    object_id: creature,
+                    zone_change_generation: creature_generation,
+                }),
+                direct_attachment_snapshot: None,
+            });
+
+        let mut out = vec![];
+        e.apply_sbas(&mut out)
+            .expect("phased-out objects skip SBAs");
+
+        assert_eq!(e.state.objects[&creature].zone, Zone::Battlefield);
+        assert_eq!(e.state.objects[&creature].damage, 2);
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&creature)
+                .copied()
+                .unwrap_or(0),
+            creature_generation
+        );
+        assert_eq!(e.state.objects[&equipment].zone, Zone::Battlefield);
+        assert_eq!(
+            e.state.objects[&equipment].attached_to,
+            Some(AttachmentRecipient::Object(creature))
+        );
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&equipment)
+                .copied()
+                .unwrap_or(0),
+            equipment_generation
+        );
+    }
+
+    #[test]
     fn resolving_source_control_duration_expires_before_control_is_published() {
         let mut e = engine();
         let source = add_creature(&mut e, 0, 2, 0);
@@ -2367,7 +2831,8 @@ mod sba_tests {
             timestamp: 1,
         });
         let mut out = Vec::new();
-        e.reindex_battlefield_control(&mut out);
+        e.reindex_battlefield_control(&mut out)
+            .expect("expire source-control duration");
         assert_eq!(e.state.objects[&target].controller, 0);
 
         e.state.continuous_effects.push(ContinuousEffect {
@@ -2382,7 +2847,8 @@ mod sba_tests {
             timestamp: 2,
         });
         out.clear();
-        e.reindex_battlefield_control(&mut out);
+        e.reindex_battlefield_control(&mut out)
+            .expect("reindex after source control changes");
 
         assert_eq!(e.state.objects[&source].controller, 1);
         assert_eq!(
@@ -2398,6 +2864,65 @@ mod sba_tests {
             source_generation,
             "source control changes do not create a new object"
         );
+    }
+
+    #[test]
+    fn phased_out_while_source_controlled_by_ends_the_control_effect() {
+        let mut e = engine();
+        let source = add_creature(&mut e, 0, 2, 2);
+        let target = add_creature(&mut e, 1, 2, 2);
+        let source_generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(0),
+            },
+            condition: None,
+            duration: EffectDuration::WhileSourceControlledBy {
+                source_object_id: source,
+                source_zone_change_generation: source_generation,
+                controller: 0,
+            },
+            timestamp: 1,
+        });
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("apply the source-bound control effect");
+        assert_eq!(e.state.objects[&target].controller, 0);
+
+        let mut phase_out_events = Vec::new();
+        assert!(e
+            .phase_out_chosen_creature(source, 1, &mut phase_out_events)
+            .expect("phase out the control-effect source"));
+
+        assert!(e.state.objects[&source].phase_status.is_some());
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation,
+            "phasing does not change the source incarnation"
+        );
+        assert_eq!(e.state.objects[&target].controller, 1);
+        assert!(e.state.continuous_effects.iter().all(|effect| {
+            !matches!(
+                effect.duration,
+                EffectDuration::WhileSourceControlledBy {
+                    source_object_id,
+                    source_zone_change_generation,
+                    ..
+                } if source_object_id == source
+                    && source_zone_change_generation == source_generation
+            )
+        }));
     }
 
     #[test]

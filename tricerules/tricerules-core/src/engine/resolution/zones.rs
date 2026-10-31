@@ -8357,7 +8357,9 @@ mod tests {
                 duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
                 timestamp: engine.state.command_index,
             });
-        engine.reindex_battlefield_control(&mut Vec::new());
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex after control effect");
         assert_eq!(engine.state.objects[&source_object].owner, 1);
         assert_eq!(engine.state.objects[&source_object].controller, 0);
 
@@ -8526,7 +8528,9 @@ mod tests {
                 duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
                 timestamp: engine.state.command_index,
             });
-        engine.reindex_battlefield_control(&mut Vec::new());
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex after control effect");
         assert_eq!(engine.state.objects[&source_object].owner, 1);
         assert_eq!(engine.state.objects[&source_object].controller, 0);
         assert_eq!(engine.state.objects[&hidden_object].owner, 1);

@@ -58,7 +58,10 @@ fn inset_cast(engine: &mut GameEngine, copy: u32, x: u32) -> rv1::RuledCommand {
 #[test]
 fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
     let (mut engine, permanent) = prepared_healer();
-    let old_copy = engine.state.prepared_permanents[&permanent];
+    let old_copy = engine.state.prepared_permanents[&permanent]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     let stale_cast = inset_cast(&mut engine, old_copy, 0);
     let definition = tricerules_cards::registry::global()
         .get("infirmary_healer_stream_of_life")
@@ -97,24 +100,42 @@ fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
     let prepare = activate_ability_for(&engine, permanent, 2, vec![]);
     engine.apply_scenario_command(0, &prepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
-    let new_copy = engine.state.prepared_permanents[&permanent];
+    let new_copy = engine.state.prepared_permanents[&permanent]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     assert_ne!(new_copy, old_copy);
     engine.apply_scenario_command(0, &prepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
-    assert_eq!(engine.state.prepared_permanents[&permanent], new_copy);
+    assert_eq!(
+        engine.state.prepared_permanents[&permanent]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id,
+        new_copy
+    );
     assert!(engine.apply_scenario_command(0, &stale_cast).is_err());
 }
 
 #[test]
 fn preparation_x_cast_consumes_designation_and_resolves_without_moving_source() {
     let (mut engine, permanent) = prepared_healer();
-    let copy = engine.state.prepared_permanents[&permanent];
+    let copy = engine.state.prepared_permanents[&permanent]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     let command = inset_cast(&mut engine, copy, 3);
     assert!(
         engine.apply_scenario_command(0, &command).is_err(),
         "unpaid cast must fail"
     );
-    assert_eq!(engine.state.prepared_permanents[&permanent], copy);
+    assert_eq!(
+        engine.state.prepared_permanents[&permanent]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id,
+        copy
+    );
     give_mana(
         &mut engine,
         0,
@@ -172,7 +193,10 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
         .unwrap();
     let source = engine.state.stack.last().unwrap().id;
     resolve_entire_stack_two_player(&mut engine);
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     let mut palette = inset_cast(&mut engine, copy, 0);
     if let Some(Cmd::CastSpell(cast)) = &mut palette.cmd {
         cast.targets.clear();
@@ -237,7 +261,10 @@ fn preparation_rejoinder_decline_still_draws_and_twofold_intent_pumps() {
             .unwrap();
         let permanent = engine.state.stack.last().unwrap().id;
         resolve_entire_stack_two_player(&mut engine);
-        let copy = engine.state.prepared_permanents[&permanent];
+        let copy = engine.state.prepared_permanents[&permanent]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id;
         let mut cast = inset_cast(&mut engine, copy, 0);
         if let Some(Cmd::CastSpell(cast)) = &mut cast.cmd {
             cast.targets = target_object(healer);
@@ -305,7 +332,10 @@ fn preparation_entry_creates_a_distinct_castable_exile_copy() {
 #[test]
 fn preparation_clone_applies_enters_prepared_and_copies_have_separate_lifetimes() {
     let (mut engine, source) = prepared_healer();
-    let original_copy = engine.state.prepared_permanents[&source];
+    let original_copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     inject_card_into_hand(&mut engine, 0, "clone");
     give_mana(
         &mut engine,
@@ -325,7 +355,10 @@ fn preparation_clone_applies_enters_prepared_and_copies_have_separate_lifetimes(
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
-    let cloned_copy = engine.state.prepared_permanents[&clone];
+    let cloned_copy = engine.state.prepared_permanents[&clone]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     assert_ne!(cloned_copy, original_copy);
     assert_eq!(
         engine.state.objects[&cloned_copy].card_id,
@@ -343,14 +376,23 @@ fn preparation_clone_applies_enters_prepared_and_copies_have_separate_lifetimes(
     engine.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 20);
-    assert_eq!(engine.state.prepared_permanents[&source], original_copy);
+    assert_eq!(
+        engine.state.prepared_permanents[&source]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id,
+        original_copy
+    );
     assert!(!engine.state.prepared_permanents.contains_key(&clone));
 }
 
 #[test]
 fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast() {
     let (mut engine, source) = prepared_healer();
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         &mut engine,
         0,
@@ -399,7 +441,10 @@ fn preparation_rejoinder_tap_and_untap_choices_preserve_target_and_draw() {
         let (mut engine, healer) = prepared_healer();
         inject_card_into_hand(&mut engine, 0, "elite_interceptor_rejoinder");
         let source = move_ready_to_battlefield(&mut engine, 0, "elite_interceptor_rejoinder");
-        let copy = engine.state.prepared_permanents[&source];
+        let copy = engine.state.prepared_permanents[&source]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id;
         engine.state.objects.get_mut(&healer).unwrap().tapped = initially_tapped;
         give_mana(
             &mut engine,
@@ -431,7 +476,10 @@ fn preparation_rejoinder_illegal_target_fizzles_without_choice_or_draw() {
     let (mut engine, healer) = prepared_healer();
     inject_card_into_hand(&mut engine, 0, "elite_interceptor_rejoinder");
     let source = move_ready_to_battlefield(&mut engine, 0, "elite_interceptor_rejoinder");
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         &mut engine,
         0,
@@ -470,7 +518,10 @@ fn preparation_rejoinder_illegal_target_fizzles_without_choice_or_draw() {
 #[test]
 fn preparation_countered_copy_never_moves_or_reprepares_the_source() {
     let (mut engine, source) = prepared_healer();
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         &mut engine,
         0,
@@ -505,7 +556,10 @@ fn preparation_countered_copy_never_moves_or_reprepares_the_source() {
 fn cast_palette(engine: &mut GameEngine) {
     inject_card_into_hand(engine, 0, "pigment_wrangler_striking_palette");
     let source = move_ready_to_battlefield(engine, 0, "pigment_wrangler_striking_palette");
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         engine,
         0,
@@ -609,7 +663,10 @@ fn preparation_palette_expires_at_cleanup_and_does_not_copy_next_turn() {
 #[test]
 fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
     let (mut engine, source) = prepared_healer();
-    let copy = engine.state.prepared_permanents[&source];
+    let copy = engine.state.prepared_permanents[&source]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     let peeper = inject_permanent_on_battlefield(&mut engine, 0, "creeping_peeper");
     engine
         .apply_scenario_command(0, &activate_ability_for(&engine, peeper, 0, vec![]))
@@ -637,7 +694,13 @@ fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
         serde_json::to_string(&engine.state.players[0]).unwrap(),
         before
     );
-    assert_eq!(engine.state.prepared_permanents[&source], copy);
+    assert_eq!(
+        engine.state.prepared_permanents[&source]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id,
+        copy
+    );
     if let Some(Cmd::CastSpell(cast)) = &mut command.cmd {
         cast.restricted_mana.clear();
         cast.targets = target_object(source);
@@ -648,5 +711,11 @@ fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
         serde_json::to_string(&engine.state.players[0]).unwrap(),
         before
     );
-    assert_eq!(engine.state.prepared_permanents[&source], copy);
+    assert_eq!(
+        engine.state.prepared_permanents[&source]
+            .active_exile_copy
+            .expect("prepared copy is active")
+            .object_id,
+        copy
+    );
 }

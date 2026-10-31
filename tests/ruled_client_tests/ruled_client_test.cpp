@@ -2032,6 +2032,39 @@ TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
     EXPECT_EQ(state->playerIdForEngineOid(999), -1);
 }
 
+TEST_F(RuledClientTest, PhasedOutStatusRebuildsOnFullMapAndResetsWithSession)
+{
+    ruled::v1::RuledEventBatch initial;
+    auto *initialMap = initial.add_events();
+    addPermanent(initialMap, kOpponent, 801, 17)->set_phased_out(true);
+    addPermanent(initialMap, kLocalPlayer, 802, 18)->set_phased_out(false);
+    apply(initial);
+
+    ASSERT_TRUE(state->isEngineOidPhasedOut(801))
+        << "the complete public battlefield map must retain an engine-reported phasing state";
+    EXPECT_FALSE(state->isEngineOidPhasedOut(802));
+
+    ruled::v1::RuledEventBatch replacement;
+    addPermanent(replacement.add_events(), kLocalPlayer, 802, 18)->set_phased_out(false);
+    apply(replacement);
+    EXPECT_FALSE(state->isEngineOidPhasedOut(801))
+        << "a full-map replacement must retire phased status for absent ObjectIds";
+    EXPECT_FALSE(state->isEngineOidPhasedOut(802));
+
+    ruled::v1::RuledEventBatch nextSession;
+    addPermanent(nextSession.add_events(), kOpponent, 803, 19)->set_phased_out(true);
+    apply(nextSession);
+    ASSERT_TRUE(state->isEngineOidPhasedOut(803));
+    state->clearSessionState(RuledSessionResetScope::All);
+    EXPECT_FALSE(state->isEngineOidPhasedOut(803))
+        << "session reset must not carry phasing state into the next game";
+
+    ruled::v1::RuledEventBatch restoredSession;
+    addPermanent(restoredSession.add_events(), kLocalPlayer, 804, 20)->set_phased_out(true);
+    apply(restoredSession);
+    EXPECT_TRUE(state->isEngineOidPhasedOut(804));
+}
+
 TEST_F(RuledClientTest, EarthbendAnimationAndReturnReplaceDerivedCharacteristics)
 {
     auto publish = [&](bool creature, quint64 generation) {
@@ -10353,6 +10386,175 @@ TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabe
     EXPECT_EQ(menu[1].label, QStringLiteral("Cast Grizzly Bears — Release to the Wind"));
 }
 
+TEST_F(RuledClientTest, PreparationViewReplacementRetiresOldLinkAndAcceptsFreshCopy)
+{
+    const auto makeView = [](quint32 copyOid, quint64 copyGeneration, bool hasActiveCopy) {
+        ruled::v1::RuledEventBatch batch;
+        auto *view = batch.add_events()->mutable_zone_view();
+        view->set_battlefields_unchanged(false);
+        auto *player = view->add_per_player();
+        player->set_player_id(kLocalPlayer);
+        auto *source = player->add_battlefield_objects();
+        source->set_object_id(42u);
+        source->set_zone_change_generation(7u);
+        auto *preparation = source->mutable_preparation();
+        if (hasActiveCopy) {
+            preparation->set_copy_object_id(copyOid);
+            preparation->set_copy_zone_change_generation(copyGeneration);
+            player->add_exile_object_ids(copyOid);
+            auto *copy = player->add_prepare_spell_copies();
+            copy->set_object_id(copyOid);
+            copy->set_display_name("Infirmary Healer // Stream of Life");
+            copy->mutable_source()->set_object_id(42u);
+            copy->mutable_source()->set_zone_change_generation(7u);
+        }
+        return batch;
+    };
+    const auto addCastOffer = [](ruled::v1::RuledEventBatch &batch, quint32 copyOid, quint64 copyGeneration) {
+        auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+        action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        action->set_object_id(copyOid);
+        action->set_zone_change_generation(copyGeneration);
+        action->set_face_index(1u);
+        action->set_card_name("Stream of Life");
+        action->set_cost("{G}");
+        action->set_casting_permission_id(91u);
+        action->mutable_preparation_source()->set_object_id(42u);
+        action->mutable_preparation_source()->set_zone_change_generation(7u);
+    };
+
+    // A present generation of zero is a complete active-copy identity.
+    auto active = makeView(77u, 0u, true);
+    addCastOffer(active, 77u, 0u);
+    apply(active);
+    ASSERT_TRUE(state->preparedCopyBySourceOid.contains(42u));
+    EXPECT_EQ(state->preparedCopyBySourceOid.value(42u), 77u);
+    ASSERT_TRUE(state->preparedCopyGenerationBySourceOid.contains(42u));
+    EXPECT_EQ(state->preparedCopyGenerationBySourceOid.value(42u), 0u);
+    const auto activeCopy = state->preparationCastCopy(42u);
+    ASSERT_TRUE(activeCopy.has_value());
+    EXPECT_EQ(*activeCopy, 77u);
+
+    // A full replacement keeps the PreparationState designation but removes both active-copy fields.
+    auto out = makeView(0u, 0u, false);
+    apply(out);
+    EXPECT_FALSE(state->preparedCopyBySourceOid.contains(42u))
+        << "a prepared designation without a complete active-copy pair has no source-to-copy link";
+    EXPECT_FALSE(state->preparedCopyGenerationBySourceOid.contains(42u));
+    EXPECT_FALSE(state->preparationCastCopy(42u).has_value());
+
+    // Phase-in restores a distinct active copy and generation without changing the source identity.
+    auto fresh = makeView(78u, 9u, true);
+    addCastOffer(fresh, 78u, 9u);
+    apply(fresh);
+    ASSERT_TRUE(state->preparedCopyBySourceOid.contains(42u));
+    EXPECT_EQ(state->preparedCopyBySourceOid.value(42u), 78u);
+    ASSERT_TRUE(state->preparedCopyGenerationBySourceOid.contains(42u));
+    EXPECT_EQ(state->preparedCopyGenerationBySourceOid.value(42u), 9u);
+    const auto freshCopy = state->preparationCastCopy(42u);
+    ASSERT_TRUE(freshCopy.has_value());
+    EXPECT_EQ(*freshCopy, 78u);
+}
+
+TEST_F(RuledClientTest, PreparationCopyOidWithoutGenerationCannotBindOrOfferCast)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *player = view->add_per_player();
+    player->set_player_id(kLocalPlayer);
+    player->add_exile_object_ids(77u);
+    auto *source = player->add_battlefield_objects();
+    source->set_object_id(42u);
+    source->set_zone_change_generation(7u);
+    source->mutable_preparation()->set_copy_object_id(77u);
+    auto *copy = player->add_prepare_spell_copies();
+    copy->set_object_id(77u);
+    copy->set_display_name("Infirmary Healer // Stream of Life");
+    copy->mutable_source()->set_object_id(42u);
+    copy->mutable_source()->set_zone_change_generation(7u);
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(77u);
+    action->set_zone_change_generation(5u);
+    action->set_face_index(1u);
+    action->set_card_name("Stream of Life");
+    action->set_cost("{G}");
+    action->set_casting_permission_id(91u);
+    action->mutable_preparation_source()->set_object_id(42u);
+    action->mutable_preparation_source()->set_zone_change_generation(7u);
+
+    apply(batch);
+    EXPECT_FALSE(state->preparedCopyBySourceOid.contains(42u));
+    EXPECT_FALSE(state->preparedCopyGenerationBySourceOid.contains(42u));
+    EXPECT_FALSE(state->preparationCastCopy(42u).has_value());
+}
+
+TEST_F(RuledClientTest, PreparationCopyGenerationWithoutOidCannotBindOrOfferCast)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *player = view->add_per_player();
+    player->set_player_id(kLocalPlayer);
+    player->add_exile_object_ids(77u);
+    auto *source = player->add_battlefield_objects();
+    source->set_object_id(42u);
+    source->set_zone_change_generation(7u);
+    source->mutable_preparation()->set_copy_zone_change_generation(0u);
+    auto *copy = player->add_prepare_spell_copies();
+    copy->set_object_id(77u);
+    copy->set_display_name("Infirmary Healer // Stream of Life");
+    copy->mutable_source()->set_object_id(42u);
+    copy->mutable_source()->set_zone_change_generation(7u);
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(77u);
+    action->set_zone_change_generation(0u);
+    action->set_face_index(1u);
+    action->set_card_name("Stream of Life");
+    action->set_cost("{G}");
+    action->set_casting_permission_id(91u);
+    action->mutable_preparation_source()->set_object_id(42u);
+    action->mutable_preparation_source()->set_zone_change_generation(7u);
+
+    apply(batch);
+    EXPECT_FALSE(state->preparedCopyBySourceOid.contains(42u));
+    EXPECT_FALSE(state->preparedCopyGenerationBySourceOid.contains(42u));
+    EXPECT_FALSE(state->preparationCastCopy(42u).has_value());
+}
+
+TEST_F(RuledClientTest, PreparationCastOfferMustMatchActiveCopyGeneration)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *player = view->add_per_player();
+    player->set_player_id(kLocalPlayer);
+    player->add_exile_object_ids(77u);
+    auto *source = player->add_battlefield_objects();
+    source->set_object_id(42u);
+    source->set_zone_change_generation(7u);
+    source->mutable_preparation()->set_copy_object_id(77u);
+    source->mutable_preparation()->set_copy_zone_change_generation(0u);
+    auto *copy = player->add_prepare_spell_copies();
+    copy->set_object_id(77u);
+    copy->set_display_name("Infirmary Healer // Stream of Life");
+    copy->mutable_source()->set_object_id(42u);
+    copy->mutable_source()->set_zone_change_generation(7u);
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(77u);
+    action->set_zone_change_generation(9u);
+    action->set_face_index(1u);
+    action->set_card_name("Stream of Life");
+    action->set_cost("{G}");
+    action->set_casting_permission_id(91u);
+    action->mutable_preparation_source()->set_object_id(42u);
+    action->mutable_preparation_source()->set_zone_change_generation(7u);
+
+    apply(batch);
+    EXPECT_FALSE(state->preparationCastCopy(42u).has_value())
+        << "a legal action for the same ObjectId but a different generation is stale";
+}
+
 TEST_F(RuledClientTest, PreparationMenuUsesTheSameGenerationBoundExileAction)
 {
     ruled::v1::RuledEventBatch batch;
@@ -10363,17 +10565,21 @@ TEST_F(RuledClientTest, PreparationMenuUsesTheSameGenerationBoundExileAction)
     permanent->set_object_id(42);
     permanent->set_zone_change_generation(7);
     permanent->mutable_preparation()->set_copy_object_id(77);
+    permanent->mutable_preparation()->set_copy_zone_change_generation(0);
     auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
     action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
     action->set_object_id(77);
     action->set_face_index(1);
+    action->set_zone_change_generation(0);
     action->set_card_name("Stream of Life");
     action->set_cost("{X}{G}");
     action->set_casting_permission_id(91);
     action->mutable_preparation_source()->set_object_id(42);
     action->mutable_preparation_source()->set_zone_change_generation(7);
     apply(batch);
-    EXPECT_EQ(state->preparationCastCopy(42), 77u);
+    auto initialCopy = state->preparationCastCopy(42);
+    ASSERT_TRUE(initialCopy.has_value());
+    EXPECT_EQ(*initialCopy, 77u);
     const auto faces = state->zoneActionFaceOptions(77, RuledCastSource::Exile);
     ASSERT_EQ(faces.size(), 1);
     const auto menu = RuledPendingCast::cardActionMenuOptions(faces, *state, 42, false, {});
@@ -10383,14 +10589,16 @@ TEST_F(RuledClientTest, PreparationMenuUsesTheSameGenerationBoundExileAction)
     EXPECT_EQ(faces.first().castingPermissionId, 91u);
     permanent->set_zone_change_generation(8);
     apply(batch);
-    EXPECT_EQ(state->preparationCastCopy(42), 0u);
+    EXPECT_FALSE(state->preparationCastCopy(42).has_value());
     permanent->set_zone_change_generation(7);
     apply(batch);
-    EXPECT_EQ(state->preparationCastCopy(42), 77u);
+    auto restoredCopy = state->preparationCastCopy(42);
+    ASSERT_TRUE(restoredCopy.has_value());
+    EXPECT_EQ(*restoredCopy, 77u);
     batch.clear_legal_by_player();
     view->set_battlefields_unchanged(true);
     apply(batch);
-    EXPECT_EQ(state->preparationCastCopy(42), 0u);
+    EXPECT_FALSE(state->preparationCastCopy(42).has_value());
 }
 
 TEST_F(RuledClientTest, PublicCastGenerationRejectsAnOldSelectionAfterReexile)

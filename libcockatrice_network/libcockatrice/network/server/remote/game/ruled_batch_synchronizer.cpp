@@ -2106,6 +2106,31 @@ void RuledBatchSynchronizer::applyLifeManaAndCombatEvents(const ruled::v1::Ruled
                 combatGesHasEvents = true;
             }
         }
+        if (e.has_removed_from_combat()) {
+            for (const auto rawOid : e.removed_from_combat().object_ids()) {
+                const quint32 oid = static_cast<quint32>(rawOid);
+                for (Server_AbstractPlayer *candidate : game->getPlayers().values()) {
+                    if (!candidate) {
+                        continue;
+                    }
+                    auto *candidatePlayer = static_cast<Server_Player *>(candidate);
+                    Server_Card *card =
+                        playerBinding(candidatePlayer->getPlayerId()).findCardByEngineOid(candidatePlayer, oid);
+                    if (!card || !card->getAttacking()) {
+                        continue;
+                    }
+                    card->setAttacking(false);
+                    Event_SetCardAttr clearEvent;
+                    clearEvent.set_zone_name(std::string(ZoneNames::TABLE));
+                    clearEvent.set_card_id(card->getId());
+                    clearEvent.set_attribute(AttrAttacking);
+                    clearEvent.set_attr_value("0");
+                    combatGes.enqueueGameEvent(clearEvent, candidatePlayer->getPlayerId());
+                    combatGesHasEvents = true;
+                    break;
+                }
+            }
+        }
         if (e.has_attackers_added()) {
             for (const auto &assignment : e.attackers_added().assignments()) {
                 const quint32 oid = static_cast<quint32>(assignment.attacker_object_id());

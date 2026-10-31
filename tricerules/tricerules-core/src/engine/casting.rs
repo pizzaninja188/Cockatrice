@@ -1784,7 +1784,11 @@ impl GameEngine {
                 .unwrap_or(0)
                 == source.zone_change_generation
             {
-                super::preparation::unprepare_permanent(&mut self.state, source.object_id);
+                super::preparation::end_prepared_designation(
+                    &mut self.state,
+                    source.object_id,
+                    source.zone_change_generation,
+                );
             }
             if let Some(copy) = self.state.objects.get_mut(&oid) {
                 copy.owner = player;
@@ -2373,7 +2377,8 @@ impl GameEngine {
         };
         let in_player_zone = match source_zone {
             AbilitySourceZone::Battlefield => {
-                object.controller == player
+                object.phase_status.is_none()
+                    && object.controller == player
                     && self.state.players[idx].battlefield.contains(&permanent_id)
             }
             AbilitySourceZone::Hand => {
@@ -3189,7 +3194,7 @@ impl GameEngine {
             .state
             .objects
             .get(&permanent_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
+            .is_some_and(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
         {
             return false;
         }
@@ -3241,7 +3246,10 @@ impl GameEngine {
             AbilitySourceZone::Hand => Zone::Hand,
             AbilitySourceZone::Graveyard => Zone::Graveyard,
         };
-        if object.zone != expected_zone {
+        if object.zone != expected_zone
+            || (ability.source_zone == AbilitySourceZone::Battlefield
+                && object.phase_status.is_some())
+        {
             return false;
         }
         if ability.source_zone == AbilitySourceZone::Battlefield
@@ -6538,7 +6546,8 @@ mod cast_snapshot_tests {
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 1_000_000,
         });
-        e.reindex_battlefield_control(&mut Vec::new());
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex after control effect");
         assert_eq!(e.controller_of(source), Some(new_controller));
         assert_eq!(e.state.objects[&source].controller, new_controller);
 
@@ -6660,6 +6669,58 @@ mod cast_snapshot_tests {
         .expect("the source leaves through the existing zone-change funnel");
         assert!(!e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability));
         assert!(e.active_static_ability_definitions(source).is_empty());
+    }
+
+    #[test]
+    fn phased_source_does_not_offer_or_accept_its_loyalty_permission() {
+        let (mut e, source, _, _) = source_loyalty_timing_fixture();
+        let actor = e.state.players[1].id;
+        let (slot, ability) = active_ability_by_id(&e, source, "plus_01");
+        let generation = e.state.zone_change_generation.get(&source).copied();
+        e.state.objects.get_mut(&source).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: actor,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        e.reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex phased source");
+        assert!(!e.state.players[1].battlefield.contains(&source));
+
+        assert!(
+            e.active_static_ability_definitions(source).is_empty(),
+            "phased-out printed static permissions are inactive"
+        );
+        assert!(
+            !e.planeswalker_loyalty_instant_timing_allowed(source, actor, &ability),
+            "neither a source static nor a player-wide emblem can grant timing to an out source"
+        );
+        assert!(
+            !e.ability_activatable(source, slot as usize, &ability),
+            "the offerability predicate excludes a phased-out source"
+        );
+
+        let error = e
+            .apply_scenario_command(actor, &activate_command(&e, source, slot))
+            .expect_err("a forged direct command cannot activate the phased-out source");
+        assert!(error
+            .to_string()
+            .contains("ability source is not in its authored zone"));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::Loyalty),
+            3,
+            "the command is rejected before its loyalty cost"
+        );
+        assert!(
+            e.state.activation_uses_this_turn.is_empty(),
+            "the command is rejected before activation-use bookkeeping"
+        );
+        assert_eq!(
+            e.state.zone_change_generation.get(&source).copied(),
+            generation,
+            "phasing retains the source generation"
+        );
     }
 }
 

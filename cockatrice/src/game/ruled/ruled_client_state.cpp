@@ -2343,6 +2343,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     restrictedManaByPlayer.clear();
     eligibleRestrictedManaByAbility.clear();
     battlefieldGenerationByOid.clear();
+    engineOidPhasedOut.clear();
     const bool hadAcceptedSacrificeSelections = !acceptedSacrificeSelectionByOid.isEmpty();
     acceptedSacrificeSelectionByOid.clear();
     acceptedSacrificeSelectionSourceOid = 0;
@@ -2350,6 +2351,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         emit acceptedSacrificeSelectionsChanged();
     }
     preparedCopyBySourceOid.clear();
+    preparedCopyGenerationBySourceOid.clear();
     engineOidMarkedDamage.clear();
     engineOidBattlefieldPower.clear();
     engineOidBattlefieldToughness.clear();

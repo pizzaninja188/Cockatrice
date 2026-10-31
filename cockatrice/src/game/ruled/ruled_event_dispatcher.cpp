@@ -2220,6 +2220,7 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
     state->engineOidHaste.clear();
     state->engineOidTrample.clear();
     state->engineOidCreature.clear();
+    state->engineOidPhasedOut.clear();
     // Combat damage and battlefield P/T are ZoneView-owned; this identity map may include stack
     // rows and carries no zone-change generation, so do not clear or prune that projection here.
     QSet<quint32> validOids;
@@ -2236,6 +2237,7 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
         state->engineOidHaste.insert(entry.engine_object_id(), hasHaste);
         state->engineOidTrample.insert(entry.engine_object_id(), hasTrample);
         state->engineOidCreature.insert(entry.engine_object_id(), entry.is_creature());
+        state->engineOidPhasedOut.insert(entry.engine_object_id(), entry.phased_out());
         if (entry.server_card_id() >= 0) {
             state->ownerCardIdToEngineOid.insert(
                 RuledClientState::makeOwnedCardKey(entry.player_id(), entry.server_card_id()),
@@ -2372,6 +2374,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         state->activatedAbilitiesByOid.clear();
         state->battlefieldGenerationByOid.clear();
         state->preparedCopyBySourceOid.clear();
+        state->preparedCopyGenerationBySourceOid.clear();
     }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
@@ -2409,8 +2412,12 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 state->prototypedBattlefieldOids.insert(oid);
             }
             state->battlefieldGenerationByOid.insert(oid, battlefieldObject.zone_change_generation());
-            if (battlefieldObject.has_preparation()) {
+            if (battlefieldObject.has_preparation() &&
+                battlefieldObject.preparation().has_copy_object_id() &&
+                battlefieldObject.preparation().has_copy_zone_change_generation()) {
                 state->preparedCopyBySourceOid.insert(oid, battlefieldObject.preparation().copy_object_id());
+                state->preparedCopyGenerationBySourceOid.insert(
+                    oid, battlefieldObject.preparation().copy_zone_change_generation());
             }
             RuledAbilityEntries abilities;
             for (const auto &ability : battlefieldObject.activated_abilities()) {

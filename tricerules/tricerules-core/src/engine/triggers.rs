@@ -353,7 +353,7 @@ impl GameEngine {
         self.state
             .objects
             .get(&object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
+            .is_some_and(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .then(|| self.trigger_source_snapshot(object_id))
             .flatten()
             .map(|source| GameEvent::LeavesBattlefield { source })
@@ -419,7 +419,7 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&source_id) else {
             return;
         };
-        if object.zone != Zone::Battlefield {
+        if object.zone != Zone::Battlefield || object.phase_status.is_some() {
             return;
         }
         let source_generation = self
@@ -3621,6 +3621,28 @@ pub(super) fn ability_definition_from(
 mod tests {
     use super::super::damage::DamageEvent;
     use super::*;
+
+    #[test]
+    fn phased_out_permanent_has_no_battlefield_leave_trigger_event() {
+        let (mut engine, source) = trigger_limit_source();
+        assert!(engine.battlefield_leave_event(source).is_some());
+
+        engine.state.objects.get_mut(&source).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex phased source");
+
+        assert!(
+            engine.battlefield_leave_event(source).is_none(),
+            "an out-of-play permanent cannot observe its eventual battlefield departure"
+        );
+    }
 
     #[test]
     fn millennium_calendar_threshold_guard_survives_while_original_resolves() {

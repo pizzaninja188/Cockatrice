@@ -1785,6 +1785,12 @@ pub enum SpellEffectKind {
     ExileTargetAndCopyUnlessAura {
         subject: EffectSubject,
     },
+    /// CR 702.26: phase out the one target creature selected by this direct ability instruction.
+    /// Teferi, Master of Time is the reviewed consumer. The subject remains closed to one
+    /// chosen Creature that its controller does not control; this is not a reusable program leaf.
+    PhaseOut {
+        subject: EffectSubject,
+    },
     /// Exile a permanent-valued subject and let the resulting card's owner cast it from exile
     /// for the stated alternative mana cost while that exact generation remains there. Airbend
     /// uses `{2}`; Release to the Wind demonstrates the same permission with a zero cost.
@@ -3708,6 +3714,7 @@ impl SpellEffectKind {
             | Self::GrantProtection { subject, .. }
             | Self::AddTypes { subject, .. }
             | Self::Exile { subject, .. }
+            | Self::PhaseOut { subject }
             | Self::ExileWithOwnerCastPermission { subject, .. }
             | Self::ReturnToOwnersHand { subject }
             | Self::PutInOwnersLibrary { subject, .. }
@@ -3860,10 +3867,18 @@ impl SpellEffectKind {
             Self::ApplyPermanentModifier {
                 modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
                 ..
-            } => ability
-                .effect
-                .iter()
-                .any(|nested| nested.contains_legacy_flat_signature(matches_leaf)),
+            } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(|nested| nested.contains_legacy_flat_signature(matches_leaf))
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(|nested| nested.contains_legacy_flat_signature(matches_leaf))
+            }
             _ => false,
         }
     }
@@ -3920,6 +3935,10 @@ impl SpellEffectKind {
         self.contains_legacy_flat_signature(|leaf| {
             matches!(leaf, Self::AddOneCounterOfChosenKindToTarget)
         })
+    }
+
+    fn contains_phase_out(&self) -> bool {
+        self.contains_legacy_flat_signature(|leaf| matches!(leaf, Self::PhaseOut { .. }))
     }
 
     fn contains_retired_flat_equipment_attachment(&self) -> bool {
@@ -4057,6 +4076,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnToOwnersHand { subject }
             | SpellEffectKind::Exile { subject, .. }
             | SpellEffectKind::ExileTargetAndCopyUnlessAura { subject }
+            | SpellEffectKind::PhaseOut { subject }
             | SpellEffectKind::ExileWithOwnerCastPermission { subject, .. }
             | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
@@ -4802,6 +4822,7 @@ impl SpellEffectKind {
             | Self::GrantTriggeredAbility { subject, .. }
             | Self::AddTypes { subject, .. }
             | Self::Exile { subject, .. }
+            | Self::PhaseOut { subject }
             | Self::ExileWithOwnerCastPermission { subject, .. }
             | Self::ReturnToOwnersHand { subject }
             | Self::PutInOwnersLibrary { subject, .. }
@@ -5548,6 +5569,24 @@ impl SpellEffectKind {
                 _ => {
                     return Err("ExileTargetAndCopyUnlessAura requires one chosen target".into());
                 }
+            }
+        }
+        if self.contains_phase_out() && !matches!(self, SpellEffectKind::PhaseOut { .. }) {
+            return Err("PhaseOut is supported only as a direct ability effect".into());
+        }
+        if let SpellEffectKind::PhaseOut { subject } = self {
+            if context != EffectContext::Ability {
+                return Err("PhaseOut requires a direct ability effect".into());
+            }
+            let expected = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::NotYou,
+                ..TargetFilter::default()
+            };
+            if !matches!(subject, EffectSubject::Chosen(filter) if filter.as_ref() == &expected) {
+                return Err(
+                    "PhaseOut requires one chosen creature target you do not control".into(),
+                );
             }
         }
         if let SpellEffectKind::Exile { subject, .. }

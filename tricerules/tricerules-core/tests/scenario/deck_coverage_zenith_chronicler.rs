@@ -640,7 +640,10 @@ fn zenith_preparation_copy_actually_cast_records_exile_event_and_mono_filter() {
         .unwrap();
     let healer = engine.state.stack.last().unwrap().id;
     resolve_all(&mut engine);
-    let prepared = engine.state.prepared_permanents[&healer];
+    let prepared = engine.state.prepared_permanents[&healer]
+        .active_exile_copy
+        .expect("prepared copy is active")
+        .object_id;
     give_mana(
         &mut engine,
         20,

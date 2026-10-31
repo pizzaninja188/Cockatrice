@@ -504,6 +504,46 @@ pub enum AttachmentRecipient {
     Player(PlayerId),
 }
 
+/// Rules status for a phased-out permanent. `phase_in_with` identifies an indirectly phased
+/// attachment's immediate parent incarnation; `direct_attachment_snapshot` preserves the exact
+/// recipient incarnation for a directly phased Aura, Equipment, or Fortification.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct PhasedOutStatus {
+    pub phase_out_under: PlayerId,
+    /// CR 702.26n: the departed phasing controller's next would-begin turn boundary has passed.
+    /// Only a direct root uses this marker to seed its next actual untap-step return.
+    pub phase_in_due_after_departed_turn: bool,
+    pub phase_in_with: Option<PhasedOutParentRef>,
+    pub direct_attachment_snapshot: Option<PhasedOutAttachmentSnapshot>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhasedOutParentRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct PhasedOutAttachmentSnapshot {
+    pub recipient: AttachmentRecipient,
+    pub recipient_zone: Option<Zone>,
+    pub recipient_zone_change_generation: Option<u64>,
+}
+
+/// Exact current exile incarnation linked to a prepared permanent (CR 722.3).
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreparedExileCopyRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
+
+/// Persistent prepared designation, separate from its optional active exile copy (CR 722.3c).
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreparedPermanentDesignation {
+    pub source_zone_change_generation: u64,
+    pub active_exile_copy: Option<PreparedExileCopyRef>,
+}
+
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExilePlayPermissionScope {
     /// Cast one named face, used by Adventure (CR 715.3d).
@@ -706,6 +746,8 @@ pub struct GameObject {
     /// the battlefield. Its physical identity remains in `card_id` and is private to its current
     /// controller until the object is turned face up or revealed as it leaves the battlefield.
     pub face_down: bool,
+    /// CR 702.26: absence means the permanent is currently phased in.
+    pub phase_status: Option<PhasedOutStatus>,
 }
 
 /// Owned CR 707.2 copiable values. Registry identity remains available for resolving copied
@@ -3990,8 +4032,10 @@ pub struct GameState {
     /// CR 719.3a: noncopiable solved Case designations bound to the current object generation.
     /// Absence means unsolved; the zone-change funnel clears the designation on departure.
     pub case_solved_generations: HashMap<ObjectId, u64>,
-    /// CR 722.3: permanent -> linked exile copy. A designation is not a copiable value.
-    pub prepared_permanents: BTreeMap<ObjectId, ObjectId>,
+    /// CR 722.3: a prepared permanent keeps its designation while its linked exile copy is retired.
+    /// The active copy is a separate exact exile incarnation and may therefore be absent while the
+    /// source remains prepared.
+    pub prepared_permanents: BTreeMap<ObjectId, PreparedPermanentDesignation>,
     /// Copies keep their prepare-spell classification on the stack, independently of the source.
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.

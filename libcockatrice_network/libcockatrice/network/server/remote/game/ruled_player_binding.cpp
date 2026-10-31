@@ -591,6 +591,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 engineOidToTrample.clear();
                 engineOidToCreature.clear();
                 engineOidToFaceDown.clear();
+                engineOidToPhasedOut.clear();
                 engineOidToZoneChangeGeneration.clear();
                 engineOidToUnderlyingCardId.clear();
                 for (int i = 0; i < ordered.size(); ++i) {
@@ -619,6 +620,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     const bool isCreatureFlag = battlefieldObject.is_creature();
                     engineOidToCreature.insert(oid, isCreatureFlag);
                     engineOidToFaceDown.insert(oid, battlefieldObject.face_down());
+                    engineOidToPhasedOut.insert(oid, battlefieldObject.phased_out());
                     engineOidToZoneChangeGeneration.insert(
                         oid, static_cast<quint64>(battlefieldObject.zone_change_generation()));
                     engineOidToUnderlyingCardId.insert(oid, QString::fromStdString(battlefieldObject.card_id()));
@@ -675,11 +677,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         }
 
                         const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
-                        const int controllerPlayerId = battlefieldObject.has_controller_player_id()
-                                                           ? battlefieldObject.controller_player_id()
-                                                           : playerId;
+                        const bool hasController = battlefieldObject.has_controller_player_id();
+                        const bool mayUseViewPlayerAsController = !battlefieldObject.phased_out();
+                        const int controllerPlayerId =
+                            hasController ? battlefieldObject.controller_player_id() : playerId;
                         QString ownerName;
-                        if (battlefieldObject.owner_player_id() != controllerPlayerId) {
+                        if ((hasController || mayUseViewPlayerAsController) &&
+                            battlefieldObject.owner_player_id() != controllerPlayerId) {
                             if (Server_Game *g = player->getGame()) {
                                 if (Server_AbstractPlayer *ownerPlayer =
                                         g->getPlayer(battlefieldObject.owner_player_id())) {
@@ -691,7 +695,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                         mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
                         QString battleControllerName;
-                        if (battlefieldObject.has_battle_protector_player_id() && controllerPlayerId != playerId) {
+                        if (battlefieldObject.has_battle_protector_player_id() &&
+                            (hasController || mayUseViewPlayerAsController) && controllerPlayerId != playerId) {
                             battleControllerName = QStringLiteral("P%1").arg(controllerPlayerId);
                             if (Server_Game *g = player->getGame()) {
                                 if (Server_AbstractPlayer *controllerPlayer = g->getPlayer(controllerPlayerId)) {

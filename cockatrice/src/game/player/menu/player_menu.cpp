@@ -75,6 +75,10 @@ QMenu *PlayerMenu::updateCardMenu(const CardItem *card)
         emit cardMenuUpdated(nullptr);
         return nullptr;
     }
+    if (RuledActions::isPhasedOutCard(card)) {
+        emit cardMenuUpdated(nullptr);
+        return nullptr;
+    }
 
     // If is spectator (as spectators don't need card menus), return
     // only update the menu if the card is actually selected

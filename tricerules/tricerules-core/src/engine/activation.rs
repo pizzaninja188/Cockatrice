@@ -92,6 +92,7 @@ impl GameEngine {
                 let in_zone = match pending.source_zone() {
                     rv1::AbilitySourceZone::Battlefield => {
                         source.zone == Zone::Battlefield
+                            && source.phase_status.is_none()
                             && source.controller == pending.actor_player_id
                             && self.state.players[idx]
                                 .battlefield
@@ -340,7 +341,11 @@ impl GameEngine {
             .state
             .objects
             .get(&command.source_object_id)
-            .filter(|object| object.zone == Zone::Battlefield && object.controller == player)
+            .filter(|object| {
+                object.zone == Zone::Battlefield
+                    && object.phase_status.is_none()
+                    && object.controller == player
+            })
             .ok_or(EngineError::Illegal(
                 "activation source is not controlled on the battlefield",
             ))?;
@@ -822,6 +827,7 @@ impl GameEngine {
             .get(&pending.source_object_id)
             .filter(|source| {
                 source.zone == Zone::Battlefield
+                    && source.phase_status.is_none()
                     && source.controller == player
                     && self.state.players[idx].battlefield.contains(&source.id)
                     && !self.state.players[idx].has_lost

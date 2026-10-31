@@ -1,0 +1,91 @@
+{
+  "format_version": 1,
+  "oracle_id": "e802fb53-7cf5-46bc-8a0b-f99cf5c20f74",
+  "spans": [
+    {
+      "face_id": "teferi_master_of_time",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "teferi_master_of_time",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1"
+      ]
+    },
+    {
+      "face_id": "teferi_master_of_time",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/effect/0",
+        "/faces/0/activated_abilities/1/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "teferi_master_of_time",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    },
+    {
+      "symbol": "SpellEffectKind::PhaseOut",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/PhaseOut"
+    },
+    {
+      "symbol": "SpellEffectKind::TakeExtraTurns",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/TakeExtraTurns"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_teferi_master_of_time::teferi_exact_identity_and_all_printed_abilities_are_registered",
+      "covers": "Exact identity, face, cost, types, starting loyalty, source-bound timing static, all three loyalty costs and printed effects."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_master_of_time::teferi_is_the_only_offturn_loyalty_source_and_plus_one_draws_then_discards",
+      "covers": "Self-only instant-timing permission, ordinary loyalty timing and use limits, then the ordered private draw/discard choice."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_master_of_time::teferi_minus_three_rejects_bad_targets_then_phases_and_returns_the_same_opponent_creature",
+      "covers": "NotYou Creature target legality, a stacked ability after source death, attachment/counter preservation, and same-incarnation phase-in."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_master_of_time::teferi_minus_three_does_not_phase_out_a_target_removed_before_resolution",
+      "covers": "A target removed after announcement is illegal on resolution and is not phased out."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_master_of_time::teferi_minus_three_removes_an_attacker_from_combat_even_when_teferi_dies",
+      "covers": "The actual -3 removes its attacker from combat even though the planeswalker source dies as a cost."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_master_of_time::teferi_minus_ten_schedules_exactly_two_controller_turns_before_rotation",
+      "covers": "The actual -10 queues exactly two controller turns after the current turn and resumes normal rotation."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

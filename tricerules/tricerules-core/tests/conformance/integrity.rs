@@ -260,6 +260,21 @@ pub(super) fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx
             count_in_zones += 1;
         }
     }
+    // Phased-out permanents stay in Zone::Battlefield but leave the active battlefield index.
+    // Count those stored objects explicitly while keeping the single-zone check intact.
+    for object in e
+        .state
+        .objects
+        .values()
+        .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_some())
+    {
+        assert!(
+            seen.insert(object.id),
+            "{ctx}: phased-out object {} is also in an active zone",
+            object.id
+        );
+        count_in_zones += 1;
+    }
     // A resolving spell is held by its continuation while a choice is parked.
     let parked = e
         .state

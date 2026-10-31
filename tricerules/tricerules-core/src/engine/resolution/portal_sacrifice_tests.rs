@@ -185,7 +185,9 @@ fn grant_control(engine: &mut GameEngine, permanent: ObjectId, controller: Playe
         duration: EffectDuration::Indefinite,
         timestamp: engine.state.command_index + 1,
     });
-    engine.reindex_battlefield_control(&mut Vec::new());
+    engine
+        .reindex_battlefield_control(&mut Vec::new())
+        .expect("reindex after control effect");
 }
 
 fn remove_permanent_types(engine: &mut GameEngine, permanent: ObjectId) {

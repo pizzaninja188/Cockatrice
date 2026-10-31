@@ -983,6 +983,7 @@ fn mind_sculpt_rejects_self_target() {
                 copiable_values: None,
                 copy_revision: 0,
                 active_copy_occurrence: None,
+                phase_status: None,
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
                 summoning_sick: false,

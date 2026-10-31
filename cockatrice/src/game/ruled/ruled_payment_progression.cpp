@@ -2198,6 +2198,9 @@ void RuledPaymentUi::finalizePendingSpellManaCost()
 
 bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 {
+    if (RuledActions::isPhasedOutCard(card)) {
+        return leftClick;
+    }
     if (click(card, leftClick))
         return true;
     if (!card || !card->getZone()) {
@@ -2281,8 +2284,11 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const auto paymentContributions = contributionOptions(card);
     const auto permanentActions = battlefieldSource && !manaAbilitiesOnly ? handler->permanentActionsForOid(oid)
                                                                           : QVector<RuledPermanentAction>{};
-    const quint32 preparationCopy = battlefieldSource && !manaAbilitiesOnly ? handler->preparationCastCopy(oid) : 0;
-    if (abilities.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty() && preparationCopy == 0) {
+    std::optional<quint32> preparationCopy = std::nullopt;
+    if (battlefieldSource && !manaAbilitiesOnly) {
+        preparationCopy = handler->preparationCastCopy(oid);
+    }
+    if (abilities.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty() && !preparationCopy) {
         return false;
     }
 
@@ -2295,7 +2301,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const auto firstAbility = abilities.value(0);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (battlefieldSource && preparationCopy == 0 && paymentContributions.isEmpty() && abilities.size() == 1 &&
+    if (battlefieldSource && !preparationCopy && paymentContributions.isEmpty() && abilities.size() == 1 &&
         firstAbility && firstAbility->usesDirectManaActivation() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = firstAbility->manaOptionsForSelection();
@@ -2357,10 +2363,10 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     int castHandIndex = -1;
     RuledCastSource castSource = RuledCastSource::Hand;
     QVector<RuledFaceOption> castFaces;
-    if (preparationCopy != 0) {
+    if (preparationCopy) {
         castSource = RuledCastSource::Exile;
-        castHandIndex = static_cast<int>(preparationCopy);
-        castFaces = handler->zoneActionFaceOptions(preparationCopy, castSource);
+        castHandIndex = static_cast<int>(*preparationCopy);
+        castFaces = handler->zoneActionFaceOptions(*preparationCopy, castSource);
     }
     if (handSource && !manaAbilitiesOnly) {
         castHandIndex = RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_CAST_SPELL, card);

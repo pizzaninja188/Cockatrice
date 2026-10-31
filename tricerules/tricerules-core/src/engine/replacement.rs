@@ -590,6 +590,7 @@ impl GameEngine {
     ) -> bool {
         for (&source_id, object) in &self.state.objects {
             if object.zone != Zone::Battlefield
+                || object.phase_status.is_some()
                 || !super::characteristics::printed_static_source_is_available(
                     &self.state,
                     self.registry,
@@ -1060,7 +1061,7 @@ impl GameEngine {
             .state
             .objects
             .get(&context.source_object_id)
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .map(|object| {
                 (
                     object.counter_count(context.kind),
@@ -1166,7 +1167,11 @@ impl GameEngine {
             .state
             .objects
             .values()
-            .filter(|object| object.zone == Zone::Battlefield && !object.face_down)
+            .filter(|object| {
+                object.zone == Zone::Battlefield
+                    && object.phase_status.is_none()
+                    && !object.face_down
+            })
             .map(|object| object.id)
             .collect::<Vec<_>>();
         sources.sort_unstable();
@@ -3816,7 +3821,7 @@ impl GameEngine {
             .state
             .objects
             .values()
-            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .collect();
         battlefield_sources.sort_by_key(|object| object.id);
         for source in battlefield_sources {
@@ -5758,7 +5763,7 @@ impl GameEngine {
                 .state
                 .objects
                 .values()
-                .filter(|object| object.zone == Zone::Battlefield)
+                .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
                 .map(|object| object.id)
                 .collect::<Vec<_>>();
             object_ids.sort_unstable();
@@ -6330,7 +6335,9 @@ impl GameEngine {
                     .state
                     .objects
                     .get(source_id)
-                    .filter(|source| source.zone == Zone::Battlefield)
+                    .filter(|source| {
+                        source.zone == Zone::Battlefield && source.phase_status.is_none()
+                    })
                     .filter(|_| {
                         self.state
                             .zone_change_generation
@@ -9918,7 +9925,9 @@ mod tests {
             .get_mut(&object_id)
             .expect("fixture permanent")
             .base_controller = new_controller;
-        engine.reindex_battlefield_control(&mut Vec::new());
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex replacement fixture control");
     }
 
     #[test]
@@ -10533,7 +10542,9 @@ mod tests {
             .get_mut(&laezel)
             .unwrap()
             .base_controller = 1;
-        engine.reindex_battlefield_control(&mut Vec::new());
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex replacement fixture control");
         let live_controller = engine
             .proposed_object_counter_placement(
                 1,
@@ -10709,7 +10720,9 @@ mod tests {
             .state
             .zone_change_generation
             .insert(vorinclex, new_source_generation);
-        engine.reindex_battlefield_control(&mut Vec::new());
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("reindex replacement fixture generation");
         move_counter_fixture_control(&mut engine, vorinclex, 20);
 
         proposal.applied_replacements.push(old_receipt);

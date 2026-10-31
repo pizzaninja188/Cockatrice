@@ -430,7 +430,9 @@ impl EffectCx<'_> {
                 .state
                 .objects
                 .get(&selected.object_id)
-                .is_some_and(|object| object.zone == Zone::Battlefield))
+                .is_some_and(|object| {
+                    object.zone == Zone::Battlefield && object.phase_status.is_none()
+                }))
         .then_some(selected.object_id)
     }
 
@@ -609,14 +611,15 @@ fn target_receipt_is_current_in_role(
             .find(|target| target.object_id == object_id && target.group_index == group_index)
             .is_some_and(|target| match target.zone_change_generation {
                 Some(_) => {
+                    let expected_zone = expected_zone.unwrap_or(Zone::Battlefield);
                     stack_target_identity_is_current(engine, target)
                         && engine.state.objects.get(&object_id).is_some_and(|object| {
-                            object.zone == expected_zone.unwrap_or(Zone::Battlefield)
+                            object.zone == expected_zone
+                                && (expected_zone != Zone::Battlefield
+                                    || object.phase_status.is_none())
                         })
-                        && expected_zone.is_none_or(|zone| {
-                            zone != Zone::Graveyard
-                                || target.kind == rv1::TargetRefKind::Graveyard as i32
-                        })
+                        && (expected_zone != Zone::Graveyard
+                            || target.kind == rv1::TargetRefKind::Graveyard as i32)
                 }
                 None if expected_zone.is_none() => engine
                     .state
@@ -1215,7 +1218,9 @@ fn trigger_object_controller(engine: &GameEngine, top: &StackItem) -> Option<Pla
             .state
             .objects
             .get(&trigger_object.object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield);
+            .is_some_and(|object| {
+                object.zone == Zone::Battlefield && object.phase_status.is_none()
+            });
     if is_current {
         engine.controller_of(trigger_object.object_id)
     } else {
@@ -1266,7 +1271,9 @@ fn resolve_effect_subject(
                     .state
                     .objects
                     .get(&trigger_object.object_id)
-                    .is_some_and(|object| object.zone == Zone::Battlefield))
+                    .is_some_and(|object| {
+                        object.zone == Zone::Battlefield && object.phase_status.is_none()
+                    }))
             .then_some(trigger_object.object_id)
         }
         EffectSubject::AttachedObject => {
@@ -1283,11 +1290,9 @@ fn resolve_effect_subject(
                 .copied()
                 .unwrap_or(0);
             (current_generation == expected_generation
-                && engine
-                    .state
-                    .objects
-                    .get(&target_oid)
-                    .is_some_and(|object| object.zone == Zone::Battlefield))
+                && engine.state.objects.get(&target_oid).is_some_and(|object| {
+                    object.zone == Zone::Battlefield && object.phase_status.is_none()
+                }))
             .then_some(target_oid)
         }
     }
@@ -1314,7 +1319,8 @@ fn resolve_zone_effect_subject(
             .unwrap_or(0);
         let object = engine.state.objects.get(&observed.object_id)?;
         let is_observed_battlefield_object = current_generation == observed.zone_change_generation
-            && object.zone == Zone::Battlefield;
+            && object.zone == Zone::Battlefield
+            && object.phase_status.is_none();
         let is_died_graveyard_incarnation = observed
             .zone_change_generation
             .checked_add(1)
@@ -1372,11 +1378,10 @@ fn resolve_zone_effect_subject(
         .copied()
         .unwrap_or(0)
         == top.source_zone_change
-        && engine
-            .state
-            .objects
-            .get(&source_id)
-            .is_some_and(|object| object.zone == expected_zone))
+        && engine.state.objects.get(&source_id).is_some_and(|object| {
+            object.zone == expected_zone
+                && (expected_zone != Zone::Battlefield || object.phase_status.is_none())
+        }))
     .then_some(source_id)
 }
 
@@ -3773,6 +3778,7 @@ impl GameEngine {
                         must_block_if_able: false,
                         face_up_index: copy.map_or(0, |snapshot| snapshot.face_up_index),
                         face_down: false,
+                        phase_status: None,
                     },
                 );
                 let created = rv1::TokenCreated {
@@ -4240,7 +4246,12 @@ pub(super) fn prepare_zone_move(
                 })
             })
     });
-    let last_known_characteristics = (leaving_battlefield || nonbattlefield_ability_source)
+    let was_phased_out = state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.phase_status.is_some());
+    let last_known_characteristics = ((leaving_battlefield && !was_phased_out)
+        || nonbattlefield_ability_source)
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten();
     let copy = leaving_battlefield
@@ -4394,7 +4405,7 @@ pub(super) fn commit_zone_move(
         state.room_states.remove(&oid);
         state.class_levels.remove(&oid);
         state.case_solved_generations.remove(&oid);
-        super::preparation::unprepare_permanent(state, oid);
+        super::preparation::end_prepared_designation(state, oid, prior_generation);
         state.battle_protectors.remove(&oid);
         state
             .chosen_opponents
@@ -4568,6 +4579,9 @@ pub(super) fn commit_zone_move(
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;
+        // A zone move creates a new object incarnation. Phasing is tied to the old
+        // battlefield incarnation and cannot carry into the destination or a later return.
+        o.phase_status = None;
         if old_zone == Some(Zone::Exile) && matches!(z, Zone::Hand | Zone::Command) {
             // The receipt already captured the old face-down incarnation above.
             o.face_down = false;
@@ -4914,6 +4928,7 @@ mod anthem_scope_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         let player_index = engine.state.player_idx(controller).expect("controller");
@@ -5141,6 +5156,7 @@ mod attached_subject_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         let player_index = engine.state.player_idx(controller).expect("controller");
@@ -12853,6 +12869,152 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn phased_out_subject_trigger_object_is_not_current() {
+        let mut engine = observer_restore_test_engine(82_105);
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let observed = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let observed_generation = engine
+            .state
+            .zone_change_generation
+            .get(&observed)
+            .copied()
+            .unwrap_or(0);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.trigger_context.observed_object = Some(TriggerObjectRef {
+            object_id: observed,
+            zone_change_generation: observed_generation,
+            controller_at_event: 1,
+        });
+
+        assert!(engine
+            .phase_out_chosen_creature(observed, 0, &mut Vec::new())
+            .expect("the opponent's observed creature phases out"));
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::TriggerObject),
+            None,
+            "a phased-out observed permanent is not a live effect subject"
+        );
+        assert_eq!(
+            resolve_zone_effect_subject(
+                &engine,
+                &item,
+                &[],
+                &[],
+                &[],
+                &EffectSubject::TriggerObject,
+            ),
+            None,
+            "a phased-out observed permanent is not a live zone-effect subject"
+        );
+    }
+
+    #[test]
+    fn phased_out_subject_trigger_controller_uses_phase_out_lki() {
+        let mut engine = observer_restore_test_engine(82_106);
+        let source = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let observed = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        engine
+            .state
+            .objects
+            .get_mut(&observed)
+            .unwrap()
+            .base_controller = 0;
+        engine.state.objects.get_mut(&observed).unwrap().controller = 0;
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("the observed permanent changes to player zero's control");
+        let observed_generation = engine
+            .state
+            .zone_change_generation
+            .get(&observed)
+            .copied()
+            .unwrap_or(0);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.trigger_context.observed_object = Some(TriggerObjectRef {
+            object_id: observed,
+            zone_change_generation: observed_generation,
+            controller_at_event: 1,
+        });
+
+        assert!(engine
+            .phase_out_chosen_creature(observed, 1, &mut Vec::new())
+            .expect("the observed permanent under player zero phases out"));
+        assert_eq!(
+            trigger_object_controller(&engine, &item),
+            Some(0),
+            "the stacked ability reads the controller captured when this incarnation phased out"
+        );
+    }
+
+    #[test]
+    fn phased_out_subject_current_source_is_not_a_live_zone_effect_subject() {
+        let mut engine = observer_restore_test_engine(82_107);
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = triggered_item(source, source_generation);
+
+        assert_eq!(
+            resolve_zone_effect_subject(&engine, &item, &[], &[], &[], &EffectSubject::Source),
+            Some(source)
+        );
+        assert!(engine
+            .phase_out_chosen_creature(source, 1, &mut Vec::new())
+            .expect("the source phases out"));
+        assert_eq!(
+            resolve_zone_effect_subject(&engine, &item, &[], &[], &[], &EffectSubject::Source),
+            None,
+            "a phased-out battlefield source cannot act as a current zone-effect subject"
+        );
+    }
+
+    #[test]
+    fn phased_out_subject_attached_object_is_not_current() {
+        let mut engine = observer_restore_test_engine(82_108);
+        let target = add_battlefield_object(&mut engine, 1, "hill_giant");
+        let aura = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(target));
+        let aura_generation = engine
+            .state
+            .zone_change_generation
+            .get(&aura)
+            .copied()
+            .unwrap_or(0);
+        let item = triggered_item(aura, aura_generation);
+
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
+            Some(target),
+            "the Aura's active attachment is available before the cohort phases out"
+        );
+        assert!(engine
+            .phase_out_chosen_creature(target, 0, &mut Vec::new())
+            .expect("the creature and its directly attached Aura phase out together"));
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
+            None,
+            "the phased-out attached object is not a live effect subject"
+        );
+    }
+
+    #[test]
     fn put_counters_applicability_accepts_a_current_noncreature_permanent() {
         let mut engine = GameEngine::new_with_default_decks(
             tricerules_cards::registry::global(),
@@ -14481,7 +14643,9 @@ mod attached_subject_tests {
             },
         ]);
         let mut reindex_events = Vec::new();
-        engine.reindex_battlefield_control(&mut reindex_events);
+        engine
+            .reindex_battlefield_control(&mut reindex_events)
+            .expect("reindex phased counter source");
         assert_eq!(engine.state.objects[&target].controller, 0);
 
         let mut item = chosen_counter_add_item(source, target, generation);
@@ -14626,6 +14790,7 @@ mod attached_subject_tests {
 #[cfg(test)]
 mod source_keyword_tests {
     use super::*;
+    use crate::state::PhasedOutParentRef;
 
     #[test]
     fn issue_157_wither_preserves_prevention_lifelink_deathtouch_and_source_lki() {
@@ -14830,11 +14995,173 @@ mod source_keyword_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         let player_index = engine.state.player_idx(controller).unwrap();
         engine.state.players[player_index].battlefield.push(id);
         id
+    }
+
+    fn phase_out_then_exile_default_controller_departure(
+        engine: &mut GameEngine,
+        target: ObjectId,
+        default_controller: PlayerId,
+        effect_controller: PlayerId,
+        temporary_controller: PlayerId,
+    ) -> (u64, super::super::characteristics::Characteristics) {
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .base_controller = default_controller;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(temporary_controller),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("apply temporary control before phase-out");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        let before = engine
+            .characteristics(target)
+            .expect("target has pre-phase-out characteristics");
+        assert_eq!(before.controller, temporary_controller);
+        let mut events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(target, effect_controller, &mut events)
+            .expect("phase-out target and cohort"));
+        let default_controller_index = engine
+            .state
+            .player_idx(default_controller)
+            .expect("default controller seat");
+        engine.state.players[default_controller_index].has_lost = true;
+        engine
+            .cleanup_until_end_of_turn_effects()
+            .expect("expire temporary control and reconcile 800.4c");
+        assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
+        (generation, before)
+    }
+
+    fn four_player_engine(seed: u64) -> GameEngine {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        engine.state.opening = None;
+        engine
+    }
+
+    #[test]
+    fn phase_out_800_4c_exile_clears_status_for_a_later_same_oid_generation() {
+        let mut engine = four_player_engine(800_406);
+        let target = add_three_toughness_creature(&mut engine, 1);
+        let (generation, _) =
+            phase_out_then_exile_default_controller_departure(&mut engine, target, 0, 0, 2);
+        let exile_generation = engine.state.zone_change_generation[&target];
+        let phase_status_cleared_on_exile = engine.state.objects[&target].phase_status.is_none();
+        assert_eq!(exile_generation, generation + 1);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            target,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("return the same physical object under surviving owner B");
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("index the new battlefield incarnation");
+        let current_generation = engine.state.zone_change_generation[&target];
+        assert_eq!(current_generation, generation + 2);
+        let active_new_incarnation = engine.state.objects[&target].zone == Zone::Battlefield
+            && engine.state.objects[&target].phase_status.is_none()
+            && engine.state.players[1].battlefield.contains(&target)
+            && engine
+                .state
+                .players
+                .iter()
+                .enumerate()
+                .all(|(index, player)| index == 1 || !player.battlefield.contains(&target));
+        assert!(
+            phase_status_cleared_on_exile && active_new_incarnation,
+            "exiling a phased-out incarnation clears its status before the same OID reenters with a new generation"
+        );
+    }
+
+    #[test]
+    fn phase_out_800_4c_exile_preserves_the_captured_pre_phase_lki() {
+        let mut engine = four_player_engine(800_407);
+        let target = add_three_toughness_creature(&mut engine, 1);
+        for (timestamp, kind) in [
+            (
+                2,
+                ContinuousEffectKind::Layer4SetCreatureTypes(vec!["Wizard".into()]),
+            ),
+            (
+                3,
+                ContinuousEffectKind::PtModify {
+                    delta_power: 2,
+                    delta_toughness: 3,
+                },
+            ),
+            (4, ContinuousEffectKind::Layer6AddKeyword(Keyword::Trample)),
+        ] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind,
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp,
+            });
+        }
+        let (generation, before) =
+            phase_out_then_exile_default_controller_departure(&mut engine, target, 0, 0, 2);
+        assert!(before.has_type("Wizard"));
+        assert!(before.keywords.contains(&Keyword::Trample));
+
+        let key = (target, generation);
+        assert_eq!(
+            engine.state.last_known_controller_by_generation.get(&key),
+            Some(&before.controller),
+            "the old generation retains its pre-phase control"
+        );
+        assert_eq!(
+            engine.state.last_known_types_by_generation.get(&key),
+            Some(&before.types),
+            "the old generation retains its pre-phase types"
+        );
+        assert_eq!(
+            engine.state.last_known_keywords_by_generation.get(&key),
+            Some(&before.keywords),
+            "the old generation retains its pre-phase keywords"
+        );
+        assert_eq!(
+            engine.state.last_known_pt_by_generation.get(&key),
+            Some(&(before.signed_power, before.signed_toughness)),
+            "the old generation retains its pre-phase power and toughness"
+        );
     }
 
     #[test]
@@ -14877,6 +15204,7 @@ mod source_keyword_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
+                phase_status: None,
             },
         );
         engine.state.players[0].battlefield.push(source);
@@ -14913,6 +15241,1341 @@ mod source_keyword_tests {
         assert!(!engine.effective_has_keyword(source, Keyword::Deathtouch));
         assert!(engine.resolving_source_has_keyword(&original_ability, Keyword::Deathtouch));
         assert!(!engine.resolving_source_has_keyword(&ability_item(source, 2), Keyword::Deathtouch));
+    }
+
+    #[test]
+    fn phased_out_stack_ability_damage_uses_source_lki_power_and_controller() {
+        use crate::engine::damage::{DamageEvent, DamageRecipient, DamageSpec};
+
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            702_612,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let source = add_three_toughness_creature(&mut engine, 0);
+        let recipient = add_three_toughness_creature(&mut engine, 0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        for (timestamp, kind) in [
+            (
+                2,
+                ContinuousEffectKind::PtModify {
+                    delta_power: 2,
+                    delta_toughness: 0,
+                },
+            ),
+            (
+                3,
+                ContinuousEffectKind::Layer4AddTypes(
+                    tricerules_card_model::primitives::TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Artifact],
+                        ..Default::default()
+                    },
+                ),
+            ),
+            (4, ContinuousEffectKind::Layer5SetColors(vec![Color::Blue])),
+            (
+                5,
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+            ),
+            (6, ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink)),
+            (7, ContinuousEffectKind::Layer6AddKeyword(Keyword::Wither)),
+            (
+                8,
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Indestructible),
+            ),
+        ] {
+            let affected = if timestamp == 8 { recipient } else { source };
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(affected),
+                kind,
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp,
+            });
+        }
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("apply the control change before phase-out");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let before = engine
+            .characteristics(source)
+            .expect("current source characteristics");
+        assert_eq!(before.controller, 1);
+        assert_eq!(before.signed_power, Some(5));
+        assert!(before.types.contains(&"Artifact".to_string()));
+        assert_eq!(before.colors, vec![Color::Blue]);
+
+        // This stack item represents the source's ability after it was activated under player 0;
+        // the source is now controlled by player 1, then phases out before the ability resolves.
+        let mut ability = ability_item(source, source_generation);
+        ability.controller = 0;
+        assert!(engine
+            .phase_out_chosen_creature(source, 0, &mut Vec::new())
+            .expect("player 0 phases out the now-opponent source"));
+        assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation,
+            "phasing keeps the same battlefield incarnation"
+        );
+        assert!(engine.characteristics(source).is_none());
+
+        let amount = engine.resolve_amount(
+            &Amount::Count(CountExpression::SourcePower),
+            AmountContext::for_stack_item(&ability, ability.controller),
+        );
+        assert_eq!(amount, 5, "source power resolves through phase-out LKI");
+        assert_eq!(
+            engine
+                .state
+                .last_known_pt_by_generation
+                .get(&(source, source_generation)),
+            Some(&(before.signed_power, before.signed_toughness))
+        );
+        assert_eq!(
+            engine
+                .state
+                .last_known_controller_by_generation
+                .get(&(source, source_generation)),
+            Some(&1),
+            "source LKI uses the controller at phase-out, not ability controller 0"
+        );
+        assert_eq!(
+            engine
+                .state
+                .last_known_types_by_generation
+                .get(&(source, source_generation)),
+            Some(&before.types),
+            "the full pre-phase type line remains available to generation-scoped readers"
+        );
+        assert_eq!(
+            engine
+                .state
+                .last_known_colors_by_generation
+                .get(&(source, source_generation)),
+            Some(&before.colors),
+            "the pre-phase color remains available to generation-scoped readers"
+        );
+
+        let recipient_generation = engine
+            .state
+            .zone_change_generation
+            .get(&recipient)
+            .copied()
+            .unwrap_or(0);
+        let mut event = DamageEvent::noncombat(
+            source,
+            ability.controller,
+            "phased source damage",
+            DamageRecipient::Permanent(recipient),
+            amount,
+        );
+        event.source.zone_change_generation = Some(source_generation);
+        let source_has_deathtouch =
+            engine.resolving_source_has_keyword(&ability, Keyword::Deathtouch);
+        let source_has_lifelink = engine.resolving_source_has_keyword(&ability, Keyword::Lifelink);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &ability,
+                vec![DamageSpec {
+                    event,
+                    source_has_deathtouch,
+                    source_has_lifelink,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("the phased source's ability damage is processed")
+            .expect("no replacement choice is required");
+        let source_snapshot = &completed[0].spec.event.source;
+        assert_eq!(completed[0].result.dealt, 5);
+        assert_eq!(
+            completed[0].recipient_generation,
+            Some(recipient_generation)
+        );
+        assert_eq!(source_snapshot.controller, 1);
+        assert_eq!(source_snapshot.colors, before.colors);
+        assert_eq!(
+            source_snapshot.types,
+            vec!["Artifact".to_string(), "Creature".to_string()]
+        );
+        assert!(source_snapshot.wither);
+        assert!(completed[0].spec.source_has_deathtouch);
+        assert!(completed[0].spec.source_has_lifelink);
+
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .expect("the ability damage and LKI-derived results commit");
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "ability controller gains no life"
+        );
+        assert_eq!(
+            engine.state.players[1].life, 25,
+            "phase-out LKI controller gains lifelink"
+        );
+        assert_eq!(
+            engine.state.objects[&recipient].counter_count(CounterKind::MinusOneMinusOne),
+            5,
+            "the source's LKI Wither applies to all five damage"
+        );
+        assert!(engine.state.objects[&recipient].deathtouch_damage);
+        assert!(engine.state.objects[&source].phase_status.is_some());
+    }
+
+    #[test]
+    fn phased_out_permanent_keeps_marked_damage_until_514_2_cleanup_then_returns_cleared() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            702_613,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let target = add_three_toughness_creature(&mut engine, 1);
+        engine.state.continuous_effects.extend([
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: 2,
+                    delta_toughness: 0,
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+            },
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(target),
+                kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 2,
+            },
+        ]);
+        {
+            let object = engine.state.objects.get_mut(&target).unwrap();
+            object.tapped = true;
+            object.damage = 2;
+            object.deathtouch_damage = true;
+            object.regeneration_shields = 1;
+        }
+        assert_eq!(
+            engine.characteristics(target).unwrap().signed_power,
+            Some(5)
+        );
+        assert!(engine.effective_has_keyword(target, Keyword::Deathtouch));
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+
+        assert!(engine
+            .phase_out_chosen_creature(target, 0, &mut Vec::new())
+            .expect("player 0 phases out the opposing creature"));
+        let phased = &engine.state.objects[&target];
+        assert!(phased.phase_status.is_some());
+        assert_eq!(phased.damage, 2, "phasing preserves marked damage");
+        assert!(phased.deathtouch_damage);
+        assert_eq!(phased.regeneration_shields, 1);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation,
+            "phasing does not change the battlefield generation"
+        );
+        assert!(engine.state.continuous_effects.iter().any(|effect| {
+            effect.affected == AffectedScope::Single(target)
+                && effect.duration == EffectDuration::UntilEndOfTurn
+        }));
+
+        engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("CR 514.2 cleanup and advance to the captured controller's untap");
+
+        let returned = &engine.state.objects[&target];
+        assert_eq!(engine.state.active_player_id(), 1);
+        assert!(returned.phase_status.is_none(), "phase-in precedes untap");
+        assert_eq!(returned.zone, Zone::Battlefield);
+        assert_eq!(returned.damage, 0);
+        assert!(!returned.deathtouch_damage);
+        assert_eq!(returned.regeneration_shields, 0);
+        assert!(!returned.tapped);
+        assert_eq!(
+            engine.characteristics(target).unwrap().signed_power,
+            Some(3),
+            "cleanup removes the temporary power effect while the permanent was phased out"
+        );
+        assert!(!engine.effective_has_keyword(target, Keyword::Deathtouch));
+        assert!(!engine.state.continuous_effects.iter().any(|effect| {
+            effect.affected == AffectedScope::Single(target)
+                && effect.duration == EffectDuration::UntilEndOfTurn
+        }));
+    }
+
+    #[test]
+    fn phased_out_lethal_damage_reaches_sbas_after_phase_in_with_attachment_prepared_kernel() {
+        // This direct kernel transition intentionally omits the intervening CR 514.2 cleanup
+        // so the test isolates status-based SBA suppression and ordinary post-phase-in SBAs.
+        // It does not claim that Teferi can normally return a damaged object before cleanup.
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            702_614,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let target = add_three_toughness_creature(&mut engine, 1);
+        let aura = add_three_toughness_creature(&mut engine, 0);
+        {
+            let object = engine.state.objects.get_mut(&target).unwrap();
+            object.damage = 3;
+        }
+        {
+            let object = engine.state.objects.get_mut(&aura).unwrap();
+            object.card_id = "pacifism".into();
+            object.attached_to = Some(AttachmentRecipient::Object(target));
+        }
+
+        let mut events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(target, 0, &mut events)
+            .expect("phase out the opponent's creature and its Aura"));
+        assert_eq!(engine.state.objects[&target].damage, 3);
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(target))
+        );
+        assert!(engine.state.objects[&target].phase_status.is_some());
+        assert!(engine.state.objects[&aura].phase_status.is_some());
+
+        engine.apply_sbas(&mut events).unwrap();
+        assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+        assert_eq!(engine.state.objects[&target].damage, 3);
+        assert!(engine.state.objects[&target].phase_status.is_some());
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&aura].phase_status.is_some());
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(target))
+        );
+
+        engine
+            .phase_in_due_permanents(1, &mut events)
+            .expect("phase the root and its attached Aura in together");
+        assert_eq!(engine.state.objects[&target].damage, 3);
+        assert!(engine.state.objects[&target].phase_status.is_none());
+        assert!(engine.state.objects[&aura].phase_status.is_none());
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(target))
+        );
+
+        engine.apply_sbas(&mut events).unwrap();
+        assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
+        assert_eq!(engine.state.players[1].graveyard.last(), Some(&target));
+        assert_eq!(engine.state.players[0].graveyard.last(), Some(&aura));
+    }
+
+    #[test]
+    fn phase_out_effect_captures_its_indirect_attachment_cohort_lki() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7025,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let root = add_three_toughness_creature(&mut engine, 1);
+        let aura = add_three_toughness_creature(&mut engine, 0);
+        let equipment = add_three_toughness_creature(&mut engine, 0);
+        for (id, card_id) in [(aura, "pacifism"), (equipment, "short_sword")] {
+            let object = engine.state.objects.get_mut(&id).unwrap();
+            object.card_id = card_id.into();
+            object.attached_to = Some(AttachmentRecipient::Object(root));
+        }
+        engine
+            .state
+            .objects
+            .get_mut(&root)
+            .unwrap()
+            .counters
+            .insert(CounterKind::PlusOnePlusOne, 2);
+
+        let members = [root, aura, equipment];
+        let before = members
+            .iter()
+            .map(|&id| {
+                (
+                    id,
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(0),
+                    engine
+                        .characteristics(id)
+                        .expect("active battlefield characteristics"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let targets = vec![root];
+        let targets_by_role = vec![targets.clone()];
+        let target_role_group_indices = vec![0];
+        let target_receipts = vec![StackTarget {
+            object_id: root,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(before[0].1),
+            required_controller: None,
+        }];
+        let chosen_filter = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::NotYou,
+            ..TargetFilter::default()
+        };
+        let effect = SpellEffectKind::PhaseOut {
+            subject: EffectSubject::Chosen(Box::new(chosen_filter)),
+        };
+        let top = deathtouch_spell_item(0);
+        let mut events = Vec::new();
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &targets_by_role,
+            target_receipts: &target_receipts,
+            target_role_group_indices: &target_role_group_indices,
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "phase out",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            resume_previous_result: None,
+            program_state: None,
+        };
+
+        dispatch::execute_effect(&mut cx, effect).expect("phase-out instruction resolves");
+
+        for (id, generation, characteristics) in before {
+            let object = &engine.state.objects[&id];
+            assert_eq!(object.zone, Zone::Battlefield);
+            assert_eq!(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0),
+                generation
+            );
+            assert_eq!(
+                engine
+                    .state
+                    .last_known_controller_by_generation
+                    .get(&(id, generation)),
+                Some(&characteristics.controller),
+                "every member's pre-phase controller is captured under its unchanged generation"
+            );
+            assert!(
+                object.phase_status.is_some(),
+                "cohort member {id} phases out"
+            );
+            assert!(!engine
+                .state
+                .players
+                .iter()
+                .any(|player| player.battlefield.contains(&id)));
+        }
+        assert_eq!(
+            engine.state.objects[&root]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_out_under,
+            1
+        );
+        assert_eq!(
+            engine.state.objects[&aura]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_in_with,
+            Some(PhasedOutParentRef {
+                object_id: root,
+                zone_change_generation: target_receipts[0].zone_change_generation.unwrap(),
+            })
+        );
+        assert_eq!(
+            engine.state.objects[&equipment].attached_to,
+            Some(AttachmentRecipient::Object(root))
+        );
+        assert_eq!(
+            engine.state.objects[&root].counter_count(CounterKind::PlusOnePlusOne),
+            2
+        );
+        assert!(!engine.object_is_current_battlefield_generation(
+            root,
+            target_receipts[0].zone_change_generation.unwrap()
+        ));
+        assert!(events.iter().all(|event| {
+            !matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::PermanentMoved(_))
+            )
+        }));
+    }
+
+    #[test]
+    fn phase_out_invalidates_a_retained_target_before_a_later_tap_effect() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7027,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let target = add_three_toughness_creature(&mut engine, 1);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        let targets = vec![target];
+        let targets_by_role = vec![targets.clone()];
+        let target_role_group_indices = vec![0];
+        let target_receipts = vec![StackTarget {
+            object_id: target,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(generation),
+            required_controller: None,
+        }];
+        let chosen_opposing_creature = || {
+            EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::NotYou,
+                ..TargetFilter::default()
+            }))
+        };
+        let effects = [
+            SpellEffectKind::PhaseOut {
+                subject: chosen_opposing_creature(),
+            },
+            SpellEffectKind::Tap {
+                subject: chosen_opposing_creature(),
+            },
+        ];
+        let top = deathtouch_spell_item(0);
+        let mut events = Vec::new();
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+
+        for (effect_index, effect) in effects.into_iter().enumerate() {
+            let mut cx = EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &targets,
+                targets_by_role: &targets_by_role,
+                target_receipts: &target_receipts,
+                target_role_group_indices: &target_role_group_indices,
+                top: &top,
+                controller: 0,
+                affected_player: 0,
+                spell_label: "phase-out retained-target fixture",
+                previous_effect_result: &previous_effect_result,
+                effect_result: &mut effect_result,
+                effect_index: effect_index as u32,
+                resume_previous_result: None,
+                program_state: None,
+            };
+            dispatch::execute_effect(&mut cx, effect).expect("direct ability effect resolves");
+        }
+
+        let object = engine.state.objects.get(&target).unwrap();
+        assert!(object.phase_status.is_some());
+        assert_eq!(object.zone, Zone::Battlefield);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation,
+            "phasing preserves the target's object incarnation"
+        );
+        assert!(
+            !object.tapped,
+            "the following direct ability instruction must not act on its phased-out target"
+        );
+    }
+
+    #[test]
+    fn phased_out_previous_battlefield_result_cannot_move_in_a_prepared_effect_kernel() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7028,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let target = add_three_toughness_creature(&mut engine, 1);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        let previous_effect_result = EffectResult {
+            produced_objects: vec![TriggerObjectRef {
+                object_id: target,
+                zone_change_generation: generation,
+                controller_at_event: 1,
+            }],
+            ..EffectResult::default()
+        };
+        let mut events = Vec::new();
+        engine
+            .phase_out_chosen_creature(target, 0, &mut events)
+            .expect("phase out the prior produced-object result");
+
+        // PhaseOut publishes no PreviousEffectObject. This kernel fixture deliberately keeps
+        // an earlier compatible result across the actual phase-out transition to exercise only
+        // the previous_battlefield_object battlefield-availability guard.
+        let top = deathtouch_spell_item(0);
+        let mut effect_result = EffectResult::default();
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "phased-out previous-result fixture",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 1,
+            resume_previous_result: None,
+            program_state: None,
+        };
+        dispatch::execute_effect(
+            &mut cx,
+            SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::PreviousEffectObject,
+            },
+        )
+        .expect("a phased-out previous result resolves as a no-op");
+
+        let object = cx.engine.state.objects.get(&target).unwrap();
+        assert_eq!(object.zone, Zone::Battlefield);
+        assert!(object.phase_status.is_some());
+        assert_eq!(
+            cx.engine
+                .state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation,
+            "the prior result does not move or replace the phased-out object"
+        );
+        assert!(!cx.engine.state.players[1].hand.contains(&target));
+    }
+
+    #[test]
+    fn phase_out_follows_an_equipment_to_its_attached_aura() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7026,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let root = add_three_toughness_creature(&mut engine, 1);
+        let equipment = add_three_toughness_creature(&mut engine, 0);
+        let aura = add_three_toughness_creature(&mut engine, 0);
+        engine.state.objects.get_mut(&equipment).unwrap().card_id = "short_sword".into();
+        engine.state.objects.get_mut(&aura).unwrap().card_id = "petrify".into();
+        engine
+            .state
+            .objects
+            .get_mut(&equipment)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(root));
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(equipment));
+
+        let members = [root, equipment, aura];
+        let before = members
+            .iter()
+            .map(|&id| {
+                (
+                    id,
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(0),
+                    engine
+                        .characteristics(id)
+                        .expect("legal attachment characteristics"),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(before[1].2.has_type("Equipment"));
+        assert!(!before[1].2.is_creature());
+        assert!(before[2].2.has_type("Aura"));
+        let SpellEffectKind::AuraAttach {
+            target: aura_target_filter,
+        } = &engine
+            .registry
+            .get("petrify")
+            .unwrap()
+            .primary_face()
+            .spell_effect[0]
+        else {
+            panic!("Petrify fixture has a direct AuraAttach effect")
+        };
+        assert!(super::super::targeting::equipment_attachment_legal(
+            &engine, equipment, root
+        ));
+        assert!(super::super::targeting::attachment_filter_legal(
+            &engine,
+            aura_target_filter,
+            AttachmentRecipient::Object(equipment),
+            aura,
+            engine.characteristics(aura).unwrap().controller,
+        ));
+
+        let targets = vec![root];
+        let targets_by_role = vec![targets.clone()];
+        let target_role_group_indices = vec![0];
+        let target_receipts = vec![StackTarget {
+            object_id: root,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(before[0].1),
+            required_controller: None,
+        }];
+        let effect = SpellEffectKind::PhaseOut {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::NotYou,
+                ..TargetFilter::default()
+            })),
+        };
+        let top = deathtouch_spell_item(0);
+        let mut events = Vec::new();
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &targets_by_role,
+            target_receipts: &target_receipts,
+            target_role_group_indices: &target_role_group_indices,
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "phase out",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+            resume_previous_result: None,
+            program_state: None,
+        };
+        dispatch::execute_effect(&mut cx, effect).expect("phase-out instruction resolves");
+
+        for (id, generation, characteristics) in before {
+            let object = &engine.state.objects[&id];
+            assert_eq!(object.zone, Zone::Battlefield);
+            assert_eq!(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0),
+                generation
+            );
+            assert_eq!(
+                engine
+                    .state
+                    .last_known_controller_by_generation
+                    .get(&(id, generation)),
+                Some(&characteristics.controller),
+                "the transitive Aura is included in the pre-phase LKI cohort"
+            );
+            assert_eq!(object.phase_status.as_ref().unwrap().phase_out_under, 1);
+            assert!(!engine
+                .state
+                .players
+                .iter()
+                .any(|player| player.battlefield.contains(&id)));
+        }
+        assert_eq!(
+            engine.state.objects[&equipment].attached_to,
+            Some(AttachmentRecipient::Object(root))
+        );
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(equipment))
+        );
+        assert_eq!(
+            engine.state.objects[&equipment]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_in_with,
+            Some(PhasedOutParentRef {
+                object_id: root,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&root)
+                    .copied()
+                    .unwrap_or(0),
+            }),
+            "the Equipment depends on the exact root incarnation"
+        );
+        assert_eq!(
+            engine.state.objects[&aura]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_in_with,
+            Some(PhasedOutParentRef {
+                object_id: equipment,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&equipment)
+                    .copied()
+                    .unwrap_or(0),
+            }),
+            "the Aura depends on the exact intermediate Equipment incarnation"
+        );
+    }
+
+    #[test]
+    fn phased_attachment_chain_returns_together_before_its_controller_untaps() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7027,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let root = add_three_toughness_creature(&mut engine, 1);
+        let equipment = add_three_toughness_creature(&mut engine, 1);
+        let aura = add_three_toughness_creature(&mut engine, 1);
+        engine.state.objects.get_mut(&equipment).unwrap().card_id = "short_sword".into();
+        engine.state.objects.get_mut(&aura).unwrap().card_id = "petrify".into();
+        engine
+            .state
+            .objects
+            .get_mut(&equipment)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(root));
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(equipment));
+
+        let SpellEffectKind::AuraAttach {
+            target: aura_target_filter,
+        } = &engine
+            .registry
+            .get("petrify")
+            .unwrap()
+            .primary_face()
+            .spell_effect[0]
+        else {
+            panic!("Petrify fixture has a direct AuraAttach effect")
+        };
+        assert!(super::super::targeting::equipment_attachment_legal(
+            &engine, equipment, root
+        ));
+        assert!(super::super::targeting::attachment_filter_legal(
+            &engine,
+            aura_target_filter,
+            AttachmentRecipient::Object(equipment),
+            aura,
+            engine.characteristics(aura).unwrap().controller,
+        ));
+
+        let members = [root, equipment, aura];
+        let generations = members
+            .iter()
+            .map(|&id| {
+                (
+                    id,
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&id)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect::<Vec<_>>();
+        for id in members {
+            engine.state.objects.get_mut(&id).unwrap().tapped = true;
+        }
+        let mut phase_out_events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(root, 0, &mut phase_out_events)
+            .expect("phase-out cohort transition"));
+        assert!(members
+            .iter()
+            .all(|id| engine.state.objects[id].phase_status.is_some()));
+
+        let untap = engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("P1's untap step begins");
+        assert_eq!(engine.state.active_player_id(), 1);
+        for (id, generation) in generations {
+            let object = &engine.state.objects[&id];
+            assert_eq!(object.zone, Zone::Battlefield);
+            assert_eq!(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0),
+                generation,
+                "phasing does not create a new object incarnation"
+            );
+            assert!(
+                object.phase_status.is_none(),
+                "member {id} returns with its chain"
+            );
+            assert!(
+                !object.tapped,
+                "member {id} is present for its controller's untap"
+            );
+            assert!(engine
+                .state
+                .players
+                .iter()
+                .any(|player| player.battlefield.contains(&id)));
+        }
+        assert_eq!(
+            engine.state.objects[&equipment].attached_to,
+            Some(AttachmentRecipient::Object(root))
+        );
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(equipment))
+        );
+        assert!(untap.events.iter().all(|event| {
+            !matches!(
+                event.ev.as_ref(),
+                Some(rv1::ruled_event::Ev::PermanentMoved(_))
+            )
+        }));
+        assert!(
+            engine.state.stack.is_empty(),
+            "phasing creates no attach triggers"
+        );
+    }
+
+    #[test]
+    fn departed_intermediate_equipment_leaves_its_phased_aura_orphaned() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            7028,
+            &[10, 20, 30, 40],
+            20,
+            None,
+            true,
+        )
+        .expect("four-player engine");
+        let root = add_three_toughness_creature(&mut engine, 10);
+        let equipment = add_three_toughness_creature(&mut engine, 20);
+        let aura = add_three_toughness_creature(&mut engine, 30);
+        engine.state.objects.get_mut(&equipment).unwrap().card_id = "short_sword".into();
+        engine.state.objects.get_mut(&aura).unwrap().card_id = "petrify".into();
+        engine
+            .state
+            .objects
+            .get_mut(&equipment)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(root));
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(equipment));
+        for id in [root, equipment, aura] {
+            engine.state.objects.get_mut(&id).unwrap().tapped = true;
+        }
+
+        let mut phase_out_events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(root, 40, &mut phase_out_events)
+            .expect("phase-out cohort transition"));
+        let root_generation = engine
+            .state
+            .zone_change_generation
+            .get(&root)
+            .copied()
+            .unwrap_or(0);
+        let equipment_generation = engine
+            .state
+            .zone_change_generation
+            .get(&equipment)
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            engine.state.objects[&root]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_out_under,
+            10
+        );
+        assert_eq!(
+            engine.state.objects[&aura]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_in_with,
+            Some(PhasedOutParentRef {
+                object_id: equipment,
+                zone_change_generation: equipment_generation,
+            })
+        );
+
+        // Reach Equipment owner's ordinary turn, then depart that owner while the entire chain
+        // is still phased out. CR 800.4a removes the Equipment object immediately.
+        engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("P20 untap step");
+        assert_eq!(engine.state.active_player_id(), 20);
+        assert!(engine.state.objects[&root].phase_status.is_some());
+        assert!(engine.state.objects[&aura].phase_status.is_some());
+        engine
+            .concede_batch(20)
+            .expect("Equipment owner's departure");
+        assert!(!engine.state.objects.contains_key(&equipment));
+        assert!(engine.state.objects[&root].phase_status.is_some());
+        assert!(engine.state.objects[&aura].phase_status.is_some());
+
+        // The root returns on A's next untap by itself. The Aura's saved immediate parent no
+        // longer exists, so later surviving-player untaps cannot promote it to a direct return.
+        for expected_active in [30, 40, 10] {
+            engine
+                .finish_cleanup_roll_new_turn(Vec::new())
+                .expect("advance surviving-player untap");
+            assert_eq!(engine.state.active_player_id(), expected_active);
+            assert!(engine.state.objects[&aura].phase_status.is_some());
+            assert!(
+                engine.state.objects[&aura].tapped,
+                "orphaned phased Aura is excluded from {expected_active}'s ordinary untap cohort"
+            );
+            assert!(!engine
+                .state
+                .players
+                .iter()
+                .any(|player| player.battlefield.contains(&aura)));
+            if expected_active == 10 {
+                assert!(engine.state.objects[&root].phase_status.is_none());
+                assert!(!engine.state.objects[&root].tapped);
+                assert_eq!(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&root)
+                        .copied()
+                        .unwrap_or(0),
+                    root_generation
+                );
+            }
+        }
+        assert_eq!(
+            engine.state.objects[&aura]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_in_with,
+            Some(PhasedOutParentRef {
+                object_id: equipment,
+                zone_change_generation: equipment_generation,
+            })
+        );
+    }
+
+    #[test]
+    fn changed_parent_generation_does_not_return_its_phased_attachment() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7029,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let parent = add_three_toughness_creature(&mut engine, 1);
+        let aura = add_three_toughness_creature(&mut engine, 0);
+        engine.state.objects.get_mut(&aura).unwrap().card_id = "petrify".into();
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(parent));
+
+        // Prepared-state identity fixture: the direct parent keeps its ObjectId but is now a
+        // later battlefield generation than the one recorded on the phased Aura.
+        let old_parent_generation = engine
+            .state
+            .zone_change_generation
+            .get(&parent)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .zone_change_generation
+            .insert(parent, old_parent_generation.saturating_add(1));
+        engine.state.objects.get_mut(&parent).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 1,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+        engine.state.objects.get_mut(&aura).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 1,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: Some(PhasedOutParentRef {
+                    object_id: parent,
+                    zone_change_generation: old_parent_generation,
+                }),
+                direct_attachment_snapshot: None,
+            });
+
+        engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("the due direct parent phases in");
+        assert_eq!(engine.state.active_player_id(), 1);
+        assert!(engine.state.objects[&parent].phase_status.is_none());
+        assert!(
+            engine.state.objects[&aura].phase_status.is_some(),
+            "the same OID with a different generation is not the recorded parent"
+        );
+    }
+
+    #[test]
+    fn phased_permanent_under_departed_controller_returns_after_would_be_turn() {
+        let (mut engine, target, generation) = phased_target_under_departed_controller();
+
+        // A leaves during B's turn. The phased permanent waits through C and D; A's next
+        // would-be normal turn is skipped, then the following live player's untap is B's.
+        assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&target].phase_status.is_some());
+        assert_eq!(engine.state.objects[&target].controller, 0);
+
+        for (expected_active, should_still_be_out) in [(2, true), (3, true), (1, false)] {
+            engine
+                .finish_cleanup_roll_new_turn(Vec::new())
+                .expect("advance to the next real untap step");
+            assert_eq!(engine.state.active_player_id(), expected_active);
+            assert_eq!(
+                engine.state.objects[&target].phase_status.is_some(),
+                should_still_be_out,
+                "phased root timing follows A's skipped would-be turn boundary"
+            );
+            if expected_active == 1 {
+                assert!(!engine.state.objects[&target].tapped);
+                assert!(engine.state.players[1].battlefield.contains(&target));
+                assert_eq!(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&target)
+                        .copied()
+                        .unwrap_or(0),
+                    generation,
+                    "phasing-in reuses the same battlefield generation"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn phased_permanent_under_departed_controller_returns_after_skipped_extra_turn() {
+        let (mut engine, target, generation) = phased_target_under_departed_controller();
+        // A had an extra turn queued before leaving during B's turn. Its skipped extra-turn
+        // boundary is A's next would-begin turn; the permanent returns at C's next real untap.
+        engine.state.extra_turn_queue = vec![0];
+
+        engine
+            .finish_cleanup_roll_new_turn(Vec::new())
+            .expect("skip A's queued extra turn and advance to the next real untap step");
+
+        assert_eq!(engine.state.active_player_id(), 2);
+        assert!(
+            engine.state.objects[&target].phase_status.is_none(),
+            "the skipped queued extra turn counts as A's next would-begin turn boundary"
+        );
+        assert!(engine.state.objects[&target].tapped);
+        assert!(engine.state.players[1].battlefield.contains(&target));
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&target)
+                .copied()
+                .unwrap_or(0),
+            generation,
+            "phasing-in at C's step keeps the same battlefield generation"
+        );
+    }
+
+    fn phased_target_under_departed_controller() -> (GameEngine, ObjectId, u64) {
+        let mut engine = four_player_engine(702_610);
+        let target = add_three_toughness_creature(&mut engine, 1);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .base_controller = 1;
+        engine.state.objects.get_mut(&target).unwrap().tapped = true;
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(0),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        engine
+            .reindex_battlefield_control(&mut Vec::new())
+            .expect("give A control before phase-out");
+        let mut events = Vec::new();
+        assert!(engine
+            .phase_out_chosen_creature(target, 1, &mut events)
+            .expect("B phases out A's creature"));
+        assert_eq!(
+            engine.state.objects[&target]
+                .phase_status
+                .as_ref()
+                .unwrap()
+                .phase_out_under,
+            0
+        );
+
+        engine.state.active_player_idx = 1;
+        engine.state.players[0].has_lost = true;
+        engine
+            .reconcile_departed_players(&mut Vec::new())
+            .expect("reconcile A's departure");
+        (engine, target, generation)
+    }
+
+    #[test]
+    fn phased_out_permanent_survives_stale_departed_controller_cache() {
+        let (engine, target, _) = phased_target_under_departed_controller();
+        assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&target].phase_status.is_some());
+        assert_eq!(engine.state.objects[&target].controller, 0);
+        assert_eq!(
+            super::super::characteristics::phased_out_controller_for_reconciliation(
+                &engine.state,
+                engine.registry,
+                target,
+            ),
+            Some(1),
+            "the 800.4c hook derives the surviving controller, not the stale cache"
+        );
+        assert!(
+            engine.characteristics(target).is_none(),
+            "ordinary rules queries do not expose current characteristics while phased out"
+        );
+        assert!(engine
+            .state
+            .players
+            .iter()
+            .all(|player| !player.battlefield.contains(&target)));
+    }
+
+    #[test]
+    fn phased_out_permanent_has_no_current_characteristics_or_controller() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            702_611,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
+        let target = add_three_toughness_creature(&mut engine, 1);
+        assert!(engine.characteristics(target).is_some());
+        assert_eq!(engine.controller_of(target), Some(1));
+
+        assert!(engine
+            .phase_out_chosen_creature(target, 0, &mut Vec::new())
+            .expect("the opponent creature phases out"));
+
+        assert!(
+            engine.characteristics(target).is_none(),
+            "a phased-out permanent has no current characteristics"
+        );
+        assert_eq!(
+            engine.controller_of(target),
+            None,
+            "a phased-out permanent has no current controller"
+        );
     }
 
     #[test]

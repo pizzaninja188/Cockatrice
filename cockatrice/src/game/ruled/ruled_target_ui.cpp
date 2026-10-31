@@ -186,6 +186,9 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *
     if (!state || !RuledActions::isRuledGame(actions->player->getGame())) {
         return RuledTargetClickEligibility::NotTargeting;
     }
+    if (RuledActions::isPhasedOutCard(card)) {
+        return RuledTargetClickEligibility::Illegal;
+    }
     if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.waitingForCastCostObject) {
         if (!card || !card->getZone()) {
             return RuledTargetClickEligibility::Illegal;
@@ -266,6 +269,9 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
 {
     if (!actions->pendingRuledSpellCast.valid || !actions->pendingRuledSpellCast.waitingForTarget) {
         return false;
+    }
+    if (RuledActions::isPhasedOutCard(card)) {
+        return true;
     }
     if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
         return true;
@@ -644,6 +650,9 @@ bool RuledTargetUi::tryBumpSpellDamageAllocationForCard(PlayerActions *actions, 
 {
     if (!actions->ruledPendingCast->isInSpellDamageAllocationMode() || !card)
         return false;
+    if (RuledActions::isPhasedOutCard(card)) {
+        return true;
+    }
     RuledClientState *handler = actions->player->getGame()->getGameEventHandler()->ruled();
     if (!handler)
         return false;
@@ -681,6 +690,9 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
 {
     RuledClientState *handler = actions->player->getGame()->getGameEventHandler()->ruled();
     if (handler && handler->isEngineCommandPending()) {
+        return true;
+    }
+    if (RuledActions::isPhasedOutCard(card)) {
         return true;
     }
 
