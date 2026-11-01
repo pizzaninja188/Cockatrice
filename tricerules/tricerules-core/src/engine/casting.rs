@@ -3257,8 +3257,17 @@ impl GameEngine {
         {
             return false;
         }
+        let has_aggregate_counter_cost = ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }));
         let activating_player = if ability.source_zone == AbilitySourceZone::Battlefield {
-            object.controller
+            if has_aggregate_counter_cost {
+                self.controller_of(permanent_id)
+                    .unwrap_or(object.controller)
+            } else {
+                object.controller
+            }
         } else {
             object.owner
         };
@@ -3281,7 +3290,13 @@ impl GameEngine {
         if !self.activation_conditions_hold(permanent_id, ability) {
             return false;
         }
-        if !self.counter_costs_payable(permanent_id, &ability.costs) {
+        if has_aggregate_counter_cost {
+            if !self.supports_accepted_aggregate_counter_shape(permanent_id, ability_index, ability)
+                || !self.accepted_aggregate_counter_costs_payable(permanent_id, &ability.costs)
+            {
+                return false;
+            }
+        } else if !self.counter_costs_payable(permanent_id, &ability.costs) {
             return false;
         }
         if ability

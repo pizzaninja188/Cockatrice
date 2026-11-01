@@ -219,9 +219,25 @@ impl GameEngine {
         prepared: PreparedPaymentCosts,
         selection: Option<&rv1::PaymentSelection>,
     ) -> Result<CostTransactionPlan, EngineError> {
+        self.finish_ability_payment_at_receipt(
+            player,
+            self.payment_object_ref(source),
+            prepared,
+            selection,
+        )
+    }
+
+    pub(in crate::engine) fn finish_ability_payment_at_receipt(
+        &self,
+        player: PlayerId,
+        source: rv1::CostObjectRef,
+        prepared: PreparedPaymentCosts,
+        selection: Option<&rv1::PaymentSelection>,
+    ) -> Result<CostTransactionPlan, EngineError> {
         if let Some(selection) = selection {
-            let life =
-                self.validate_explicit_payment(player, source, false, &prepared, selection)?;
+            let life = self.validate_explicit_payment_at_receipt(
+                player, source, false, &prepared, selection,
+            )?;
             prepared.finish_explicit_with_any_color(
                 &self.state,
                 selection,

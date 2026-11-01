@@ -120,6 +120,30 @@ pub(super) enum CounterDebitSource {
         ability_source: rv1::CostObjectRef,
         filter: Box<TargetFilter>,
     },
+    AggregatePermanent {
+        ability_source: rv1::CostObjectRef,
+        filter: Box<TargetFilter>,
+    },
+}
+
+#[derive(Clone, Copy)]
+pub(in crate::engine) struct TrustedAggregateCounterCosts {
+    player: PlayerId,
+    source: rv1::CostObjectRef,
+}
+
+impl TrustedAggregateCounterCosts {
+    /// Constructed only after Begin validates the supported aggregate activation shape and its
+    /// captured source receipt. This value is private to the engine path; client selections alone
+    /// cannot authorize aggregate counter debits.
+    pub(in crate::engine) fn accepted_begin(player: PlayerId, source: rv1::CostObjectRef) -> Self {
+        Self { player, source }
+    }
+
+    #[cfg(test)]
+    fn test_accepted_announcement(player: PlayerId, source: rv1::CostObjectRef) -> Self {
+        Self::accepted_begin(player, source)
+    }
 }
 
 #[derive(Clone)]
@@ -1565,6 +1589,73 @@ impl GameEngine {
         extra_generic: u32,
         mana_reduction: ActivatedManaReduction,
     ) -> Result<PreparedPaymentCosts, EngineError> {
+        self.prepare_ability_costs_internal(
+            player,
+            idx,
+            permanent_id,
+            costs,
+            flex_payments,
+            selections,
+            restricted_mana,
+            x_value,
+            extra_generic,
+            mana_reduction,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn prepare_ability_costs_with_trusted_aggregate(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        costs: &[AbilityCost],
+        flex_payments: &[rv1::FlexPipPayment],
+        selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        x_value: u32,
+        extra_generic: u32,
+        mana_reduction: ActivatedManaReduction,
+        context: TrustedAggregateCounterCosts,
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        self.prepare_ability_costs_internal(
+            player,
+            idx,
+            permanent_id,
+            costs,
+            flex_payments,
+            selections,
+            restricted_mana,
+            x_value,
+            extra_generic,
+            mana_reduction,
+            Some(context),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_ability_costs_internal(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        costs: &[AbilityCost],
+        flex_payments: &[rv1::FlexPipPayment],
+        selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        x_value: u32,
+        extra_generic: u32,
+        mana_reduction: ActivatedManaReduction,
+        trusted_aggregate: Option<TrustedAggregateCounterCosts>,
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        if trusted_aggregate.as_ref().is_some_and(|context| {
+            context.player != player || context.source.object_id != permanent_id
+        }) {
+            return Err(EngineError::Illegal(
+                "trusted aggregate counter context does not match its announcement",
+            ));
+        }
         use rv1::cost_selection::Selection;
 
         let source_card_id = self
@@ -1589,12 +1680,59 @@ impl GameEngine {
         let mut waterbend_limit = None;
         let mut saw_tap = false;
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
+        let aggregate_inventory = trusted_aggregate
+            .as_ref()
+            .map(|_| self.live_counter_inventory());
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
-                AbilityCost::RemoveCountersFromPermanents { .. } => {
-                    return Err(EngineError::Illegal(
-                        "aggregate counter removal cost is not supported",
-                    ));
+                AbilityCost::RemoveCountersFromPermanents {
+                    count,
+                    counter,
+                    filter,
+                } => {
+                    let Some(context) = trusted_aggregate.as_ref() else {
+                        return Err(EngineError::Illegal(
+                            "aggregate counter removal cost is not supported",
+                        ));
+                    };
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal(
+                            "missing aggregate counter-removal group selection",
+                        ));
+                    };
+                    let Some(Selection::CounterRemovalGroup(group)) = selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "aggregate counter-removal cost requires grouped contributions",
+                        ));
+                    };
+                    let inventory = aggregate_inventory
+                        .as_ref()
+                        .expect("trusted aggregate preparation captures one live inventory");
+                    let rows = self.validate_aggregate_counter_group_selection(
+                        player,
+                        context.source,
+                        *count,
+                        *counter,
+                        filter,
+                        group,
+                        inventory,
+                    )?;
+                    for (slot, contribution) in rows {
+                        debits.push(CostDebit::RemoveCounters {
+                            object: rv1::CostObjectRef {
+                                object_id: slot.object_id,
+                                zone_change_generation: slot.zone_change_generation,
+                            },
+                            kind: slot.kind,
+                            count: contribution,
+                            payment_source: CounterDebitSource::AggregatePermanent {
+                                ability_source: context.source,
+                                filter: Box::new(filter.clone()),
+                            },
+                        });
+                    }
                 }
                 AbilityCost::RemoveCounters {
                     counter,
@@ -2183,6 +2321,17 @@ impl GameEngine {
         Ok(plan)
     }
 
+    pub(in crate::engine) fn validate_aggregate_preview_resources(
+        &self,
+        prepared: &PreparedPaymentCosts,
+        mana: ManaPaymentPlan,
+    ) -> Result<(), EngineError> {
+        let mut transaction = prepared.transaction.clone();
+        transaction.debits.push(CostDebit::Mana(mana));
+        self.prepare_cost_transaction_commit(transaction)?;
+        Ok(())
+    }
+
     pub(in crate::engine) fn prepare_cost_transaction_commit_with_permission(
         &self,
         mut plan: CostTransactionPlan,
@@ -2728,7 +2877,7 @@ impl GameEngine {
         }
         let mut consumed = HashSet::new();
         let mut tapped = HashSet::new();
-        let mut counter_debits: BTreeMap<(ObjectId, CounterKind), u64> = BTreeMap::new();
+        let mut counter_demands = Vec::new();
         let total_life_payment = plan.debits.iter().try_fold(0u64, |total, debit| {
             let amount = match debit {
                 CostDebit::Mana(mana) => u64::from(mana.life_cost),
@@ -2783,8 +2932,6 @@ impl GameEngine {
                     count,
                     payment_source,
                 } => {
-                    *counter_debits.entry((object.object_id, *kind)).or_default() +=
-                        u64::from(*count);
                     let source_valid = match payment_source {
                         CounterDebitSource::Source => {
                             self.state.objects.get(&object.object_id).is_some_and(|o| {
@@ -2808,15 +2955,45 @@ impl GameEngine {
                                     filter,
                                 )
                         }
+                        CounterDebitSource::AggregatePermanent {
+                            ability_source,
+                            filter,
+                        } => self.aggregate_counter_permanent_matches(
+                            plan.player,
+                            *ability_source,
+                            object.object_id,
+                            filter,
+                        ),
                     };
-                    source_valid
-                        && self
-                            .state
-                            .zone_change_generation
-                            .get(&object.object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == object.zone_change_generation
+                    let generation_matches = self
+                        .state
+                        .zone_change_generation
+                        .get(&object.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == object.zone_change_generation;
+                    if source_valid && generation_matches {
+                        let key = super::super::counters::CounterInventoryKey {
+                            object_id: object.object_id,
+                            zone_change_generation: object.zone_change_generation,
+                            kind: *kind,
+                        };
+                        if matches!(
+                            payment_source,
+                            CounterDebitSource::AggregatePermanent { .. }
+                        ) {
+                            counter_demands.push(super::super::counters::CounterDemand::Split {
+                                count: *count,
+                                candidates: vec![key],
+                            });
+                        } else {
+                            counter_demands.push(super::super::counters::CounterDemand::Whole {
+                                count: *count,
+                                candidates: vec![key],
+                            });
+                        }
+                    }
+                    source_valid && generation_matches
                 }
                 CostDebit::Blight { object, count } => {
                     self.validate_blight(plan.player, *count, object).is_ok()
@@ -2827,9 +3004,14 @@ impl GameEngine {
                     delta,
                 } => {
                     if *delta < 0 {
-                        *counter_debits
-                            .entry((*object_id, CounterKind::Loyalty))
-                            .or_default() += u64::from(delta.unsigned_abs());
+                        counter_demands.push(super::super::counters::CounterDemand::Whole {
+                            count: delta.unsigned_abs(),
+                            candidates: vec![super::super::counters::CounterInventoryKey {
+                                object_id: *object_id,
+                                zone_change_generation: *generation,
+                                kind: CounterKind::Loyalty,
+                            }],
+                        });
                     }
                     (*delta <= 0 || self.can_receive_counters(*object_id))
                         && self.state.objects.get(object_id).is_some_and(|object| {
@@ -3052,15 +3234,13 @@ impl GameEngine {
                 return Err(EngineError::Illegal("cost transaction became stale"));
             }
         }
-        for ((oid, kind), count) in counter_debits {
-            if self
-                .state
-                .objects
-                .get(&oid)
-                .is_none_or(|o| u64::from(o.counter_count(kind)) < count)
-            {
-                return Err(EngineError::Illegal("not enough counters to pay all costs"));
-            }
+        if !counter_demands.is_empty()
+            && !super::super::counters::counter_demands_payable(
+                &self.live_counter_inventory(),
+                &counter_demands,
+            )
+        {
+            return Err(EngineError::Illegal("not enough counters to pay all costs"));
         }
         let requires_permission = plan
             .debits
@@ -3173,6 +3353,140 @@ impl GameEngine {
             )
             && kind_matches
             && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
+    }
+
+    pub(in crate::engine) fn aggregate_counter_permanent_matches(
+        &self,
+        player: PlayerId,
+        source: rv1::CostObjectRef,
+        oid: ObjectId,
+        filter: &TargetFilter,
+    ) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches.iter().any(|branch| {
+                self.aggregate_counter_permanent_matches(player, source, oid, branch)
+            });
+        }
+        if super::super::targeting::object_is_excluded(
+            &self.state,
+            &filter.excluded_objects,
+            oid,
+            super::super::targeting::TargetSourceIdentity::captured(
+                source.object_id,
+                source.zone_change_generation,
+            ),
+            TriggerContext::default(),
+        ) {
+            return false;
+        }
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield || object.phase_status.is_some() {
+            return false;
+        }
+        let Some(controller) = self.controller_of(oid) else {
+            return false;
+        };
+        let controller_matches = match filter.controller {
+            TargetController::Any => true,
+            TargetController::You => controller == player,
+            TargetController::Opponent => self.state.are_opponents(controller, player),
+            TargetController::NotYou => controller != player,
+            TargetController::DefendingPlayer => false,
+        };
+        if !controller_matches {
+            return false;
+        }
+        let Some(characteristics) = self.characteristics(oid) else {
+            return false;
+        };
+        let kind_matches = match filter.kind {
+            TargetKind::Creature => characteristics.is_creature(),
+            TargetKind::AnyPermanent => true,
+            _ => false,
+        };
+        kind_matches
+            && crate::engine::targeting::target_owner_matches(
+                &self.state,
+                filter.owner,
+                player,
+                oid,
+            )
+            && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn validate_aggregate_counter_group_selection(
+        &self,
+        player: PlayerId,
+        source: rv1::CostObjectRef,
+        required_count: u32,
+        fixed_kind: Option<CounterKind>,
+        filter: &TargetFilter,
+        selection: &rv1::CounterRemovalGroupSelection,
+        inventory: &super::super::counters::CounterInventory,
+    ) -> Result<Vec<(super::super::counters::CounterInventoryKey, u32)>, EngineError> {
+        use super::super::counters::counter_option_id;
+
+        if selection.contributions.is_empty() {
+            return Err(EngineError::Illegal(
+                "aggregate counter-removal group cannot be empty",
+            ));
+        }
+        let eligible = self
+            .filtered_counter_inventory_keys(inventory, player, source, filter, fixed_kind)
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let mut rows = Vec::with_capacity(selection.contributions.len());
+        let mut unique_rows = HashSet::new();
+        let mut total = 0u64;
+        for contribution in &selection.contributions {
+            let Some(object) = contribution.object.as_ref() else {
+                return Err(EngineError::Illegal(
+                    "aggregate counter contribution requires an object receipt",
+                ));
+            };
+            if contribution.count == 0
+                || !unique_rows.insert((
+                    object.object_id,
+                    object.zone_change_generation,
+                    contribution.option_id,
+                ))
+            {
+                return Err(EngineError::Illegal(
+                    "aggregate counter contribution is empty or duplicated",
+                ));
+            }
+            let Some(key) = inventory.keys().find(|key| {
+                key.object_id == object.object_id
+                    && key.zone_change_generation == object.zone_change_generation
+                    && counter_option_id(key.kind) == contribution.option_id
+                    && eligible.contains(key)
+            }) else {
+                return Err(EngineError::Illegal(
+                    "aggregate counter contribution is stale or ineligible",
+                ));
+            };
+            if contribution.count > inventory.capacity(key) {
+                return Err(EngineError::Illegal(
+                    "aggregate counter contribution exceeds its live inventory",
+                ));
+            }
+            total =
+                total
+                    .checked_add(u64::from(contribution.count))
+                    .ok_or(EngineError::Illegal(
+                        "aggregate counter contribution total overflowed",
+                    ))?;
+            rows.push((key, contribution.count));
+        }
+        if total != u64::from(required_count) {
+            return Err(EngineError::Illegal(
+                "aggregate counter contributions do not equal the required total",
+            ));
+        }
+        Ok(rows)
     }
 
     /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
@@ -4881,6 +5195,1069 @@ mod convoke_transaction_tests {
             serde_json::to_value(&engine.state).expect("serialize state after supported prepare"),
             before_control,
             "prepare plans the singleton debit without committing it"
+        );
+    }
+
+    #[test]
+    fn aggregate_counter_group_rows_validate_exact_total_and_reject_atomically() {
+        let aggregate_cost_ron = "RemoveCountersFromPermanents(count: 3, counter: None, filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact, Creature, Planeswalker], excluded_objects: [Source]))";
+        let validation_card = format!(
+            r#"(
+                id: "c1_aggregate_counter_validation",
+                name: "C1 Aggregate Counter Validation",
+                face_id: "c1_aggregate_counter_validation",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    ability_id: "aggregate_01", presentation: Fallback,
+                    costs: [{aggregate_cost_ron}],
+                    effect: [Draw(who: Controller, count: 1)])]
+            )"#
+        );
+        let validation_registry =
+            CardRegistry::from_chunks_and_tokens(&[validation_card.as_str()], &[])
+                .expect("the local aggregate counter cost passes registry validation");
+        let cost = validation_registry
+            .get("c1_aggregate_counter_validation")
+            .expect("validated local aggregate cost definition")
+            .primary_face()
+            .activated_abilities[0]
+            .costs[0]
+            .clone();
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            602_422,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player mixed-group fixture");
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "brambleback_brute".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+
+        let artifact = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&artifact).unwrap().card_id = "ornithopter".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            artifact,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&artifact)
+            .unwrap()
+            .add_counters(CounterKind::Charge, 2, 0);
+
+        let creature = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&creature).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&creature)
+            .unwrap()
+            .add_counters(CounterKind::Night, 1, 0);
+
+        let selection = rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 2,
+                        },
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(creature)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Night,
+                            ),
+                            count: 1,
+                        },
+                    ],
+                },
+            )),
+        };
+        let costs = [cost];
+        let context = TrustedAggregateCounterCosts::test_accepted_announcement(
+            0,
+            engine.payment_object_ref(source),
+        );
+        let prepared = engine
+            .prepare_ability_costs_with_trusted_aggregate(
+                0,
+                0,
+                source,
+                &costs,
+                &[],
+                std::slice::from_ref(&selection),
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+                context,
+            )
+            .expect("a valid split selection pays the exact aggregate counter count");
+        assert!(matches!(
+            prepared.transaction.debits.as_slice(),
+            [
+                CostDebit::RemoveCounters {
+                    object: artifact_debit,
+                    kind: CounterKind::Charge,
+                    count: 2,
+                    ..
+                },
+                CostDebit::RemoveCounters {
+                    object: creature_debit,
+                    kind: CounterKind::Night,
+                    count: 1,
+                    ..
+                }
+            ] if artifact_debit.object_id == artifact && creature_debit.object_id == creature
+        ));
+        engine
+            .revalidate_cost_transaction(&prepared.transaction)
+            .expect("the mixed rows pass shared generation-bound debit validation");
+
+        let rows = match selection.selection.as_ref().unwrap() {
+            rv1::cost_selection::Selection::CounterRemovalGroup(group) => {
+                group.contributions.clone()
+            }
+            other => panic!("the valid regression carries a group selection: {other:?}"),
+        };
+        let mut missing_reference = rows.clone();
+        missing_reference[0].object = None;
+        let mut zero_row = rows.clone();
+        zero_row[0].count = 0;
+        let mut duplicate_row = rows.clone();
+        duplicate_row.push(rows[0]);
+        let mut wrong_option = rows.clone();
+        wrong_option[0].option_id = u32::MAX;
+        let mut stale_generation = rows.clone();
+        stale_generation[0]
+            .object
+            .as_mut()
+            .unwrap()
+            .zone_change_generation += 1;
+        let mut short_total = rows.clone();
+        short_total[0].count = 1;
+        let mut long_total = rows.clone();
+        long_total[0].count = 3;
+        let mut wrong_filter_object = rows.clone();
+        wrong_filter_object[0].object = Some(engine.payment_object_ref(source));
+        let malformed = [
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection::default(),
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemoval(
+                    rv1::CounterRemovalSelection {
+                        source: Some(engine.payment_object_ref(artifact)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 1,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: rows.clone(),
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: missing_reference,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: zero_row,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: duplicate_row,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: wrong_option,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: stale_generation,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: short_total,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: long_total,
+                    },
+                )),
+            },
+            rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: wrong_filter_object,
+                    },
+                )),
+            },
+        ];
+        for invalid in malformed {
+            let before = serde_json::to_value(&engine.state)
+                .expect("serialize state before malformed group preparation");
+            assert!(engine
+                .prepare_ability_costs_with_trusted_aggregate(
+                    0,
+                    0,
+                    source,
+                    &costs,
+                    &[],
+                    &[invalid],
+                    &[],
+                    0,
+                    0,
+                    ActivatedManaReduction::default(),
+                    context,
+                )
+                .is_err());
+            assert_eq!(
+                serde_json::to_value(&engine.state)
+                    .expect("serialize state after malformed group preparation"),
+                before,
+                "malformed grouped rows never debit or mutate state"
+            );
+        }
+
+        engine
+            .state
+            .objects
+            .get_mut(&artifact)
+            .unwrap()
+            .add_counters(CounterKind::Night, 1, 0);
+        let same_object_selection = rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 2,
+                        },
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Night,
+                            ),
+                            count: 1,
+                        },
+                    ],
+                },
+            )),
+        };
+        let same_object = engine
+            .prepare_ability_costs_with_trusted_aggregate(
+                0,
+                0,
+                source,
+                &costs,
+                &[],
+                &[same_object_selection],
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+                context,
+            )
+            .expect("two distinct counter kinds on one object are legal group rows");
+        engine
+            .revalidate_cost_transaction(&same_object.transaction)
+            .expect("same-object distinct-kind rows remain independently available");
+    }
+
+    fn aggregate_transaction_fixture(
+        seed: u64,
+        life: i32,
+    ) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            life,
+            None,
+            true,
+        )
+        .expect("aggregate transaction fixture");
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "brambleback_brute".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let artifact = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&artifact).unwrap().card_id = "ornithopter".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            artifact,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&artifact)
+            .unwrap()
+            .add_counters(CounterKind::Charge, 2, 0);
+        let creature = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&creature).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&creature)
+            .unwrap()
+            .add_counters(CounterKind::Night, 1, 0);
+        (engine, source, artifact, creature)
+    }
+
+    fn aggregate_test_filter() -> Box<TargetFilter> {
+        Box::new(TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
+            permanent_types: vec![
+                PermanentTypeFilter::Artifact,
+                PermanentTypeFilter::Creature,
+                PermanentTypeFilter::Planeswalker,
+            ],
+            ..TargetFilter::default()
+        })
+    }
+
+    fn aggregate_counter_debit(
+        source: rv1::CostObjectRef,
+        object: rv1::CostObjectRef,
+        kind: CounterKind,
+        count: u32,
+        filter: &TargetFilter,
+    ) -> CostDebit {
+        CostDebit::RemoveCounters {
+            object,
+            kind,
+            count,
+            payment_source: CounterDebitSource::AggregatePermanent {
+                ability_source: source,
+                filter: Box::new(filter.clone()),
+            },
+        }
+    }
+
+    fn ability_transaction(debits: Vec<CostDebit>) -> CostTransactionPlan {
+        CostTransactionPlan {
+            purpose: CostPurpose::Ability,
+            player: 0,
+            player_idx: 0,
+            debits,
+            cast_cost_receipts: vec![],
+        }
+    }
+
+    fn prepared_aggregate_counter_transaction(
+        engine: &GameEngine,
+        source: ObjectId,
+        artifact: ObjectId,
+        creature: ObjectId,
+    ) -> CostTransactionPlan {
+        let source_ref = engine.payment_object_ref(source);
+        let artifact_ref = engine.payment_object_ref(artifact);
+        let creature_ref = engine.payment_object_ref(creature);
+        let costs = [
+            AbilityCost::PayLife { amount: 2 },
+            AbilityCost::Mana(ManaCost::parse("{G}").unwrap()),
+            AbilityCost::RemoveCountersFromPermanents {
+                count: 3,
+                counter: None,
+                filter: *aggregate_test_filter(),
+            },
+        ];
+        let selection = rv1::CostSelection {
+            cost_index: 2,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![
+                        rv1::CounterRemovalContribution {
+                            object: Some(artifact_ref),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 2,
+                        },
+                        rv1::CounterRemovalContribution {
+                            object: Some(creature_ref),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Night,
+                            ),
+                            count: 1,
+                        },
+                    ],
+                },
+            )),
+        };
+        let context = TrustedAggregateCounterCosts::test_accepted_announcement(0, source_ref);
+        engine
+            .prepare_ability_costs_with_trusted_aggregate(
+                0,
+                0,
+                source,
+                &costs,
+                &[],
+                &[selection],
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+                context,
+            )
+            .expect("valid accepted group rows and resource costs prepare together")
+            .finish_with_any_color(&engine.state, engine.may_spend_mana_as_any_color(0))
+            .expect("the complete prepared cost, including green mana, can be paid")
+    }
+
+    #[test]
+    fn aggregate_counter_captured_source_return_differs_from_selected_live_source() {
+        let (mut aggregate, source, artifact, creature) =
+            aggregate_transaction_fixture(602_432, 20);
+        aggregate.state.players[0].mana_pool.green = 1;
+        let original_source = aggregate.payment_object_ref(source);
+        let plan = prepared_aggregate_counter_transaction(&aggregate, source, artifact, creature);
+        crate::engine::resolution::move_object_to_zone(
+            &mut aggregate.state,
+            aggregate.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the original aggregate source leaves after preparation");
+        crate::engine::resolution::move_object_to_zone(
+            &mut aggregate.state,
+            aggregate.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .expect("the same ObjectId returns as a new source incarnation");
+        assert_ne!(
+            aggregate.payment_object_ref(source).zone_change_generation,
+            original_source.zone_change_generation
+        );
+
+        let receipt = aggregate
+            .commit_cost_transaction(plan)
+            .expect("captured aggregate authorization does not require the old source incarnation");
+        assert_eq!(receipt.life_paid, 2);
+        assert_eq!(aggregate.state.players[0].life, 18);
+        assert_eq!(aggregate.state.players[0].mana_pool.green, 0);
+        assert_eq!(
+            aggregate.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            aggregate.state.objects[&creature].counter_count(CounterKind::Night),
+            0
+        );
+
+        let (mut selected, selected_source, _, selected_creature) =
+            aggregate_transaction_fixture(602_433, 20);
+        selected.state.players[0].mana_pool.green = 1;
+        let selected_creature_ref = selected.payment_object_ref(selected_creature);
+        let selected_filter = Box::new(TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            permanent_types: vec![PermanentTypeFilter::Creature],
+            ..TargetFilter::default()
+        });
+        let selected_costs = [
+            AbilityCost::PayLife { amount: 2 },
+            AbilityCost::Mana(ManaCost::parse("{G}").unwrap()),
+            AbilityCost::RemoveCounters {
+                counter: Some(CounterKind::Night),
+                count: 1,
+                payment_source: CounterRemovalPaymentSource::SelectedPermanent(selected_filter),
+            },
+        ];
+        let selected_rows = [rv1::CostSelection {
+            cost_index: 2,
+            selection: Some(rv1::cost_selection::Selection::CounterRemoval(
+                rv1::CounterRemovalSelection {
+                    source: Some(selected_creature_ref),
+                    option_id: crate::engine::counters::counter_option_id(CounterKind::Night),
+                },
+            )),
+        }];
+        let selected_plan = selected
+            .prepare_ability_costs(
+                0,
+                0,
+                selected_source,
+                &selected_costs,
+                &[],
+                &selected_rows,
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+            )
+            .expect("the selected-permanent plan captures the live source incarnation")
+            .finish_with_any_color(&selected.state, selected.may_spend_mana_as_any_color(0))
+            .expect("the complete selected-permanent cost, including green mana, can be paid");
+        crate::engine::resolution::move_object_to_zone(
+            &mut selected.state,
+            selected.registry,
+            selected_source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("the selected-cost source leaves after preparation");
+        crate::engine::resolution::move_object_to_zone(
+            &mut selected.state,
+            selected.registry,
+            selected_source,
+            Zone::Battlefield,
+            None,
+        )
+        .expect("the selected-cost source returns with a new generation");
+        let before_rejected_commit = format!("{:?}", selected.state);
+        assert!(selected.commit_cost_transaction(selected_plan).is_err());
+        assert_eq!(format!("{:?}", selected.state), before_rejected_commit);
+        assert_eq!(selected.state.players[0].life, 20);
+        assert_eq!(selected.state.players[0].mana_pool.green, 1);
+        assert_eq!(
+            selected.state.objects[&selected_creature].counter_count(CounterKind::Night),
+            1
+        );
+        assert!(selected.state.pending_ability_activation.is_none());
+        assert!(selected.pending_ability_activation_internal.is_none());
+    }
+
+    #[test]
+    fn aggregate_counter_prepared_contributor_changes_reject_before_other_debits() {
+        #[derive(Clone, Copy)]
+        enum ContributorChange {
+            DerivedControl,
+            DerivedType,
+            Phasing,
+            ZoneChange,
+            CounterAmount,
+        }
+
+        for (offset, change) in [
+            ContributorChange::DerivedControl,
+            ContributorChange::DerivedType,
+            ContributorChange::Phasing,
+            ContributorChange::ZoneChange,
+            ContributorChange::CounterAmount,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let seed = 602_440 + offset as u64;
+            let (mut engine, source, artifact, creature) = aggregate_transaction_fixture(seed, 20);
+            engine.state.players[0].mana_pool.green = 1;
+            let old_artifact_ref = engine.payment_object_ref(artifact);
+            let plan = prepared_aggregate_counter_transaction(&engine, source, artifact, creature);
+            match change {
+                ContributorChange::DerivedControl => {
+                    engine
+                        .state
+                        .continuous_effects
+                        .push(crate::state::ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: None,
+                            affected: crate::state::AffectedScope::Single(artifact),
+                            kind: tricerules_card_model::ContinuousEffectKind::Layer2Control {
+                                controller: tricerules_card_model::ControllerReference::Fixed(1),
+                            },
+                            condition: None,
+                            duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                            timestamp: 100,
+                        });
+                    assert_eq!(engine.controller_of(artifact), Some(1));
+                }
+                ContributorChange::DerivedType => {
+                    engine
+                        .state
+                        .continuous_effects
+                        .push(crate::state::ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: None,
+                            affected: crate::state::AffectedScope::Single(creature),
+                            kind: tricerules_card_model::ContinuousEffectKind::Layer4RemoveCreature,
+                            condition: None,
+                            duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                            timestamp: 100,
+                        });
+                    assert!(!engine.characteristics(creature).unwrap().is_creature());
+                }
+                ContributorChange::Phasing => {
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&artifact)
+                        .unwrap()
+                        .phase_status = Some(crate::state::PhasedOutStatus {
+                        phase_out_under: 0,
+                        phase_in_due_after_departed_turn: false,
+                        phase_in_with: None,
+                        direct_attachment_snapshot: None,
+                    });
+                }
+                ContributorChange::ZoneChange => {
+                    crate::engine::resolution::move_object_to_zone(
+                        &mut engine.state,
+                        engine.registry,
+                        artifact,
+                        Zone::Graveyard,
+                        None,
+                    )
+                    .expect("contributor leaves after payment preparation");
+                    crate::engine::resolution::move_object_to_zone(
+                        &mut engine.state,
+                        engine.registry,
+                        artifact,
+                        Zone::Battlefield,
+                        None,
+                    )
+                    .expect("contributor returns under a new generation");
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&artifact)
+                        .unwrap()
+                        .add_counters(CounterKind::Charge, 2, 0);
+                    assert_ne!(
+                        engine.payment_object_ref(artifact).zone_change_generation,
+                        old_artifact_ref.zone_change_generation
+                    );
+                }
+                ContributorChange::CounterAmount => {
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&artifact)
+                        .unwrap()
+                        .counters
+                        .insert(CounterKind::Charge, 1);
+                    assert_eq!(
+                        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+                        1
+                    );
+                }
+            }
+
+            let before_rejected_commit = format!("{:?}", engine.state);
+            assert!(
+                engine.commit_cost_transaction(plan).is_err(),
+                "prepared aggregate debit must reject contributor change {offset}"
+            );
+            assert_eq!(
+                format!("{:?}", engine.state),
+                before_rejected_commit,
+                "stale group must reject before fixed life, mana, or other counters are debited"
+            );
+            assert_eq!(engine.state.players[0].life, 20);
+            assert_eq!(engine.state.players[0].mana_pool.green, 1);
+            assert_eq!(
+                engine.state.objects[&creature].counter_count(CounterKind::Night),
+                1
+            );
+            assert!(engine.state.pending_ability_activation.is_none());
+            assert!(engine.pending_ability_activation_internal.is_none());
+        }
+    }
+
+    #[test]
+    fn aggregate_counter_debits_share_overdraw_and_combined_life_validation() {
+        let filter = aggregate_test_filter();
+        let (mut overdraw, source, artifact, _) = aggregate_transaction_fixture(602_424, 20);
+        let source_ref = overdraw.payment_object_ref(source);
+        let artifact_ref = overdraw.payment_object_ref(artifact);
+        let overdraw_plan = ability_transaction(vec![
+            aggregate_counter_debit(source_ref, artifact_ref, CounterKind::Charge, 2, &filter),
+            CostDebit::RemoveCounters {
+                object: artifact_ref,
+                kind: CounterKind::Charge,
+                count: 1,
+                payment_source: CounterDebitSource::SelectedPermanent {
+                    ability_source: source_ref,
+                    filter: filter.clone(),
+                },
+            },
+        ]);
+        let before = serde_json::to_value(&overdraw.state)
+            .expect("serialize state before shared aggregate/singleton overdraw");
+        assert!(overdraw.commit_cost_transaction(overdraw_plan).is_err());
+        assert_eq!(
+            serde_json::to_value(&overdraw.state)
+                .expect("serialize state after shared aggregate/singleton overdraw"),
+            before,
+            "aggregate and singleton debits cannot consume the same counter twice"
+        );
+
+        let (mut loyalty_conflict, walker, _, _) = aggregate_transaction_fixture(602_425, 20);
+        loyalty_conflict
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .card_id = "jace_beleren".into();
+        loyalty_conflict
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Loyalty, 1);
+        let walker_ref = loyalty_conflict.payment_object_ref(walker);
+        let loyalty_filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            permanent_types: vec![PermanentTypeFilter::Planeswalker],
+            ..TargetFilter::default()
+        };
+        let loyalty_plan = ability_transaction(vec![
+            aggregate_counter_debit(
+                walker_ref,
+                walker_ref,
+                CounterKind::Loyalty,
+                1,
+                &loyalty_filter,
+            ),
+            CostDebit::Loyalty {
+                object_id: walker,
+                generation: walker_ref.zone_change_generation,
+                delta: -1,
+            },
+        ]);
+        let before = serde_json::to_value(&loyalty_conflict.state)
+            .expect("serialize state before aggregate and negative loyalty share a slot");
+        assert!(loyalty_conflict
+            .commit_cost_transaction(loyalty_plan)
+            .is_err());
+        assert_eq!(
+            serde_json::to_value(&loyalty_conflict.state)
+                .expect("serialize state after aggregate and negative loyalty share a slot"),
+            before,
+            "negative loyalty and aggregate rows compete for the same current counter units"
+        );
+
+        let (mut independent_kinds, walker, artifact, _) =
+            aggregate_transaction_fixture(602_426, 20);
+        independent_kinds
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .card_id = "jace_beleren".into();
+        independent_kinds
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Loyalty, 1);
+        let walker_ref = independent_kinds.payment_object_ref(walker);
+        let artifact_ref = independent_kinds.payment_object_ref(artifact);
+        let artifact_filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            permanent_types: vec![PermanentTypeFilter::Artifact],
+            ..TargetFilter::default()
+        };
+        independent_kinds
+            .commit_cost_transaction(ability_transaction(vec![
+                aggregate_counter_debit(
+                    walker_ref,
+                    artifact_ref,
+                    CounterKind::Charge,
+                    1,
+                    &artifact_filter,
+                ),
+                CostDebit::Loyalty {
+                    object_id: walker,
+                    generation: walker_ref.zone_change_generation,
+                    delta: -1,
+                },
+            ]))
+            .expect("independent counter kinds pay from their own slots");
+        assert_eq!(
+            independent_kinds.state.objects[&artifact].counter_count(CounterKind::Charge),
+            1
+        );
+        assert_eq!(
+            independent_kinds.state.objects[&walker].counter_count(CounterKind::Loyalty),
+            0
+        );
+
+        let (mut positive_does_not_finance, walker, _, _) =
+            aggregate_transaction_fixture(602_427, 20);
+        positive_does_not_finance
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .card_id = "jace_beleren".into();
+        positive_does_not_finance
+            .state
+            .objects
+            .get_mut(&walker)
+            .unwrap()
+            .counters
+            .remove(&CounterKind::Loyalty);
+        let walker_ref = positive_does_not_finance.payment_object_ref(walker);
+        let source_allowed_filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            permanent_types: vec![PermanentTypeFilter::Planeswalker],
+            ..TargetFilter::default()
+        };
+        let positive_plan = ability_transaction(vec![
+            aggregate_counter_debit(
+                walker_ref,
+                walker_ref,
+                CounterKind::Loyalty,
+                1,
+                &source_allowed_filter,
+            ),
+            CostDebit::Loyalty {
+                object_id: walker,
+                generation: walker_ref.zone_change_generation,
+                delta: 1,
+            },
+        ]);
+        let before = serde_json::to_value(&positive_does_not_finance.state)
+            .expect("serialize state before checking positive counter additions");
+        assert!(positive_does_not_finance
+            .commit_cost_transaction(positive_plan)
+            .is_err());
+        assert_eq!(
+            serde_json::to_value(&positive_does_not_finance.state)
+                .expect("serialize state after checking positive counter additions"),
+            before,
+            "a positive loyalty cost cannot create counters used by a removal cost"
+        );
+
+        let plan_with_phyrexian = |engine: &GameEngine,
+                                   source: ObjectId,
+                                   artifact: ObjectId,
+                                   creature: ObjectId| {
+            let mana = super::super::mana::plan_mana_payment_with_reduction(
+                &engine.state,
+                0,
+                &ManaCost::parse("{G/P}{G/P}").unwrap(),
+                0,
+                0,
+                0,
+                &[
+                    rv1::FlexPipPayment {
+                        pip_index: 0,
+                        pay_life: true,
+                    },
+                    rv1::FlexPipPayment {
+                        pip_index: 1,
+                        pay_life: true,
+                    },
+                ],
+            )
+            .unwrap();
+            let source_ref = engine.payment_object_ref(source);
+            let artifact_ref = engine.payment_object_ref(artifact);
+            let creature_ref = engine.payment_object_ref(creature);
+            ability_transaction(vec![
+                aggregate_counter_debit(source_ref, artifact_ref, CounterKind::Charge, 2, &filter),
+                aggregate_counter_debit(source_ref, creature_ref, CounterKind::Night, 1, &filter),
+                CostDebit::Mana(mana),
+                CostDebit::Life { amount: 2 },
+            ])
+        };
+        let (mut short_life, source, artifact, creature) =
+            aggregate_transaction_fixture(602_428, 5);
+        let short_life_plan = plan_with_phyrexian(&short_life, source, artifact, creature);
+        let before = serde_json::to_value(&short_life.state)
+            .expect("serialize state before insufficient combined life payment");
+        assert!(short_life.commit_cost_transaction(short_life_plan).is_err());
+        assert_eq!(
+            serde_json::to_value(&short_life.state)
+                .expect("serialize state after insufficient combined life payment"),
+            before,
+            "fixed and Phyrexian life are checked together before counter removal"
+        );
+
+        let (mut exact_life, source, artifact, creature) =
+            aggregate_transaction_fixture(602_429, 6);
+        let exact_life_receipt = exact_life
+            .commit_cost_transaction(plan_with_phyrexian(&exact_life, source, artifact, creature))
+            .expect("the exact combined life total is payable");
+        assert_eq!(exact_life_receipt.life_paid, 6);
+        assert_eq!(exact_life.state.players[0].life, 0);
+        assert_eq!(
+            exact_life.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            exact_life.state.objects[&creature].counter_count(CounterKind::Night),
+            0
+        );
+
+        let (mut stale_mana, source, artifact, _) = aggregate_transaction_fixture(602_430, 20);
+        stale_mana.state.players[0].mana_pool.green = 1;
+        let mana = super::super::mana::plan_mana_payment_with_reduction(
+            &stale_mana.state,
+            0,
+            &ManaCost::parse("{G}").unwrap(),
+            0,
+            0,
+            0,
+            &[],
+        )
+        .unwrap();
+        stale_mana.state.players[0].mana_pool.green = 0;
+        let source_ref = stale_mana.payment_object_ref(source);
+        let artifact_ref = stale_mana.payment_object_ref(artifact);
+        let stale_mana_plan = ability_transaction(vec![
+            aggregate_counter_debit(source_ref, artifact_ref, CounterKind::Charge, 1, &filter),
+            CostDebit::Mana(mana),
+        ]);
+        let before = serde_json::to_value(&stale_mana.state)
+            .expect("serialize state before stale mana with aggregate rows");
+        assert!(stale_mana.commit_cost_transaction(stale_mana_plan).is_err());
+        assert_eq!(
+            serde_json::to_value(&stale_mana.state)
+                .expect("serialize state after stale mana with aggregate rows"),
+            before,
+            "stale mana cannot partially debit aggregate counters"
+        );
+
+        let (mut stale_restricted, source, artifact, _) =
+            aggregate_transaction_fixture(602_431, 20);
+        stale_restricted.state.players[0].mana_pool.green = 1;
+        stale_restricted.state.players[0].restricted_mana.push(
+            crate::state::RestrictedManaContribution {
+                restriction_group_id: 17,
+                amount: ManaAmount {
+                    g: 1,
+                    ..Default::default()
+                },
+            },
+        );
+        let selections = [rv1::ManaSpendSelection {
+            restriction_group_id: 17,
+            g: 1,
+            ..Default::default()
+        }];
+        let mana = plan_mana_payment_with_restricted_reduction(
+            &stale_restricted.state,
+            0,
+            &ManaCost::parse("{G}{G}").unwrap(),
+            0,
+            0,
+            0,
+            &[],
+            &selections,
+            &[17],
+        )
+        .unwrap();
+        stale_restricted.state.players[0].restricted_mana.clear();
+        let source_ref = stale_restricted.payment_object_ref(source);
+        let artifact_ref = stale_restricted.payment_object_ref(artifact);
+        let stale_restricted_plan = ability_transaction(vec![
+            aggregate_counter_debit(source_ref, artifact_ref, CounterKind::Charge, 1, &filter),
+            CostDebit::Mana(mana),
+        ]);
+        let before = serde_json::to_value(&stale_restricted.state)
+            .expect("serialize state before stale restricted mana with aggregate rows");
+        assert!(stale_restricted
+            .commit_cost_transaction(stale_restricted_plan)
+            .is_err());
+        assert_eq!(
+            serde_json::to_value(&stale_restricted.state)
+                .expect("serialize state after stale restricted mana with aggregate rows"),
+            before,
+            "missing restricted groups cannot partially debit aggregate counters"
         );
     }
 

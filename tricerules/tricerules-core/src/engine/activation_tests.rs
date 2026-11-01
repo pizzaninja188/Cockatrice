@@ -87,6 +87,28 @@ const SPELL_PAYMENT_LAND: &str = r#"(
     )],
 )"#;
 
+const CAPTURED_ARTIFACT_PAYMENT_LAND: &str = r#"(
+    id: "captured_artifact_payment_land", name: "Captured Artifact Payment Land",
+    face_id: "captured_artifact_payment_land", types: ["Land"],
+    activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+        costs: [Tap], effect: [ProduceMana(options: [(c: 1)], restriction: Some((
+            restriction_id: "restriction_01", presentation: Fallback,
+            activate_ability: [(card_type: Some(Artifact))],
+        )))],
+    )],
+)"#;
+
+const CAPTURED_ARTIFACT_SPELL_PAYMENT_LAND: &str = r#"(
+    id: "captured_artifact_spell_payment_land", name: "Captured Artifact Spell Payment Land",
+    face_id: "captured_artifact_spell_payment_land", types: ["Land"],
+    activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+        costs: [Tap], effect: [ProduceMana(options: [(c: 1)], restriction: Some((
+            restriction_id: "restriction_01", presentation: Fallback,
+            cast_spell: [(card_type: Some(Artifact))],
+        )))],
+    )],
+)"#;
+
 const PAIN_PAYMENT_LAND: &str = r#"(
     id: "pain_payment_land", name: "Pain Payment Land", face_id: "pain_payment_land", types: ["Land"],
     activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [Tap],
@@ -578,6 +600,366 @@ fn aggregate_counter_cost_fixture(seed: u64) -> (GameEngine, ObjectId, ObjectId,
         .expect("creature contributor")
         .add_counters(CounterKind::Night, 1, 0);
     (engine, source, artifact, creature)
+}
+
+const C2_AGGREGATE_COUNTER_PAYMENT_FIXTURE: &str = r#"(
+    id: "c2_aggregate_counter_payment_fixture",
+    name: "C2 Aggregate Counter Payment Fixture",
+    face_id: "c2_aggregate_counter_payment_fixture",
+    types: ["Creature"],
+    power: Some(1),
+    toughness: Some(1),
+    activated_abilities: [
+        (ability_id: "aggregate_payment_01", presentation: Fallback,
+            costs: [Mana("{1}{U/P}{U/P}"), RemoveCountersFromPermanents(count: 3, counter: None,
+                    filter: (kind: AnyPermanent, controller: You,
+                        permanent_types: [Artifact, Creature, Planeswalker],
+                        excluded_objects: [Source]))],
+            effect: [PutCounters(subject: Source, counter: PlusOnePlusOne, count: 1)])
+    ]
+)"#;
+
+const C2_AGGREGATE_TRANSFORM_PAYMENT_FIXTURE: &str = r#"(
+    id: "c2_aggregate_transform_payment_fixture_front_c2_aggregate_transform_payment_fixture_back",
+    name: "C2 Aggregate Transform Payment Fixture",
+    layout: Transform,
+    faces: [
+        (
+            name: "C2 Aggregate Transform Payment Fixture",
+            face_id: "c2_aggregate_transform_payment_fixture_front",
+            types: ["Creature"],
+            power: Some(1),
+            toughness: Some(1),
+            activated_abilities: [
+                (ability_id: "aggregate_payment_01", presentation: Fallback,
+                    costs: [Mana("{1}{U/P}{U/P}"), RemoveCountersFromPermanents(count: 3, counter: None,
+                            filter: (kind: AnyPermanent, controller: You,
+                                permanent_types: [Artifact, Creature, Planeswalker],
+                                excluded_objects: [Source]))],
+                    effect: [PutCounters(subject: Source, counter: PlusOnePlusOne, count: 1)])
+            ],
+        ),
+        (
+            name: "C2 Aggregate Transform Payment Fixture Back",
+            face_id: "c2_aggregate_transform_payment_fixture_back",
+            types: ["Creature"],
+            power: Some(2),
+            toughness: Some(3),
+        ),
+    ],
+)"#;
+
+fn aggregate_counter_payment_fixture(seed: u64) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+    aggregate_counter_payment_fixture_with_definition(
+        seed,
+        C2_AGGREGATE_COUNTER_PAYMENT_FIXTURE,
+        false,
+    )
+}
+
+fn aggregate_counter_payment_fixture_with_definition(
+    seed: u64,
+    source_definition: &str,
+    source_in_hand: bool,
+) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+    aggregate_counter_payment_fixture_with_definition_and_name(
+        seed,
+        source_definition,
+        "C2 Aggregate Counter Payment Fixture",
+        source_in_hand,
+    )
+}
+
+fn aggregate_counter_payment_fixture_with_definition_and_name(
+    seed: u64,
+    source_definition: &str,
+    source_name: &str,
+    source_in_hand: bool,
+) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/ornithopter.ron"),
+            include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            include_str!("../../../tricerules-cards/data/liquimetal_torque.ron"),
+            include_str!("../../../tricerules-cards/data/krark-clan_ironworks.ron"),
+            include_str!("../../../tricerules-cards/data/mycosynth_lattice.ron"),
+            PAIN_PAYMENT_LAND,
+            RESTRICTED_PAYMENT_LAND,
+            SPELL_PAYMENT_LAND,
+            CAPTURED_ARTIFACT_PAYMENT_LAND,
+            CAPTURED_ARTIFACT_SPELL_PAYMENT_LAND,
+            source_definition,
+        ],
+        &[],
+    )
+    .expect("the local C2 aggregate counter payment fixture validates");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let source_card_id = registry
+        .id_for_name(source_name)
+        .expect("the selected local C2 source name resolves in its fixture registry")
+        .to_string();
+    let mut engine = GameEngine::new_with_registry(
+        seed,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("C2 aggregate counter payment engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    let source = if source_in_hand {
+        engine
+            .apply_dev_command(
+                10,
+                &rv1::DevCommand {
+                    target_player_id: 10,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: source_name.into(),
+                            zone: rv1::DevZone::Hand as i32,
+                            ready: false,
+                        },
+                    )),
+                },
+            )
+            .expect("local C2 fixture enters hand");
+        engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .find(|object| engine.state.objects[object].card_id == source_card_id)
+            .expect("local C2 source is in the actor's hand")
+    } else {
+        place_ready(&mut engine, 10, source_name)
+    };
+    let artifact = place_ready(&mut engine, 10, "Ornithopter");
+    let creature = place_ready(&mut engine, 10, "Grizzly Bears");
+    engine
+        .state
+        .objects
+        .get_mut(&artifact)
+        .expect("artifact contributor")
+        .add_counters(CounterKind::Charge, 2, 0);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("creature contributor")
+        .add_counters(CounterKind::Night, 1, 0);
+    (engine, source, artifact, creature)
+}
+
+fn aggregate_counter_group_selection(
+    engine: &GameEngine,
+    artifact: ObjectId,
+    creature: ObjectId,
+    cost_index: u32,
+) -> rv1::CostSelection {
+    rv1::CostSelection {
+        cost_index,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(artifact)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                        count: 2,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(creature)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Night),
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    }
+}
+
+fn aggregate_phyrexian_life_choices(pay_life: [bool; 2]) -> Vec<rv1::FlexPipPayment> {
+    pay_life
+        .into_iter()
+        .enumerate()
+        .map(|(index, pay_life)| rv1::FlexPipPayment {
+            pip_index: index as u32 + 1,
+            pay_life,
+        })
+        .collect()
+}
+
+fn aggregate_counter_begin_command(
+    engine: &GameEngine,
+    source: ObjectId,
+    artifact: ObjectId,
+    creature: ObjectId,
+    flex_payments: Vec<rv1::FlexPipPayment>,
+) -> rv1::BeginAbilityActivation {
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the aggregate payment ability is active");
+    let group_cost_index = effective
+        .definition
+        .costs
+        .iter()
+        .position(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }))
+        .expect("the aggregate payment ability has its split counter cost");
+    let source_ref = engine.payment_object_ref(source);
+    rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        ability_index: effective.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![aggregate_counter_group_selection(
+            engine,
+            artifact,
+            creature,
+            group_cost_index as u32,
+        )],
+        flex_payments,
+        ..Default::default()
+    }
+}
+
+fn begin_aggregate_counter_payment_window(
+    engine: &mut GameEngine,
+    source: ObjectId,
+    artifact: ObjectId,
+    creature: ObjectId,
+    pay_life: [bool; 2],
+) -> (rv1::PendingAbilityActivation, rv1::CostObjectRef) {
+    let source_ref = engine.payment_object_ref(source);
+    let command = aggregate_counter_begin_command(
+        engine,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices(pay_life),
+    );
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(command)),
+            },
+        )
+        .expect("the validated split-counter Begin opens the locked payment window");
+    (
+        engine
+            .state
+            .pending_ability_activation
+            .clone()
+            .expect("the accepted activation remains pending"),
+        source_ref,
+    )
+}
+
+fn assert_aggregate_commit_rejected_unchanged(
+    engine: &mut GameEngine,
+    player: PlayerId,
+    command: rv1::CommitAbilityActivation,
+    description: &str,
+) {
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        player,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(command)),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "{description} must reject as Illegal"
+    );
+    assert_eq!(
+        format!("{:?}", engine.state),
+        before,
+        "{description} preserves the pending transaction and all resources"
+    );
+    assert!(engine.state.pending_ability_activation.is_some());
+}
+
+fn aggregate_counter_shape_definition(shape: &str) -> String {
+    let mut definition: tricerules_card_model::card_def::RawCardDefinition =
+        ron::from_str(C2_AGGREGATE_COUNTER_PAYMENT_FIXTURE)
+            .expect("the labeled C2 payment fixture parses as a raw definition");
+    let ability = definition
+        .activated_abilities
+        .iter_mut()
+        .find(|ability| ability.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the named fixture ability exists");
+    match shape {
+        "source_tap" => ability.costs.insert(1, AbilityCost::Tap),
+        "fixed_life" => ability.costs.insert(1, AbilityCost::PayLife { amount: 3 }),
+        "sorcery_speed" => ability.timing = tricerules_card_model::ActivationTiming::SorcerySpeed,
+        "per_turn_limit" => {
+            ability.activation_limit = Some(
+                tricerules_card_model::primitives::ActivationLimit::PerTurn { max_activations: 1 },
+            )
+        }
+        "hand" => ability.source_zone = AbilitySourceZone::Hand,
+        "modal" => {
+            ability.effect.clear();
+            ability.modal = Some(
+                ron::from_str::<tricerules_card_model::ModalDef>(
+                    r#"(min_modes: 1, max_modes: 1, modes: [
+                        (mode_id: "draw_one", presentation: Fallback,
+                            effects: [Draw(who: Controller, count: 1)]),
+                        (mode_id: "draw_two", presentation: Fallback,
+                            effects: [Draw(who: Controller, count: 2)])
+                    ])"#,
+                )
+                .expect("the local modal sibling is a typed model definition"),
+            );
+        }
+        "targeted" => {
+            ability.effect = vec![ron::from_str::<SpellEffectKind>(
+                "Tap(subject: Chosen((kind: Creature, controller: You)))",
+            )
+            .expect("the local target sibling uses a model-valid chosen effect")];
+            ability.targeting = Some(
+                ron::from_str::<tricerules_card_model::primitives::TargetingDef>(
+                    r#"(groups: [(min: 1, max: 1, prompt: "Choose your creature",
+                        effect_indices: [0])])"#,
+                )
+                .expect("the local target sibling uses a model-valid target group"),
+            );
+        }
+        "variable" => {
+            ability.costs[0] = AbilityCost::Mana(
+                tricerules_card_model::ManaCost::parse("{X}").expect("model-valid X mana cost"),
+            );
+        }
+        "colored" => {
+            ability.costs[0] = AbilityCost::Mana(
+                tricerules_card_model::ManaCost::parse("{R}{U/P}{U/P}")
+                    .expect("model-valid colored and Phyrexian mana cost"),
+            );
+        }
+        "hybrid" => {
+            ability.costs[0] = AbilityCost::Mana(
+                tricerules_card_model::ManaCost::parse("{1}{U/R}")
+                    .expect("model-valid hybrid mana cost"),
+            );
+        }
+        "mono_hybrid" => {
+            ability.costs[0] = AbilityCost::Mana(
+                tricerules_card_model::ManaCost::parse("{2/U}")
+                    .expect("model-valid monohybrid mana cost"),
+            );
+        }
+        other => panic!("unknown aggregate shape fixture: {other}"),
+    }
+    ron::ser::to_string(&definition).expect("typed local fixture serializes for the registry")
 }
 
 fn self_counter_replacement_fixture(
@@ -1772,7 +2154,3397 @@ fn self_counter_recipient_departure_prunes_paused_placement_and_resumes_each_pla
 }
 
 #[test]
-fn aggregate_counter_schema_is_unoffered_and_direct_activation_is_atomic_illegal() {
+fn aggregate_counter_public_affordability_enables_only_supported_accepted_shape() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_500);
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the aggregate payment ability is active");
+
+    let event = engine.ev_zone_view_sync_tracked();
+    let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = event.ev else {
+        panic!("the actual public state event includes a zone view");
+    };
+    let actor_view = zone_view
+        .per_player
+        .iter()
+        .find(|view| view.player_id == 10)
+        .expect("the actor receives its battlefield view");
+    let source_view = actor_view
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == source)
+        .expect("the source is present in the public battlefield view");
+    let ability_info = source_view
+        .activated_abilities
+        .iter()
+        .find(|ability| ability.ability_index == effective.slot)
+        .expect("the supported aggregate ability has public AbilityInfo");
+    assert!(
+        ability_info.activatable,
+        "the supported fixed targetless aggregate shape is publicly activatable when its complete costs are payable"
+    );
+
+    let mut batch = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut batch, &engine);
+    let public_legal = batch
+        .legal_by_player
+        .get(&10)
+        .expect("the actor receives legal action data");
+    let ability_key = (u64::from(source) << 32) | u64::from(effective.slot);
+    let choices = public_legal
+        .cost_choices_by_ability
+        .get(&ability_key)
+        .expect("the aggregate ability has public cost choices");
+    assert!(choices.non_mana_costs_payable);
+    let group = choices
+        .choices
+        .iter()
+        .find_map(|choice| choice.counter_removal_group.as_ref())
+        .expect("the complete payable aggregate cost is offered as a group");
+    assert_eq!(group.required_count, 3);
+    assert!(group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == artifact)
+    }));
+    assert!(group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == creature)
+    }));
+}
+
+#[test]
+fn aggregate_counter_public_competition_preserves_a_fixed_kind_for_a_second_group() {
+    let mut definition: tricerules_card_model::card_def::RawCardDefinition =
+        ron::from_str(C2_AGGREGATE_COUNTER_PAYMENT_FIXTURE)
+            .expect("the local aggregate definition parses");
+    let ability = definition
+        .activated_abilities
+        .iter_mut()
+        .find(|ability| ability.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the aggregate ability exists");
+    let filter = match &ability.costs[1] {
+        AbilityCost::RemoveCountersFromPermanents { filter, .. } => filter.clone(),
+        other => panic!("the first counter cost is aggregate: {other:?}"),
+    };
+    ability
+        .costs
+        .push(AbilityCost::RemoveCountersFromPermanents {
+            count: 3,
+            counter: Some(CounterKind::Charge),
+            filter,
+        });
+    let definition =
+        ron::ser::to_string(&definition).expect("the typed two-group definition serializes");
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition(602_516, &definition, false);
+    engine.state.players[0].mana_pool.colorless = 1;
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the two-group aggregate ability is active");
+
+    let ability_info_activatable = |engine: &mut GameEngine| {
+        let event = engine.ev_zone_view_sync_tracked();
+        let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = event.ev else {
+            panic!("the public state event includes a zone view");
+        };
+        zone_view
+            .per_player
+            .iter()
+            .find(|view| view.player_id == 10)
+            .and_then(|view| {
+                view.battlefield_objects
+                    .iter()
+                    .find(|object| object.object_id == source)
+            })
+            .and_then(|object| {
+                object
+                    .activated_abilities
+                    .iter()
+                    .find(|ability| ability.ability_index == effective.slot)
+            })
+            .expect("the aggregate ability has a public AbilityInfo")
+            .activatable
+    };
+    assert!(!engine.ability_activatable(source, effective.slot as usize, &effective.definition));
+    assert!(
+        !ability_info_activatable(&mut engine),
+        "the public AbilityInfo is false when shared inventory cannot pay both groups"
+    );
+    let mut insufficient_batch = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut insufficient_batch, &engine);
+    let insufficient_choices = insufficient_batch.legal_by_player[&10]
+        .cost_choices_by_ability
+        .get(&((u64::from(source) << 32) | u64::from(effective.slot)))
+        .expect("the structurally supported two-group cost offer remains keyed");
+    assert!(
+        !insufficient_choices.non_mana_costs_payable,
+        "the public keyed aggregate offer also uses the shared allocator"
+    );
+
+    let other_artifact = place_ready(&mut engine, 10, "Ornithopter");
+    engine
+        .state
+        .objects
+        .get_mut(&artifact)
+        .unwrap()
+        .add_counters(CounterKind::Charge, 1, 0);
+    engine
+        .state
+        .objects
+        .get_mut(&other_artifact)
+        .unwrap()
+        .add_counters(CounterKind::Charge, 2, 0);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        3
+    );
+    assert_eq!(
+        engine.state.objects[&other_artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert!(
+        engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+        "the shared public allocator must reserve the Charge-three slot for the constrained demand"
+    );
+    assert!(ability_info_activatable(&mut engine));
+    let mut batch = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut batch, &engine);
+    let choices = batch.legal_by_player[&10]
+        .cost_choices_by_ability
+        .get(&((u64::from(source) << 32) | u64::from(effective.slot)))
+        .expect("the public ability publishes both group costs");
+    assert!(choices.non_mana_costs_payable);
+    let groups = choices
+        .choices
+        .iter()
+        .filter_map(|choice| {
+            choice
+                .counter_removal_group
+                .as_ref()
+                .map(|group| (choice.cost_index, group))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(groups.len(), 2);
+    assert!(groups.iter().all(|(_, group)| group.required_count == 3));
+    let fixed_charge_group = groups
+        .iter()
+        .find(|(cost_index, _)| *cost_index == 2)
+        .map(|(_, group)| *group)
+        .expect("the fixed-kind group retains its cost index");
+    let charge_capacity = |object_id| {
+        fixed_charge_group
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .object
+                    .as_ref()
+                    .is_some_and(|object| object.object_id == object_id)
+            })
+            .and_then(|candidate| {
+                candidate.options.iter().find(|option| {
+                    option.option_id
+                        == crate::engine::counters::counter_option_id(CounterKind::Charge)
+                })
+            })
+            .map(|option| option.available_count)
+            .expect("the offered Charge candidate reports its available contribution count")
+    };
+    assert_eq!(charge_capacity(artifact), 3);
+    assert_eq!(charge_capacity(other_artifact), 2);
+
+    let source_ref = engine.payment_object_ref(source);
+    let begin = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        ability_index: effective.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![
+            aggregate_counter_group_selection(&engine, other_artifact, creature, 1),
+            rv1::CostSelection {
+                cost_index: 2,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: vec![rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 3,
+                        }],
+                    },
+                )),
+            },
+        ],
+        flex_payments: aggregate_phyrexian_life_choices([true, true]),
+        ..Default::default()
+    };
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+            },
+        )
+        .expect("Begin accepts both groups using disjoint rows after shared competition");
+    let pending = engine.state.pending_ability_activation.clone().unwrap();
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        3
+    );
+    assert_eq!(
+        engine.state.objects[&other_artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    rv1::CommitAbilityActivation {
+                        transaction_id: pending.transaction_id,
+                        expected_revision: pending.revision,
+                        payment: Some(rv1::PaymentSelection {
+                            expected_state_revision: engine.state.command_index,
+                            source: Some(source_ref),
+                            mana: Some(rv1::PaymentMana {
+                                c: 1,
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("both split groups debit atomically");
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&other_artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.players[0].life, 16);
+    assert_eq!(engine.state.stack.len(), 1);
+}
+
+#[test]
+fn aggregate_counter_begin_locks_group_and_both_phyrexian_choices() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_501);
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the aggregate payment ability is active");
+    let group_selection = rv1::CostSelection {
+        cost_index: 1,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(artifact)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                        count: 2,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(creature)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Night),
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    };
+    let begin = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: engine.payment_object_ref(source).zone_change_generation,
+        ability_index: effective.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![group_selection],
+        flex_payments: vec![
+            rv1::FlexPipPayment {
+                pip_index: 1,
+                pay_life: true,
+            },
+            rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            },
+        ],
+        ..Default::default()
+    };
+    let before = serde_json::to_value(&engine.state)
+        .expect("serialize complete state before accepted aggregate Begin");
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+            },
+        )
+        .expect("a supported payable aggregate Begin accepts both fixed Phyrexian choices");
+
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("accepted aggregate Begin publishes a pending activation");
+    assert_eq!(
+        pending.stage(),
+        rv1::AbilityActivationStage::Payment,
+        "the supported targetless ability begins directly in its payment window"
+    );
+    assert_eq!(pending.actor_player_id, 10);
+    assert_eq!(pending.source_object_id, source);
+    assert_eq!(
+        engine.state.players[0].life, 20,
+        "Begin reserves but does not pay life"
+    );
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert!(
+        serde_json::to_value(&engine.state).expect("serialize state after Begin") != before,
+        "accepted Begin publishes the payment window without debiting announced costs"
+    );
+    assert!(engine.pending_ability_activation_internal.is_some());
+}
+
+#[test]
+fn aggregate_counter_begin_combines_fixed_and_phyrexian_life_before_publishing() {
+    let definition = aggregate_counter_shape_definition("fixed_life");
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition(602_511, &definition, false);
+    engine.state.players[0].life = 6;
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("fixed-life aggregate capability is active");
+    assert!(
+        engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+        "the test begins with payable counters and no announcement-time gate on future mana"
+    );
+    let group_cost_index = effective
+        .definition
+        .costs
+        .iter()
+        .position(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }))
+        .expect("the fixed-life ability retains its aggregate group");
+    let begin = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: engine.payment_object_ref(source).zone_change_generation,
+        ability_index: effective.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![rv1::CostSelection {
+            cost_index: group_cost_index as u32,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 2,
+                        },
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(creature)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Night,
+                            ),
+                            count: 1,
+                        },
+                    ],
+                },
+            )),
+        }],
+        flex_payments: vec![
+            rv1::FlexPipPayment {
+                pip_index: 1,
+                pay_life: true,
+            },
+            rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            },
+        ],
+        ..Default::default()
+    };
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "fixed PayLife 3 plus both Phyrexian life choices costs 7, which the actor at 6 life cannot pay"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_accepted_fixed_and_phyrexian_life_preview_commit_retries_at_exact_total() {
+    let definition = aggregate_counter_shape_definition("fixed_life");
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition(602_516, &definition, false);
+    engine.state.players[0].life = 8;
+    engine.state.players[0].mana_pool.colorless = 1;
+
+    // This is a prepared-state boundary check: Begin is accepted at 8 life and
+    // locks PayLife 3 plus two Phyrexian life choices without paying them.
+    let (pending, source_ref) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    assert_eq!(
+        pending.flex_payments,
+        aggregate_phyrexian_life_choices([true, true])
+    );
+    assert_eq!(engine.state.players[0].life, 8);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+
+    engine.state.players[0].life = 6;
+    let make_commit = |expected_state_revision, mana| rv1::CommitAbilityActivation {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision,
+            source: Some(source_ref),
+            mana: Some(mana),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let before_incomplete_preview = format!("{:?}", engine.state);
+    let incomplete_preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(make_commit(
+                engine.state.command_index,
+                rv1::PaymentMana::default(),
+            )),
+            ..Default::default()
+        },
+    );
+    assert!(!incomplete_preview.complete);
+    assert!(
+        !incomplete_preview.error.is_empty(),
+        "the incomplete-mana Preview still rejects the combined life total"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_incomplete_preview);
+    assert_eq!(
+        engine.state.pending_ability_activation.as_ref(),
+        Some(&pending),
+        "the incomplete Preview retains the accepted choices for retry"
+    );
+
+    let complete_mana = rv1::PaymentMana {
+        c: 1,
+        ..Default::default()
+    };
+    let before_complete_preview = format!("{:?}", engine.state);
+    let complete_preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(make_commit(engine.state.command_index, complete_mana)),
+            ..Default::default()
+        },
+    );
+    assert!(!complete_preview.complete);
+    assert!(
+        !complete_preview.error.is_empty(),
+        "complete mana cannot make the combined PayLife 3 plus Phyrexian life 4 payable at 6"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_complete_preview);
+    assert_eq!(
+        engine.state.pending_ability_activation.as_ref(),
+        Some(&pending),
+        "the complete Preview retains the accepted choices for retry"
+    );
+
+    let before_rejected_commit = format!("{:?}", engine.state);
+    let rejected_commit = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                make_commit(engine.state.command_index, complete_mana),
+            )),
+        },
+    );
+    assert!(
+        matches!(rejected_commit, Err(EngineError::Illegal(_))),
+        "explicit complete-mana Commit rejects the combined life total at 6"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_rejected_commit);
+    assert_eq!(
+        engine.state.pending_ability_activation.as_ref(),
+        Some(&pending),
+        "rejected Commit leaves the accepted payment available for retry"
+    );
+
+    // Restore the prepared actor to exactly 7: all life components are paid
+    // once, after which normal state-based loss at 0 life is allowed to end
+    // the game and remove the activation.
+    engine.state.players[0].life = 7;
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    make_commit(engine.state.command_index, complete_mana),
+                )),
+            },
+        )
+        .expect("the same locked choices succeed at their exact life total");
+
+    assert_eq!(engine.state.players[0].life, 0);
+    assert!(engine.state.players[0].has_lost);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_begin_locks_each_phyrexian_choice_and_rejects_malformed_lists() {
+    let (base, source, artifact, creature) = aggregate_counter_payment_fixture(602_515);
+    let make_choices = |choices: [bool; 2]| {
+        choices
+            .into_iter()
+            .enumerate()
+            .map(|(index, pay_life)| rv1::FlexPipPayment {
+                pip_index: index as u32 + 1,
+                pay_life,
+            })
+            .collect::<Vec<_>>()
+    };
+    let missing = vec![rv1::FlexPipPayment {
+        pip_index: 1,
+        pay_life: true,
+    }];
+    let malformed = [
+        ("missing pip", missing),
+        (
+            "duplicate pip",
+            vec![
+                rv1::FlexPipPayment {
+                    pip_index: 1,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 1,
+                    pay_life: false,
+                },
+            ],
+        ),
+        (
+            "generic pip index",
+            vec![
+                rv1::FlexPipPayment {
+                    pip_index: 0,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 2,
+                    pay_life: false,
+                },
+            ],
+        ),
+        (
+            "out of range pip index",
+            vec![
+                rv1::FlexPipPayment {
+                    pip_index: 1,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: false,
+                },
+            ],
+        ),
+    ];
+    for (label, flex_payments) in malformed {
+        let mut engine = base.clone();
+        let mut begin = aggregate_counter_begin_command(
+            &engine,
+            source,
+            artifact,
+            creature,
+            make_choices([true, true]),
+        );
+        begin.flex_payments = flex_payments;
+        let before = serde_json::to_value(&engine.state)
+            .expect("serialize state before malformed Phyrexian choices");
+        assert!(
+            matches!(
+                engine.apply_command(
+                    10,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+                    },
+                ),
+                Err(EngineError::Illegal(_))
+            ),
+            "{label} must reject Begin"
+        );
+        assert_eq!(
+            serde_json::to_value(&engine.state)
+                .expect("serialize state after malformed Phyrexian choices"),
+            before,
+            "{label} must not allocate a transaction or change resources"
+        );
+        assert!(engine.pending_ability_activation_internal.is_none());
+    }
+
+    for (label, pay_life, blue, expected_life) in [
+        ("UU", [false, false], 2, 20),
+        ("U then life", [false, true], 1, 18),
+        ("life then U", [true, false], 1, 18),
+        ("four life", [true, true], 0, 16),
+    ] {
+        let mut engine = base.clone();
+        engine.state.players[0].mana_pool.colorless = 1;
+        engine.state.players[0].mana_pool.blue = blue;
+        let source_ref = engine.payment_object_ref(source);
+        let begin = aggregate_counter_begin_command(
+            &engine,
+            source,
+            artifact,
+            creature,
+            make_choices(pay_life),
+        );
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+                },
+            )
+            .expect("the complete explicit Phyrexian list is accepted");
+        let pending = engine.state.pending_ability_activation.clone().unwrap();
+        assert_eq!(pending.flex_payments, make_choices(pay_life), "{label}");
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "Begin locks {label} without spending"
+        );
+        assert_eq!(engine.state.players[0].mana_pool.blue, blue);
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                        rv1::CommitAbilityActivation {
+                            transaction_id: pending.transaction_id,
+                            expected_revision: pending.revision,
+                            payment: Some(rv1::PaymentSelection {
+                                expected_state_revision: engine.state.command_index,
+                                source: Some(source_ref),
+                                mana: Some(rv1::PaymentMana {
+                                    u: blue,
+                                    c: 1,
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("the selected blue and life alternatives complete the fixed cost");
+        assert_eq!(engine.state.players[0].life, expected_life, "{label}");
+        assert_eq!(engine.state.players[0].mana_pool.blue, 0, "{label}");
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 0, "{label}");
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&creature].counter_count(CounterKind::Night),
+            0
+        );
+        assert_eq!(engine.state.stack.len(), 1, "{label}");
+    }
+}
+
+#[test]
+fn aggregate_counter_commit_rejects_changed_flex_stale_context_and_retries_once() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_512);
+    engine.state.players[0].mana_pool.colorless = 1;
+    let (pending, source_ref) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    let valid = rv1::CommitAbilityActivation {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana {
+                c: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        20,
+        valid.clone(),
+        "a different player attempting the accepted payment",
+    );
+    let mut wrong_transaction = valid.clone();
+    wrong_transaction.transaction_id = wrong_transaction.transaction_id.saturating_add(1);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        wrong_transaction,
+        "a mismatched activation transaction id",
+    );
+    let mut stale_pending_revision = valid.clone();
+    stale_pending_revision.expected_revision =
+        stale_pending_revision.expected_revision.saturating_add(1);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        stale_pending_revision,
+        "a stale pending activation revision",
+    );
+    let mut stale_payment_revision = valid.clone();
+    stale_payment_revision
+        .payment
+        .as_mut()
+        .expect("explicit payment exists")
+        .expected_state_revision = engine.state.command_index.saturating_sub(1);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        stale_payment_revision,
+        "a stale current payment state revision",
+    );
+    let mut wrong_source_receipt = valid.clone();
+    wrong_source_receipt
+        .payment
+        .as_mut()
+        .expect("explicit payment exists")
+        .source
+        .as_mut()
+        .expect("the original source receipt is selected")
+        .zone_change_generation = source_ref.zone_change_generation.saturating_add(1);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        wrong_source_receipt,
+        "a payment naming a different source incarnation",
+    );
+    let mut forged_restricted_group = valid.clone();
+    forged_restricted_group.restricted_mana = vec![rv1::ManaSpendSelection {
+        restriction_group_id: 17,
+        c: 1,
+        ..Default::default()
+    }];
+    forged_restricted_group
+        .payment
+        .as_mut()
+        .expect("explicit payment exists")
+        .mana = Some(rv1::PaymentMana::default());
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        forged_restricted_group,
+        "an unavailable restricted mana group",
+    );
+    let mut identical_flex_override = valid.clone();
+    identical_flex_override.flex_payments = aggregate_phyrexian_life_choices([true, true]);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        identical_flex_override,
+        "a nonempty Commit flex list that repeats the accepted choices",
+    );
+    let mut changed_flex_override = valid.clone();
+    changed_flex_override.flex_payments = aggregate_phyrexian_life_choices([false, true]);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        changed_flex_override,
+        "a nonempty Commit flex list that changes an accepted choice",
+    );
+
+    let mut missing_internal = engine.clone();
+    missing_internal.pending_ability_activation_internal = None;
+    assert_aggregate_commit_rejected_unchanged(
+        &mut missing_internal,
+        10,
+        valid.clone(),
+        "missing engine-owned accepted aggregate state",
+    );
+    let mut mismatched_pending = engine.clone();
+    mismatched_pending
+        .state
+        .pending_ability_activation
+        .as_mut()
+        .expect("accepted pending activation exists")
+        .flex_payments
+        .pop();
+    assert_aggregate_commit_rejected_unchanged(
+        &mut mismatched_pending,
+        10,
+        valid.clone(),
+        "a Pending flex list that disagrees with the engine-owned snapshot",
+    );
+
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    valid.clone(),
+                )),
+            },
+        )
+        .expect("the unchanged accepted choices remain available for retry");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].life, 16);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+
+    let before_duplicate = format!("{:?}", engine.state);
+    assert!(matches!(
+        engine.apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(valid)),
+            },
+        ),
+        Err(EngineError::Illegal(_))
+    ));
+    assert_eq!(format!("{:?}", engine.state), before_duplicate);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "duplicate Commit creates no second ability"
+    );
+}
+
+#[test]
+fn aggregate_counter_incomplete_preview_rejects_invalid_live_contributors_first() {
+    #[derive(Clone, Copy)]
+    enum ContributorChange {
+        Control,
+        Type,
+        Phase,
+        Generation,
+        Quantity,
+    }
+
+    for (offset, (label, change)) in [
+        ("control", ContributorChange::Control),
+        ("type", ContributorChange::Type),
+        ("phase", ContributorChange::Phase),
+        ("generation", ContributorChange::Generation),
+        ("quantity", ContributorChange::Quantity),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (mut engine, source, artifact, creature) =
+            aggregate_counter_payment_fixture(602_517 + offset as u64);
+        engine.state.players[0].mana_pool.colorless = 1;
+        let (pending, source_ref) = begin_aggregate_counter_payment_window(
+            &mut engine,
+            source,
+            artifact,
+            creature,
+            [true, true],
+        );
+        let complete_mana_commit = |engine: &GameEngine| rv1::CommitAbilityActivation {
+            transaction_id: pending.transaction_id,
+            expected_revision: pending.revision,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(source_ref),
+                mana: Some(rv1::PaymentMana {
+                    c: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let original_artifact_ref = engine.payment_object_ref(artifact);
+        let before_valid_preview = serde_json::to_value(&engine.state)
+            .expect("serialize state before valid incomplete Preview");
+        let valid_incomplete = engine.preview_payment(
+            10,
+            &rv1::PreviewPayment {
+                transaction_id: pending.transaction_id,
+                revision: engine.state.command_index,
+                commit_ability_activation: Some(rv1::CommitAbilityActivation {
+                    transaction_id: pending.transaction_id,
+                    expected_revision: pending.revision,
+                    payment: Some(rv1::PaymentSelection {
+                        expected_state_revision: engine.state.command_index,
+                        source: Some(source_ref),
+                        mana: Some(rv1::PaymentMana::default()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert!(
+            valid_incomplete.error.is_empty(),
+            "{label}: a valid row set with no generic mana is a normal incomplete Preview: {}",
+            valid_incomplete.error
+        );
+        assert!(!valid_incomplete.complete);
+        assert_eq!(
+            serde_json::to_value(&engine.state)
+                .expect("serialize state after valid incomplete Preview"),
+            before_valid_preview
+        );
+        match change {
+            ContributorChange::Control => {
+                engine
+                    .state
+                    .continuous_effects
+                    .push(crate::state::ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: None,
+                        affected: crate::state::AffectedScope::Single(artifact),
+                        kind: tricerules_card_model::ContinuousEffectKind::Layer2Control {
+                            controller: tricerules_card_model::ControllerReference::Fixed(20),
+                        },
+                        condition: None,
+                        duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                        timestamp: engine.state.command_index.saturating_add(1),
+                    });
+                assert_eq!(engine.controller_of(artifact), Some(20));
+            }
+            ContributorChange::Type => {
+                engine
+                    .state
+                    .continuous_effects
+                    .push(crate::state::ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: None,
+                        affected: crate::state::AffectedScope::Single(creature),
+                        kind: tricerules_card_model::ContinuousEffectKind::Layer4RemoveCreature,
+                        condition: None,
+                        duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                        timestamp: engine.state.command_index.saturating_add(1),
+                    });
+                assert!(!engine.characteristics(creature).unwrap().is_creature());
+            }
+            ContributorChange::Phase => {
+                engine
+                    .state
+                    .objects
+                    .get_mut(&artifact)
+                    .unwrap()
+                    .phase_status = Some(crate::state::PhasedOutStatus {
+                    phase_out_under: 0,
+                    phase_in_due_after_departed_turn: false,
+                    phase_in_with: None,
+                    direct_attachment_snapshot: None,
+                });
+            }
+            ContributorChange::Generation => {
+                crate::engine::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    artifact,
+                    Zone::Graveyard,
+                    None,
+                )
+                .expect("contributor leaves after the accepted Begin");
+                crate::engine::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    artifact,
+                    Zone::Battlefield,
+                    None,
+                )
+                .expect("contributor returns as a new generation");
+                engine
+                    .state
+                    .objects
+                    .get_mut(&artifact)
+                    .unwrap()
+                    .add_counters(CounterKind::Charge, 2, 0);
+                assert_ne!(
+                    engine.payment_object_ref(artifact).zone_change_generation,
+                    original_artifact_ref.zone_change_generation
+                );
+            }
+            ContributorChange::Quantity => {
+                engine
+                    .state
+                    .objects
+                    .get_mut(&artifact)
+                    .unwrap()
+                    .counters
+                    .insert(CounterKind::Charge, 1);
+            }
+        }
+
+        let before_preview = format!("{:?}", engine.state);
+        let preview = engine.preview_payment(
+            10,
+            &rv1::PreviewPayment {
+                transaction_id: pending.transaction_id,
+                revision: engine.state.command_index,
+                commit_ability_activation: Some(rv1::CommitAbilityActivation {
+                    transaction_id: pending.transaction_id,
+                    expected_revision: pending.revision,
+                    payment: Some(rv1::PaymentSelection {
+                        expected_state_revision: engine.state.command_index,
+                        source: Some(source_ref),
+                        mana: Some(rv1::PaymentMana::default()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert!(
+            !preview.complete,
+            "{label}: absent generic mana still leaves an incomplete selected payment"
+        );
+        assert!(
+            !preview.error.is_empty(),
+            "{label}: unlike the valid incomplete preview, changed contributors invalidate the locked rows"
+        );
+        assert_ne!(preview.error, valid_incomplete.error, "{label}");
+        assert_eq!(
+            format!("{:?}", engine.state),
+            before_preview,
+            "{label}: failed Preview is read-only"
+        );
+        assert_eq!(
+            engine.state.pending_ability_activation.as_ref(),
+            Some(&pending),
+            "{label}: the accepted transaction and rows remain available for retry"
+        );
+        assert!(engine.pending_ability_activation_internal.is_some());
+
+        let rejected_complete_mana_commit = complete_mana_commit(&engine);
+        assert_aggregate_commit_rejected_unchanged(
+            &mut engine,
+            10,
+            rejected_complete_mana_commit,
+            &format!("{label}: complete-mana Commit after the contributor changed"),
+        );
+        assert!(engine.pending_ability_activation_internal.is_some());
+        assert_eq!(engine.state.players[0].life, 20, "{label}: no life debit");
+        assert_eq!(
+            engine.state.players[0].mana_pool.colorless, 1,
+            "{label}: no mana debit"
+        );
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+            if matches!(change, ContributorChange::Quantity) {
+                1
+            } else {
+                2
+            },
+            "{label}: no artifact counter debit"
+        );
+        assert_eq!(
+            engine.state.objects[&creature].counter_count(CounterKind::Night),
+            1,
+            "{label}: no creature counter debit"
+        );
+
+        match change {
+            ContributorChange::Control => {
+                engine.state.continuous_effects.retain(|effect| {
+                    !(matches!(
+                        &effect.affected,
+                        crate::state::AffectedScope::Single(id) if *id == artifact
+                    ) && matches!(
+                        &effect.kind,
+                        tricerules_card_model::ContinuousEffectKind::Layer2Control {
+                            controller: tricerules_card_model::ControllerReference::Fixed(20)
+                        }
+                    ))
+                });
+                assert_eq!(engine.controller_of(artifact), Some(10));
+            }
+            ContributorChange::Type => {
+                engine.state.continuous_effects.retain(|effect| {
+                    !(matches!(
+                        &effect.affected,
+                        crate::state::AffectedScope::Single(id) if *id == creature
+                    ) && matches!(
+                        &effect.kind,
+                        tricerules_card_model::ContinuousEffectKind::Layer4RemoveCreature
+                    ))
+                });
+                assert!(engine.characteristics(creature).unwrap().is_creature());
+            }
+            ContributorChange::Phase => {
+                engine
+                    .state
+                    .objects
+                    .get_mut(&artifact)
+                    .unwrap()
+                    .phase_status = None;
+                assert!(engine.state.objects[&artifact].phase_status.is_none());
+            }
+            ContributorChange::Generation => {
+                // A new zone-change generation permanently stales the accepted
+                // object receipt. Do not pretend a generation rewind is a
+                // lawful retry path; the repairable cases below exercise the
+                // unchanged accepted rows and choices.
+                continue;
+            }
+            ContributorChange::Quantity => {
+                engine
+                    .state
+                    .objects
+                    .get_mut(&artifact)
+                    .unwrap()
+                    .add_counters(CounterKind::Charge, 1, 0);
+                assert_eq!(
+                    engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+                    2
+                );
+            }
+        }
+
+        let retry = complete_mana_commit(&engine);
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(retry)),
+                },
+            )
+            .expect("repairing the live contributor allows the same accepted rows to commit");
+        assert!(engine.state.pending_ability_activation.is_none(), "{label}");
+        assert!(
+            engine.pending_ability_activation_internal.is_none(),
+            "{label}"
+        );
+        assert_eq!(engine.state.players[0].life, 16, "{label}: life debit once");
+        assert_eq!(
+            engine.state.players[0].mana_pool.colorless, 0,
+            "{label}: mana debit once"
+        );
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0,
+            "{label}: artifact counter debit once"
+        );
+        assert_eq!(
+            engine.state.objects[&creature].counter_count(CounterKind::Night),
+            0,
+            "{label}: creature counter debit once"
+        );
+        assert_eq!(engine.state.stack.len(), 1, "{label}: one activation");
+    }
+}
+
+#[test]
+fn aggregate_counter_activation_does_not_require_an_untapped_or_sickness_free_source() {
+    for (offset, (tapped, summoning_sick)) in [(true, false), (false, true), (true, true)]
+        .into_iter()
+        .enumerate()
+    {
+        let (mut engine, source, artifact, creature) =
+            aggregate_counter_payment_fixture(602_590 + offset as u64);
+        engine.state.players[0].mana_pool.colorless = 1;
+        let source_state = engine.state.objects.get_mut(&source).unwrap();
+        source_state.tapped = tapped;
+        source_state.summoning_sick = summoning_sick;
+
+        let effective = engine
+            .effective_activated_abilities(source)
+            .into_iter()
+            .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+            .expect("the aggregate ability remains available on a tapped or summoning-sick source");
+        assert!(
+            !effective
+                .definition
+                .costs
+                .iter()
+                .any(|cost| matches!(cost, AbilityCost::Tap)),
+            "the aggregate ability has no source Tap cost"
+        );
+        assert!(
+            engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+            "the exact tapped/summoning-sick combination ({tapped}, {summoning_sick}) is legal without a Tap cost"
+        );
+
+        let (pending, source_ref) = begin_aggregate_counter_payment_window(
+            &mut engine,
+            source,
+            artifact,
+            creature,
+            [true, true],
+        );
+        let commit = rv1::CommitAbilityActivation {
+            transaction_id: pending.transaction_id,
+            expected_revision: pending.revision,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(source_ref),
+                mana: Some(rv1::PaymentMana {
+                    c: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
+                },
+            )
+            .expect("the tapped or summoning-sick source can pay the no-Tap aggregate ability");
+
+        assert_eq!(engine.state.objects[&source].tapped, tapped);
+        assert_eq!(engine.state.objects[&source].summoning_sick, summoning_sick);
+        assert_eq!(engine.state.players[0].life, 16);
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&creature].counter_count(CounterKind::Night),
+            0
+        );
+        assert_eq!(engine.state.stack.len(), 1);
+    }
+}
+
+#[test]
+fn aggregate_counter_begin_rejects_prohibited_activated_ability_without_removing_it() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_593);
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .state
+        .continuous_effects
+        .push(crate::state::ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: crate::state::AffectedScope::Single(source),
+            kind: tricerules_card_model::ContinuousEffectKind::ProhibitActivatedAbilities,
+            condition: None,
+            duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index.saturating_add(1),
+        });
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the prohibition leaves the activated ability present");
+    assert!(
+        !engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+        "the live prohibition blocks activation while the ability remains effective"
+    );
+    let begin = aggregate_counter_begin_command(
+        &engine,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "Begin rejects the otherwise supported, payable ability under its live prohibition"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_begin_enforces_sorcery_timing_during_upkeep() {
+    let definition = aggregate_counter_shape_definition("sorcery_speed");
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition(602_594, &definition, false);
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine.state.turn_step = TurnStep::Upkeep;
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the typed SorcerySpeed sibling remains present during Upkeep");
+    assert_eq!(
+        effective.definition.timing,
+        tricerules_card_model::ActivationTiming::SorcerySpeed
+    );
+    assert_eq!(engine.state.priority_idx, 0, "actor 10 retains priority");
+    assert!(
+        !engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+        "the ability's stricter timing rejects Upkeep despite actor priority"
+    );
+    let begin = aggregate_counter_begin_command(
+        &engine,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "Begin enforces the typed SorcerySpeed restriction during Upkeep"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_begin_enforces_per_turn_limit_after_a_real_payment() {
+    let definition = aggregate_counter_shape_definition("per_turn_limit");
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition(602_595, &definition, false);
+    engine.state.players[0].mana_pool.colorless = 2;
+    engine
+        .state
+        .objects
+        .get_mut(&artifact)
+        .unwrap()
+        .add_counters(CounterKind::Charge, 2, 0);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .unwrap()
+        .add_counters(CounterKind::Night, 1, 0);
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the typed one-per-turn ability is present");
+    assert_eq!(
+        effective.definition.activation_limit,
+        Some(tricerules_card_model::primitives::ActivationLimit::PerTurn { max_activations: 1 })
+    );
+    assert!(engine.ability_activatable(source, effective.slot as usize, &effective.definition));
+
+    let (pending, source_ref) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    let first_commit = rv1::CommitAbilityActivation {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana {
+                c: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    first_commit,
+                )),
+            },
+        )
+        .expect("the first activation pays its complete mana and counter costs");
+    assert_eq!(engine.state.players[0].life, 16);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+
+    let effective = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the spent ability remains present for its second Begin check");
+    assert!(
+        !engine.ability_activatable(source, effective.slot as usize, &effective.definition),
+        "the per-turn limit is the remaining blocker after a complete first payment"
+    );
+    let second_begin = aggregate_counter_begin_command(
+        &engine,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+                second_begin,
+            )),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "the second otherwise payable Begin rejects at the per-turn limit"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_begin_rejects_only_a_stale_source_generation_atomically() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_596);
+    engine.state.players[0].mana_pool.colorless = 1;
+    let mut begin = aggregate_counter_begin_command(
+        &engine,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    begin.expected_zone_change_generation = begin.expected_zone_change_generation.saturating_add(1);
+    let before = format!("{:?}", engine.state);
+    let result = engine.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+        },
+    );
+    assert!(
+        matches!(result, Err(EngineError::Illegal(_))),
+        "Begin rejects only because its source zone-change generation is stale"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+}
+
+#[test]
+fn aggregate_counter_begin_uses_the_derived_controller_only_for_the_new_route() {
+    let (mut base, source, artifact10, creature10) = aggregate_counter_payment_fixture(602_513);
+    let artifact20 = place_ready(&mut base, 20, "Ornithopter");
+    let creature20 = place_ready(&mut base, 20, "Grizzly Bears");
+    base.state
+        .objects
+        .get_mut(&artifact20)
+        .expect("the derived controller artifact contributor")
+        .add_counters(CounterKind::Charge, 2, 0);
+    base.state
+        .objects
+        .get_mut(&creature20)
+        .expect("the derived controller creature contributor")
+        .add_counters(CounterKind::Night, 1, 0);
+    base.state
+        .continuous_effects
+        .push(crate::state::ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: crate::state::AffectedScope::Single(source),
+            kind: tricerules_card_model::ContinuousEffectKind::Layer2Control {
+                controller: tricerules_card_model::ControllerReference::Fixed(20),
+            },
+            condition: None,
+            duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+            timestamp: 100,
+        });
+    assert_eq!(base.state.objects[&source].controller, 10);
+    assert_eq!(base.controller_of(source), Some(20));
+    let effective = base
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the derived controller sees the aggregate ability");
+
+    let mut raw_controller = base.clone();
+    raw_controller.state.priority_idx = 0;
+    let raw_command = aggregate_counter_begin_command(
+        &raw_controller,
+        source,
+        artifact10,
+        creature10,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    let before_raw = format!("{:?}", raw_controller.state);
+    let raw_result = raw_controller.apply_command(
+        10,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(raw_command)),
+        },
+    );
+    let raw_actor_was_rejected_atomically = matches!(raw_result, Err(EngineError::Illegal(_)))
+        && format!("{:?}", raw_controller.state) == before_raw;
+
+    let mut derived_controller = base;
+    derived_controller.state.priority_idx = 1;
+    let derived_command = aggregate_counter_begin_command(
+        &derived_controller,
+        source,
+        artifact20,
+        creature20,
+        aggregate_phyrexian_life_choices([true, true]),
+    );
+    let derived_result = derived_controller.apply_command(
+        20,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+                derived_command,
+            )),
+        },
+    );
+    assert!(
+        raw_actor_was_rejected_atomically
+            && derived_result.is_ok()
+            && derived_controller
+                .state
+                .pending_ability_activation
+                .as_ref()
+                .is_some_and(|pending| pending.actor_player_id == 20),
+        "raw controller 10 must be rejected atomically while derived controller 20 is accepted; raw_rejected_atomically={raw_actor_was_rejected_atomically}, derived_result={derived_result:?}, ability_slot={}",
+        effective.slot
+    );
+}
+
+#[test]
+fn aggregate_counter_accepted_begin_source_sacrifice_preview_commit_is_atomic() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_502);
+    let torque = place_ready(&mut engine, 10, "Liquimetal Torque");
+    let ironworks = place_ready(&mut engine, 10, "Krark-Clan Ironworks");
+    let captured_artifact_land = place_ready(&mut engine, 10, "Captured Artifact Payment Land");
+    let captured_spell_land = place_ready(&mut engine, 10, "Captured Artifact Spell Payment Land");
+    engine.state.players[0].mana_pool = Default::default();
+
+    let torque_ability = engine
+        .effective_activated_abilities(torque)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "activated_02")
+        .expect("the actual Liquimetal Torque AddTypes ability is offered");
+    let source_receipt = engine.payment_object_ref(source);
+    let torque_receipt = engine.payment_object_ref(torque);
+    let torque_activation_batch = engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                    rv1::ActivateAbility {
+                        source_object_id: torque,
+                        ability_index: torque_ability.slot,
+                        expected_zone_change_generation: torque_receipt.zone_change_generation,
+                        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                        targets: vec![rv1::TargetRef {
+                            object_id: source,
+                            group_index: 0,
+                            kind: rv1::TargetRefKind::Permanent as i32,
+                            expected_zone_change_generation: Some(
+                                source_receipt.zone_change_generation,
+                            ),
+                            ..Default::default()
+                        }],
+                        payment: Some(rv1::PaymentSelection {
+                            expected_state_revision: engine.state.command_index,
+                            source: Some(torque_receipt),
+                            mana: Some(rv1::PaymentMana::default()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("actual Torque AddTypes activation is announced");
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "actual Torque activation must put one nonmana ability on the stack before passing; batch={:#?}; stack={:#?}",
+        torque_activation_batch,
+        engine.state.stack
+    );
+    for _ in 0..2 {
+        let priority = engine.state.priority_player_id();
+        engine
+            .apply_command(
+                priority,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("both players pass priority to resolve Liquimetal Torque");
+    }
+    assert!(
+        engine.state.stack.is_empty(),
+        "the actual Torque ability resolves before Begin; remaining stack: {:#?}",
+        engine.state.stack
+    );
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert!(engine.state.players[0].battlefield.contains(&source));
+    assert_eq!(
+        engine.payment_object_ref(source).zone_change_generation,
+        source_receipt.zone_change_generation,
+        "the stable local creature remains the same battlefield incarnation through Torque resolution"
+    );
+    assert!(
+        engine
+            .characteristics(source)
+            .is_some_and(|characteristics| characteristics.has_type("Artifact")),
+        "the derived Artifact type is present before the accepted activation begins; source={:#?}; effects={:#?}",
+        engine.characteristics(source),
+        engine.state.continuous_effects
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+
+    let aggregate = engine
+        .effective_activated_abilities(source)
+        .into_iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+        .expect("the local aggregate payment capability is active");
+    let group_selection = rv1::CostSelection {
+        cost_index: 1,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(artifact)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                        count: 2,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(creature)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Night),
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    };
+    let begin = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: source_receipt.zone_change_generation,
+        ability_index: aggregate.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![group_selection],
+        flex_payments: vec![
+            rv1::FlexPipPayment {
+                pip_index: 1,
+                pay_life: true,
+            },
+            rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            },
+        ],
+        ..Default::default()
+    };
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+            },
+        )
+        .expect("accepted aggregate Begin opens the Payment stage without spending costs");
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("accepted aggregate payment stage remains pending");
+    let transaction_id = pending.transaction_id;
+    let pending_revision = pending.revision;
+
+    let mut cancelled_before_mana = engine.clone();
+    cancelled_before_mana
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id,
+                        expected_revision: pending_revision,
+                    },
+                )),
+            },
+        )
+        .expect("Cancel is available before independent mana actions");
+    assert!(cancelled_before_mana
+        .state
+        .pending_ability_activation
+        .is_none());
+    assert!(cancelled_before_mana
+        .pending_ability_activation_internal
+        .is_none());
+    assert_eq!(cancelled_before_mana.state.players[0].life, 20);
+    assert_eq!(
+        cancelled_before_mana.state.players[0].mana_pool.colorless,
+        0
+    );
+    assert_eq!(
+        cancelled_before_mana.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        cancelled_before_mana.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    let next_begin = aggregate_counter_begin_command(
+        &cancelled_before_mana,
+        source,
+        artifact,
+        creature,
+        aggregate_phyrexian_life_choices([true, false]),
+    );
+    cancelled_before_mana
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(next_begin)),
+            },
+        )
+        .expect("a fresh Begin after Cancel may choose a different Phyrexian payment");
+    let next_pending = cancelled_before_mana
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("the new choice has its own accepted transaction");
+    assert_ne!(next_pending.transaction_id, transaction_id);
+    assert_eq!(
+        next_pending.flex_payments,
+        aggregate_phyrexian_life_choices([true, false])
+    );
+    assert_eq!(cancelled_before_mana.state.players[0].life, 20);
+    assert_eq!(
+        cancelled_before_mana.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        cancelled_before_mana.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+
+    let ironworks_ability = engine
+        .effective_activated_abilities(ironworks)
+        .into_iter()
+        .find(|ability| {
+            ability.definition.is_mana_ability()
+                && ability
+                    .definition
+                    .costs
+                    .iter()
+                    .any(|cost| matches!(cost, AbilityCost::SacrificePermanent { .. }))
+        })
+        .expect("the actual KCI mana ability is offered");
+    let mut legal = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut legal, &engine);
+    let actor_legal = legal
+        .legal_by_player
+        .get(&10)
+        .expect("the paying actor receives the actual legal mana-ability offer");
+    let ironworks_key = (u64::from(ironworks) << 32) | u64::from(ironworks_ability.slot);
+    let ironworks_choices = actor_legal
+        .cost_choices_by_ability
+        .get(&ironworks_key)
+        .expect("KCI has actual offered battlefield cost choices during Payment");
+    let source_candidate = ironworks_choices
+        .choices
+        .iter()
+        .flat_map(|choice| &choice.candidate_objects)
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == source)
+        })
+        .expect("the actually offered KCI artifact sacrifice candidate is the original source");
+    let source_cost_ref = source_candidate
+        .object
+        .expect("offered KCI sacrifice candidate is generation-bound");
+    let kci_cost_index = ironworks_choices
+        .choices
+        .iter()
+        .find(|choice| {
+            choice
+                .candidate_objects
+                .iter()
+                .any(|candidate| candidate.object.as_ref() == Some(&source_cost_ref))
+        })
+        .expect("the source is offered for one actual KCI cost")
+        .cost_index;
+    let ironworks_receipt = engine.payment_object_ref(ironworks);
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                    rv1::ActivateAbility {
+                        source_object_id: ironworks,
+                        ability_index: ironworks_ability.slot,
+                        expected_zone_change_generation: ironworks_receipt.zone_change_generation,
+                        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                        cost_selections: vec![rv1::CostSelection {
+                            cost_index: kci_cost_index,
+                            selection: Some(rv1::cost_selection::Selection::PermanentId(
+                                source_cost_ref.object_id,
+                            )),
+                        }],
+                        payment: Some(rv1::PaymentSelection {
+                            expected_state_revision: engine.state.command_index,
+                            source: Some(ironworks_receipt),
+                            mana: Some(rv1::PaymentMana::default()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("KCI sacrifices the derived artifact source and produces two colorless mana");
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_ne!(
+        engine.payment_object_ref(source).zone_change_generation,
+        source_receipt.zone_change_generation,
+        "the original source's departure advances its generation"
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("the accepted aggregate Payment window survives source sacrifice");
+    assert_eq!(pending.transaction_id, transaction_id);
+    assert_eq!(pending.revision, pending_revision);
+    assert_eq!(pending.stage(), rv1::AbilityActivationStage::Payment);
+
+    let mut cancelled_after_kci = engine.clone();
+    let mana_actions_before_cancel = engine.state.undoable_mana_abilities.clone();
+    cancelled_after_kci
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id,
+                        expected_revision: pending_revision,
+                    },
+                )),
+            },
+        )
+        .expect("Cancel closes the accepted cost window after KCI already sacrificed the source");
+    assert!(cancelled_after_kci
+        .state
+        .pending_ability_activation
+        .is_none());
+    assert!(cancelled_after_kci
+        .pending_ability_activation_internal
+        .is_none());
+    assert_eq!(
+        cancelled_after_kci.state.objects[&source].zone,
+        Zone::Graveyard
+    );
+    assert!(cancelled_after_kci.state.players[0]
+        .graveyard
+        .contains(&source));
+    assert_eq!(cancelled_after_kci.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(
+        format!("{:?}", cancelled_after_kci.state.undoable_mana_abilities),
+        format!("{:?}", mana_actions_before_cancel),
+        "Cancel leaves the independently recorded KCI mana action intact"
+    );
+    assert_eq!(cancelled_after_kci.state.players[0].life, 20);
+    assert_eq!(
+        cancelled_after_kci.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        cancelled_after_kci.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert!(cancelled_after_kci.state.stack.is_empty());
+
+    let pending_before_restricted_mana = pending.clone();
+    let mut artifact_permission = engine.clone();
+    let restricted_batch = activate_fixture_mana(&mut artifact_permission, captured_artifact_land);
+    let artifact_restriction_group = artifact_permission.state.players[0]
+        .restricted_mana
+        .last()
+        .expect("the actual restricted land created a current mana group")
+        .restriction_group_id;
+    let artifact_offer = restricted_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("the post-Begin mana action refreshes the pending offer");
+    assert!(artifact_offer
+        .eligible_restricted_mana_group_ids
+        .contains(&artifact_restriction_group));
+    assert_eq!(artifact_offer.transaction_id, transaction_id);
+    assert_eq!(artifact_offer.revision, pending_revision);
+    assert_eq!(
+        artifact_offer.cost_selections,
+        pending_before_restricted_mana.cost_selections
+    );
+    assert_eq!(
+        artifact_offer.flex_payments,
+        pending_before_restricted_mana.flex_payments
+    );
+    assert_eq!(
+        artifact_offer.locked_total_cost,
+        pending_before_restricted_mana.locked_total_cost
+    );
+    assert_eq!(artifact_permission.state.players[0].mana_pool.colorless, 2);
+    let artifact_commit = rv1::CommitAbilityActivation {
+        transaction_id,
+        expected_revision: pending_revision,
+        restricted_mana: vec![rv1::ManaSpendSelection {
+            restriction_group_id: artifact_restriction_group,
+            c: 1,
+            ..Default::default()
+        }],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: artifact_permission.state.command_index,
+            source: Some(source_receipt),
+            mana: Some(rv1::PaymentMana::default()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let artifact_before_preview = format!("{:?}", artifact_permission.state);
+    let artifact_preview = artifact_permission.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision: artifact_permission.state.command_index,
+            commit_ability_activation: Some(artifact_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(
+        artifact_preview.error.is_empty(),
+        "{}",
+        artifact_preview.error
+    );
+    assert!(artifact_preview.complete);
+    assert_eq!(
+        format!("{:?}", artifact_permission.state),
+        artifact_before_preview
+    );
+    artifact_permission
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    artifact_commit,
+                )),
+            },
+        )
+        .expect("captured Artifact purpose can spend one newly created restricted mana");
+    assert!(artifact_permission
+        .state
+        .pending_ability_activation
+        .is_none());
+    assert!(artifact_permission.state.players[0]
+        .restricted_mana
+        .is_empty());
+    assert_eq!(artifact_permission.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(artifact_permission.state.players[0].life, 16);
+    assert_eq!(
+        artifact_permission.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        artifact_permission.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(artifact_permission.state.stack.len(), 1);
+
+    let mut spell_only = engine.clone();
+    let spell_batch = activate_fixture_mana(&mut spell_only, captured_spell_land);
+    let spell_restriction_group = spell_only.state.players[0]
+        .restricted_mana
+        .last()
+        .expect("the spell-only land created a current mana group")
+        .restriction_group_id;
+    let spell_offer = spell_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("the current Payment offer refreshes after the spell-only mana action");
+    assert!(!spell_offer
+        .eligible_restricted_mana_group_ids
+        .contains(&spell_restriction_group));
+    assert_eq!(spell_only.state.players[0].mana_pool.colorless, 2);
+    let spell_only_commit = rv1::CommitAbilityActivation {
+        transaction_id,
+        expected_revision: pending_revision,
+        restricted_mana: vec![rv1::ManaSpendSelection {
+            restriction_group_id: spell_restriction_group,
+            c: 1,
+            ..Default::default()
+        }],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: spell_only.state.command_index,
+            source: Some(source_receipt),
+            mana: Some(rv1::PaymentMana::default()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_spell_rejection = format!("{:?}", spell_only.state);
+    assert!(
+        matches!(
+            spell_only.apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                        spell_only_commit,
+                    )),
+                },
+            ),
+            Err(EngineError::Illegal(_))
+        ),
+        "spell-only mana cannot pay an activated ability even when ordinary mana is available"
+    );
+    assert_eq!(format!("{:?}", spell_only.state), before_spell_rejection);
+    assert_eq!(spell_only.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(spell_only.state.players[0].life, 20);
+    assert_eq!(
+        spell_only.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        spell_only.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    let spell_pending = spell_only
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("the rejected payment keeps the same accepted transaction pending");
+    assert_eq!(
+        spell_pending.transaction_id,
+        pending_before_restricted_mana.transaction_id
+    );
+    assert_eq!(
+        spell_pending.revision,
+        pending_before_restricted_mana.revision
+    );
+    assert_eq!(
+        spell_pending.cost_selections,
+        pending_before_restricted_mana.cost_selections
+    );
+    assert_eq!(
+        spell_pending.flex_payments,
+        pending_before_restricted_mana.flex_payments
+    );
+    assert_eq!(
+        spell_pending.locked_total_cost,
+        pending_before_restricted_mana.locked_total_cost
+    );
+
+    let payment = rv1::PaymentSelection {
+        expected_state_revision: engine.state.command_index,
+        source: Some(source_receipt),
+        mana: Some(rv1::PaymentMana {
+            c: 1,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let commit = rv1::CommitAbilityActivation {
+        transaction_id,
+        expected_revision: pending_revision,
+        payment: Some(payment),
+        ..Default::default()
+    };
+    let before_preview = format!("{:?}", engine.state);
+    let preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.error.is_empty(), "{}", preview.error);
+    assert!(
+        preview.complete,
+        "the reserved 2C can pay generic1 while both Phyrexian pips pay life"
+    );
+    assert_eq!(
+        preview
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.source.as_ref()),
+        Some(&source_receipt),
+        "Preview retains the original source receipt after the source leaves"
+    );
+    assert_eq!(
+        format!("{:?}", engine.state),
+        before_preview,
+        "Preview is read-only"
+    );
+    let commit = rv1::CommitAbilityActivation {
+        payment: preview.selection,
+        ..commit
+    };
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
+            },
+        )
+        .expect("explicit Commit uses the original source receipt and locked group and Phyrexian choices");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].life, 16);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "one captured activation is put on the stack"
+    );
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(source));
+
+    for _ in 0..2 {
+        let priority = engine.state.priority_player_id();
+        engine
+            .apply_command(
+                priority,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("both players pass to resolve the captured activation");
+    }
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+        0,
+        "the absent source does not receive the captured self-counter effect"
+    );
+}
+
+#[test]
+fn aggregate_counter_accepted_route_survives_prepared_source_changes() {
+    #[derive(Clone, Copy)]
+    enum SourceChange {
+        ReturnAsNewGeneration,
+        DerivedControl,
+        PhaseOut,
+        LoseAbilityMenu,
+    }
+
+    for (offset, (label, change)) in [
+        (
+            "return as new generation",
+            SourceChange::ReturnAsNewGeneration,
+        ),
+        ("derived control", SourceChange::DerivedControl),
+        ("phase out", SourceChange::PhaseOut),
+        ("remove all abilities", SourceChange::LoseAbilityMenu),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (mut engine, source, artifact, creature) =
+            aggregate_counter_payment_fixture(602_530 + offset as u64);
+        engine.state.players[0].mana_pool.colorless = 1;
+        let (accepted, source_receipt) = begin_aggregate_counter_payment_window(
+            &mut engine,
+            source,
+            artifact,
+            creature,
+            [true, true],
+        );
+        assert_eq!(
+            accepted.flex_payments,
+            aggregate_phyrexian_life_choices([true, true])
+        );
+        assert_eq!(accepted.cost_selections.len(), 1);
+        let accepted_rows = accepted.cost_selections.clone();
+        let accepted_flex = accepted.flex_payments.clone();
+
+        match change {
+            SourceChange::ReturnAsNewGeneration => {
+                crate::engine::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    source,
+                    Zone::Graveyard,
+                    None,
+                )
+                .expect("the prepared source leaves the battlefield");
+                crate::engine::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    source,
+                    Zone::Battlefield,
+                    None,
+                )
+                .expect("the same physical source object returns as a new incarnation");
+                assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+                assert!(engine.state.players[0].battlefield.contains(&source));
+                assert_ne!(
+                    engine.payment_object_ref(source).zone_change_generation,
+                    source_receipt.zone_change_generation,
+                    "leave and return keeps the ObjectId but advances its generation"
+                );
+            }
+            SourceChange::DerivedControl => {
+                engine
+                    .state
+                    .continuous_effects
+                    .push(crate::state::ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: None,
+                        affected: crate::state::AffectedScope::Single(source),
+                        kind: tricerules_card_model::ContinuousEffectKind::Layer2Control {
+                            controller: tricerules_card_model::ControllerReference::Fixed(20),
+                        },
+                        condition: None,
+                        duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                        timestamp: engine.state.command_index.saturating_add(1),
+                    });
+                let mut control_events = Vec::new();
+                engine
+                    .reindex_battlefield_control(&mut control_events)
+                    .expect("materialize the prepared derived-control change");
+                assert_eq!(engine.state.objects[&source].controller, 20);
+                assert!(engine.state.players[1].battlefield.contains(&source));
+            }
+            SourceChange::PhaseOut => {
+                engine.state.objects.get_mut(&source).unwrap().phase_status =
+                    Some(crate::state::PhasedOutStatus {
+                        phase_out_under: 10,
+                        phase_in_due_after_departed_turn: false,
+                        phase_in_with: None,
+                        direct_attachment_snapshot: None,
+                    });
+                let mut phase_events = Vec::new();
+                engine
+                    .reindex_battlefield_control(&mut phase_events)
+                    .expect("materialize the prepared phasing change");
+                assert!(engine.state.objects[&source].phase_status.is_some());
+            }
+            SourceChange::LoseAbilityMenu => {
+                engine
+                    .state
+                    .continuous_effects
+                    .push(crate::state::ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: None,
+                        affected: crate::state::AffectedScope::Single(source),
+                        kind: tricerules_card_model::ContinuousEffectKind::Layer6RemoveAllAbilities,
+                        condition: None,
+                        duration: tricerules_card_model::EffectDuration::UntilEndOfTurn,
+                        timestamp: engine.state.command_index.saturating_add(1),
+                    });
+                assert!(
+                    engine.effective_activated_abilities(source).is_empty(),
+                    "the live source menu is removed while the accepted occurrence remains"
+                );
+            }
+        }
+
+        let transition_snapshot = format!("{:?}", engine.state);
+        let mut refreshed = RuledEventBatch::default();
+        super::legal_actions::fill_legal(&mut refreshed, &engine);
+        let actor_offer = refreshed.legal_by_player[&10]
+            .pending_ability_activation
+            .as_ref()
+            .expect("fresh LegalActions reconstructs the accepted offer from its captured route");
+        assert_eq!(
+            actor_offer.transaction_id, accepted.transaction_id,
+            "{label}"
+        );
+        assert_eq!(actor_offer.revision, accepted.revision, "{label}");
+        assert_eq!(actor_offer.cost_selections, accepted_rows, "{label}");
+        assert_eq!(actor_offer.flex_payments, accepted_flex, "{label}");
+        assert_eq!(
+            actor_offer.locked_total_cost, accepted.locked_total_cost,
+            "{label}"
+        );
+        if matches!(change, SourceChange::LoseAbilityMenu) {
+            assert!(actor_offer.payment_preview.is_some());
+            assert_eq!(
+                format!("{:?}", engine.state),
+                transition_snapshot,
+                "a fresh offer does not mutate the state after ability-menu loss"
+            );
+        }
+
+        let commit = rv1::CommitAbilityActivation {
+            transaction_id: accepted.transaction_id,
+            expected_revision: accepted.revision,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(source_receipt),
+                mana: Some(rv1::PaymentMana {
+                    c: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let before_preview = format!("{:?}", engine.state);
+        let preview = engine.preview_payment(
+            10,
+            &rv1::PreviewPayment {
+                transaction_id: accepted.transaction_id,
+                revision: engine.state.command_index,
+                commit_ability_activation: Some(commit.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(preview.error.is_empty(), "{label}: {}", preview.error);
+        assert!(preview.complete, "{label}");
+        assert_eq!(
+            preview
+                .selection
+                .as_ref()
+                .and_then(|selection| selection.source.as_ref()),
+            Some(&source_receipt),
+            "{label}: Preview retains the original source receipt"
+        );
+        assert_eq!(
+            format!("{:?}", engine.state),
+            before_preview,
+            "{label}: Preview is read-only after the direct source transition"
+        );
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                        rv1::CommitAbilityActivation {
+                            payment: preview.selection,
+                            ..commit
+                        },
+                    )),
+                },
+            )
+            .unwrap_or_else(|error| {
+                panic!("{label}: original actor commits captured route: {error}")
+            });
+        assert!(engine.state.pending_ability_activation.is_none(), "{label}");
+        assert!(
+            engine.pending_ability_activation_internal.is_none(),
+            "{label}"
+        );
+        assert_eq!(engine.state.players[0].life, 16, "{label}");
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 0, "{label}");
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+            0,
+            "{label}"
+        );
+        assert_eq!(
+            engine.state.objects[&creature].counter_count(CounterKind::Night),
+            0,
+            "{label}"
+        );
+        assert_eq!(
+            engine.state.stack.len(),
+            1,
+            "{label}: one original occurrence is finished"
+        );
+        assert_eq!(
+            engine.state.stack[0].controller, 10,
+            "{label}: original actor controls the stack object"
+        );
+        assert_eq!(
+            engine.state.stack[0].source_zone_change, source_receipt.zone_change_generation,
+            "{label}"
+        );
+        if matches!(change, SourceChange::ReturnAsNewGeneration) {
+            assert_ne!(
+                engine.payment_object_ref(source).zone_change_generation,
+                engine.state.stack[0].source_zone_change,
+                "{label}: the stack occurrence remains bound to the old source generation"
+            );
+        }
+        for _ in 0..2 {
+            let priority = engine.state.priority_player_id();
+            engine
+                .apply_command(
+                    priority,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .unwrap_or_else(|error| {
+                    panic!("{label}: pass to resolve the captured ability: {error}")
+                });
+        }
+        assert!(
+            engine.state.stack.is_empty(),
+            "{label}: captured ability resolves"
+        );
+        let expected_source_counters = match change {
+            SourceChange::ReturnAsNewGeneration | SourceChange::PhaseOut => 0,
+            SourceChange::DerivedControl | SourceChange::LoseAbilityMenu => 1,
+        };
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            expected_source_counters,
+            "{label}: the captured effect applies only to its still-live source incarnation"
+        );
+    }
+}
+
+#[test]
+fn aggregate_counter_actor_concede_abandons_without_payment() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_534);
+    engine.state.players[0].mana_pool.colorless = 1;
+    let (pending, source_receipt) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    assert_eq!(pending.actor_player_id, 10);
+    assert_eq!(
+        pending.flex_payments,
+        aggregate_phyrexian_life_choices([true, true])
+    );
+    assert_eq!(
+        engine.payment_object_ref(source).zone_change_generation,
+        source_receipt.zone_change_generation
+    );
+
+    concede(&mut engine, 10);
+
+    assert!(engine.state.players[0].has_lost);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.players[0].life, 20,
+        "Concede spends neither locked Phyrexian pip"
+    );
+    assert_eq!(
+        engine.state.players[0].mana_pool.colorless, 1,
+        "the offered mana remains untouched"
+    );
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+        0
+    );
+}
+
+#[test]
+fn aggregate_counter_nested_mana_choice_masks_and_restores_accepted_payment() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_535);
+    let pain_land = place_ready(&mut engine, 10, "Pain Payment Land");
+    engine.state.players[0].mana_pool = Default::default();
+    engine.state.add_damage_prevention_shield(10, 1);
+    engine.state.add_damage_prevention_shield(10, 1);
+    let (accepted, source_receipt) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    let accepted_rows = accepted.cost_selections.clone();
+    let accepted_flex = accepted.flex_payments.clone();
+    assert_eq!(
+        accepted_flex,
+        aggregate_phyrexian_life_choices([true, true])
+    );
+
+    let mana_batch = activate_fixture_mana(&mut engine, pain_land);
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the real Pain Payment Land damage opens the two-shield order choice")
+        .presentation
+        .candidates[0];
+    let canonical_pending = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("the original aggregate Payment route remains canonical under nested work");
+    assert_eq!(canonical_pending.transaction_id, accepted.transaction_id);
+    assert_eq!(canonical_pending.revision, accepted.revision);
+    assert_eq!(canonical_pending.cost_selections, accepted_rows);
+    assert_eq!(canonical_pending.flex_payments, accepted_flex);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+    let actor_nested_offer = mana_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("the mana action response contains the masked actor projection");
+    assert!(actor_nested_offer.cost_selections.is_empty());
+    assert!(actor_nested_offer.flex_payments.is_empty());
+    assert!(actor_nested_offer.payment_preview.is_none());
+
+    let nested_snapshot = format!("{:?}", engine.state);
+    for viewer in [10, 20, -1] {
+        let projected = engine
+            .pending_ability_activation_for(viewer)
+            .expect("every viewer receives the still-pending public activation");
+        assert!(projected.cost_selections.is_empty(), "viewer {viewer}");
+        assert!(projected.flex_payments.is_empty(), "viewer {viewer}");
+        assert!(projected.payment_preview.is_none(), "viewer {viewer}");
+        assert!(projected.locked_total_cost.is_empty(), "viewer {viewer}");
+        assert!(
+            pending_public_projection_matches(&projected, canonical_pending),
+            "viewer {viewer}"
+        );
+    }
+    assert_eq!(
+        format!("{:?}", engine.state),
+        nested_snapshot,
+        "nested projections cannot mutate canonical rows or flex choices"
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .cost_selections,
+        accepted_rows,
+        "canonical group rows stay present while every viewer is masked"
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .flex_payments,
+        accepted_flex,
+        "canonical fixed Phyrexian choices stay present while every viewer is masked"
+    );
+
+    let resumed_batch = engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![choice],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("the actual actor answers the nested prevention-shield choice");
+    assert!(engine.state.pending_resolution.is_none());
+    let resumed_canonical = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("the same aggregate Payment route resumes after nested resolution");
+    assert_eq!(resumed_canonical.transaction_id, accepted.transaction_id);
+    assert_eq!(resumed_canonical.revision, accepted.revision);
+    assert_eq!(resumed_canonical.cost_selections, accepted_rows);
+    assert_eq!(resumed_canonical.flex_payments, accepted_flex);
+    let actor_offer = resumed_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("resumption returns the actor offer");
+    assert_eq!(actor_offer.transaction_id, accepted.transaction_id);
+    assert_eq!(actor_offer.cost_selections, accepted_rows);
+    assert_eq!(actor_offer.flex_payments, accepted_flex);
+    let payment_preview = actor_offer
+        .payment_preview
+        .as_ref()
+        .expect("the actor regains its payment preview after nested work");
+    assert!(
+        payment_preview.error.is_empty(),
+        "{}",
+        payment_preview.error
+    );
+    assert!(
+        !payment_preview.complete,
+        "the restored candidate preview stays incomplete until the actor supplies a mana selection"
+    );
+
+    let resumed_snapshot = format!("{:?}", engine.state);
+    let actor_projection = engine
+        .pending_ability_activation_for(10)
+        .expect("actor projection resumes with the same accepted payment");
+    assert_eq!(actor_projection.transaction_id, accepted.transaction_id);
+    assert_eq!(actor_projection.cost_selections, accepted_rows);
+    assert_eq!(actor_projection.flex_payments, accepted_flex);
+    let actor_payment_preview = actor_projection
+        .payment_preview
+        .as_ref()
+        .expect("actor projection restores its candidate payment preview");
+    assert!(
+        actor_payment_preview.error.is_empty(),
+        "{}",
+        actor_payment_preview.error
+    );
+    assert!(!actor_payment_preview.complete);
+    for viewer in [20, -1] {
+        let projected = engine
+            .pending_ability_activation_for(viewer)
+            .expect("nonactor resumes the public activation projection");
+        assert!(projected.cost_selections.is_empty(), "viewer {viewer}");
+        assert!(projected.flex_payments.is_empty(), "viewer {viewer}");
+        assert!(projected.payment_preview.is_none(), "viewer {viewer}");
+    }
+    assert_eq!(
+        format!("{:?}", engine.state),
+        resumed_snapshot,
+        "resumed projections are read-only"
+    );
+
+    let commit = rv1::CommitAbilityActivation {
+        transaction_id: accepted.transaction_id,
+        expected_revision: accepted.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_receipt),
+            mana: Some(rv1::PaymentMana {
+                c: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_preview = format!("{:?}", engine.state);
+    let preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: accepted.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.error.is_empty(), "{}", preview.error);
+    assert!(preview.complete);
+    assert_eq!(
+        preview
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.source.as_ref()),
+        Some(&source_receipt)
+    );
+    assert_eq!(format!("{:?}", engine.state), before_preview);
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    rv1::CommitAbilityActivation {
+                        payment: preview.selection,
+                        ..commit
+                    },
+                )),
+            },
+        )
+        .expect("the original actor commits the same payment after nested choice resumes");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].life, 16);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+}
+
+#[test]
+fn aggregate_counter_uses_live_lattice_permission_after_begin() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_payment_fixture(602_536);
+    let lattice = place_ready(&mut engine, 10, "Mycosynth Lattice");
+    engine.state.players[0].mana_pool = Default::default();
+    engine.state.players[0].mana_pool.red = 3;
+    assert!(engine.may_spend_mana_as_any_color(10));
+    let (accepted, source_receipt) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [false, false],
+    );
+    assert_eq!(
+        accepted.flex_payments,
+        aggregate_phyrexian_life_choices([false, false])
+    );
+
+    engine
+        .state
+        .continuous_effects
+        .push(crate::state::ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: crate::state::AffectedScope::Single(lattice),
+            kind: tricerules_card_model::ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: tricerules_card_model::EffectDuration::Indefinite,
+            timestamp: engine.state.command_index.saturating_add(1),
+        });
+    assert!(!engine.may_spend_mana_as_any_color(10));
+
+    let unavailable_permission_commit = rv1::CommitAbilityActivation {
+        transaction_id: accepted.transaction_id,
+        expected_revision: accepted.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_receipt),
+            mana: Some(rv1::PaymentMana {
+                r: 3,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_invalid_preview = format!("{:?}", engine.state);
+    let invalid_preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: accepted.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(unavailable_permission_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(
+        !invalid_preview.complete,
+        "off-color red cannot satisfy the two locked blue Phyrexian pips after Lattice loses its ability"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_invalid_preview);
+    assert_aggregate_commit_rejected_unchanged(
+        &mut engine,
+        10,
+        unavailable_permission_commit.clone(),
+        "off-color payment after the live Lattice permission is removed",
+    );
+
+    engine.state.continuous_effects.pop();
+    assert!(engine.may_spend_mana_as_any_color(10));
+    let before_valid_preview = format!("{:?}", engine.state);
+    let valid_preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: accepted.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(unavailable_permission_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(valid_preview.error.is_empty(), "{}", valid_preview.error);
+    assert!(valid_preview.complete);
+    assert_eq!(format!("{:?}", engine.state), before_valid_preview);
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    rv1::CommitAbilityActivation {
+                        payment: valid_preview.selection,
+                        ..unavailable_permission_commit
+                    },
+                )),
+            },
+        )
+        .expect("restoring the live Lattice ability permits retrying the unchanged payment");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].life, 20);
+    assert_eq!(engine.state.players[0].mana_pool.red, 0);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+}
+
+#[test]
+fn aggregate_counter_accepted_route_survives_source_transform_face_change() {
+    let (mut engine, source, artifact, creature) =
+        aggregate_counter_payment_fixture_with_definition_and_name(
+            602_537,
+            C2_AGGREGATE_TRANSFORM_PAYMENT_FIXTURE,
+            "C2 Aggregate Transform Payment Fixture",
+            false,
+        );
+    engine.state.players[0].mana_pool.colorless = 1;
+    assert_eq!(engine.state.objects[&source].face_up_index, 0);
+    let (accepted, source_receipt) = begin_aggregate_counter_payment_window(
+        &mut engine,
+        source,
+        artifact,
+        creature,
+        [true, true],
+    );
+    let accepted_rows = accepted.cost_selections.clone();
+    let accepted_flex = accepted.flex_payments.clone();
+    let old_face_generation = engine
+        .state
+        .face_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or_default();
+
+    let mut face_events = Vec::new();
+    assert!(engine
+        .change_permanent_face(source, FaceChangeAction::Transform, &mut face_events)
+        .expect("prepared Transform changes the source face"));
+    assert_eq!(engine.state.objects[&source].face_up_index, 1);
+    assert_eq!(
+        engine.payment_object_ref(source).zone_change_generation,
+        source_receipt.zone_change_generation,
+        "Transform preserves the same battlefield object incarnation"
+    );
+    let transformed_face_generation = engine.state.face_change_generation[&source];
+    assert!(transformed_face_generation > old_face_generation);
+    assert!(
+        engine.effective_activated_abilities(source).is_empty(),
+        "the transformed back face has no aggregate ability menu"
+    );
+    let transformed_characteristics = engine.characteristics(source).unwrap();
+    assert_eq!(transformed_characteristics.power, Some(2));
+    assert_eq!(transformed_characteristics.toughness, Some(3));
+
+    let transformed_snapshot = format!("{:?}", engine.state);
+    let mut refreshed = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut refreshed, &engine);
+    let actor_offer = refreshed.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect(
+            "fresh LegalActions reconstructs the accepted offer after Transform removes the menu",
+        );
+    assert_eq!(actor_offer.transaction_id, accepted.transaction_id);
+    assert_eq!(actor_offer.revision, accepted.revision);
+    assert_eq!(actor_offer.cost_selections, accepted_rows);
+    assert_eq!(actor_offer.flex_payments, accepted_flex);
+    assert_eq!(actor_offer.locked_total_cost, accepted.locked_total_cost);
+    assert_eq!(format!("{:?}", engine.state), transformed_snapshot);
+
+    let commit = rv1::CommitAbilityActivation {
+        transaction_id: accepted.transaction_id,
+        expected_revision: accepted.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_receipt),
+            mana: Some(rv1::PaymentMana {
+                c: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_preview = format!("{:?}", engine.state);
+    let preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: accepted.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.error.is_empty(), "{}", preview.error);
+    assert!(preview.complete);
+    assert_eq!(
+        preview
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.source.as_ref()),
+        Some(&source_receipt),
+        "Preview retains the original source receipt through face change"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_preview);
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    rv1::CommitAbilityActivation {
+                        payment: preview.selection,
+                        ..commit
+                    },
+                )),
+            },
+        )
+        .expect("the actor commits the captured front-face ability from the same object");
+    assert!(engine.state.pending_ability_activation.is_none());
+    let stack_item = engine
+        .state
+        .stack
+        .last()
+        .expect("the captured ability is on the stack");
+    assert_eq!(stack_item.source_permanent_id, Some(source));
+    assert_eq!(
+        stack_item.source_zone_change,
+        source_receipt.zone_change_generation
+    );
+    assert_eq!(stack_item.source_face_change, old_face_generation);
+    assert_ne!(stack_item.source_face_change, transformed_face_generation);
+    assert_eq!(
+        stack_item
+            .activated_ability
+            .as_ref()
+            .map(|ability| ability.ability_id.as_str()),
+        Some("aggregate_payment_01"),
+        "the stack retains the front-face activated ability definition"
+    );
+
+    for _ in 0..2 {
+        let priority = engine.state.priority_player_id();
+        engine
+            .apply_command(
+                priority,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("both players pass to resolve the captured front-face ability");
+    }
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+        1,
+        "the same battlefield incarnation receives its captured effect after transforming"
+    );
+}
+
+#[test]
+fn aggregate_counter_unsupported_shapes_stay_unoffered_and_begin_atomic() {
+    for (case_index, shape) in ["source_tap", "hand", "modal", "targeted", "variable"]
+        .into_iter()
+        .enumerate()
+    {
+        let source_in_hand = shape == "hand";
+        let definition = aggregate_counter_shape_definition(shape);
+        let (mut engine, source, artifact, creature) =
+            aggregate_counter_payment_fixture_with_definition(
+                602_520 + case_index as u64,
+                &definition,
+                source_in_hand,
+            );
+        {
+            let pool = &mut engine.state.players[0].mana_pool;
+            pool.white = 20;
+            pool.blue = 20;
+            pool.black = 20;
+            pool.red = 20;
+            pool.green = 20;
+            pool.colorless = 20;
+        }
+
+        let (ability_index, ability) = if source_in_hand {
+            engine
+                .authored_zone_activated_abilities(source, AbilitySourceZone::Hand)
+                .into_iter()
+                .find(|(_, ability, _)| ability.ability_id.as_str() == "aggregate_payment_01")
+                .map(|(index, ability, _)| (index as u32, ability))
+                .expect("the typed hand fixture exposes its authored hand ability")
+        } else {
+            let effective = engine
+                .effective_activated_abilities(source)
+                .into_iter()
+                .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+                .expect("the typed battlefield fixture exposes its activated ability");
+            (effective.slot, effective.definition)
+        };
+        let group_cost_index = ability
+            .costs
+            .iter()
+            .position(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }))
+            .expect("the shape sibling retains its aggregate counter cost");
+        let group_selection = rv1::CostSelection {
+            cost_index: group_cost_index as u32,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(artifact)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Charge,
+                            ),
+                            count: 2,
+                        },
+                        rv1::CounterRemovalContribution {
+                            object: Some(engine.payment_object_ref(creature)),
+                            option_id: crate::engine::counters::counter_option_id(
+                                CounterKind::Night,
+                            ),
+                            count: 1,
+                        },
+                    ],
+                },
+            )),
+        };
+        let flex_payments = if shape == "variable" {
+            Vec::new()
+        } else {
+            vec![
+                rv1::FlexPipPayment {
+                    pip_index: 1,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 2,
+                    pay_life: true,
+                },
+            ]
+        };
+        let mut legal = RuledEventBatch::default();
+        super::legal_actions::fill_legal(&mut legal, &engine);
+        let actor_legal = legal
+            .legal_by_player
+            .get(&10)
+            .expect("the actor receives public legal action data");
+        if source_in_hand {
+            let hand_action = actor_legal
+                .zone_ability_actions
+                .iter()
+                .find(|action| action.object_id == source)
+                .expect("the actual hand ability is publicly projected");
+            assert!(
+                !hand_action
+                    .ability
+                    .as_ref()
+                    .is_some_and(|info| info.activatable),
+                "hand aggregate sibling must not be offered as activatable"
+            );
+            let key = (u64::from(source) << 32) | u64::from(ability_index);
+            if let Some(choices) = actor_legal.cost_choices_by_ability.get(&key) {
+                assert!(!choices.non_mana_costs_payable);
+                assert!(
+                    choices
+                        .choices
+                        .iter()
+                        .all(|choice| choice.counter_removal_group.is_none()),
+                    "hand aggregate sibling has no grouped payable offer"
+                );
+            }
+        } else {
+            let event = engine.ev_zone_view_sync_tracked();
+            let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = event.ev else {
+                panic!("the actual public state event includes a zone view");
+            };
+            let actor_view = zone_view
+                .per_player
+                .iter()
+                .find(|view| view.player_id == 10)
+                .expect("the actor receives its battlefield view");
+            let source_view = actor_view
+                .battlefield_objects
+                .iter()
+                .find(|object| object.object_id == source)
+                .expect("the source is present in the public battlefield view");
+            let ability_info = source_view
+                .activated_abilities
+                .iter()
+                .find(|info| info.ability_index == ability_index)
+                .expect("the unsupported sibling has public AbilityInfo");
+            assert!(
+                !ability_info.activatable,
+                "{shape} sibling stays unactivatable"
+            );
+            let key = (u64::from(source) << 32) | u64::from(ability_index);
+            let choices = actor_legal
+                .cost_choices_by_ability
+                .get(&key)
+                .expect("the unsupported battlefield sibling has keyed public costs");
+            assert!(
+                choices
+                    .choices
+                    .iter()
+                    .all(|choice| choice.counter_removal_group.is_none()),
+                "{shape} sibling has no grouped payable offer"
+            );
+        }
+
+        let source_zone = if source_in_hand {
+            rv1::AbilitySourceZone::Hand as i32
+        } else {
+            rv1::AbilitySourceZone::Battlefield as i32
+        };
+        let begin = rv1::BeginAbilityActivation {
+            source_object_id: source,
+            expected_zone_change_generation: engine
+                .payment_object_ref(source)
+                .zone_change_generation,
+            ability_index,
+            source_zone,
+            cost_selections: vec![group_selection],
+            flex_payments,
+            own_target: (shape == "targeted").then_some(rv1::AbilityActivationTarget {
+                object_id: creature,
+                zone_change_generation: engine.payment_object_ref(creature).zone_change_generation,
+                group_index: 0,
+            }),
+            ..Default::default()
+        };
+        let before = serde_json::to_value(&engine.state)
+            .expect("serialize complete state before unsupported Begin");
+        let result = engine.apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+            },
+        );
+        assert!(
+            matches!(result, Err(EngineError::Illegal(_))),
+            "{shape} aggregate sibling must fail Begin as Illegal"
+        );
+        assert_eq!(
+            serde_json::to_value(&engine.state).expect("serialize state after rejected Begin"),
+            before,
+            "{shape} unsupported Begin preserves state, pending data, history and allocators"
+        );
+        assert!(engine.pending_ability_activation_internal.is_none());
+    }
+}
+
+#[test]
+fn aggregate_counter_hybrid_mana_shape_is_unoffered_and_begin_atomic_illegal() {
+    for (case_index, shape) in ["hybrid", "mono_hybrid"].into_iter().enumerate() {
+        let definition = aggregate_counter_shape_definition(shape);
+        let (mut engine, source, artifact, creature) =
+            aggregate_counter_payment_fixture_with_definition(
+                602_530 + case_index as u64,
+                &definition,
+                false,
+            );
+        {
+            let pool = &mut engine.state.players[0].mana_pool;
+            pool.white = 20;
+            pool.blue = 20;
+            pool.black = 20;
+            pool.red = 20;
+            pool.green = 20;
+            pool.colorless = 20;
+        }
+        let effective = engine
+            .effective_activated_abilities(source)
+            .into_iter()
+            .find(|ability| ability.definition.ability_id.as_str() == "aggregate_payment_01")
+            .expect("the model-valid flexible-mana sibling is active");
+        let event = engine.ev_zone_view_sync_tracked();
+        let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = event.ev else {
+            panic!("the actual public state event includes a zone view");
+        };
+        let actor_view = zone_view
+            .per_player
+            .iter()
+            .find(|view| view.player_id == 10)
+            .expect("the actor receives its battlefield view");
+        let source_view = actor_view
+            .battlefield_objects
+            .iter()
+            .find(|object| object.object_id == source)
+            .expect("the source is present in the public battlefield view");
+        let ability_info = source_view
+            .activated_abilities
+            .iter()
+            .find(|ability| ability.ability_index == effective.slot)
+            .expect("hybrid sibling has public AbilityInfo");
+        assert!(
+            !ability_info.activatable,
+            "{shape} mana is not lockable at Begin"
+        );
+
+        let mut legal = RuledEventBatch::default();
+        super::legal_actions::fill_legal(&mut legal, &engine);
+        let actor_legal = legal
+            .legal_by_player
+            .get(&10)
+            .expect("the actor receives public legal action data");
+        let key = (u64::from(source) << 32) | u64::from(effective.slot);
+        let choices = actor_legal
+            .cost_choices_by_ability
+            .get(&key)
+            .expect("the sibling retains keyed structural cost status");
+        assert!(
+            choices
+                .choices
+                .iter()
+                .all(|choice| choice.counter_removal_group.is_none()),
+            "{shape} mana must not expose a grouped payable offer"
+        );
+
+        let group_cost_index = effective
+            .definition
+            .costs
+            .iter()
+            .position(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }))
+            .expect("hybrid sibling retains its group cost");
+        let begin = rv1::BeginAbilityActivation {
+            source_object_id: source,
+            expected_zone_change_generation: engine
+                .payment_object_ref(source)
+                .zone_change_generation,
+            ability_index: effective.slot,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: vec![rv1::CostSelection {
+                cost_index: group_cost_index as u32,
+                selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                    rv1::CounterRemovalGroupSelection {
+                        contributions: vec![
+                            rv1::CounterRemovalContribution {
+                                object: Some(engine.payment_object_ref(artifact)),
+                                option_id: crate::engine::counters::counter_option_id(
+                                    CounterKind::Charge,
+                                ),
+                                count: 2,
+                            },
+                            rv1::CounterRemovalContribution {
+                                object: Some(engine.payment_object_ref(creature)),
+                                option_id: crate::engine::counters::counter_option_id(
+                                    CounterKind::Night,
+                                ),
+                                count: 1,
+                            },
+                        ],
+                    },
+                )),
+            }],
+            ..Default::default()
+        };
+        let before = serde_json::to_value(&engine.state)
+            .expect("serialize state before flexible-mana Begin");
+        let result = engine.apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+            },
+        );
+        assert!(
+            matches!(result, Err(EngineError::Illegal(_))),
+            "{shape} aggregate Begin must reject before allocating pending state"
+        );
+        assert_eq!(
+            serde_json::to_value(&engine.state).expect("serialize state after rejected Begin"),
+            before
+        );
+        assert!(engine.pending_ability_activation_internal.is_none());
+    }
+}
+
+#[test]
+fn aggregate_counter_public_offer_keeps_legacy_direct_activation_atomic_illegal() {
     let (mut engine, source, artifact, creature) = aggregate_counter_cost_fixture(602_420);
     let effective = engine.effective_activated_abilities(source);
     assert_eq!(
@@ -1827,8 +5599,8 @@ fn aggregate_counter_schema_is_unoffered_and_direct_activation_is_atomic_illegal
     assert!(engine.counter_costs_payable(source, &singleton.definition.costs));
 
     let aggregate_info = super::legal_actions::activated_ability_info(&engine, source, aggregate);
-    assert!(!aggregate_info.activatable);
-    assert!(aggregate_info.cost_label.contains("unsupported"));
+    assert!(aggregate_info.activatable);
+    assert!(!aggregate_info.cost_label.contains("unsupported"));
     let singleton_info = super::legal_actions::activated_ability_info(&engine, source, singleton);
     assert!(
         singleton_info.activatable,
@@ -1845,9 +5617,26 @@ fn aggregate_counter_schema_is_unoffered_and_direct_activation_is_atomic_illegal
     let aggregate_choices = public_legal
         .cost_choices_by_ability
         .get(&aggregate_key)
-        .expect("disabled ability may keep its keyed cost data");
-    assert!(!aggregate_choices.non_mana_costs_payable);
-    assert!(aggregate_choices.choices.is_empty());
+        .expect("the supported aggregate ability has keyed cost data");
+    assert!(aggregate_choices.non_mana_costs_payable);
+    let group = aggregate_choices
+        .choices
+        .iter()
+        .find_map(|choice| choice.counter_removal_group.as_ref())
+        .expect("the supported public route exposes grouped counter-removal choices");
+    assert_eq!(group.required_count, aggregate_count);
+    assert!(group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == artifact)
+    }));
+    assert!(group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == creature)
+    }));
     assert!(aggregate_choices.cast_cost_groups.is_empty());
 
     let singleton_key = (u64::from(source) << 32) | u64::from(singleton.slot);
@@ -1977,6 +5766,199 @@ fn aggregate_counter_schema_is_unoffered_and_direct_activation_is_atomic_illegal
         "successful preview plans but does not debit the singleton control"
     );
     assert_no_pending_activation(&engine);
+}
+
+#[test]
+fn aggregate_counter_c2_public_route_is_guarded_while_direct_route_stays_closed() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_cost_fixture(602_432);
+    let effective = engine.effective_activated_abilities(source);
+    let aggregate = effective
+        .iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_01")
+        .expect("aggregate-cost ability");
+    let aggregate_cost = &aggregate.definition.costs[0];
+    let required_count = match aggregate_cost {
+        AbilityCost::RemoveCountersFromPermanents { count, .. } => *count,
+        other => panic!("fixture retains the approved aggregate shape: {other:?}"),
+    };
+    assert_eq!(required_count, 3);
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert!(!engine.counter_costs_payable(source, &aggregate.definition.costs));
+
+    let event = engine.ev_zone_view_sync_tracked();
+    let Some(rv1::ruled_event::Ev::ZoneView(zone_view)) = event.ev else {
+        panic!("the actual public state event includes a zone view");
+    };
+    let actor_view = zone_view
+        .per_player
+        .iter()
+        .find(|view| view.player_id == 10)
+        .expect("the actor receives the public battlefield AbilityInfo");
+    let source_view = actor_view
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == source)
+        .expect("the source is present in the public battlefield view");
+    let ability_info = source_view
+        .activated_abilities
+        .iter()
+        .find(|ability| ability.ability_index == aggregate.slot)
+        .expect("the public AbilityInfo for the aggregate cost");
+    assert!(ability_info.activatable);
+
+    let mut batch = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut batch, &engine);
+    let public_legal = batch
+        .legal_by_player
+        .get(&10)
+        .expect("the actor receives legal action data");
+    let aggregate_key = (u64::from(source) << 32) | u64::from(aggregate.slot);
+    let choices = public_legal
+        .cost_choices_by_ability
+        .get(&aggregate_key)
+        .expect("the aggregate ability keeps its keyed structural status");
+    assert!(choices.non_mana_costs_payable);
+    let offered_group = choices
+        .choices
+        .iter()
+        .find_map(|choice| choice.counter_removal_group.as_ref())
+        .expect("the supported aggregate cost is publicly offered as one group");
+    assert_eq!(offered_group.required_count, 3);
+    assert!(offered_group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == artifact)
+    }));
+    assert!(offered_group.candidates.iter().any(|candidate| {
+        candidate
+            .object
+            .as_ref()
+            .is_some_and(|object| object.object_id == creature)
+    }));
+
+    let source_ref = engine.payment_object_ref(source);
+    let group_selection = rv1::CostSelection {
+        cost_index: 0,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(artifact)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                        count: 2,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(engine.payment_object_ref(creature)),
+                        option_id: crate::engine::counters::counter_option_id(CounterKind::Night),
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    };
+    let begin = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        ability_index: aggregate.slot,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![group_selection.clone()],
+        ..Default::default()
+    };
+    let begin_command = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+    };
+    engine
+        .apply_command(10, &begin_command)
+        .expect("the guarded accepted aggregate route supports the validated group");
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("supported aggregate Begin opens the Payment stage");
+    let transaction_id = pending.transaction_id;
+    let expected_revision = pending.revision;
+    assert_eq!(pending.stage(), rv1::AbilityActivationStage::Payment);
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id,
+                        expected_revision,
+                    },
+                )),
+            },
+        )
+        .expect("Cancel closes the accepted window without debiting its group");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+
+    let direct = rv1::ActivateAbility {
+        source_object_id: source,
+        ability_index: aggregate.slot,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![group_selection],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana::default()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let direct_command = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(direct.clone())),
+    };
+    let before_direct = serde_json::to_value(&engine.state)
+        .expect("serialize complete state and allocators before direct activation");
+    assert!(matches!(
+        engine.apply_command(10, &direct_command),
+        Err(EngineError::Illegal(_))
+    ));
+    assert_eq!(
+        serde_json::to_value(&engine.state)
+            .expect("serialize complete state and allocators after direct activation"),
+        before_direct
+    );
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+
+    let before_preview = serde_json::to_value(&engine.state)
+        .expect("serialize complete state and allocators before ordinary Preview");
+    let preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            activate_ability: Some(direct),
+            ..Default::default()
+        },
+    );
+    assert!(!preview.error.is_empty());
+    assert!(!preview.complete);
+    assert_eq!(
+        serde_json::to_value(&engine.state)
+            .expect("serialize complete state and allocators after ordinary Preview"),
+        before_preview
+    );
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
 }
 
 #[test]

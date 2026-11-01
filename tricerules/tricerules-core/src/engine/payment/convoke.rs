@@ -158,8 +158,25 @@ impl GameEngine {
         costs: &PreparedPaymentCosts,
         selection: &rv1::PaymentSelection,
     ) -> Result<u32, EngineError> {
+        self.validate_explicit_payment_at_receipt(
+            player,
+            self.payment_object_ref(source),
+            has_convoke,
+            costs,
+            selection,
+        )
+    }
+
+    pub(in crate::engine) fn validate_explicit_payment_at_receipt(
+        &self,
+        player: PlayerId,
+        source: rv1::CostObjectRef,
+        has_convoke: bool,
+        costs: &PreparedPaymentCosts,
+        selection: &rv1::PaymentSelection,
+    ) -> Result<u32, EngineError> {
         if selection.expected_state_revision != self.state.command_index
-            || selection.source.as_ref() != Some(&self.payment_object_ref(source))
+            || selection.source.as_ref() != Some(&source)
         {
             return Err(EngineError::Illegal("stale payment"));
         }
@@ -234,149 +251,153 @@ impl GameEngine {
                 "payment preview requires exactly one action",
             ));
         }
-        let (mut prepared, source, mut selection, allows_convoke) = if let Some(command) =
-            &request.commit_spell_cast
-        {
-            let pending = self
-                .state
-                .pending_spell_cast
-                .as_ref()
-                .ok_or(EngineError::Illegal("no spell cast is being paid"))?;
-            if pending.caster != player || pending.transaction_id != command.transaction_id {
-                return Err(EngineError::Illegal("stale spell-cast transaction"));
-            }
-            let internal = self
-                .pending_spell_cast_internal
-                .as_ref()
-                .ok_or(EngineError::Illegal("missing locked spell cost"))?;
-            let mut prepared = internal.prepared.payment.clone();
-            prepared.eligible_restricted_mana =
-                self.eligible_restricted_mana_for_pending_spell_cast(pending)?;
-            prepared.restricted_mana = command.restricted_mana.clone();
-            (
-                prepared,
-                Some(self.payment_object_ref(pending.reserved_object_id)),
-                command.payment.clone().unwrap_or_default(),
-                internal.prepared.convoke,
-            )
-        } else if let Some(command) = &request.commit_ability_activation {
-            let costs = self.prepare_pending_ability_payment(player, command)?;
-            let source = self
-                .state
-                .pending_ability_activation
-                .as_ref()
-                .unwrap()
-                .source_object_id;
-            (
-                costs,
-                Some(self.payment_object_ref(source)),
-                command.payment.clone().unwrap_or_default(),
-                false,
-            )
-        } else if let Some(command) = &request.commit_attack_declaration {
-            let pending = self
-                .state
-                .pending_attack_declaration
-                .as_ref()
-                .ok_or(EngineError::Illegal("no attack declaration is being paid"))?;
-            if pending.attacking_player_id != player
-                || pending.transaction_id != command.transaction_id
-                || pending.revision != command.expected_revision
-            {
-                return Err(EngineError::Illegal("stale attack declaration payment"));
-            }
-            (
-                self.prepare_attack_payment_costs(
+        let (mut prepared, source, mut selection, allows_convoke, validate_all_resources) =
+            if let Some(command) = &request.commit_spell_cast {
+                let pending = self
+                    .state
+                    .pending_spell_cast
+                    .as_ref()
+                    .ok_or(EngineError::Illegal("no spell cast is being paid"))?;
+                if pending.caster != player || pending.transaction_id != command.transaction_id {
+                    return Err(EngineError::Illegal("stale spell-cast transaction"));
+                }
+                let internal = self
+                    .pending_spell_cast_internal
+                    .as_ref()
+                    .ok_or(EngineError::Illegal("missing locked spell cost"))?;
+                let mut prepared = internal.prepared.payment.clone();
+                prepared.eligible_restricted_mana =
+                    self.eligible_restricted_mana_for_pending_spell_cast(pending)?;
+                prepared.restricted_mana = command.restricted_mana.clone();
+                (
+                    prepared,
+                    Some(self.payment_object_ref(pending.reserved_object_id)),
+                    command.payment.clone().unwrap_or_default(),
+                    internal.prepared.convoke,
+                    false,
+                )
+            } else if let Some(command) = &request.commit_ability_activation {
+                let (costs, source, accepted_aggregate) =
+                    self.prepare_pending_ability_payment(player, command)?;
+                (
+                    costs,
+                    Some(source),
+                    command.payment.clone().unwrap_or_default(),
+                    false,
+                    accepted_aggregate,
+                )
+            } else if let Some(command) = &request.commit_attack_declaration {
+                let pending = self
+                    .state
+                    .pending_attack_declaration
+                    .as_ref()
+                    .ok_or(EngineError::Illegal("no attack declaration is being paid"))?;
+                if pending.attacking_player_id != player
+                    || pending.transaction_id != command.transaction_id
+                    || pending.revision != command.expected_revision
+                {
+                    return Err(EngineError::Illegal("stale attack declaration payment"));
+                }
+                (
+                    self.prepare_attack_payment_costs(
+                        player,
+                        pending.generic_mana_cost,
+                        &command.restricted_mana,
+                    )?,
+                    None,
+                    command.payment.clone().unwrap_or_default(),
+                    false,
+                    false,
+                )
+            } else if let Some(command) = &request.cast_spell {
+                if self.special_cast_method(player).is_none()
+                    && (self.state.priority_player_id() != player
+                        || self.state.blocking_choice().is_some())
+                {
+                    return Err(EngineError::Illegal("spell payment is not available now"));
+                }
+                let cast = self.prepare_spell_cast(player, command)?;
+                (
+                    cast.payment,
+                    Some(self.payment_object_ref(cast.oid)),
+                    command.payment.clone().unwrap_or_default(),
+                    cast.convoke,
+                    false,
+                )
+            } else if let Some(command) = &request.activate_ability {
+                (
+                    self.prepare_activation_payment(player, command)?,
+                    Some(self.payment_object_ref(command.source_object_id)),
+                    command.payment.clone().unwrap_or_default(),
+                    false,
+                    false,
+                )
+            } else if let Some(command) = &request.resolution_choice {
+                self.validate_resolution_prompt_id(player, command.resolution_prompt_id)?;
+                let pending = self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .ok_or(EngineError::Illegal("no resolution payment"))?;
+                let payment = pending
+                    .continuation
+                    .mana_payment()
+                    .ok_or(EngineError::Illegal("no resolution payment"))?;
+                if pending.deciding_player != player
+                    || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
+                    || !command.chosen_object_ids.is_empty()
+                    || !command.chosen_player_ids.is_empty()
+                    || command.selected_branch_index != 0
+                    || command.cast_spell.is_some()
+                    || command.spell_cast_announcement.is_some()
+                    || command.chosen_combat_defender.is_some()
+                {
+                    return Err(EngineError::Illegal("invalid resolution payment proposal"));
+                }
+                if payment.variable_mana_contribution
+                    && command.payment.as_ref().is_some_and(|selection| {
+                        !selection.convoke.is_empty() || !selection.waterbend.is_empty()
+                    })
+                {
+                    return Err(EngineError::Illegal(
+                        "Join Forces accepts mana contributions only",
+                    ));
+                }
+                let mut prepared = self.prepare_resolution_payment_costs(
                     player,
-                    pending.generic_mana_cost,
-                    &command.restricted_mana,
-                )?,
-                None,
-                command.payment.clone().unwrap_or_default(),
-                false,
-            )
-        } else if let Some(command) = &request.cast_spell {
-            if self.special_cast_method(player).is_none()
-                && (self.state.priority_player_id() != player
-                    || self.state.blocking_choice().is_some())
-            {
-                return Err(EngineError::Illegal("spell payment is not available now"));
-            }
-            let cast = self.prepare_spell_cast(player, command)?;
-            (
-                cast.payment,
-                Some(self.payment_object_ref(cast.oid)),
-                command.payment.clone().unwrap_or_default(),
-                cast.convoke,
-            )
-        } else if let Some(command) = &request.activate_ability {
-            (
-                self.prepare_activation_payment(player, command)?,
-                Some(self.payment_object_ref(command.source_object_id)),
-                command.payment.clone().unwrap_or_default(),
-                false,
-            )
-        } else if let Some(command) = &request.resolution_choice {
-            self.validate_resolution_prompt_id(player, command.resolution_prompt_id)?;
-            let pending = self
-                .state
-                .pending_resolution
-                .as_ref()
-                .ok_or(EngineError::Illegal("no resolution payment"))?;
-            let payment = pending
-                .continuation
-                .mana_payment()
-                .ok_or(EngineError::Illegal("no resolution payment"))?;
-            if pending.deciding_player != player
-                || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
-                || !command.chosen_object_ids.is_empty()
-                || !command.chosen_player_ids.is_empty()
-                || command.selected_branch_index != 0
-                || command.cast_spell.is_some()
-                || command.spell_cast_announcement.is_some()
-                || command.chosen_combat_defender.is_some()
-            {
-                return Err(EngineError::Illegal("invalid resolution payment proposal"));
-            }
-            if payment.variable_mana_contribution
-                && command.payment.as_ref().is_some_and(|selection| {
-                    !selection.convoke.is_empty() || !selection.waterbend.is_empty()
-                })
-            {
-                return Err(EngineError::Illegal(
-                    "Join Forces accepts mana contributions only",
-                ));
-            }
-            let mut prepared =
-                self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?;
-            if payment.variable_mana_contribution {
-                let amount = selected_mana_total(
-                    command
-                        .payment
-                        .as_ref()
-                        .and_then(|selection| selection.mana.as_ref()),
+                    payment,
                     &command.restricted_mana,
                 )?;
-                prepared.mana = ManaCost {
-                    pips: vec![tricerules_card_model::mana::ManaSymbol::Generic(amount)],
-                };
-            }
-            (
-                prepared,
-                Some(self.payment_object_ref(pending.presentation.source_object_id)),
-                command.payment.clone().unwrap_or_default(),
-                false,
-            )
-        } else {
-            let command = request.execute_permanent_action.as_ref().unwrap();
-            let (prepared, source) = self.prepare_permanent_action_payment(player, command)?;
-            (
-                prepared,
-                Some(source),
-                command.payment.clone().unwrap_or_default(),
-                false,
-            )
-        };
+                if payment.variable_mana_contribution {
+                    let amount = selected_mana_total(
+                        command
+                            .payment
+                            .as_ref()
+                            .and_then(|selection| selection.mana.as_ref()),
+                        &command.restricted_mana,
+                    )?;
+                    prepared.mana = ManaCost {
+                        pips: vec![tricerules_card_model::mana::ManaSymbol::Generic(amount)],
+                    };
+                }
+                (
+                    prepared,
+                    Some(self.payment_object_ref(pending.presentation.source_object_id)),
+                    command.payment.clone().unwrap_or_default(),
+                    false,
+                    false,
+                )
+            } else {
+                let command = request.execute_permanent_action.as_ref().unwrap();
+                let (prepared, source) = self.prepare_permanent_action_payment(player, command)?;
+                (
+                    prepared,
+                    Some(source),
+                    command.payment.clone().unwrap_or_default(),
+                    false,
+                    false,
+                )
+            };
         if let Some(source) = source {
             if selection.source.as_ref().is_some_and(|old| *old != source) {
                 return Err(EngineError::Illegal("payment source changed"));
@@ -511,7 +532,7 @@ impl GameEngine {
             .first()
             .ok_or(EngineError::Illegal("invalid payment selection"))?
             .life;
-        super::mana::plan_exact_mana_payment(
+        let mana = super::mana::plan_exact_mana_payment(
             &self.state,
             idx,
             mana_counts(selection.mana.as_ref()),
@@ -519,6 +540,9 @@ impl GameEngine {
             &prepared.eligible_restricted_mana,
             life,
         )?;
+        if validate_all_resources {
+            self.validate_aggregate_preview_resources(&prepared, mana)?;
+        }
         response.complete = remaining.iter().any(Demand::complete);
         remaining.sort_by_key(|d| {
             (

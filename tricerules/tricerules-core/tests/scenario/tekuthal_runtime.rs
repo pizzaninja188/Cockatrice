@@ -1,6 +1,6 @@
-//! Capability-only fixtures for Tekuthal's Proliferate action replacement.
-//! Actual Karn's Bastion and Tezzeret's Gambit definitions are included unchanged from shipped
-//! card data; the local static fixture is not an admitted Tekuthal card.
+//! Capability-only fixtures for Tekuthal's Proliferate action replacement and aggregate payment.
+//! Actual Karn's Bastion, Tezzeret's Gambit, and payment-source cards use unchanged shipped data;
+//! the local replacement and payment fixtures are not admitted Tekuthal card data.
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use std::sync::OnceLock;
@@ -36,6 +36,24 @@ const STATIC_FIXTURE_RON: &str = r#"(
     )],
 )"#;
 
+const PAYMENT_FIXTURE_ID: &str = "tekuthal_aggregate_payment_capability_fixture";
+const PAYMENT_FIXTURE_RON: &str = r#"(
+    id: "tekuthal_aggregate_payment_capability_fixture",
+    name: "Tekuthal Aggregate Payment Capability Fixture",
+    face_id: "tekuthal_aggregate_payment_capability_fixture",
+    types: ["Creature"],
+    power: Some(1),
+    toughness: Some(1),
+    activated_abilities: [
+        (ability_id: "aggregate_payment_01", presentation: Fallback,
+            costs: [Mana("{1}{U/P}{U/P}"), RemoveCountersFromPermanents(count: 3, counter: None,
+                filter: (kind: AnyPermanent, controller: You,
+                    permanent_types: [Artifact, Creature, Planeswalker],
+                    excluded_objects: [Source]))],
+            effect: [PutCounters(subject: Source, counter: PlusOnePlusOne, count: 1)])
+    ]
+)"#;
+
 fn runtime_registry() -> &'static CardRegistry {
     static REGISTRY: OnceLock<CardRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -55,6 +73,27 @@ fn runtime_registry() -> &'static CardRegistry {
     })
 }
 
+fn payment_registry() -> &'static CardRegistry {
+    static REGISTRY: OnceLock<CardRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/krark-clan_ironworks.ron"),
+                include_str!("../../../tricerules-cards/data/liquimetal_torque.ron"),
+                include_str!("../../../tricerules-cards/data/replicating_ring.ron"),
+                include_str!("../../../tricerules-cards/data/everflowing_chalice.ron"),
+                PAYMENT_FIXTURE_RON,
+            ],
+            &[include_str!(
+                "../../../tricerules-cards/data/tokens/replicated_ring.ron"
+            )],
+        )
+        .expect("payment capability fixture and shipped payment cards are valid")
+    })
+}
+
 fn runtime_engine(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
@@ -68,6 +107,46 @@ fn runtime_engine(seed: u64) -> GameEngine {
     .expect("Tekuthal action fixture engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
+}
+
+fn payment_engine(seed: u64) -> GameEngine {
+    let deck = deck_with("forest", &[]);
+    let mut engine = GameEngine::new(
+        payment_registry(),
+        seed,
+        &[10, 20],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("aggregate payment capability fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine
+}
+
+fn payment_public_permanent(
+    batch: &RuledEventBatch,
+    player_id: i32,
+    object_id: u32,
+) -> ruled_v1::BattlefieldObject {
+    let zone_view = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref()? {
+            ruled_event::Ev::ZoneView(view) => Some(view),
+            _ => None,
+        })
+        .expect("engine response publishes the battlefield view");
+    zone_view
+        .per_player
+        .iter()
+        .find(|view| view.player_id == player_id)
+        .expect("player receives a battlefield view")
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == object_id)
+        .expect("permanent is in the published battlefield")
+        .clone()
 }
 
 fn runtime_four_player_engine(seed: u64) -> GameEngine {
@@ -3367,4 +3446,1608 @@ fn ezuri_two_original_instructions_double_to_four_delayed_actions_without_interl
     assert!(no_counters.state.pending_trigger_order.is_none());
     assert!(no_counters.state.pending_triggers.is_empty());
     assert!(no_counters.state.stack.is_empty());
+}
+
+#[test]
+fn tekuthal_aggregate_payment_command_distribution_and_atomic_rejection() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    fn commit(
+        engine: &GameEngine,
+        pending: &rv1::PendingAbilityActivation,
+        source: &rv1::CostObjectRef,
+        mana: rv1::PaymentMana,
+    ) -> rv1::CommitAbilityActivation {
+        rv1::CommitAbilityActivation {
+            transaction_id: pending.transaction_id,
+            expected_revision: pending.revision,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(*source),
+                mana: Some(mana),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn public_permanent(
+        batch: &RuledEventBatch,
+        player_id: i32,
+        object_id: u32,
+    ) -> rv1::BattlefieldObject {
+        let zone_view = batch
+            .events
+            .iter()
+            .find_map(|event| match event.ev.as_ref()? {
+                Ev::ZoneView(view) => Some(view),
+                _ => None,
+            })
+            .expect("initial response publishes the engine-owned battlefield view");
+        zone_view
+            .per_player
+            .iter()
+            .find(|view| view.player_id == player_id)
+            .expect("the requested player receives a battlefield view")
+            .battlefield_objects
+            .iter()
+            .find(|object| object.object_id == object_id)
+            .expect("the requested permanent is in the published battlefield")
+            .clone()
+    }
+
+    let mut engine = payment_engine(602_601);
+    let actor_seat = engine.state.player_idx(10).expect("payment actor seat");
+    let source = inject_creature_on_battlefield(&mut engine, actor_seat, PAYMENT_FIXTURE_ID);
+    let ring = inject_permanent_on_battlefield(&mut engine, actor_seat, "replicating_ring");
+    let chalice = inject_permanent_on_battlefield(&mut engine, actor_seat, "everflowing_chalice");
+    let creature = inject_creature_on_battlefield(&mut engine, actor_seat, "grizzly_bears");
+    let counter_timestamp = engine.state.command_index;
+    engine
+        .state
+        .objects
+        .get_mut(&ring)
+        .expect("actual Replicating Ring contributor")
+        .add_counters(CounterKind::Charge, 1, counter_timestamp);
+    engine
+        .state
+        .objects
+        .get_mut(&chalice)
+        .expect("actual Everflowing Chalice contributor")
+        .add_counters(CounterKind::Charge, 2, counter_timestamp);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("actual Grizzly Bears contributor")
+        .add_counters(CounterKind::Night, 1, counter_timestamp);
+
+    let initial = engine.initial_response_batch();
+    let source_view = public_permanent(&initial, 10, source);
+    assert_eq!(source_view.activated_abilities.len(), 1);
+    let source_ability = source_view.activated_abilities[0].clone();
+    assert!(source_ability.activatable);
+    let source_ref = rv1::CostObjectRef {
+        object_id: source_view.object_id,
+        zone_change_generation: source_view.zone_change_generation,
+    };
+
+    let ability_key = (u64::from(source) << 32) | u64::from(source_ability.ability_index);
+    let public_legal = initial
+        .legal_by_player
+        .get(&10)
+        .expect("actor receives legal cost choices");
+    let cost_choices = public_legal
+        .cost_choices_by_ability
+        .get(&ability_key)
+        .expect("the published ability slot has legal cost choices");
+    assert!(cost_choices.non_mana_costs_payable);
+    let group_choice = cost_choices
+        .choices
+        .iter()
+        .find(|choice| choice.counter_removal_group.is_some())
+        .expect("the aggregate cost is offered as one public group");
+    let group = group_choice
+        .counter_removal_group
+        .as_ref()
+        .expect("aggregate cost choice carries its candidates");
+    assert_eq!(group.required_count, 3);
+
+    let ring_candidate = group
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == ring)
+        })
+        .expect("actual Replicating Ring is offered as a counter source");
+    let ring_ref = ring_candidate
+        .object
+        .expect("Ring candidate includes its generation-bound receipt");
+    let ring_charge = ring_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "charge" && option.available_count >= 1)
+        .expect("Ring's offered Charge option supplies one unit");
+
+    let chalice_candidate = group
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == chalice)
+        })
+        .expect("actual Everflowing Chalice is offered as a counter source");
+    let chalice_ref = chalice_candidate
+        .object
+        .expect("Chalice candidate includes its generation-bound receipt");
+    let chalice_charge = chalice_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "charge" && option.available_count >= 1)
+        .expect("Chalice's offered Charge option supplies one unit");
+
+    let creature_candidate = group
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == creature)
+        })
+        .expect("actual Grizzly Bears is offered as a counter source");
+    let creature_ref = creature_candidate
+        .object
+        .expect("creature candidate includes its generation-bound receipt");
+    let creature_night = creature_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "night" && option.available_count >= 1)
+        .expect("creature's offered Night option supplies one unit");
+
+    let cost_selections = vec![rv1::CostSelection {
+        cost_index: group_choice.cost_index,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(ring_ref),
+                        option_id: ring_charge.option_id,
+                        count: 1,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(chalice_ref),
+                        option_id: chalice_charge.option_id,
+                        count: 1,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(creature_ref),
+                        option_id: creature_night.option_id,
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    }];
+    let flex_payments = vec![
+        rv1::FlexPipPayment {
+            pip_index: 1,
+            pay_life: true,
+        },
+        rv1::FlexPipPayment {
+            pip_index: 2,
+            pay_life: true,
+        },
+    ];
+    let begin = RuledCommand {
+        cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
+            source_object_id: source_ref.object_id,
+            expected_zone_change_generation: source_ref.zone_change_generation,
+            ability_index: source_ability.ability_index,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: cost_selections.clone(),
+            flex_payments: flex_payments.clone(),
+            ..Default::default()
+        })),
+    };
+
+    let before_wrong_actor = format!("{:?}", engine.state);
+    let diagnostics_before_wrong_actor = engine.diagnostic_snapshot().unwrap();
+    let command_index_before_wrong_actor = engine.state.command_index;
+    let wrong_actor = engine.apply_scenario_command(20, &begin);
+    assert!(
+        matches!(wrong_actor, Err(tricerules_core::EngineError::Illegal(_))),
+        "the non-priority opponent cannot Begin the actor's payment"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_wrong_actor);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        diagnostics_before_wrong_actor
+    );
+    assert_eq!(engine.state.command_index, command_index_before_wrong_actor);
+
+    let begin_batch = engine
+        .apply_scenario_command(10, &begin)
+        .expect("actor accepts the public aggregate Begin command");
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("accepted Begin opens its engine-owned payment transaction");
+    assert_eq!(pending.stage(), rv1::AbilityActivationStage::Payment);
+    assert_eq!(pending.actor_player_id, 10);
+    assert_eq!(pending.source_object_id, source_ref.object_id);
+    assert_eq!(pending.cost_selections, cost_selections);
+    assert_eq!(pending.flex_payments, flex_payments);
+    let actor_pending = begin_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("the actor receives the private payment-row projection");
+    assert_eq!(actor_pending.transaction_id, pending.transaction_id);
+    assert_eq!(actor_pending.cost_selections, pending.cost_selections);
+    assert_eq!(actor_pending.flex_payments, pending.flex_payments);
+    let opponent_pending = begin_batch.legal_by_player[&20]
+        .pending_ability_activation
+        .as_ref()
+        .expect("opponent receives the public payment transaction shell");
+    assert_eq!(
+        opponent_pending.stage(),
+        rv1::AbilityActivationStage::Payment
+    );
+    assert!(opponent_pending.cost_selections.is_empty());
+    assert!(opponent_pending.flex_payments.is_empty());
+    assert!(opponent_pending.payment_preview.is_none());
+    assert_eq!(engine.state.players[actor_seat].life, 20);
+
+    let underfunded_commit = commit(&engine, &pending, &source_ref, rv1::PaymentMana::default());
+    let before_preview = format!("{:?}", engine.state);
+    let diagnostics_before_preview = engine.diagnostic_snapshot().unwrap();
+    let preview_command_index = engine.state.command_index;
+    let preview = engine.preview_payment_scenario(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: engine.state.command_index,
+            commit_ability_activation: Some(underfunded_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(!preview.complete);
+    assert_eq!(format!("{:?}", engine.state), before_preview);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        diagnostics_before_preview
+    );
+    assert_eq!(engine.state.command_index, preview_command_index);
+
+    let rejected_commit = engine.apply_scenario_command(
+        10,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitAbilityActivation(underfunded_commit)),
+        },
+    );
+    assert!(
+        matches!(
+            rejected_commit,
+            Err(tricerules_core::EngineError::Illegal(_))
+        ),
+        "an underfunded Commit is rejected"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_preview);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        diagnostics_before_preview
+    );
+    assert_eq!(engine.state.command_index, preview_command_index);
+    assert_eq!(
+        engine.state.pending_ability_activation.as_ref(),
+        Some(&pending),
+        "rejection preserves the pending transaction for a corrected Commit"
+    );
+
+    let payment_offer = engine.initial_response_batch();
+    let chalice_view = public_permanent(&payment_offer, 10, chalice);
+    assert_eq!(chalice_view.activated_abilities.len(), 1);
+    let chalice_ability = chalice_view.activated_abilities[0].clone();
+    assert!(chalice_ability.activatable);
+    let chalice_ref = rv1::CostObjectRef {
+        object_id: chalice_view.object_id,
+        zone_change_generation: chalice_view.zone_change_generation,
+    };
+    let mana_activation = RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
+            source_object_id: chalice_ref.object_id,
+            ability_index: chalice_ability.ability_index,
+            expected_zone_change_generation: chalice_ref.zone_change_generation,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(chalice_ref),
+                mana: Some(rv1::PaymentMana::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    };
+    let mana_batch = engine
+        .apply_scenario_command(10, &mana_activation)
+        .expect("the actual Everflowing Chalice mana ability resolves in the Payment window");
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 2);
+    assert!(engine.state.objects[&chalice].tapped);
+    assert_eq!(
+        engine.state.objects[&chalice].counter_count(CounterKind::Charge),
+        2,
+        "Chalice's mana ability leaves the counters available for the locked group"
+    );
+    let pending_after_mana = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("mana action preserves the accepted payment transaction");
+    assert_eq!(pending_after_mana.transaction_id, pending.transaction_id);
+    assert_eq!(pending_after_mana.revision, pending.revision);
+    assert_eq!(pending_after_mana.cost_selections, pending.cost_selections);
+    assert_eq!(pending_after_mana.flex_payments, pending.flex_payments);
+    let refreshed_offer = mana_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("mana action redistributes the actor's same payment row");
+    assert_eq!(refreshed_offer.transaction_id, pending.transaction_id);
+    let opponent_refreshed = mana_batch.legal_by_player[&20]
+        .pending_ability_activation
+        .as_ref()
+        .expect("mana action refreshes the public payment shell for the opponent");
+    assert!(opponent_refreshed.cost_selections.is_empty());
+    assert!(opponent_refreshed.flex_payments.is_empty());
+    assert!(opponent_refreshed.payment_preview.is_none());
+
+    let accepted_commit = commit(
+        &engine,
+        &pending,
+        &source_ref,
+        rv1::PaymentMana {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let commit_batch = engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitAbilityActivation(accepted_commit)),
+            },
+        )
+        .expect("full mana, life, and aggregate counter payment commits");
+    assert_eq!(engine.state.command_index, preview_command_index + 2);
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(commit_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .is_none());
+    assert!(commit_batch.legal_by_player[&20]
+        .pending_ability_activation
+        .is_none());
+    assert_eq!(engine.state.players[actor_seat].life, 16);
+    assert_eq!(
+        engine.state.players[actor_seat].mana_pool.colorless, 1,
+        "Commit spends one generic mana and preserves the extra Chalice mana"
+    );
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&chalice].counter_count(CounterKind::Charge),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+}
+
+#[test]
+fn tekuthal_aggregate_accepted_source_sacrifice_and_cancel_commands() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    fn commit(
+        engine: &GameEngine,
+        pending: &rv1::PendingAbilityActivation,
+        source: &rv1::CostObjectRef,
+    ) -> rv1::CommitAbilityActivation {
+        rv1::CommitAbilityActivation {
+            transaction_id: pending.transaction_id,
+            expected_revision: pending.revision,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(*source),
+                mana: Some(rv1::PaymentMana {
+                    c: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn return_same_object_for_generation_fixture(
+        engine: &mut GameEngine,
+        player_seat: usize,
+        object_id: u32,
+    ) -> u64 {
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .expect("sacrificed object retains its advanced generation");
+        let new_generation = current_generation.saturating_add(1);
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("same object identity is returned by the labeled fixture");
+        object.zone = Zone::Battlefield;
+        object.tapped = false;
+        object.summoning_sick = true;
+        object.damage = 0;
+        object.counters.clear();
+        object.counter_timestamps.clear();
+        engine.state.players[player_seat]
+            .graveyard
+            .retain(|id| *id != object_id);
+        engine.state.players[player_seat]
+            .battlefield
+            .push(object_id);
+        engine
+            .state
+            .zone_change_generation
+            .insert(object_id, new_generation);
+        new_generation
+    }
+
+    fn resolve_pending_stack_item(engine: &mut GameEngine) {
+        for _ in 0..2 {
+            let priority = engine.state.priority_player_id();
+            engine
+                .apply_scenario_command(priority, &pass())
+                .expect("both players pass to resolve the activated ability");
+        }
+        assert!(engine.state.stack.is_empty());
+    }
+
+    let mut engine = payment_engine(602_602);
+    let actor_seat = engine.state.player_idx(10).expect("payment actor seat");
+    let source = inject_creature_on_battlefield(&mut engine, actor_seat, PAYMENT_FIXTURE_ID);
+    let ring = inject_permanent_on_battlefield(&mut engine, actor_seat, "replicating_ring");
+    let creature = inject_creature_on_battlefield(&mut engine, actor_seat, "grizzly_bears");
+    let torque = inject_permanent_on_battlefield(&mut engine, actor_seat, "liquimetal_torque");
+    let ironworks =
+        inject_permanent_on_battlefield(&mut engine, actor_seat, "krark-clan_ironworks");
+    let counter_timestamp = engine.state.command_index;
+    engine
+        .state
+        .objects
+        .get_mut(&ring)
+        .expect("actual Replicating Ring contributor")
+        .add_counters(CounterKind::Charge, 2, counter_timestamp);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("actual Grizzly Bears contributor")
+        .add_counters(CounterKind::Night, 1, counter_timestamp);
+    engine.state.players[actor_seat].mana_pool = Default::default();
+    assert!(engine.state.objects[&source]
+        .power
+        .is_some_and(|power| power > 0));
+    assert!(engine.state.objects[&source]
+        .toughness
+        .is_some_and(|toughness| toughness > 0));
+
+    let before_torque = engine.initial_response_batch();
+    let source_before_torque = payment_public_permanent(&before_torque, 10, source);
+    let torque_view = payment_public_permanent(&before_torque, 10, torque);
+    let torque_ability = torque_view
+        .activated_abilities
+        .iter()
+        .find(|ability| !ability.is_mana_ability && ability.activatable)
+        .expect("actual Liquimetal Torque offers its targeted AddTypes ability");
+    let torque_ref = rv1::CostObjectRef {
+        object_id: torque_view.object_id,
+        zone_change_generation: torque_view.zone_change_generation,
+    };
+    let source_ref_before_torque = rv1::CostObjectRef {
+        object_id: source_before_torque.object_id,
+        zone_change_generation: source_before_torque.zone_change_generation,
+    };
+    let torque_command = RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
+            source_object_id: torque_ref.object_id,
+            ability_index: torque_ability.ability_index,
+            expected_zone_change_generation: torque_ref.zone_change_generation,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            targets: vec![rv1::TargetRef {
+                object_id: source_ref_before_torque.object_id,
+                group_index: 0,
+                kind: rv1::TargetRefKind::Permanent as i32,
+                expected_zone_change_generation: Some(
+                    source_ref_before_torque.zone_change_generation,
+                ),
+                ..Default::default()
+            }],
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(torque_ref),
+                mana: Some(rv1::PaymentMana::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    };
+    engine
+        .apply_scenario_command(10, &torque_command)
+        .expect("actual Torque AddTypes activation is announced");
+    assert_eq!(engine.state.stack.len(), 1);
+    for _ in 0..2 {
+        let priority = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(priority, &pass())
+            .expect("both players pass priority to resolve Torque");
+    }
+    assert!(engine.state.stack.is_empty());
+    let source_view = payment_public_permanent(&engine.initial_response_batch(), 10, source);
+    let source_ref = rv1::CostObjectRef {
+        object_id: source_view.object_id,
+        zone_change_generation: source_view.zone_change_generation,
+    };
+    assert_eq!(source_ref, source_ref_before_torque);
+    assert!(engine
+        .characteristics(source)
+        .is_some_and(|characteristics| {
+            characteristics.is_creature() && characteristics.has_type("Artifact")
+        }));
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 0);
+
+    let before_begin = engine.initial_response_batch();
+    let source_view = payment_public_permanent(&before_begin, 10, source);
+    let source_ability = source_view
+        .activated_abilities
+        .iter()
+        .find(|ability| !ability.is_mana_ability)
+        .expect("the local source's aggregate ability is in the public view");
+    let source_ref = rv1::CostObjectRef {
+        object_id: source_view.object_id,
+        zone_change_generation: source_view.zone_change_generation,
+    };
+    let ability_key = (u64::from(source) << 32) | u64::from(source_ability.ability_index);
+    let public_legal = before_begin
+        .legal_by_player
+        .get(&10)
+        .expect("actor receives the aggregate payment choice");
+    let cost_choices = public_legal
+        .cost_choices_by_ability
+        .get(&ability_key)
+        .expect("the aggregate source has public cost choices");
+    let group_choice = cost_choices
+        .choices
+        .iter()
+        .find(|choice| choice.counter_removal_group.is_some())
+        .expect("the group cost is offered");
+    let group = group_choice.counter_removal_group.as_ref().unwrap();
+    assert_eq!(group.required_count, 3);
+    let ring_candidate = group
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == ring)
+        })
+        .expect("Ring is offered as a Charge contributor");
+    let ring_ref = ring_candidate.object.unwrap();
+    let charge_option = ring_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "charge" && option.available_count >= 2)
+        .expect("Ring offers both locked Charge units");
+    let creature_candidate = group
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == creature)
+        })
+        .expect("Grizzly Bears is offered as a Night contributor");
+    let creature_ref = creature_candidate.object.unwrap();
+    let night_option = creature_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "night" && option.available_count >= 1)
+        .expect("creature offers one locked Night unit");
+    let cost_selections = vec![rv1::CostSelection {
+        cost_index: group_choice.cost_index,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(ring_ref),
+                        option_id: charge_option.option_id,
+                        count: 2,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(creature_ref),
+                        option_id: night_option.option_id,
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    }];
+    let flex_payments = vec![
+        rv1::FlexPipPayment {
+            pip_index: 1,
+            pay_life: true,
+        },
+        rv1::FlexPipPayment {
+            pip_index: 2,
+            pay_life: true,
+        },
+    ];
+    let begin_command = RuledCommand {
+        cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
+            source_object_id: source_ref.object_id,
+            expected_zone_change_generation: source_ref.zone_change_generation,
+            ability_index: source_ability.ability_index,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: cost_selections.clone(),
+            flex_payments: flex_payments.clone(),
+            ..Default::default()
+        })),
+    };
+    let begin_batch = engine
+        .apply_scenario_command(10, &begin_command)
+        .expect("aggregate Begin locks one Night and two Charge units plus life choices");
+    let pending_before_kci = engine
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("accepted Begin opens the Payment window");
+    assert_eq!(
+        pending_before_kci.stage(),
+        rv1::AbilityActivationStage::Payment
+    );
+    assert_eq!(pending_before_kci.cost_selections, cost_selections);
+    assert_eq!(pending_before_kci.flex_payments, flex_payments);
+    assert_eq!(engine.state.players[actor_seat].life, 20);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    let actor_pending = begin_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("actor receives the full accepted payment row");
+    assert_eq!(actor_pending.cost_selections, cost_selections);
+    assert_eq!(actor_pending.flex_payments, flex_payments);
+
+    let payment_offer = engine.initial_response_batch();
+    let ironworks_view = payment_public_permanent(&payment_offer, 10, ironworks);
+    let ironworks_ability = ironworks_view
+        .activated_abilities
+        .iter()
+        .find(|ability| ability.is_mana_ability && ability.activatable)
+        .expect("actual KCI mana ability is offered during Payment");
+    let ironworks_ref = rv1::CostObjectRef {
+        object_id: ironworks_view.object_id,
+        zone_change_generation: ironworks_view.zone_change_generation,
+    };
+    let ironworks_key = (u64::from(ironworks) << 32) | u64::from(ironworks_ability.ability_index);
+    let ironworks_choices = payment_offer.legal_by_player[&10]
+        .cost_choices_by_ability
+        .get(&ironworks_key)
+        .expect("public KCI mana offer includes sacrifice choices");
+    let source_candidate = ironworks_choices
+        .choices
+        .iter()
+        .flat_map(|choice| &choice.candidate_objects)
+        .find(|candidate| {
+            candidate
+                .object
+                .as_ref()
+                .is_some_and(|object| object.object_id == source_ref.object_id)
+        })
+        .expect("KCI offers the exact aggregate source as an Artifact sacrifice");
+    let source_cost_ref = source_candidate
+        .object
+        .expect("KCI sacrifice offer includes the source generation");
+    assert_eq!(source_cost_ref, source_ref);
+    let kci_cost_choice = ironworks_choices
+        .choices
+        .iter()
+        .find(|choice| {
+            choice
+                .candidate_objects
+                .iter()
+                .any(|candidate| candidate.object.as_ref() == Some(&source_cost_ref))
+        })
+        .expect("the source receipt belongs to an offered KCI sacrifice cost");
+    let kci_command = RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
+            source_object_id: ironworks_ref.object_id,
+            ability_index: ironworks_ability.ability_index,
+            expected_zone_change_generation: ironworks_ref.zone_change_generation,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: vec![rv1::CostSelection {
+                cost_index: kci_cost_choice.cost_index,
+                selection: Some(rv1::cost_selection::Selection::PermanentId(
+                    source_cost_ref.object_id,
+                )),
+            }],
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(ironworks_ref),
+                mana: Some(rv1::PaymentMana::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    };
+    let kci_batch = engine
+        .apply_scenario_command(10, &kci_command)
+        .expect("actual KCI sacrifices the same source and produces two colorless mana");
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert!(engine.state.players[actor_seat].graveyard.contains(&source));
+    let sacrificed_generation = engine.state.zone_change_generation[&source];
+    assert_ne!(sacrificed_generation, source_ref.zone_change_generation);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 2);
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("same accepted aggregate Payment survives the KCI source sacrifice");
+    assert_eq!(pending.transaction_id, pending_before_kci.transaction_id);
+    assert_eq!(pending.revision, pending_before_kci.revision);
+    assert_eq!(pending.stage(), rv1::AbilityActivationStage::Payment);
+    assert_eq!(pending.cost_selections, pending_before_kci.cost_selections);
+    assert_eq!(pending.flex_payments, pending_before_kci.flex_payments);
+    assert_eq!(engine.state.players[actor_seat].life, 20);
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert_eq!(
+        kci_batch.legal_by_player[&10]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .transaction_id,
+        pending.transaction_id
+    );
+    let opponent_pending = kci_batch.legal_by_player[&20]
+        .pending_ability_activation
+        .as_ref()
+        .expect("opponent keeps the public Payment shell");
+    assert!(opponent_pending.cost_selections.is_empty());
+    assert!(opponent_pending.flex_payments.is_empty());
+    assert!(opponent_pending.payment_preview.is_none());
+
+    let mut cancelled = engine.clone();
+    let cancel_batch = cancelled
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelAbilityActivation(rv1::CancelAbilityActivation {
+                    transaction_id: pending.transaction_id,
+                    expected_revision: pending.revision,
+                })),
+            },
+        )
+        .expect("Cancel closes Payment after the independent KCI action");
+    assert!(cancelled.state.pending_ability_activation.is_none());
+    assert!(cancel_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .is_none());
+    assert_eq!(cancelled.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(
+        cancelled.state.zone_change_generation[&source],
+        sacrificed_generation
+    );
+    assert_eq!(cancelled.state.players[actor_seat].mana_pool.colorless, 2);
+    assert_eq!(cancelled.state.players[actor_seat].life, 20);
+    assert_eq!(
+        cancelled.state.objects[&ring].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        cancelled.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert!(cancelled.state.stack.is_empty());
+
+    let accepted_commit = commit(&engine, &pending, &source_ref);
+    let before_preview = format!("{:?}", engine.state);
+    let diagnostics_before_preview = engine.diagnostic_snapshot().unwrap();
+    let command_index_before_preview = engine.state.command_index;
+    let preview = engine.preview_payment_scenario(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: command_index_before_preview,
+            commit_ability_activation: Some(accepted_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.complete, "{}", preview.error);
+    assert!(preview.error.is_empty(), "{}", preview.error);
+    assert_eq!(format!("{:?}", engine.state), before_preview);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        diagnostics_before_preview
+    );
+    assert_eq!(engine.state.command_index, command_index_before_preview);
+
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitAbilityActivation(accepted_commit)),
+            },
+        )
+        .expect("original source receipt remains valid for the accepted transaction");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.command_index, command_index_before_preview + 1);
+    assert_eq!(engine.state.players[actor_seat].life, 16);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 1);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        sacrificed_generation
+    );
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+
+    let mut generation_fixture = engine.clone();
+    let new_source_generation =
+        return_same_object_for_generation_fixture(&mut generation_fixture, actor_seat, source);
+    let reentry_batch = generation_fixture.initial_response_batch();
+    let reentered_source = payment_public_permanent(&reentry_batch, 10, source);
+    assert_eq!(reentered_source.object_id, source_ref.object_id);
+    assert_eq!(
+        reentered_source.zone_change_generation,
+        new_source_generation
+    );
+    assert_ne!(
+        reentered_source.zone_change_generation,
+        source_ref.zone_change_generation
+    );
+
+    resolve_pending_stack_item(&mut engine);
+    resolve_pending_stack_item(&mut generation_fixture);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+        0,
+        "the committed Source effect does not find the departed original object"
+    );
+    assert_eq!(
+        generation_fixture.state.objects[&source].zone,
+        Zone::Battlefield
+    );
+    assert_eq!(
+        generation_fixture.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+        0,
+        "the same ObjectId at a new generation is not the captured Source incarnation"
+    );
+}
+
+#[test]
+fn tekuthal_aggregate_payment_serialized_commands_replay_identically() {
+    use prost::Message;
+    use tricerules_proto::ruled::v1 as rv1;
+
+    fn fixture(seed: u64) -> (GameEngine, u32, u32, u32, u32, usize) {
+        let mut engine = payment_engine(seed);
+        let actor_seat = engine.state.player_idx(10).expect("payment actor seat");
+        let source = inject_creature_on_battlefield(&mut engine, actor_seat, PAYMENT_FIXTURE_ID);
+        let ring = inject_permanent_on_battlefield(&mut engine, actor_seat, "replicating_ring");
+        let chalice =
+            inject_permanent_on_battlefield(&mut engine, actor_seat, "everflowing_chalice");
+        let creature = inject_creature_on_battlefield(&mut engine, actor_seat, "grizzly_bears");
+        let timestamp = engine.state.command_index;
+        engine
+            .state
+            .objects
+            .get_mut(&ring)
+            .expect("actual Ring counter source")
+            .add_counters(CounterKind::Charge, 1, timestamp);
+        engine
+            .state
+            .objects
+            .get_mut(&chalice)
+            .expect("actual Chalice mana and counter source")
+            .add_counters(CounterKind::Charge, 2, timestamp);
+        engine
+            .state
+            .objects
+            .get_mut(&creature)
+            .expect("actual creature counter source")
+            .add_counters(CounterKind::Night, 1, timestamp);
+        (engine, source, ring, chalice, creature, actor_seat)
+    }
+
+    fn assert_twins(
+        engine: &GameEngine,
+        replay: &GameEngine,
+        actor_seat: usize,
+        object_ids: [u32; 4],
+    ) {
+        assert_eq!(engine.state.command_index, replay.state.command_index);
+        assert_eq!(
+            engine.diagnostic_snapshot().unwrap(),
+            replay.diagnostic_snapshot().unwrap()
+        );
+        assert_eq!(
+            engine.state.pending_ability_activation,
+            replay.state.pending_ability_activation
+        );
+        assert_eq!(engine.state.stack.len(), replay.state.stack.len());
+        assert_eq!(
+            engine.state.players[actor_seat].life,
+            replay.state.players[actor_seat].life
+        );
+        assert_eq!(
+            engine.state.players[actor_seat].mana_pool.colorless,
+            replay.state.players[actor_seat].mana_pool.colorless
+        );
+        for object_id in object_ids {
+            let left = &engine.state.objects[&object_id];
+            let right = &replay.state.objects[&object_id];
+            assert_eq!(left.zone, right.zone);
+            assert_eq!(left.tapped, right.tapped);
+            assert_eq!(left.counters, right.counters);
+            assert_eq!(
+                engine.state.zone_change_generation.get(&object_id),
+                replay.state.zone_change_generation.get(&object_id)
+            );
+        }
+    }
+
+    fn apply_serialized_accepted_command(
+        engine: &mut GameEngine,
+        replay: &mut GameEngine,
+        actor: i32,
+        command: &RuledCommand,
+        actor_seat: usize,
+        object_ids: [u32; 4],
+    ) -> RuledEventBatch {
+        let encoded = command.encode_to_vec();
+        let decoded = RuledCommand::decode(encoded.as_slice())
+            .expect("accepted command prost-decodes on the replay engine");
+        assert_eq!(encoded, decoded.encode_to_vec());
+        let actual = engine
+            .apply_scenario_command(actor, command)
+            .expect("original accepted command applies");
+        let reproduced = replay
+            .apply_scenario_command(actor, &decoded)
+            .expect("decoded accepted command applies to the twin engine");
+        assert_eq!(actual.encode_to_vec(), reproduced.encode_to_vec());
+        assert_twins(engine, replay, actor_seat, object_ids);
+        actual
+    }
+
+    let (mut engine, source, ring, chalice, creature, actor_seat) = fixture(602_603);
+    let (mut replay, replay_source, replay_ring, replay_chalice, replay_creature, replay_seat) =
+        fixture(602_603);
+    assert_eq!(
+        (source, ring, chalice, creature, actor_seat),
+        (
+            replay_source,
+            replay_ring,
+            replay_chalice,
+            replay_creature,
+            replay_seat
+        )
+    );
+    let object_ids = [source, ring, chalice, creature];
+    let first_offer = engine.initial_response_batch();
+    let replay_first_offer = replay.initial_response_batch();
+    assert_eq!(
+        first_offer.encode_to_vec(),
+        replay_first_offer.encode_to_vec()
+    );
+    assert_twins(&engine, &replay, actor_seat, object_ids);
+
+    let source_view = payment_public_permanent(&first_offer, 10, source);
+    let source_ability = source_view
+        .activated_abilities
+        .iter()
+        .find(|ability| !ability.is_mana_ability)
+        .expect("local aggregate ability is in the public offer");
+    let source_ref = rv1::CostObjectRef {
+        object_id: source_view.object_id,
+        zone_change_generation: source_view.zone_change_generation,
+    };
+    let ability_key = (u64::from(source) << 32) | u64::from(source_ability.ability_index);
+    let public_legal = first_offer
+        .legal_by_player
+        .get(&10)
+        .expect("actor receives the current cost choices");
+    let cost_choices = public_legal
+        .cost_choices_by_ability
+        .get(&ability_key)
+        .expect("aggregate source has a public cost choice");
+    let group_choice = cost_choices
+        .choices
+        .iter()
+        .find(|choice| choice.counter_removal_group.is_some())
+        .expect("counter sources are offered as one aggregate group");
+    let group = group_choice.counter_removal_group.as_ref().unwrap();
+    assert_eq!(group.required_count, 3);
+
+    let find_candidate = |object_id| {
+        group
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .object
+                    .as_ref()
+                    .is_some_and(|object| object.object_id == object_id)
+            })
+            .unwrap_or_else(|| panic!("object {object_id} is offered as a counter source"))
+    };
+    let ring_candidate = find_candidate(ring);
+    let ring_ref = ring_candidate.object.unwrap();
+    let ring_charge = ring_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "charge" && option.available_count >= 1)
+        .expect("Ring offers one Charge unit");
+    let chalice_candidate = find_candidate(chalice);
+    let chalice_ref = chalice_candidate.object.unwrap();
+    let chalice_charge = chalice_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "charge" && option.available_count >= 1)
+        .expect("Chalice offers one Charge unit");
+    let creature_candidate = find_candidate(creature);
+    let creature_ref = creature_candidate.object.unwrap();
+    let creature_night = creature_candidate
+        .options
+        .iter()
+        .find(|option| option.label == "night" && option.available_count >= 1)
+        .expect("creature offers one Night unit");
+    let cost_selections = vec![rv1::CostSelection {
+        cost_index: group_choice.cost_index,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    rv1::CounterRemovalContribution {
+                        object: Some(ring_ref),
+                        option_id: ring_charge.option_id,
+                        count: 1,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(chalice_ref),
+                        option_id: chalice_charge.option_id,
+                        count: 1,
+                    },
+                    rv1::CounterRemovalContribution {
+                        object: Some(creature_ref),
+                        option_id: creature_night.option_id,
+                        count: 1,
+                    },
+                ],
+            },
+        )),
+    }];
+    let flex_payments = vec![
+        rv1::FlexPipPayment {
+            pip_index: 1,
+            pay_life: true,
+        },
+        rv1::FlexPipPayment {
+            pip_index: 2,
+            pay_life: true,
+        },
+    ];
+    let begin_command = RuledCommand {
+        cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
+            source_object_id: source_ref.object_id,
+            expected_zone_change_generation: source_ref.zone_change_generation,
+            ability_index: source_ability.ability_index,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: cost_selections.clone(),
+            flex_payments: flex_payments.clone(),
+            ..Default::default()
+        })),
+    };
+    let begin_batch = apply_serialized_accepted_command(
+        &mut engine,
+        &mut replay,
+        10,
+        &begin_command,
+        actor_seat,
+        object_ids,
+    );
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("Begin opens the public Payment stage");
+    assert_eq!(pending.cost_selections, cost_selections);
+    assert_eq!(pending.flex_payments, flex_payments);
+    assert_eq!(engine.state.players[actor_seat].life, 20);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 0);
+    let actor_pending = begin_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("actor receives its selected group and flex rows");
+    assert_eq!(actor_pending.cost_selections, cost_selections);
+    assert_eq!(actor_pending.flex_payments, flex_payments);
+
+    let payment_offer = engine.initial_response_batch();
+    let replay_payment_offer = replay.initial_response_batch();
+    assert_eq!(
+        payment_offer.encode_to_vec(),
+        replay_payment_offer.encode_to_vec()
+    );
+    assert_twins(&engine, &replay, actor_seat, object_ids);
+    let chalice_view = payment_public_permanent(&payment_offer, 10, chalice);
+    let chalice_ability = chalice_view
+        .activated_abilities
+        .iter()
+        .find(|ability| ability.is_mana_ability && ability.activatable)
+        .expect("actual Everflowing Chalice mana ability is offered");
+    let chalice_ref = rv1::CostObjectRef {
+        object_id: chalice_view.object_id,
+        zone_change_generation: chalice_view.zone_change_generation,
+    };
+
+    let underfunded = rv1::CommitAbilityActivation {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana::default()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_preview_state = format!("{:?}", engine.state);
+    let before_preview_diagnostics = engine.diagnostic_snapshot().unwrap();
+    let before_preview_index = engine.state.command_index;
+    let incomplete = engine.preview_payment_scenario(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: before_preview_index,
+            commit_ability_activation: Some(underfunded.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(!incomplete.complete);
+    assert_eq!(format!("{:?}", engine.state), before_preview_state);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        before_preview_diagnostics
+    );
+    assert_eq!(engine.state.command_index, before_preview_index);
+    assert_twins(&engine, &replay, actor_seat, object_ids);
+
+    let rejected = engine.apply_scenario_command(
+        10,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitAbilityActivation(underfunded)),
+        },
+    );
+    assert!(
+        matches!(rejected, Err(tricerules_core::EngineError::Illegal(_))),
+        "underfunded Commit is rejected without becoming an accepted command"
+    );
+    assert_eq!(format!("{:?}", engine.state), before_preview_state);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        before_preview_diagnostics
+    );
+    assert_eq!(engine.state.command_index, before_preview_index);
+    assert_eq!(
+        engine.state.pending_ability_activation.as_ref(),
+        Some(&pending)
+    );
+    assert_twins(&engine, &replay, actor_seat, object_ids);
+
+    let mana_command = RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
+            source_object_id: chalice_ref.object_id,
+            ability_index: chalice_ability.ability_index,
+            expected_zone_change_generation: chalice_ref.zone_change_generation,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(chalice_ref),
+                mana: Some(rv1::PaymentMana::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    };
+    let mana_batch = apply_serialized_accepted_command(
+        &mut engine,
+        &mut replay,
+        10,
+        &mana_command,
+        actor_seat,
+        object_ids,
+    );
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 2);
+    assert!(engine.state.objects[&chalice].tapped);
+    assert_eq!(
+        engine.state.objects[&chalice].counter_count(CounterKind::Charge),
+        2
+    );
+    let pending_after_mana = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("real Chalice mana preserves the aggregate Payment");
+    assert_eq!(pending_after_mana.transaction_id, pending.transaction_id);
+    assert_eq!(pending_after_mana.revision, pending.revision);
+    assert_eq!(pending_after_mana.cost_selections, pending.cost_selections);
+    assert_eq!(pending_after_mana.flex_payments, pending.flex_payments);
+    assert_eq!(
+        mana_batch.legal_by_player[&10]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .transaction_id,
+        pending.transaction_id
+    );
+
+    let complete_commit = rv1::CommitAbilityActivation {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana {
+                c: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_complete_preview_state = format!("{:?}", engine.state);
+    let before_complete_preview_diagnostics = engine.diagnostic_snapshot().unwrap();
+    let before_complete_preview_index = engine.state.command_index;
+    let complete_preview = engine.preview_payment_scenario(
+        10,
+        &rv1::PreviewPayment {
+            transaction_id: pending.transaction_id,
+            revision: before_complete_preview_index,
+            commit_ability_activation: Some(complete_commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(complete_preview.complete, "{}", complete_preview.error);
+    assert!(
+        complete_preview.error.is_empty(),
+        "{}",
+        complete_preview.error
+    );
+    assert_eq!(format!("{:?}", engine.state), before_complete_preview_state);
+    assert_eq!(
+        engine.diagnostic_snapshot().unwrap(),
+        before_complete_preview_diagnostics
+    );
+    assert_eq!(engine.state.command_index, before_complete_preview_index);
+    assert_twins(&engine, &replay, actor_seat, object_ids);
+
+    let commit_batch = apply_serialized_accepted_command(
+        &mut engine,
+        &mut replay,
+        10,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitAbilityActivation(complete_commit)),
+        },
+        actor_seat,
+        object_ids,
+    );
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[actor_seat].life, 16);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 1);
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&chalice].counter_count(CounterKind::Charge),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        0
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+    assert!(commit_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .is_none());
+}
+
+#[test]
+fn tekuthal_aggregate_four_nonconsecutive_seats_keep_payer_and_private_group() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let player_ids = [3, 7, 11, 19];
+    let deck = deck_with("forest", &[]);
+    let mut engine = GameEngine::new(
+        payment_registry(),
+        602_604,
+        &player_ids,
+        20,
+        Some(vec![deck; player_ids.len()]),
+        true,
+    )
+    .expect("four-seat aggregate payment capability fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let actor_id = engine.state.priority_player_id();
+    let actor_seat = engine
+        .state
+        .player_idx(actor_id)
+        .expect("priority player has an engine seat");
+    assert_eq!(actor_id, player_ids[0]);
+    assert_eq!(actor_seat, 0);
+    assert_ne!(actor_id, actor_seat as i32);
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .map(|player| player.id)
+            .collect::<Vec<_>>(),
+        player_ids.to_vec()
+    );
+
+    let source = inject_creature_on_battlefield(&mut engine, actor_seat, PAYMENT_FIXTURE_ID);
+    let ring = inject_permanent_on_battlefield(&mut engine, actor_seat, "replicating_ring");
+    let chalice = inject_permanent_on_battlefield(&mut engine, actor_seat, "everflowing_chalice");
+    let creature = inject_creature_on_battlefield(&mut engine, actor_seat, "grizzly_bears");
+    let timestamp = engine.state.command_index;
+    engine
+        .state
+        .objects
+        .get_mut(&ring)
+        .expect("actual Replicating Ring contributor")
+        .add_counters(CounterKind::Charge, 1, timestamp);
+    engine
+        .state
+        .objects
+        .get_mut(&chalice)
+        .expect("actual Everflowing Chalice contributor")
+        .add_counters(CounterKind::Charge, 2, timestamp);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("actual Grizzly Bears contributor")
+        .add_counters(CounterKind::Night, 1, timestamp);
+
+    let initial = engine.initial_response_batch();
+    assert_eq!(initial.legal_by_player.len(), player_ids.len());
+    for player_id in player_ids {
+        assert!(initial.legal_by_player.contains_key(&player_id));
+    }
+    let source_view = payment_public_permanent(&initial, actor_id, source);
+    let source_ability = source_view
+        .activated_abilities
+        .iter()
+        .find(|ability| !ability.is_mana_ability)
+        .expect("local aggregate ability is in the active player's offer");
+    let source_ref = rv1::CostObjectRef {
+        object_id: source_view.object_id,
+        zone_change_generation: source_view.zone_change_generation,
+    };
+    let ability_key = (u64::from(source) << 32) | u64::from(source_ability.ability_index);
+    let legal = initial
+        .legal_by_player
+        .get(&actor_id)
+        .expect("payer receives the offered aggregate cost");
+    let cost_choices = legal
+        .cost_choices_by_ability
+        .get(&ability_key)
+        .expect("the offered slot publishes its cost choices");
+    let group_choice = cost_choices
+        .choices
+        .iter()
+        .find(|choice| choice.counter_removal_group.is_some())
+        .expect("the aggregate cost is offered as one group");
+    let group = group_choice.counter_removal_group.as_ref().unwrap();
+    assert_eq!(group.required_count, 3);
+
+    let contribution = |object_id: u32, label: &str| {
+        let candidate = group
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate
+                    .object
+                    .as_ref()
+                    .is_some_and(|object| object.object_id == object_id)
+            })
+            .unwrap_or_else(|| panic!("object {object_id} is offered as a counter source"));
+        let option = candidate
+            .options
+            .iter()
+            .find(|option| option.label == label && option.available_count >= 1)
+            .unwrap_or_else(|| panic!("object {object_id} offers a usable {label} counter"));
+        rv1::CounterRemovalContribution {
+            object: candidate.object,
+            option_id: option.option_id,
+            count: 1,
+        }
+    };
+    let cost_selections = vec![rv1::CostSelection {
+        cost_index: group_choice.cost_index,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection {
+                contributions: vec![
+                    contribution(ring, "charge"),
+                    contribution(chalice, "charge"),
+                    contribution(creature, "night"),
+                ],
+            },
+        )),
+    }];
+    let flex_payments = vec![
+        rv1::FlexPipPayment {
+            pip_index: 1,
+            pay_life: true,
+        },
+        rv1::FlexPipPayment {
+            pip_index: 2,
+            pay_life: true,
+        },
+    ];
+    let begin = RuledCommand {
+        cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
+            source_object_id: source_ref.object_id,
+            expected_zone_change_generation: source_ref.zone_change_generation,
+            ability_index: source_ability.ability_index,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections: cost_selections.clone(),
+            flex_payments: flex_payments.clone(),
+            ..Default::default()
+        })),
+    };
+    let begin_batch = engine
+        .apply_scenario_command(actor_id, &begin)
+        .expect("the active player accepts the public aggregate Begin command");
+    let pending = engine
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("Begin creates the payer-owned Payment transaction");
+    assert_eq!(pending.actor_player_id, actor_id);
+    assert!(!pending.locked_total_cost.is_empty());
+    assert!(!pending.cost_selections.is_empty());
+    assert!(!pending.flex_payments.is_empty());
+    assert_eq!(pending.cost_selections, cost_selections);
+    assert_eq!(pending.flex_payments, flex_payments);
+
+    let assert_projection =
+        |batch: &RuledEventBatch, viewers: &[i32], canonical: &rv1::PendingAbilityActivation| {
+            for viewer in viewers {
+                let projection = batch
+                    .legal_by_player
+                    .get(viewer)
+                    .and_then(|legal| legal.pending_ability_activation.as_ref())
+                    .unwrap_or_else(|| panic!("player {viewer} receives the Payment projection"));
+                assert_eq!(projection.transaction_id, canonical.transaction_id);
+                assert_eq!(projection.actor_player_id, actor_id);
+                assert_eq!(projection.stage(), rv1::AbilityActivationStage::Payment);
+                if *viewer == actor_id {
+                    assert!(!projection.locked_total_cost.is_empty());
+                    assert_eq!(projection.locked_total_cost, canonical.locked_total_cost);
+                    assert_eq!(
+                        projection.eligible_restricted_mana_group_ids,
+                        canonical.eligible_restricted_mana_group_ids
+                    );
+                    assert_eq!(projection.cost_selections, canonical.cost_selections);
+                    assert_eq!(projection.flex_payments, canonical.flex_payments);
+                } else {
+                    assert!(projection.locked_total_cost.is_empty());
+                    assert!(projection.eligible_restricted_mana_group_ids.is_empty());
+                    assert!(projection.cost_selections.is_empty());
+                    assert!(projection.flex_payments.is_empty());
+                    assert!(projection.payment_preview.is_none());
+                }
+            }
+        };
+    assert_projection(&begin_batch, &player_ids, &pending);
+
+    let fresh_batch = engine.initial_response_batch();
+    assert_projection(&fresh_batch, &player_ids, &pending);
+
+    let departed_id = player_ids[1];
+    let departure_batch = engine
+        .apply_scenario_command(departed_id, &concede())
+        .expect("an unrelated seat may leave during the pending Payment");
+    let departed_seat = engine
+        .state
+        .player_idx(departed_id)
+        .expect("departed player remains indexed by PlayerId");
+    assert!(engine.state.players[departed_seat].has_lost);
+    let retained = engine
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .expect("an unrelated departure retains the payer's Payment");
+    assert_eq!(retained.transaction_id, pending.transaction_id);
+    assert_eq!(retained.revision, pending.revision);
+    assert_eq!(retained.actor_player_id, actor_id);
+    assert_eq!(retained.cost_selections, pending.cost_selections);
+    assert_eq!(retained.flex_payments, pending.flex_payments);
+    assert_projection(
+        &departure_batch,
+        &[player_ids[0], player_ids[2], player_ids[3]],
+        retained,
+    );
+
+    let cancel = RuledCommand {
+        cmd: Some(Cmd::CancelAbilityActivation(rv1::CancelAbilityActivation {
+            transaction_id: retained.transaction_id,
+            expected_revision: retained.revision,
+        })),
+    };
+    let cancel_batch = engine
+        .apply_scenario_command(actor_id, &cancel)
+        .expect("the original payer still owns Cancel after the unrelated departure");
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(cancel_batch.legal_by_player[&actor_id]
+        .pending_ability_activation
+        .is_none());
+    assert_eq!(engine.state.players[actor_seat].life, 20);
+    assert_eq!(engine.state.players[actor_seat].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&ring].counter_count(CounterKind::Charge),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&chalice].counter_count(CounterKind::Charge),
+        2
+    );
+    assert_eq!(
+        engine.state.objects[&creature].counter_count(CounterKind::Night),
+        1
+    );
+    assert!(engine.state.stack.is_empty());
 }

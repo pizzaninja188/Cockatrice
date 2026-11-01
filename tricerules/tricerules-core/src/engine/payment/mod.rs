@@ -828,6 +828,17 @@ impl GameEngine {
         )
     }
 
+    pub(super) fn eligible_restricted_mana_for_ability_characteristics(
+        &self,
+        player_idx: usize,
+        characteristics: &Characteristics,
+    ) -> Vec<u32> {
+        self.eligible_restricted_mana_for_purpose(
+            player_idx,
+            ManaSpendPurpose::ActivateAbility(characteristics),
+        )
+    }
+
     pub(super) fn eligible_restricted_mana_for_resolution_payment(
         &self,
         player_idx: usize,

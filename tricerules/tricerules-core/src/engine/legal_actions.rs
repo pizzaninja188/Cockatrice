@@ -733,7 +733,12 @@ pub(super) fn activated_ability_info(
         .iter()
         .map(|cost| match cost {
             AbilityCost::RemoveCountersFromPermanents { count, .. } => {
-                format!("Remove {count} counters from matching permanents (unsupported)")
+                if eng.supports_accepted_aggregate_counter_shape(source_id, ability_index, ability)
+                {
+                    format!("Remove {count} counters from matching permanents")
+                } else {
+                    format!("Remove {count} counters from matching permanents (unsupported)")
+                }
             }
             AbilityCost::RemoveCounters { counter, count, .. } => format!(
                 "Remove {count} {}counter(s)",
@@ -1279,8 +1284,18 @@ pub(super) fn legal_ability_cost_choices(
                         || !choice.candidate_objects.is_empty();
                 choices.push(choice);
             }
-            AbilityCost::RemoveCountersFromPermanents { .. } => {
-                structurally_payable = false;
+            AbilityCost::RemoveCountersFromPermanents {
+                count,
+                counter,
+                filter,
+            } => {
+                if !eng.supports_accepted_aggregate_counter_shape(source, ability_index, ability) {
+                    structurally_payable = false;
+                    continue;
+                }
+                choices.push(eng.aggregate_counter_removal_group_choice(
+                    player, source, cost_index, *count, *counter, filter,
+                ));
             }
             AbilityCost::Blight { count } => {
                 let choice = eng.blight_cost_choice(player, cost_index, *count);

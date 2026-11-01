@@ -11,8 +11,23 @@ use prost::Message;
 #[derive(Clone)]
 pub(super) struct PendingAbilityActivationInternal {
     pub(super) effective: EffectiveActivatedAbility,
+    route: PendingAbilityActivationRoute,
     prepared_costs: Option<PreparedPaymentCosts>,
     announcement: super::casting::AnnouncedAbilityActivation,
+}
+
+#[derive(Clone)]
+enum PendingAbilityActivationRoute {
+    OpponentChoice,
+    OpponentPayment,
+    HandPayment,
+    AcceptedAggregate {
+        actor: PlayerId,
+        source: rv1::CostObjectRef,
+        source_characteristics: Box<Characteristics>,
+        cost_selections: Vec<rv1::CostSelection>,
+        flex_payments: Vec<rv1::FlexPipPayment>,
+    },
 }
 
 #[derive(Clone)]
@@ -32,6 +47,110 @@ fn target_ref(target: &rv1::AbilityActivationTarget) -> rv1::TargetRef {
 }
 
 impl GameEngine {
+    pub(super) fn supports_accepted_aggregate_counter_shape(
+        &self,
+        source: ObjectId,
+        ability_index: usize,
+        ability: &ActivatedAbilityDef,
+    ) -> bool {
+        if ability.source_zone != AbilitySourceZone::Battlefield
+            || ability.modal.is_some()
+            || ability.is_mana_ability()
+            || ability.requires_opponent_target_choice()
+        {
+            return false;
+        }
+
+        let mut has_aggregate_removal = false;
+        let mut mana_components = 0usize;
+        for cost in &ability.costs {
+            match cost {
+                AbilityCost::Mana(mana) => {
+                    mana_components += 1;
+                    if mana.pips.iter().any(|symbol| {
+                        !matches!(
+                            symbol,
+                            ManaSymbol::W
+                                | ManaSymbol::U
+                                | ManaSymbol::B
+                                | ManaSymbol::R
+                                | ManaSymbol::G
+                                | ManaSymbol::C
+                                | ManaSymbol::Generic(_)
+                                | ManaSymbol::Phyrexian(_)
+                        )
+                    }) {
+                        // Check authored symbols before any reductions. Hybrid, mono-hybrid and X
+                        // do not have fixed choices in this Begin contract.
+                        return false;
+                    }
+                }
+                AbilityCost::PayLife { .. } => {}
+                AbilityCost::RemoveCountersFromPermanents { count, .. } if *count > 0 => {
+                    has_aggregate_removal = true;
+                }
+                _ => return false,
+            }
+        }
+        if !has_aggregate_removal || mana_components > 1 {
+            return false;
+        }
+
+        let program = self
+            .effective_activated_abilities(source)
+            .into_iter()
+            .find(|effective| {
+                effective.slot as usize == ability_index
+                    && effective.definition.ability_id == ability.ability_id
+            })
+            .and_then(|effective| self.program_for_activation_occurrence(&effective.occurrence));
+        if ability.program.is_some() && program.is_none() {
+            return false;
+        }
+        !super::targeting::target_schema_with_program(
+            &ability.effect,
+            ability.targeting.as_ref(),
+            program,
+        )
+        .has_targets()
+    }
+
+    fn validate_accepted_aggregate_flex_choices(
+        mana: &ManaCost,
+        choices: &[rv1::FlexPipPayment],
+    ) -> Result<(), EngineError> {
+        let required = mana
+            .pips
+            .iter()
+            .enumerate()
+            .filter_map(|(index, symbol)| {
+                matches!(symbol, ManaSymbol::Phyrexian(_)).then_some(index as u32)
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut supplied = std::collections::BTreeSet::new();
+        for choice in choices {
+            let Some(ManaSymbol::Phyrexian(_)) = usize::try_from(choice.pip_index)
+                .ok()
+                .and_then(|index| mana.pips.get(index))
+            else {
+                return Err(EngineError::Illegal(
+                    "aggregate Begin flex choice is not a fixed Phyrexian pip",
+                ));
+            };
+            if !supplied.insert(choice.pip_index) {
+                return Err(EngineError::Illegal(
+                    "duplicate aggregate Begin Phyrexian choice",
+                ));
+            }
+        }
+        if supplied != required {
+            return Err(EngineError::Illegal(
+                "aggregate Begin must explicitly choose every Phyrexian pip",
+            ));
+        }
+        Ok(())
+    }
+
     fn eligible_activation_opponents(
         &self,
         pending: &rv1::PendingAbilityActivation,
@@ -79,43 +198,77 @@ impl GameEngine {
         let Some(mut pending) = self.state.pending_ability_activation.clone() else {
             return;
         };
-        let source_current = self
+        let actor_current = self
             .state
             .player_idx(pending.actor_player_id)
-            .is_some_and(|idx| {
-                if self.state.players[idx].has_lost {
-                    return false;
+            .is_some_and(|idx| !self.state.players[idx].has_lost);
+        let source_current = actor_current
+            && self
+                .state
+                .player_idx(pending.actor_player_id)
+                .is_some_and(|idx| {
+                    let Some(source) = self.state.objects.get(&pending.source_object_id) else {
+                        return false;
+                    };
+                    let in_zone = match pending.source_zone() {
+                        rv1::AbilitySourceZone::Battlefield => {
+                            source.zone == Zone::Battlefield
+                                && source.phase_status.is_none()
+                                && source.controller == pending.actor_player_id
+                                && self.state.players[idx]
+                                    .battlefield
+                                    .contains(&pending.source_object_id)
+                        }
+                        rv1::AbilitySourceZone::Hand => {
+                            source.zone == Zone::Hand
+                                && source.owner == pending.actor_player_id
+                                && self.state.players[idx]
+                                    .hand
+                                    .contains(&pending.source_object_id)
+                        }
+                        _ => false,
+                    };
+                    in_zone
+                        && self.payment_object_ref(source.id).zone_change_generation
+                            == pending.source_zone_change_generation
+                });
+        let accepted_aggregate = self
+            .pending_ability_activation_internal
+            .as_ref()
+            .is_some_and(|internal| match &internal.route {
+                PendingAbilityActivationRoute::AcceptedAggregate {
+                    actor,
+                    source,
+                    cost_selections,
+                    flex_payments,
+                    ..
+                } => {
+                    pending.stage() == rv1::AbilityActivationStage::Payment
+                        && pending.source_zone() == rv1::AbilitySourceZone::Battlefield
+                        && *actor == pending.actor_player_id
+                        && *actor == pending.deciding_player_id
+                        && source.object_id == pending.source_object_id
+                        && source.zone_change_generation == pending.source_zone_change_generation
+                        && *cost_selections == pending.cost_selections
+                        && *flex_payments == pending.flex_payments
                 }
-                let Some(source) = self.state.objects.get(&pending.source_object_id) else {
-                    return false;
-                };
-                let in_zone = match pending.source_zone() {
-                    rv1::AbilitySourceZone::Battlefield => {
-                        source.zone == Zone::Battlefield
-                            && source.phase_status.is_none()
-                            && source.controller == pending.actor_player_id
-                            && self.state.players[idx]
-                                .battlefield
-                                .contains(&pending.source_object_id)
-                    }
-                    rv1::AbilitySourceZone::Hand => {
-                        source.zone == Zone::Hand
-                            && source.owner == pending.actor_player_id
-                            && self.state.players[idx]
-                                .hand
-                                .contains(&pending.source_object_id)
-                    }
-                    _ => false,
-                };
-                in_zone
-                    && self.payment_object_ref(source.id).zone_change_generation
-                        == pending.source_zone_change_generation
+                _ => false,
             });
         let ability = self
             .pending_ability_activation_internal
             .as_ref()
             .map(|internal| &internal.effective.definition);
-        let valid = source_current
+        let route_is_accepted = self
+            .pending_ability_activation_internal
+            .as_ref()
+            .is_some_and(|internal| {
+                matches!(
+                    internal.route,
+                    PendingAbilityActivationRoute::AcceptedAggregate { .. }
+                )
+            });
+        let valid = actor_current
+            && (accepted_aggregate || (!route_is_accepted && source_current))
             && ability.is_some_and(|ability| {
                 pending.stage() == rv1::AbilityActivationStage::Payment
                     || pending.announced_targets.first().is_some_and(|own| {
@@ -318,39 +471,42 @@ impl GameEngine {
             || self.state.turn_step == TurnStep::Cleanup
             || self.state.blocking_choice().is_some()
             || self.state.pending_spell_cast.is_some()
+            || self.state.pending_ability_activation.is_some()
             || priority_locked_for_combat_declaration(&self.state)
         {
             return Err(EngineError::Illegal(
                 "ability announcement is not legal now",
             ));
         }
-        if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
-            return Err(EngineError::Illegal(
-                "pre-announced ability cost and flex payments are unsupported",
-            ));
-        }
-        match rv1::AbilitySourceZone::try_from(command.source_zone)
+        let source_zone = match rv1::AbilitySourceZone::try_from(command.source_zone)
             .map_err(|_| EngineError::Illegal("unknown activation source zone"))?
         {
             rv1::AbilitySourceZone::Hand => {
-                return self.begin_hand_tapped_creature_activation(player, command)
+                if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
+                    return Err(EngineError::Illegal(
+                        "pre-announced ability cost and flex payments are unsupported",
+                    ));
+                }
+                return self.begin_hand_tapped_creature_activation(player, command);
             }
-            rv1::AbilitySourceZone::Battlefield => {}
+            rv1::AbilitySourceZone::Battlefield => rv1::AbilitySourceZone::Battlefield,
             _ => {
                 return Err(EngineError::Illegal(
                     "unsupported staged activation source zone",
                 ))
             }
-        }
+        };
+        let idx = self
+            .state
+            .player_idx(player)
+            .filter(|index| !self.state.players[*index].has_lost)
+            .ok_or(EngineError::UnknownPlayer(player))?;
         let source = self
             .state
             .objects
             .get(&command.source_object_id)
-            .filter(|object| {
-                object.zone == Zone::Battlefield
-                    && object.phase_status.is_none()
-                    && object.controller == player
-            })
+            .cloned()
+            .filter(|object| object.zone == Zone::Battlefield && object.phase_status.is_none())
             .ok_or(EngineError::Illegal(
                 "activation source is not controlled on the battlefield",
             ))?;
@@ -364,6 +520,45 @@ impl GameEngine {
             .into_iter()
             .find(|effective| effective.slot == command.ability_index)
             .ok_or(EngineError::Illegal("missing activated ability"))?;
+        let contains_aggregate = effective
+            .definition
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }));
+        if contains_aggregate {
+            if source_zone != rv1::AbilitySourceZone::Battlefield
+                || self.controller_of(source.id) != Some(player)
+                || command.own_target.is_some()
+                || command.opponent_player_id.is_some()
+                || !self.supports_accepted_aggregate_counter_shape(
+                    source.id,
+                    command.ability_index as usize,
+                    &effective.definition,
+                )
+                || !self.ability_activatable(
+                    source.id,
+                    command.ability_index as usize,
+                    &effective.definition,
+                )
+            {
+                return Err(EngineError::Illegal(
+                    "aggregate activation shape or restrictions are unsupported",
+                ));
+            }
+            return self.begin_accepted_aggregate_counter_activation(
+                player, idx, &source, effective, command,
+            );
+        }
+        if source.controller != player {
+            return Err(EngineError::Illegal(
+                "activation source is not controlled on the battlefield",
+            ));
+        }
+        if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
+            return Err(EngineError::Illegal(
+                "pre-announced ability cost and flex payments are unsupported",
+            ));
+        }
         let program = self.program_for_activation_occurrence(&effective.occurrence);
         if !effective.definition.requires_opponent_target_choice()
             || !self.ability_activatable(
@@ -442,7 +637,114 @@ impl GameEngine {
         self.state.pending_ability_activation = Some(pending);
         self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
             effective,
+            route: PendingAbilityActivationRoute::OpponentChoice,
             prepared_costs: None,
+            announcement,
+        });
+        Ok(RuledEventBatch::default())
+    }
+
+    fn begin_accepted_aggregate_counter_activation(
+        &mut self,
+        player: PlayerId,
+        player_index: usize,
+        source: &GameObject,
+        effective: EffectiveActivatedAbility,
+        command: &rv1::BeginAbilityActivation,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let source_ref = self.payment_object_ref(source.id);
+        if source_ref.zone_change_generation != command.expected_zone_change_generation {
+            return Err(EngineError::Illegal("stale activation source generation"));
+        }
+        let source_characteristics = self.characteristics(source.id).ok_or(
+            EngineError::Illegal("aggregate activation source characteristics are unavailable"),
+        )?;
+        let trusted = super::payment::transaction::TrustedAggregateCounterCosts::accepted_begin(
+            player, source_ref,
+        );
+        let prepared_costs = self.prepare_ability_costs_with_trusted_aggregate(
+            player,
+            player_index,
+            source.id,
+            &effective.definition.costs,
+            &command.flex_payments,
+            &command.cost_selections,
+            &[],
+            0,
+            0,
+            self.activated_mana_reduction(player, source.id, &effective.definition)?,
+            trusted,
+        )?;
+        Self::validate_accepted_aggregate_flex_choices(
+            &prepared_costs.mana,
+            &command.flex_payments,
+        )?;
+        // Include fixed Phyrexian life with fixed nonmana life now, while allowing the player to
+        // float ordinary mana later in this Payment window. A zero-mana exact plan preserves the
+        // locked life choice; the shared validator also rechecks every captured counter row.
+        let locked_demands = super::payment::demand::normalize(
+            &prepared_costs.mana,
+            prepared_costs.x_value,
+            prepared_costs.extra_generic,
+            prepared_costs.generic_reduction,
+            &prepared_costs.flex_payments,
+        )?;
+        let locked_life =
+            locked_demands
+                .first()
+                .map(|demand| demand.life)
+                .ok_or(EngineError::Illegal(
+                    "accepted aggregate activation has no locked demand",
+                ))?;
+        let mana = super::payment::mana::plan_exact_mana_payment(
+            &self.state,
+            player_index,
+            [0; 6],
+            &[],
+            &[],
+            locked_life,
+        )?;
+        self.validate_aggregate_preview_resources(&prepared_costs, mana)?;
+        let announcement = self.capture_ability_announcement(
+            player,
+            source.id,
+            &effective,
+            &[],
+            0,
+            self.effective_card_identity(source.id)
+                .map(|(id, face)| (id.to_string(), face))
+                .ok_or(EngineError::Illegal("bad activation face"))?,
+        )?;
+        let transaction_id = self.state.next_ability_activation_transaction_id;
+        let pending = rv1::PendingAbilityActivation {
+            transaction_id,
+            revision: 1,
+            stage: rv1::AbilityActivationStage::Payment as i32,
+            actor_player_id: player,
+            deciding_player_id: player,
+            source_object_id: source.id,
+            source_zone_change_generation: source_ref.zone_change_generation,
+            ability_index: command.ability_index,
+            reserved_object_id: self.state.next_object_id,
+            source_description: events::object_display_name(&self.state, self.registry, source.id),
+            locked_total_cost: prepared_costs.total_cost_label()?,
+            cost_selections: command.cost_selections.clone(),
+            flex_payments: command.flex_payments.clone(),
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            ..Default::default()
+        };
+        self.state.next_ability_activation_transaction_id = transaction_id.saturating_add(1);
+        self.state.pending_ability_activation = Some(pending);
+        self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
+            effective,
+            route: PendingAbilityActivationRoute::AcceptedAggregate {
+                actor: player,
+                source: source_ref,
+                source_characteristics: Box::new(source_characteristics),
+                cost_selections: command.cost_selections.clone(),
+                flex_payments: command.flex_payments.clone(),
+            },
+            prepared_costs: Some(prepared_costs),
             announcement,
         });
         Ok(RuledEventBatch::default())
@@ -563,6 +865,7 @@ impl GameEngine {
         self.state.pending_ability_activation = Some(pending);
         self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
             effective,
+            route: PendingAbilityActivationRoute::HandPayment,
             prepared_costs: Some(prepared_costs),
             announcement,
         });
@@ -706,10 +1009,12 @@ impl GameEngine {
         }
         pending.revision = pending.revision.saturating_add(1);
         if let Some(costs) = prepared {
-            self.pending_ability_activation_internal
+            let internal = self
+                .pending_ability_activation_internal
                 .as_mut()
-                .unwrap()
-                .prepared_costs = Some(costs);
+                .expect("the current activation snapshot remains present");
+            internal.prepared_costs = Some(costs);
+            internal.route = PendingAbilityActivationRoute::OpponentPayment;
         }
         self.pending_ability_activation_internal
             .as_mut()
@@ -734,7 +1039,7 @@ impl GameEngine {
         &self,
         player: PlayerId,
         command: &rv1::CommitAbilityActivation,
-    ) -> Result<PreparedPaymentCosts, EngineError> {
+    ) -> Result<(PreparedPaymentCosts, rv1::CostObjectRef, bool), EngineError> {
         let pending = self
             .state
             .pending_ability_activation
@@ -751,7 +1056,49 @@ impl GameEngine {
         let idx = self
             .state
             .player_idx(player)
+            .filter(|index| !self.state.players[*index].has_lost)
             .ok_or(EngineError::UnknownPlayer(player))?;
+        let internal = self
+            .pending_ability_activation_internal
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing activation snapshot"))?;
+        if let PendingAbilityActivationRoute::AcceptedAggregate {
+            actor,
+            source,
+            source_characteristics,
+            cost_selections,
+            flex_payments,
+        } = &internal.route
+        {
+            if *actor != player
+                || *actor != pending.actor_player_id
+                || source.object_id != pending.source_object_id
+                || source.zone_change_generation != pending.source_zone_change_generation
+                || pending.source_zone() != rv1::AbilitySourceZone::Battlefield
+                || pending.stage() != rv1::AbilityActivationStage::Payment
+                || *cost_selections != pending.cost_selections
+                || *flex_payments != pending.flex_payments
+                || command.return_tapped_creature.is_some()
+                || !command.flex_payments.is_empty()
+            {
+                return Err(EngineError::Illegal(
+                    "accepted aggregate activation snapshot changed",
+                ));
+            }
+            let mut costs = internal
+                .prepared_costs
+                .clone()
+                .ok_or(EngineError::Illegal("missing locked activation cost"))?;
+            if costs.flex_payments != *flex_payments {
+                return Err(EngineError::Illegal(
+                    "accepted aggregate flex choices changed",
+                ));
+            }
+            costs.eligible_restricted_mana = self
+                .eligible_restricted_mana_for_ability_characteristics(idx, source_characteristics);
+            costs.restricted_mana = command.restricted_mana.clone();
+            return Ok((costs, *source, true));
+        }
         if pending.source_zone() == rv1::AbilitySourceZone::Hand {
             let source = self
                 .state
@@ -773,10 +1120,6 @@ impl GameEngine {
                     "activation source incarnation changed",
                 ));
             }
-            let internal = self
-                .pending_ability_activation_internal
-                .as_ref()
-                .ok_or(EngineError::Illegal("missing activation snapshot"))?;
             let ability = &internal.effective.definition;
             let return_cost_count = ability
                 .costs
@@ -819,7 +1162,7 @@ impl GameEngine {
                 self.eligible_restricted_mana_for_ability(idx, source.id);
             costs.restricted_mana = command.restricted_mana.clone();
             costs.flex_payments = command.flex_payments.clone();
-            return Ok(costs);
+            return Ok((costs, self.payment_object_ref(source.id), false));
         }
         if command.return_tapped_creature.is_some() {
             return Err(EngineError::Illegal(
@@ -857,7 +1200,7 @@ impl GameEngine {
         costs.eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, source.id);
         costs.restricted_mana = command.restricted_mana.clone();
         costs.flex_payments = command.flex_payments.clone();
-        Ok(costs)
+        Ok((costs, self.payment_object_ref(source.id), false))
     }
 
     pub(super) fn commit_ability_activation(
@@ -878,11 +1221,17 @@ impl GameEngine {
                 "missing tapped-creature return cost selection",
             ));
         }
-        let costs = self.prepare_pending_ability_payment(player, command)?;
+        let (costs, payment_source, _accepted_aggregate) =
+            self.prepare_pending_ability_payment(player, command)?;
         let pending = self.state.pending_ability_activation.as_ref().unwrap();
         let source = pending.source_object_id;
         let source_zone_change_generation = pending.source_zone_change_generation;
-        let plan = self.finish_ability_payment(player, source, costs, command.payment.as_ref())?;
+        let plan = self.finish_ability_payment_at_receipt(
+            player,
+            payment_source,
+            costs,
+            command.payment.as_ref(),
+        )?;
         let announcement = self
             .pending_ability_activation_internal
             .as_ref()
@@ -955,7 +1304,7 @@ impl GameEngine {
                     };
                     pending.eligible_restricted_mana_group_ids = self
                         .prepare_pending_ability_payment(player, &command)
-                        .map(|costs| costs.eligible_restricted_mana)
+                        .map(|(costs, _, _)| costs.eligible_restricted_mana)
                         .unwrap_or_default();
                     let mut preview = self.preview_payment(
                         player,
