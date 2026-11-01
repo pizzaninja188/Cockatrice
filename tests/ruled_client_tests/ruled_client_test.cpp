@@ -379,6 +379,164 @@ protected:
     }
 };
 
+constexpr quint32 kUnsupportedCostSourceOid = 700;
+constexpr quint64 kUnsupportedCostSourceGeneration = 4;
+constexpr int kUnsupportedCostAbilityIndex = 1;
+
+void setWireCostChoiceKind(ruled::v1::LegalCostChoice *choice, int wireKind)
+{
+    if (wireKind == static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP)) {
+        choice->set_kind(ruled::v1::COST_CHOICE_KIND_TAP);
+        return;
+    }
+    const auto *kindField = choice->GetDescriptor()->FindFieldByName("kind");
+    choice->GetReflection()->SetEnumValue(choice, kindField, wireKind);
+}
+
+ruled::v1::RuledEventBatch unsupportedCostBatch(int laterWireKind = static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP),
+                                                bool twoChoices = false,
+                                                bool publishPermanentAction = false)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *source = view->add_battlefield_objects();
+    source->set_object_id(kUnsupportedCostSourceOid);
+    source->set_zone_change_generation(kUnsupportedCostSourceGeneration);
+    auto *ability = source->add_activated_abilities();
+    ability->set_ability_index(kUnsupportedCostAbilityIndex);
+    ability->set_text("Pay an ordinary activated cost.");
+    ability->set_activatable(true);
+
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 key = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                        static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[key];
+    costs.set_non_mana_costs_payable(true);
+    const auto addChoice = [&](int costIndex, int wireKind, quint32 candidateId, quint64 generation) {
+        auto *choice = costs.add_choices();
+        choice->set_cost_index(costIndex);
+        choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+        choice->set_min(1);
+        choice->set_max(1);
+        setWireCostChoiceKind(choice, wireKind);
+        choice->add_candidate_ids(candidateId);
+        auto *candidate = choice->add_candidate_objects();
+        candidate->mutable_object()->set_object_id(candidateId);
+        candidate->mutable_object()->set_zone_change_generation(generation);
+        candidate->set_contribution(1);
+        if (wireKind == 9) {
+            auto *group = choice->mutable_counter_removal_group();
+            group->set_required_count(3);
+            auto *groupCandidate = group->add_candidates();
+            groupCandidate->mutable_object()->set_object_id(candidateId);
+            groupCandidate->mutable_object()->set_zone_change_generation(generation);
+            auto *option = groupCandidate->add_options();
+            option->set_option_id(1);
+            option->set_label("+1/+1");
+            option->set_available_count(3);
+        }
+        return choice;
+    };
+    if (twoChoices) {
+        addChoice(0, static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), 902, 14);
+        addChoice(1, laterWireKind, 901, 13);
+    } else {
+        addChoice(1, laterWireKind, 901, 13);
+    }
+    if (publishPermanentAction) {
+        auto *action = actions.add_permanent_actions();
+        action->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+        action->set_object_id(kUnsupportedCostSourceOid);
+        action->set_zone_change_generation(kUnsupportedCostSourceGeneration);
+        action->set_mana_cost("{1}");
+    }
+    return batch;
+}
+
+PendingActivatedAbility &prepareUnsupportedCostDraft(RuledPendingCast &owner, const RuledClientState &state)
+{
+    auto &draft = owner.beginAbility();
+    draft.permanentOid = kUnsupportedCostSourceOid;
+    draft.sourceZone = state.abilitySourceZone(kUnsupportedCostSourceOid);
+    draft.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+    draft.abilityIndex = kUnsupportedCostAbilityIndex;
+    draft.costChoices = state.abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    draft.waitingForCost = true;
+    return draft;
+}
+
+enum class AbilityCommandProbe
+{
+    Activate,
+    Begin,
+    Preview,
+    Commit,
+};
+
+void sendAbilityCommandProbe(FakeHost &host, const PendingActivatedAbility &draft, AbilityCommandProbe probe)
+{
+    switch (probe) {
+        case AbilityCommandProbe::Activate: {
+            ruled::v1::RuledCommand command;
+            draft.writeActivationHeader(*command.mutable_activate_ability());
+            host.sendRuledCommand(command);
+            return;
+        }
+        case AbilityCommandProbe::Begin: {
+            ruled::v1::RuledCommand command;
+            auto *begin = command.mutable_begin_ability_activation();
+            begin->set_source_object_id(draft.permanentOid);
+            begin->set_source_zone(draft.sourceZone);
+            begin->set_expected_zone_change_generation(draft.expectedZoneChangeGeneration);
+            begin->set_ability_index(static_cast<quint32>(draft.abilityIndex));
+            host.sendRuledCommandExpectingAck(command, [](bool) {});
+            return;
+        }
+        case AbilityCommandProbe::Preview: {
+            RuledPayment payment;
+            payment.begin();
+            ruled::v1::RuledCommand activation;
+            draft.writeActivationHeader(*activation.mutable_activate_ability());
+            const auto preview = payment.requestAction(activation);
+            ruled::v1::RuledCommand command;
+            *command.mutable_preview_payment() = preview;
+            host.sendRuledCommand(command);
+            return;
+        }
+        case AbilityCommandProbe::Commit: {
+            RuledPayment payment;
+            payment.begin();
+            ruled::v1::RuledCommand command;
+            auto *commit = command.mutable_commit_ability_activation();
+            commit->set_transaction_id(91);
+            commit->set_expected_revision(3);
+            const auto preview = payment.requestAction(command);
+            if (!preview.has_commit_ability_activation()) {
+                return;
+            }
+            payment.writePayment(command);
+            host.sendRuledCommand(command);
+            return;
+        }
+    }
+}
+
+bool isAbilityCommandProbe(const ruled::v1::RuledCommand &command, AbilityCommandProbe probe)
+{
+    switch (probe) {
+        case AbilityCommandProbe::Activate:
+            return command.has_activate_ability();
+        case AbilityCommandProbe::Begin:
+            return command.has_begin_ability_activation();
+        case AbilityCommandProbe::Preview:
+            return command.has_preview_payment();
+        case AbilityCommandProbe::Commit:
+            return command.has_commit_ability_activation();
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------
 // Identity maps
 // ---------------------------------------------------------------------------------------
@@ -4570,6 +4728,314 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     EXPECT_EQ(choices.at(2).min, 2);
     EXPECT_EQ(choices.at(2).max, 2);
     EXPECT_EQ(choices.at(2).candidateIds, QSet<quint32>({501, 502}));
+}
+
+TEST_F(RuledClientTest, UnsupportedCounterKindsDisablePositiveLegacyCostOffers)
+{
+    apply(unsupportedCostBatch());
+    ASSERT_TRUE(state->activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    EXPECT_TRUE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    const auto supported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(supported.size(), 1);
+    EXPECT_EQ(supported.front().kind, RuledCostChoiceKind::Tap);
+    EXPECT_EQ(supported.front().candidateIds, QSet<quint32>{901});
+    EXPECT_EQ(supported.front().candidateGenerations.value(901), 13u);
+
+    for (const int wireKind : {9, 777}) {
+        apply(unsupportedCostBatch(wireKind));
+        ASSERT_TRUE(state->activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+        const auto choices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_EQ(choices.size(), 1);
+        EXPECT_EQ(choices.front().kind, RuledCostChoiceKind::Unspecified);
+        EXPECT_EQ(choices.front().min, 1);
+        EXPECT_EQ(choices.front().max, 1);
+        EXPECT_EQ(choices.front().candidateIds, QSet<quint32>{901});
+        EXPECT_EQ(choices.front().candidateGenerations.value(901), 13u);
+        const auto key = RuledClientState::abilityTargetKey(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_TRUE(state->abilityCostData.contains(key));
+        EXPECT_FALSE(state->abilityCostData.value(key).nonManaCostsPayable) << wireKind;
+        EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex)) << wireKind;
+    }
+}
+
+TEST_F(RuledClientTest, UnsupportedCostRefreshInvalidatesOnlyUnacceptedOrdinaryDrafts)
+{
+    apply(unsupportedCostBatch(static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), true));
+    ASSERT_TRUE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    RuledPendingCast transaction;
+    auto &draft = prepareUnsupportedCostDraft(transaction, *state);
+    ASSERT_EQ(draft.costChoices.size(), 2);
+    ASSERT_EQ(draft.costChoices.at(0).candidateIds, QSet<quint32>{902});
+    ASSERT_EQ(draft.costChoices.at(1).kind, RuledCostChoiceKind::Tap);
+    draft.nextCostChoice = 1;
+    draft.costSelections.append({0, RuledCostChoiceZone::Battlefield, {902}, {14}});
+    ASSERT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    ASSERT_TRUE(transaction.reconcileAbilityCosts(*state, kLocalPlayer));
+
+    apply(unsupportedCostBatch(9, true));
+    const auto current = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(current.size(), 2);
+    EXPECT_EQ(current.at(0).kind, RuledCostChoiceKind::Tap);
+    EXPECT_EQ(current.at(1).kind, RuledCostChoiceKind::Unspecified);
+    ASSERT_TRUE(draft.valid);
+    ASSERT_EQ(draft.costChoices.size(), 2);
+    EXPECT_EQ(draft.costChoices.at(1).kind, RuledCostChoiceKind::Tap);
+    ASSERT_EQ(draft.costSelections.size(), 1);
+    EXPECT_EQ(draft.costSelections.front().selectedIds, QVector<quint32>{902});
+    EXPECT_EQ(draft.costSelections.front().selectedGenerations, QVector<quint64>{14});
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    EXPECT_FALSE(transaction.reconcileAbilityCosts(*state, kLocalPlayer));
+    EXPECT_TRUE(draft.valid) << "reconciliation reports rejection; the UI bridge owns cancellation";
+    ASSERT_EQ(draft.costSelections.size(), 1);
+    EXPECT_EQ(draft.costSelections.front().selectedIds, QVector<quint32>{902});
+}
+
+TEST_F(RuledClientTest, UnsupportedLiveOffersPreserveSubmittedAndMatchingAcceptedActivation)
+{
+    apply(unsupportedCostBatch(9, false, true));
+    const auto cached = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(cached.size(), 1);
+    ASSERT_EQ(cached.front().kind, RuledCostChoiceKind::Unspecified);
+    ASSERT_TRUE(state->permanentActionFor(kUnsupportedCostSourceOid,
+                                          kUnsupportedCostSourceGeneration,
+                                          ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP,
+                                          std::nullopt));
+
+    PendingActivatedAbility draft;
+    draft.valid = true;
+    draft.permanentOid = kUnsupportedCostSourceOid;
+    draft.sourceZone = state->abilitySourceZone(kUnsupportedCostSourceOid);
+    draft.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+    draft.abilityIndex = kUnsupportedCostAbilityIndex;
+    draft.costChoices = cached;
+    PendingActivatedAbility::Target target;
+    target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    target.ref.set_object_id(kOpponent);
+    draft.selectedTargets.append(target);
+    draft.remainingCost.insert(QChar('G'), 2);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+
+    draft.stage = PendingActivatedAbility::Stage::BeginPending;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    draft.stage = PendingActivatedAbility::Stage::CommitPending;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+
+    auto &accepted = state->pendingAbilityActivation.emplace();
+    accepted.set_transaction_id(91);
+    accepted.set_source_object_id(kUnsupportedCostSourceOid);
+    accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration);
+    accepted.set_ability_index(kUnsupportedCostAbilityIndex);
+    draft.engineTransactionId = 91;
+    draft.stage = PendingActivatedAbility::Stage::Paying;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    draft.stage = PendingActivatedAbility::Stage::CommitPending;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+
+    accepted.set_transaction_id(92);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    accepted.set_transaction_id(91);
+    accepted.set_source_object_id(kUnsupportedCostSourceOid + 1);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    accepted.set_source_object_id(kUnsupportedCostSourceOid);
+    accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration + 1);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration);
+    accepted.set_ability_index(kUnsupportedCostAbilityIndex + 1);
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    accepted.set_ability_index(kUnsupportedCostAbilityIndex);
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+
+    draft.engineTransactionId = 0;
+    draft.stage = PendingActivatedAbility::Stage::Announcing;
+    draft.permanentAction = true;
+    draft.permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    draft.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration + 1;
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
+    EXPECT_EQ(draft.selectedTargets.size(), 1);
+    EXPECT_EQ(draft.selectedTargets.front().ref.object_id(), static_cast<quint32>(kOpponent));
+    EXPECT_EQ(draft.remainingCost.value(QChar('G')), 2);
+}
+
+TEST_F(RuledClientTest, UnsupportedCostRefreshCancelsRealSelectionAndDirectContinuationWithoutCommands)
+{
+    const QVector<AbilityCommandProbe> probes = {AbilityCommandProbe::Activate,
+                                                  AbilityCommandProbe::Begin,
+                                                  AbilityCommandProbe::Preview,
+                                                  AbilityCommandProbe::Commit};
+    apply(unsupportedCostBatch(static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), true));
+
+    for (const auto probe : probes) {
+        RuledPendingCast transaction;
+        auto &draft = prepareUnsupportedCostDraft(transaction, *state);
+        int cancellations = 0;
+        int operations = 0;
+        if (probe == AbilityCommandProbe::Commit) {
+            auto &accepted = state->pendingAbilityActivation.emplace();
+            accepted.set_transaction_id(91);
+            accepted.set_source_object_id(kUnsupportedCostSourceOid);
+            accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration);
+            accepted.set_ability_index(kUnsupportedCostAbilityIndex);
+            draft.engineTransactionId = 91;
+            draft.stage = PendingActivatedAbility::Stage::Paying;
+        }
+        host.sentCommands.clear();
+        ruledDispatchPendingAbilityCostOperation(
+            *state, transaction.ability, [&]() { ++cancellations; transaction.clearAbility(); }, [&]() {
+                ++operations;
+                transaction.ability.nextCostChoice = 6;
+                sendAbilityCommandProbe(host, transaction.ability, probe);
+            });
+        ASSERT_EQ(cancellations, 0);
+        ASSERT_EQ(operations, 1);
+        EXPECT_EQ(transaction.ability.nextCostChoice, 6);
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        ASSERT_TRUE(isAbilityCommandProbe(host.sentCommands.front(), probe));
+        const auto &command = host.sentCommands.front();
+        switch (probe) {
+            case AbilityCommandProbe::Activate:
+                EXPECT_EQ(command.activate_ability().source_object_id(), kUnsupportedCostSourceOid);
+                EXPECT_EQ(command.activate_ability().expected_zone_change_generation(),
+                          kUnsupportedCostSourceGeneration);
+                break;
+            case AbilityCommandProbe::Begin:
+                EXPECT_EQ(command.begin_ability_activation().source_object_id(), kUnsupportedCostSourceOid);
+                EXPECT_EQ(command.begin_ability_activation().expected_zone_change_generation(),
+                          kUnsupportedCostSourceGeneration);
+                host.answerPendingAck(true);
+                break;
+            case AbilityCommandProbe::Preview:
+                ASSERT_TRUE(command.preview_payment().has_activate_ability());
+                EXPECT_EQ(command.preview_payment().activate_ability().source_object_id(), kUnsupportedCostSourceOid);
+                EXPECT_EQ(command.preview_payment().activate_ability().expected_zone_change_generation(),
+                          kUnsupportedCostSourceGeneration);
+                break;
+            case AbilityCommandProbe::Commit:
+                EXPECT_EQ(command.commit_ability_activation().transaction_id(), 91u);
+                EXPECT_EQ(command.commit_ability_activation().expected_revision(), 3u);
+                EXPECT_TRUE(command.commit_ability_activation().has_payment());
+                break;
+        }
+        transaction.clearAbility();
+        state->pendingAbilityActivation.reset();
+        host.sentCommands.clear();
+    }
+
+    for (const int wireKind : {9, 777}) {
+        apply(unsupportedCostBatch(static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), true));
+        const auto cachedSupported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_EQ(cachedSupported.size(), 2);
+        ASSERT_EQ(cachedSupported.at(0).candidateIds, QSet<quint32>{902});
+        ASSERT_EQ(cachedSupported.at(1).candidateIds, QSet<quint32>{901});
+        apply(unsupportedCostBatch(wireKind, true));
+        const auto current = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_EQ(current.size(), 2);
+        EXPECT_EQ(current.at(0).kind, RuledCostChoiceKind::Tap);
+        EXPECT_EQ(current.at(1).kind, RuledCostChoiceKind::Unspecified);
+
+        for (const auto probe : probes) {
+            RuledPendingCast transaction;
+            auto &draft = transaction.beginAbility();
+            draft.permanentOid = kUnsupportedCostSourceOid;
+            draft.sourceZone = state->abilitySourceZone(kUnsupportedCostSourceOid);
+            draft.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+            draft.abilityIndex = kUnsupportedCostAbilityIndex;
+            draft.costChoices = cachedSupported;
+            draft.nextCostChoice = 1;
+            draft.waitingForCost = true;
+            draft.costSelections.append({0, RuledCostChoiceZone::Battlefield, {902}, {14}});
+            ASSERT_TRUE(draft.valid);
+            ASSERT_EQ(draft.costSelections.size(), 1);
+            ASSERT_EQ(draft.costChoices.at(1).kind, RuledCostChoiceKind::Tap);
+            host.sentCommands.clear();
+            int cancellations = 0;
+            int operations = 0;
+            const auto dispatch = [&]() {
+                ruledDispatchPendingAbilityCostOperation(
+                    *state, transaction.ability, [&]() { ++cancellations; transaction.clearAbility(); }, [&]() {
+                        ++operations;
+                        if (probe == AbilityCommandProbe::Begin) {
+                            transaction.ability.costSelections.append(
+                                {1, RuledCostChoiceZone::Battlefield, {901}, {13}});
+                            ++transaction.ability.nextCostChoice;
+                            transaction.ability.waitingForCost = false;
+                        } else {
+                            transaction.ability.xValue = 77;
+                        }
+                        sendAbilityCommandProbe(host, transaction.ability, probe);
+                    });
+            };
+            dispatch();
+            if (probe == AbilityCommandProbe::Begin && !host.sentCommands.isEmpty()) {
+                ASSERT_TRUE(host.sentCommands.back().has_begin_ability_activation());
+                host.answerPendingAck(true);
+            }
+            EXPECT_EQ(cancellations, 1) << "wire kind " << wireKind;
+            EXPECT_EQ(operations, 0) << "wire kind " << wireKind;
+            EXPECT_FALSE(transaction.ability.valid);
+            EXPECT_TRUE(transaction.ability.costSelections.isEmpty());
+            EXPECT_EQ(transaction.ability.nextCostChoice, 0);
+            EXPECT_EQ(transaction.ability.xValue, 0u);
+            EXPECT_TRUE(host.sentCommands.isEmpty()) << "wire kind " << wireKind;
+
+            // The same production dispatcher is the continuation prefix; a canceled draft is a no-op.
+            dispatch();
+            EXPECT_EQ(cancellations, 1);
+            EXPECT_EQ(operations, 0);
+            EXPECT_TRUE(host.sentCommands.isEmpty());
+            host.sentCommands.clear();
+        }
+    }
+
+    apply(unsupportedCostBatch(9, true));
+    const auto cachedUnsupported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(cachedUnsupported.size(), 2);
+    ASSERT_EQ(cachedUnsupported.at(1).kind, RuledCostChoiceKind::Unspecified);
+    apply(unsupportedCostBatch(static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), true));
+    const auto refreshedSupported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(refreshedSupported.size(), 2);
+    EXPECT_TRUE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    RuledPendingCast cachedTransaction;
+    auto &cachedDraft = cachedTransaction.beginAbility();
+    cachedDraft.permanentOid = kUnsupportedCostSourceOid;
+    cachedDraft.sourceZone = state->abilitySourceZone(kUnsupportedCostSourceOid);
+    cachedDraft.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+    cachedDraft.abilityIndex = kUnsupportedCostAbilityIndex;
+    cachedDraft.costChoices = cachedUnsupported;
+    cachedDraft.nextCostChoice = 1;
+    cachedDraft.waitingForCost = true;
+    cachedDraft.costSelections.append({0, RuledCostChoiceZone::Battlefield, {902}, {14}});
+    ASSERT_TRUE(cachedDraft.valid);
+    ASSERT_EQ(cachedDraft.costSelections.size(), 1);
+    EXPECT_EQ(cachedDraft.costChoices.at(1).kind, RuledCostChoiceKind::Unspecified);
+    const auto cachedReceipts = cachedDraft.costSelections;
+    EXPECT_FALSE(cachedTransaction.reconcileAbilityCosts(*state, kLocalPlayer));
+    ASSERT_EQ(cachedDraft.costChoices.size(), 2);
+    EXPECT_EQ(cachedDraft.costChoices.at(1).kind, RuledCostChoiceKind::Unspecified);
+    EXPECT_EQ(cachedDraft.costSelections.size(), cachedReceipts.size());
+    EXPECT_EQ(cachedDraft.costSelections.front().selectedIds, cachedReceipts.front().selectedIds);
+    int cachedCancellations = 0;
+    int cachedOperations = 0;
+    host.sentCommands.clear();
+    ruledDispatchPendingAbilityCostOperation(
+        *state, cachedTransaction.ability, [&]() { ++cachedCancellations; cachedTransaction.clearAbility(); }, [&]() {
+            ++cachedOperations;
+            cachedTransaction.ability.nextCostChoice = 6;
+            sendAbilityCommandProbe(host, cachedTransaction.ability, AbilityCommandProbe::Activate);
+        });
+    EXPECT_EQ(cachedCancellations, 1);
+    EXPECT_EQ(cachedOperations, 0);
+    EXPECT_FALSE(cachedTransaction.ability.valid);
+    EXPECT_TRUE(cachedTransaction.ability.costSelections.isEmpty());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    ruledDispatchPendingAbilityCostOperation(
+        *state, cachedTransaction.ability, [&]() { ++cachedCancellations; cachedTransaction.clearAbility(); }, [&]() {
+            ++cachedOperations;
+            sendAbilityCommandProbe(host, cachedTransaction.ability, AbilityCommandProbe::Activate);
+        });
+    EXPECT_EQ(cachedCancellations, 1);
+    EXPECT_EQ(cachedOperations, 0);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
 }
 
 TEST(RuledPendingCostSelectionTest, GraveyardSelectionMembershipTracksPhysicalObjectIds)

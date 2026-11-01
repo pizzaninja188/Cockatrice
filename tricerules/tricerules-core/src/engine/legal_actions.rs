@@ -732,6 +732,9 @@ pub(super) fn activated_ability_info(
         .costs
         .iter()
         .map(|cost| match cost {
+            AbilityCost::RemoveCountersFromPermanents { count, .. } => {
+                format!("Remove {count} counters from matching permanents (unsupported)")
+            }
             AbilityCost::RemoveCounters { counter, count, .. } => format!(
                 "Remove {count} {}counter(s)",
                 counter
@@ -1276,6 +1279,9 @@ pub(super) fn legal_ability_cost_choices(
                         || !choice.candidate_objects.is_empty();
                 choices.push(choice);
             }
+            AbilityCost::RemoveCountersFromPermanents { .. } => {
+                structurally_payable = false;
+            }
             AbilityCost::Blight { count } => {
                 let choice = eng.blight_cost_choice(player, cost_index, *count);
                 structurally_payable &= !choice.candidate_ids.is_empty();
@@ -1302,6 +1308,7 @@ pub(super) fn legal_ability_cost_choices(
                         .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AbilityCost::ReturnTappedCreature => {
@@ -1326,6 +1333,7 @@ pub(super) fn legal_ability_cost_choices(
                         .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AbilityCost::Discard | AbilityCost::DiscardCard { .. } => {
@@ -1357,6 +1365,7 @@ pub(super) fn legal_ability_cost_choices(
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
@@ -1384,6 +1393,7 @@ pub(super) fn legal_ability_cost_choices(
                         .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AbilityCost::TapPermanents {
@@ -1444,6 +1454,7 @@ pub(super) fn legal_ability_cost_choices(
                         })
                         .collect(),
                     aggregate_minimum: aggregate_constraint_proto(*constraint),
+                    ..Default::default()
                 });
             }
             AbilityCost::ExileGraveyardCards {
@@ -1510,6 +1521,7 @@ pub(super) fn legal_ability_cost_choices(
                         })
                         .collect(),
                     aggregate_minimum: aggregate_constraint_proto(*constraint),
+                    ..Default::default()
                 });
             }
             AbilityCost::Tap
@@ -1577,6 +1589,7 @@ fn legal_spell_cost_choices(
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
@@ -1600,6 +1613,7 @@ fn legal_spell_cost_choices(
                         .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
                     aggregate_minimum: None,
+                    ..Default::default()
                 });
             }
             AdditionalCost::TapPermanents {
@@ -1660,6 +1674,7 @@ fn legal_spell_cost_choices(
                         })
                         .collect(),
                     aggregate_minimum: aggregate_constraint_proto(*constraint),
+                    ..Default::default()
                 });
             }
             AdditionalCost::ExileGraveyardCards {
@@ -1726,6 +1741,7 @@ fn legal_spell_cost_choices(
                         })
                         .collect(),
                     aggregate_minimum: aggregate_constraint_proto(*constraint),
+                    ..Default::default()
                 });
             }
         }
@@ -1749,6 +1765,7 @@ fn legal_spell_cost_choices(
                 .map(|oid| cost_object_candidate(eng, *oid, 0))
                 .collect(),
             aggregate_minimum: None,
+            ..Default::default()
         });
     }
     let mut non_mana_costs_payable =

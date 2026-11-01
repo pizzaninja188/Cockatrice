@@ -1591,6 +1591,11 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
+                AbilityCost::RemoveCountersFromPermanents { .. } => {
+                    return Err(EngineError::Illegal(
+                        "aggregate counter removal cost is not supported",
+                    ));
+                }
                 AbilityCost::RemoveCounters {
                     counter,
                     count,
@@ -4687,6 +4692,195 @@ mod convoke_transaction_tests {
         assert_eq!(
             engine.state.objects[&bearer].counter_count(CounterKind::PlusOnePlusOne),
             0
+        );
+    }
+
+    #[test]
+    fn aggregate_counter_prepare_is_unconditionally_unsupported_without_debits() {
+        let aggregate_cost_ron = "RemoveCountersFromPermanents(count: 3, counter: None, filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact, Creature, Planeswalker], excluded_objects: [Source]))";
+        let validation_card = format!(
+            r#"(
+                id: "b2_aggregate_counter_validation",
+                name: "B2 Aggregate Counter Validation",
+                face_id: "b2_aggregate_counter_validation",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    ability_id: "aggregate_01", presentation: Fallback,
+                    costs: [{aggregate_cost_ron}],
+                    effect: [Draw(who: Controller, count: 1)])]
+            )"#
+        );
+        let validation_registry =
+            CardRegistry::from_chunks_and_tokens(&[validation_card.as_str()], &[])
+                .expect("the reviewed aggregate counter cost passes local registry validation");
+        let aggregate_cost = validation_registry
+            .get("b2_aggregate_counter_validation")
+            .expect("validated local aggregate cost definition")
+            .primary_face()
+            .activated_abilities[0]
+            .costs[0]
+            .clone();
+        let filter = match &aggregate_cost {
+            AbilityCost::RemoveCountersFromPermanents { filter, .. } => filter.clone(),
+            other => panic!("validated raw cost has expected B1 shape: {other:?}"),
+        };
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            602_421,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player planner fixture");
+        engine.state.players[0].mana_pool.colorless = 10;
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "brambleback_brute".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        assert!(!engine
+            .registry
+            .get("brambleback_brute")
+            .unwrap()
+            .primary_face()
+            .activated_abilities
+            .is_empty());
+
+        let artifact = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&artifact).unwrap().card_id = "ornithopter".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            artifact,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&artifact)
+            .unwrap()
+            .add_counters(CounterKind::Charge, 2, 0);
+
+        let creature = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&creature).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&creature)
+            .unwrap()
+            .add_counters(CounterKind::Night, 1, 0);
+
+        assert!(engine.state.players[0].battlefield.contains(&artifact));
+        assert!(engine.state.players[0].battlefield.contains(&creature));
+        assert_eq!(engine.state.objects[&artifact].controller, 0);
+        assert_eq!(engine.state.objects[&creature].controller, 0);
+        assert_eq!(
+            engine.state.objects[&artifact].counter_count(CounterKind::Charge)
+                + engine.state.objects[&creature].counter_count(CounterKind::Night),
+            3,
+            "two eligible permanents carry enough counters of distinct kinds"
+        );
+        assert!(engine.counter_payment_permanent_matches(0, source, artifact, &filter));
+        assert!(engine.counter_payment_permanent_matches(0, source, creature, &filter));
+        assert!(!engine.counter_payment_permanent_matches(0, source, source, &filter));
+
+        let artifact_ref = engine.payment_object_ref(artifact);
+        let legacy_selection = rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::CounterRemoval(
+                rv1::CounterRemovalSelection {
+                    source: Some(artifact_ref),
+                    option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+                },
+            )),
+        };
+        let aggregate_costs = [aggregate_cost];
+        for selections in [Vec::new(), vec![legacy_selection.clone()]] {
+            let before = serde_json::to_value(&engine.state)
+                .expect("serialize state before unsupported prepare");
+            let result = engine.prepare_ability_costs(
+                0,
+                0,
+                source,
+                &aggregate_costs,
+                &[],
+                &selections,
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+            );
+            match result {
+                Err(EngineError::Illegal(reason)) => {
+                    assert_eq!(reason, "aggregate counter removal cost is not supported");
+                }
+                Err(error) => {
+                    panic!("aggregate prepare returns the unsupported Illegal: {error:?}")
+                }
+                Ok(_) => panic!("aggregate counter cost cannot produce a payable plan"),
+            }
+            assert_eq!(
+                serde_json::to_value(&engine.state)
+                    .expect("serialize state after unsupported prepare"),
+                before,
+                "unsupported prepare creates no debit and mutates no game state"
+            );
+            assert!(engine.state.pending_ability_activation.is_none());
+            assert!(engine.pending_ability_activation_internal.is_none());
+        }
+
+        let singleton_control = [AbilityCost::RemoveCounters {
+            counter: Some(CounterKind::Charge),
+            count: 1,
+            payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(filter)),
+        }];
+        let before_control = serde_json::to_value(&engine.state)
+            .expect("serialize state before supported singleton prepare");
+        let prepared = engine
+            .prepare_ability_costs(
+                0,
+                0,
+                source,
+                &singleton_control,
+                &[],
+                &[legacy_selection],
+                &[],
+                0,
+                0,
+                ActivatedManaReduction::default(),
+            )
+            .expect("supported selected-permanent singleton plans successfully");
+        assert!(matches!(
+            prepared.transaction.debits.as_slice(),
+            [CostDebit::RemoveCounters {
+                object,
+                kind: CounterKind::Charge,
+                count: 1,
+                ..
+            }] if object.object_id == artifact
+                && object.zone_change_generation == artifact_ref.zone_change_generation
+        ));
+        assert_eq!(
+            serde_json::to_value(&engine.state).expect("serialize state after supported prepare"),
+            before_control,
+            "prepare plans the singleton debit without committing it"
         );
     }
 

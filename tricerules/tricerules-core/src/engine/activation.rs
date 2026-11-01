@@ -324,6 +324,11 @@ impl GameEngine {
                 "ability announcement is not legal now",
             ));
         }
+        if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
+            return Err(EngineError::Illegal(
+                "pre-announced ability cost and flex payments are unsupported",
+            ));
+        }
         match rv1::AbilitySourceZone::try_from(command.source_zone)
             .map_err(|_| EngineError::Illegal("unknown activation source zone"))?
         {
@@ -930,6 +935,10 @@ impl GameEngine {
             .pending_ability_activation
             .clone()
             .map(|mut pending| {
+                if player != pending.actor_player_id || self.state.pending_resolution.is_some() {
+                    pending.cost_selections.clear();
+                    pending.flex_payments.clear();
+                }
                 if pending.deciding_player_id != player || self.state.pending_resolution.is_some() {
                     pending.valid_opponent_ids.clear();
                     pending.target_group = None;

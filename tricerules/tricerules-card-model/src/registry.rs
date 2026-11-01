@@ -1191,6 +1191,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::ReturnTappedCreature
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }
+            | AbilityCost::RemoveCountersFromPermanents { .. }
             | AbilityCost::RemoveXStorageCountersFromSource
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
@@ -6349,5 +6350,48 @@ mod luxior_model_contract_tests {
                 ..
             }
         ));
+    }
+}
+
+#[cfg(test)]
+mod aggregate_counter_cost_registry_tests {
+    use super::*;
+
+    const AGGREGATE_COUNTER_COST_FIXTURE: &str = r#"(
+        id: "aggregate_counter_cost_fixture",
+        name: "Aggregate Counter Cost Fixture",
+        face_id: "aggregate_counter_cost_fixture",
+        types: ["Creature"],
+        activated_abilities: [
+            (ability_id: "activated_01", presentation: Fallback,
+                costs: [RemoveCountersFromPermanents(
+                    count: 3, counter: None,
+                    filter: (kind: AnyPermanent, controller: You,
+                        permanent_types: [Artifact, Creature, Planeswalker],
+                        excluded_objects: [Source]))],
+                effect: [GainLife(amount: 1)]),
+        ],
+    )"#;
+
+    #[test]
+    fn aggregate_counter_costs_register_without_result_actions() {
+        let raw: RawCardDefinition = RON_OPTS
+            .from_str(AGGREGATE_COUNTER_COST_FIXTURE)
+            .expect("the local raw fixture parses before registry admission");
+        let serialized =
+            ron::ser::to_string(&raw).expect("the local raw fixture serializes after parsing");
+        let registry = CardRegistry::from_chunks_and_tokens(&[serialized.as_str()], &[])
+            .expect("the aggregate cost and ordinary effect register");
+        let ability = &registry
+            .get("aggregate_counter_cost_fixture")
+            .expect("the fixture is present in the validated registry")
+            .primary_face()
+            .activated_abilities[0];
+
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert!(
+            ability_cost_result_actions(&ability.costs).is_empty(),
+            "aggregate counter removal has no discard, exile, sacrifice or tap result action"
+        );
     }
 }

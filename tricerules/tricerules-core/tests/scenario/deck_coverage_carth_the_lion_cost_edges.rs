@@ -159,6 +159,7 @@ fn begin(engine: &GameEngine, source: u32, own: u32) -> RuledCommand {
                     .unwrap_or(0),
                 group_index: 0,
             }),
+            ..Default::default()
         })),
     }
 }

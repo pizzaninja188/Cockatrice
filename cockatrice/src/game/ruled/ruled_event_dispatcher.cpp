@@ -410,6 +410,7 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                 break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
+                data.nonManaCostsPayable = false;
                 break;
         }
         for (const quint32 candidate : choice.candidate_ids()) {

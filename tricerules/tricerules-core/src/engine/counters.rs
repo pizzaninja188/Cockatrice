@@ -152,6 +152,7 @@ impl GameEngine {
         let mut demands = Vec::<(u32, Vec<(ObjectId, CounterKind)>)>::new();
         for cost in costs {
             match cost {
+                AbilityCost::RemoveCountersFromPermanents { .. } => return false,
                 AbilityCost::RemoveCounters {
                     counter: Some(kind),
                     count,

@@ -52,6 +52,7 @@
 #include <libcockatrice/utility/color.h>
 #include <libcockatrice/utility/zone_names.h>
 #include <memory>
+#include <string_view>
 
 RNG_Abstract *rng = nullptr; // required by other server code
 
@@ -1163,6 +1164,1002 @@ TEST(RuledProtocolVisibilityTest, EveryBroadcastReachableFieldIsClassifiedAndCle
         clearRuledFieldsByVisibility(message.get(), visibility);
         EXPECT_FALSE(fieldIsPresent(*message, field))
             << field->full_name() << " was classified private but survived the reflection clear";
+    }
+}
+
+TEST_F(RuledBatchTest, AggregateCounterSchemaDescriptorsAndAbsentWireRemainCompatible)
+{
+    const auto *kind = ruled::v1::CostChoiceKind_descriptor()->FindValueByName(
+        "COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS");
+    ASSERT_NE(kind, nullptr);
+    EXPECT_EQ(kind->number(), 9);
+
+    const auto expectField = [](const google::protobuf::Descriptor *message, const char *name, int number,
+                                google::protobuf::FieldDescriptor::Type type, bool repeated, bool hasPresence,
+                                const char *oneofName, const char *messageTypeName) {
+        const auto *field = message->FindFieldByName(name);
+        EXPECT_NE(field, nullptr) << message->full_name() << "." << name;
+        if (!field)
+            return false;
+        EXPECT_EQ(field->number(), number) << field->full_name();
+        EXPECT_EQ(field->type(), type) << field->full_name();
+        EXPECT_EQ(field->is_repeated(), repeated) << field->full_name();
+        EXPECT_EQ(field->has_presence(), hasPresence) << field->full_name();
+        const std::string_view actualOneof =
+            field->containing_oneof() ? field->containing_oneof()->name() : std::string_view{};
+        EXPECT_EQ(actualOneof, oneofName ? std::string_view(oneofName) : std::string_view{}) << field->full_name();
+        const std::string_view actualMessageType =
+            field->message_type() ? field->message_type()->full_name() : std::string_view{};
+        EXPECT_EQ(actualMessageType, messageTypeName ? std::string_view(messageTypeName) : std::string_view{})
+            << field->full_name();
+        const bool hasVisibility = field->options().HasExtension(ruled::v1::field_visibility);
+        EXPECT_TRUE(hasVisibility) << field->full_name() << " must declare field visibility";
+        if (hasVisibility) {
+            EXPECT_EQ(field->options().GetExtension(ruled::v1::field_visibility),
+                      ruled::v1::FIELD_VISIBILITY_PER_PLAYER)
+                << field->full_name();
+        }
+        return true;
+    };
+
+    using Field = google::protobuf::FieldDescriptor;
+    const auto *legalCostChoice = ruled::v1::LegalCostChoice::descriptor();
+    const auto *groupCandidate = ruled::v1::CounterRemovalGroupCandidate::descriptor();
+    const auto *groupChoices = ruled::v1::CounterRemovalGroupChoices::descriptor();
+    const auto *contribution = ruled::v1::CounterRemovalContribution::descriptor();
+    const auto *groupSelection = ruled::v1::CounterRemovalGroupSelection::descriptor();
+    const auto *counterOption = ruled::v1::CounterRemovalOption::descriptor();
+    const auto *costSelection = ruled::v1::CostSelection::descriptor();
+    const auto *beginActivation = ruled::v1::BeginAbilityActivation::descriptor();
+    const auto *pendingActivation = ruled::v1::PendingAbilityActivation::descriptor();
+
+    ASSERT_TRUE(expectField(legalCostChoice, "counter_removal_group", 11, Field::TYPE_MESSAGE, false, true,
+                            nullptr, "ruled.v1.CounterRemovalGroupChoices"));
+    ASSERT_TRUE(expectField(groupCandidate, "object", 1, Field::TYPE_MESSAGE, false, true, nullptr,
+                            "ruled.v1.CostObjectRef"));
+    ASSERT_TRUE(expectField(groupCandidate, "options", 2, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.CounterRemovalOption"));
+    ASSERT_TRUE(expectField(groupChoices, "required_count", 1, Field::TYPE_UINT32, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(groupChoices, "candidates", 2, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.CounterRemovalGroupCandidate"));
+    ASSERT_TRUE(expectField(contribution, "object", 1, Field::TYPE_MESSAGE, false, true, nullptr,
+                            "ruled.v1.CostObjectRef"));
+    ASSERT_TRUE(expectField(contribution, "option_id", 2, Field::TYPE_UINT32, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(contribution, "count", 3, Field::TYPE_UINT32, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(groupSelection, "contributions", 1, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.CounterRemovalContribution"));
+    ASSERT_TRUE(expectField(counterOption, "option_id", 1, Field::TYPE_UINT32, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(counterOption, "label", 2, Field::TYPE_STRING, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(counterOption, "available_count", 3, Field::TYPE_UINT32, false, false, nullptr, nullptr));
+    ASSERT_TRUE(expectField(costSelection, "counter_removal_group", 7, Field::TYPE_MESSAGE, false, true,
+                            "selection", "ruled.v1.CounterRemovalGroupSelection"));
+    ASSERT_TRUE(expectField(beginActivation, "cost_selections", 7, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.CostSelection"));
+    ASSERT_TRUE(expectField(beginActivation, "flex_payments", 8, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.FlexPipPayment"));
+    ASSERT_TRUE(expectField(pendingActivation, "cost_selections", 22, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.CostSelection"));
+    ASSERT_TRUE(expectField(pendingActivation, "flex_payments", 23, Field::TYPE_MESSAGE, true, false, nullptr,
+                            "ruled.v1.FlexPipPayment"));
+
+    google::protobuf::DynamicMessageFactory factory;
+    const auto *beginPrototype = factory.GetPrototype(beginActivation);
+    ASSERT_NE(beginPrototype, nullptr);
+    for (const char *name : std::array<const char *, 2>{"cost_selections", "flex_payments"}) {
+        const auto *field = beginActivation->FindFieldByName(name);
+        ASSERT_NE(field, nullptr) << name;
+        std::unique_ptr<google::protobuf::Message> command(beginPrototype->New());
+        setFieldToNonDefault(command.get(), field);
+        ASSERT_TRUE(fieldIsPresent(*command, field)) << field->full_name();
+        clearRuledFieldsByVisibility(command.get(), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+        EXPECT_FALSE(fieldIsPresent(*command, field)) << field->full_name() << " survived per-player clearing";
+    }
+
+    const auto wireBytes = [](const auto &bytes) {
+        return std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    };
+    const std::string legalCostChoiceBytes = wireBytes(std::array<unsigned char, 4>{0x08, 0x02, 0x30, 0x06});
+    ruled::v1::LegalCostChoice legalCostChoiceMessage;
+    ASSERT_TRUE(legalCostChoiceMessage.ParseFromString(legalCostChoiceBytes));
+    EXPECT_EQ(legalCostChoiceMessage.cost_index(), 2u);
+    EXPECT_EQ(legalCostChoiceMessage.kind(), ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    EXPECT_FALSE(legalCostChoiceMessage.has_counter_removal_group());
+    EXPECT_EQ(legalCostChoiceMessage.SerializeAsString(), legalCostChoiceBytes);
+
+    const std::string costSelectionBytes = wireBytes(std::array<unsigned char, 4>{0x08, 0x02, 0x10, 0x03});
+    ruled::v1::CostSelection costSelectionMessage;
+    ASSERT_TRUE(costSelectionMessage.ParseFromString(costSelectionBytes));
+    EXPECT_EQ(costSelectionMessage.cost_index(), 2u);
+    EXPECT_EQ(costSelectionMessage.selection_case(), ruled::v1::CostSelection::kHandIndex);
+    EXPECT_FALSE(costSelectionMessage.has_counter_removal_group());
+    EXPECT_EQ(costSelectionMessage.SerializeAsString(), costSelectionBytes);
+
+    const std::string beginActivationBytes =
+        wireBytes(std::array<unsigned char, 8>{0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01});
+    ruled::v1::BeginAbilityActivation beginActivationMessage;
+    ASSERT_TRUE(beginActivationMessage.ParseFromString(beginActivationBytes));
+    EXPECT_EQ(beginActivationMessage.source_object_id(), 41u);
+    EXPECT_EQ(beginActivationMessage.expected_zone_change_generation(), 4u);
+    EXPECT_EQ(beginActivationMessage.ability_index(), 1u);
+    EXPECT_EQ(beginActivationMessage.source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    EXPECT_EQ(beginActivationMessage.cost_selections_size(), 0);
+    EXPECT_EQ(beginActivationMessage.flex_payments_size(), 0);
+    EXPECT_EQ(beginActivationMessage.SerializeAsString(), beginActivationBytes);
+
+    const std::string pendingActivationBytes = wireBytes(
+        std::array<unsigned char, 14>{0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0A, 0x28, 0x14, 0x30, 0x29,
+                                      0x38, 0x04});
+    ruled::v1::PendingAbilityActivation pendingActivationMessage;
+    ASSERT_TRUE(pendingActivationMessage.ParseFromString(pendingActivationBytes));
+    EXPECT_EQ(pendingActivationMessage.transaction_id(), 5u);
+    EXPECT_EQ(pendingActivationMessage.revision(), 1u);
+    EXPECT_EQ(pendingActivationMessage.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    EXPECT_EQ(pendingActivationMessage.actor_player_id(), 10);
+    EXPECT_EQ(pendingActivationMessage.deciding_player_id(), 20);
+    EXPECT_EQ(pendingActivationMessage.source_object_id(), 41u);
+    EXPECT_EQ(pendingActivationMessage.source_zone_change_generation(), 4u);
+    EXPECT_EQ(pendingActivationMessage.cost_selections_size(), 0);
+    EXPECT_EQ(pendingActivationMessage.flex_payments_size(), 0);
+    EXPECT_EQ(pendingActivationMessage.SerializeAsString(), pendingActivationBytes);
+}
+
+TEST_F(RuledBatchTest, AggregateCounterGroupsProjectAndCanonicalizeIncarnationReceipts)
+{
+    constexpr quint32 sourceId = 700u;
+    constexpr quint64 sourceGeneration = 4u;
+    constexpr quint32 firstContributorId = 11061u;
+    constexpr quint64 firstContributorGeneration = 17u;
+    constexpr quint32 secondContributorId = 11062u;
+    constexpr quint64 secondContributorGeneration = 19u;
+    const quint64 engineKey = (quint64{sourceId} << 32) | 1u;
+
+    seedCardCatalog({"Grizzly Bears", "Island", "Hill Giant"});
+    Server_Card *sourceCard = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    Server_Card *firstContributor = addCardToTable(p1, QStringLiteral("Island"));
+    Server_Card *secondContributor = addCardToTable(p1, QStringLiteral("Hill Giant"));
+    ASSERT_NE(sourceCard, nullptr);
+    ASSERT_NE(firstContributor, nullptr);
+    ASSERT_NE(secondContributor, nullptr);
+    firstContributor->setFaceDown(true);
+    secondContributor->setFaceDown(true);
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedZone = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto actorView = buildPerPlayerView(p1, {sourceId, firstContributorId, secondContributorId}, {false, false, false});
+    auto *sourceView = actorView.mutable_battlefield_objects(0);
+    sourceView->set_zone_change_generation(sourceGeneration);
+    auto *firstView = actorView.mutable_battlefield_objects(1);
+    firstView->set_zone_change_generation(firstContributorGeneration);
+    firstView->set_face_down(true);
+    auto *secondView = actorView.mutable_battlefield_objects(2);
+    secondView->set_zone_change_generation(secondContributorGeneration);
+    secondView->set_face_down(true);
+    *seedZone->add_per_player() = actorView;
+    *seedZone->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    EXPECT_EQ(findCardByEngineOid(p1, sourceId), sourceCard);
+    EXPECT_EQ(findCardByEngineOid(p1, firstContributorId), firstContributor);
+    EXPECT_EQ(findCardByEngineOid(p1, secondContributorId), secondContributor);
+
+    ruled::v1::RuledEventBatch batch = seed.batch();
+    auto *legal = &(*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto &legalChoices = (*legal->mutable_cost_choices_by_ability())[engineKey];
+    auto *choice = legalChoices.add_choices();
+    choice->set_cost_index(2u);
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS);
+    auto *group = choice->mutable_counter_removal_group();
+    group->set_required_count(3u);
+    auto *firstCandidate = group->add_candidates();
+    firstCandidate->mutable_object()->set_object_id(firstContributorId);
+    firstCandidate->mutable_object()->set_zone_change_generation(firstContributorGeneration);
+    auto *charge = firstCandidate->add_options();
+    charge->set_option_id(7u);
+    charge->set_label("Charge");
+    charge->set_available_count(2u);
+    auto *night = firstCandidate->add_options();
+    night->set_option_id(13u);
+    night->set_label("Night");
+    night->set_available_count(1u);
+    auto *secondCandidate = group->add_candidates();
+    secondCandidate->mutable_object()->set_object_id(secondContributorId);
+    secondCandidate->mutable_object()->set_zone_change_generation(secondContributorGeneration);
+    auto *secondCharge = secondCandidate->add_options();
+    secondCharge->set_option_id(7u);
+    secondCharge->set_label("Charge");
+    secondCharge->set_available_count(3u);
+
+    EXPECT_TRUE(prepareIdentityBatch(batch)) << "the reviewed compiled schema identity must be supported";
+    const auto projected = redactFor(batch, p1);
+    ASSERT_TRUE(projected.legal_by_player().contains(p1->getPlayerId()));
+    const auto &projectedLegal = projected.legal_by_player().at(p1->getPlayerId());
+    const auto zoneViewEvent = std::find_if(projected.events().begin(), projected.events().end(),
+                                            [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(zoneViewEvent, projected.events().end());
+    const auto *zoneView = &zoneViewEvent->zone_view();
+    const ruled::v1::RuledPerPlayerView *projectedActorView = nullptr;
+    for (const auto &playerView : zoneView->per_player()) {
+        if (playerView.player_id() == p1->getPlayerId())
+            projectedActorView = &playerView;
+    }
+    ASSERT_NE(projectedActorView, nullptr);
+    ASSERT_EQ(projectedActorView->battlefield_objects_size(), 3);
+    const auto &projectedSource = projectedActorView->battlefield_objects(0);
+    const auto *projectedFirst = &projectedActorView->battlefield_objects(1);
+    const auto *projectedSecond = &projectedActorView->battlefield_objects(2);
+    EXPECT_EQ(projectedSource.object_id(), sourceId);
+    EXPECT_EQ(projectedSource.zone_change_generation(), sourceGeneration);
+    EXPECT_FALSE(projectedSource.face_down());
+    EXPECT_TRUE(projectedFirst->face_down());
+    EXPECT_TRUE(projectedSecond->face_down());
+    EXPECT_NE(projectedFirst->object_id(), firstContributorId);
+    EXPECT_NE(projectedFirst->zone_change_generation(), firstContributorGeneration);
+    EXPECT_NE(projectedSecond->object_id(), secondContributorId);
+    EXPECT_NE(projectedSecond->zone_change_generation(), secondContributorGeneration);
+
+    const quint64 presentedKey = (quint64{sourceId} << 32) | 1u;
+    EXPECT_EQ(presentedKey, engineKey);
+    EXPECT_NE(projectedFirst->object_id(), projectedSecond->object_id());
+    EXPECT_NE(projectedSource.object_id(), projectedFirst->object_id());
+    EXPECT_NE(projectedSource.object_id(), projectedSecond->object_id());
+    ASSERT_TRUE(projectedLegal.cost_choices_by_ability().contains(presentedKey));
+    const auto &projectedChoices = projectedLegal.cost_choices_by_ability().at(presentedKey);
+    ASSERT_EQ(projectedChoices.choices_size(), 1);
+    const auto &projectedChoice = projectedChoices.choices(0);
+    ASSERT_TRUE(projectedChoice.has_counter_removal_group());
+    ASSERT_EQ(projectedChoice.counter_removal_group().candidates_size(), 2);
+    EXPECT_EQ(projectedChoice.cost_index(), 2u);
+    EXPECT_EQ(projectedChoice.kind(), ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS);
+    EXPECT_EQ(projectedChoice.counter_removal_group().required_count(), 3u);
+
+    const auto &firstProjectedCandidate = projectedChoice.counter_removal_group().candidates(0);
+    EXPECT_EQ(firstProjectedCandidate.object().object_id(), projectedFirst->object_id());
+    EXPECT_EQ(firstProjectedCandidate.object().zone_change_generation(), projectedFirst->zone_change_generation());
+    ASSERT_EQ(firstProjectedCandidate.options_size(), 2);
+    EXPECT_EQ(firstProjectedCandidate.options(0).option_id(), 7u);
+    EXPECT_EQ(firstProjectedCandidate.options(0).label(), "Charge");
+    EXPECT_EQ(firstProjectedCandidate.options(0).available_count(), 2u);
+    EXPECT_EQ(firstProjectedCandidate.options(1).option_id(), 13u);
+    EXPECT_EQ(firstProjectedCandidate.options(1).label(), "Night");
+    EXPECT_EQ(firstProjectedCandidate.options(1).available_count(), 1u);
+    const auto &secondProjectedCandidate = projectedChoice.counter_removal_group().candidates(1);
+    EXPECT_EQ(secondProjectedCandidate.object().object_id(), projectedSecond->object_id());
+    EXPECT_EQ(secondProjectedCandidate.object().zone_change_generation(), projectedSecond->zone_change_generation());
+    ASSERT_EQ(secondProjectedCandidate.options_size(), 1);
+    EXPECT_EQ(secondProjectedCandidate.options(0).option_id(), 7u);
+    EXPECT_EQ(secondProjectedCandidate.options(0).label(), "Charge");
+    EXPECT_EQ(secondProjectedCandidate.options(0).available_count(), 3u);
+
+    const auto opponentProjection = redactFor(batch, p2);
+    EXPECT_TRUE(opponentProjection.legal_by_player().empty());
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    const auto spectatorProjection = redactFor(batch, spectator);
+    EXPECT_TRUE(spectatorProjection.legal_by_player().empty());
+
+    const auto makeBeginCommand = [&](const ruled::v1::BattlefieldObject &firstObject,
+                                      const ruled::v1::BattlefieldObject &secondObject) {
+        ruled::v1::RuledCommand command;
+        auto *activation = command.mutable_begin_ability_activation();
+        activation->set_source_object_id(projectedSource.object_id());
+        activation->set_expected_zone_change_generation(projectedSource.zone_change_generation());
+        activation->set_ability_index(1u);
+        auto *selection = activation->add_cost_selections();
+        selection->set_cost_index(2u);
+        auto *groupSelection = selection->mutable_counter_removal_group();
+        const auto addContribution = [&](const ruled::v1::BattlefieldObject &object, quint32 optionId) {
+            auto *contribution = groupSelection->add_contributions();
+            contribution->mutable_object()->set_object_id(object.object_id());
+            contribution->mutable_object()->set_zone_change_generation(object.zone_change_generation());
+            contribution->set_option_id(optionId);
+            contribution->set_count(1u);
+        };
+        addContribution(firstObject, 7u);
+        addContribution(firstObject, 13u);
+        addContribution(secondObject, 7u);
+        auto *flex = activation->add_flex_payments();
+        flex->set_pip_index(1u);
+        flex->set_pay_life(true);
+        return command;
+    };
+
+    // This exercises relay identity translation only; it does not claim engine acceptance of the selection.
+    const ruled::v1::RuledCommand staleReceiptCommand = makeBeginCommand(*projectedFirst, *projectedSecond);
+    ruled::v1::RuledCommand beginCommand = staleReceiptCommand;
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), beginCommand));
+    const auto &canonicalBegin = beginCommand.begin_ability_activation();
+    EXPECT_EQ(canonicalBegin.source_object_id(), sourceId);
+    EXPECT_EQ(canonicalBegin.expected_zone_change_generation(), sourceGeneration);
+    EXPECT_EQ(canonicalBegin.ability_index(), 1u);
+    EXPECT_EQ(canonicalBegin.source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+    ASSERT_EQ(canonicalBegin.cost_selections_size(), 1);
+    const auto &canonicalSelection = canonicalBegin.cost_selections(0);
+    EXPECT_EQ(canonicalSelection.cost_index(), 2u);
+    EXPECT_EQ(canonicalSelection.selection_case(), ruled::v1::CostSelection::kCounterRemovalGroup);
+    ASSERT_EQ(canonicalSelection.counter_removal_group().contributions_size(), 3);
+    const auto &canonicalCharge = canonicalSelection.counter_removal_group().contributions(0);
+    EXPECT_EQ(canonicalCharge.object().object_id(), firstContributorId);
+    EXPECT_EQ(canonicalCharge.object().zone_change_generation(), firstContributorGeneration);
+    EXPECT_EQ(canonicalCharge.option_id(), 7u);
+    EXPECT_EQ(canonicalCharge.count(), 1u);
+    const auto &canonicalNight = canonicalSelection.counter_removal_group().contributions(1);
+    EXPECT_EQ(canonicalNight.object().object_id(), firstContributorId);
+    EXPECT_EQ(canonicalNight.object().zone_change_generation(), firstContributorGeneration);
+    EXPECT_EQ(canonicalNight.option_id(), 13u);
+    EXPECT_EQ(canonicalNight.count(), 1u);
+    const auto &canonicalSecondCharge = canonicalSelection.counter_removal_group().contributions(2);
+    EXPECT_EQ(canonicalSecondCharge.object().object_id(), secondContributorId);
+    EXPECT_EQ(canonicalSecondCharge.object().zone_change_generation(), secondContributorGeneration);
+    EXPECT_EQ(canonicalSecondCharge.option_id(), 7u);
+    EXPECT_EQ(canonicalSecondCharge.count(), 1u);
+    ASSERT_EQ(canonicalBegin.flex_payments_size(), 1);
+    EXPECT_EQ(canonicalBegin.flex_payments(0).pip_index(), 1u);
+    EXPECT_TRUE(canonicalBegin.flex_payments(0).pay_life());
+
+    // Generation perturbations are decoded losslessly; exact-incarnation legality belongs to the engine.
+    ruled::v1::RuledCommand perturbedGenerationCommand = staleReceiptCommand;
+    auto *perturbedFirst = perturbedGenerationCommand.mutable_begin_ability_activation()
+                               ->mutable_cost_selections(0)
+                               ->mutable_counter_removal_group()
+                               ->mutable_contributions(0)
+                               ->mutable_object();
+    perturbedFirst->set_zone_change_generation(perturbedFirst->zone_change_generation() ^ 1u);
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), perturbedGenerationCommand));
+    const auto &perturbedBegin = perturbedGenerationCommand.begin_ability_activation();
+    EXPECT_EQ(perturbedBegin.source_object_id(), sourceId);
+    EXPECT_EQ(perturbedBegin.expected_zone_change_generation(), sourceGeneration);
+    const auto &perturbedSelection = perturbedBegin.cost_selections(0);
+    EXPECT_EQ(perturbedSelection.cost_index(), 2u);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(0).object().object_id(), firstContributorId);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(0).object().zone_change_generation(),
+              firstContributorGeneration ^ 1u);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(0).option_id(), 7u);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(0).count(), 1u);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(1).object().object_id(), firstContributorId);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(1).object().zone_change_generation(),
+              firstContributorGeneration);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(1).option_id(), 13u);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(2).object().object_id(), secondContributorId);
+    EXPECT_EQ(perturbedSelection.counter_removal_group().contributions(2).object().zone_change_generation(),
+              secondContributorGeneration);
+    EXPECT_EQ(perturbedBegin.flex_payments(0).pip_index(), 1u);
+    EXPECT_TRUE(perturbedBegin.flex_payments(0).pay_life());
+
+    ruled::v1::RuledCommand legacyCommand;
+    auto *legacyActivation = legacyCommand.mutable_activate_ability();
+    legacyActivation->set_source_object_id(projectedSource.object_id());
+    legacyActivation->set_ability_index(1u);
+    legacyActivation->set_expected_zone_change_generation(projectedSource.zone_change_generation());
+    auto *legacySelection = legacyActivation->add_cost_selections();
+    legacySelection->set_cost_index(2u);
+    auto *legacyGroup = legacySelection->mutable_counter_removal_group();
+    auto *legacyNight = legacyGroup->add_contributions();
+    legacyNight->mutable_object()->set_object_id(projectedFirst->object_id());
+    legacyNight->mutable_object()->set_zone_change_generation(projectedFirst->zone_change_generation());
+    legacyNight->set_option_id(13u);
+    legacyNight->set_count(1u);
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), legacyCommand));
+    EXPECT_EQ(legacyCommand.activate_ability().source_object_id(), sourceId);
+    EXPECT_EQ(legacyCommand.activate_ability().expected_zone_change_generation(), sourceGeneration);
+    ASSERT_EQ(legacyCommand.activate_ability().cost_selections_size(), 1);
+    const auto &canonicalLegacySelection = legacyCommand.activate_ability().cost_selections(0);
+    EXPECT_EQ(canonicalLegacySelection.cost_index(), 2u);
+    ASSERT_EQ(canonicalLegacySelection.counter_removal_group().contributions_size(), 1);
+    EXPECT_EQ(canonicalLegacySelection.counter_removal_group().contributions(0).object().object_id(),
+              firstContributorId);
+    EXPECT_EQ(canonicalLegacySelection.counter_removal_group().contributions(0).object().zone_change_generation(),
+              firstContributorGeneration);
+    EXPECT_EQ(canonicalLegacySelection.counter_removal_group().contributions(0).option_id(), 13u);
+    EXPECT_EQ(canonicalLegacySelection.counter_removal_group().contributions(0).count(), 1u);
+
+    constexpr quint64 replacementGeneration = 23u;
+    ruled::v1::RuledEventBatch replacementBatch;
+    auto *departure = replacementBatch.add_events()->mutable_permanent_moved();
+    departure->set_object_id(firstContributorId);
+    departure->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    departure->set_object_id_publicly_observable(true);
+    auto *identityBreak = replacementBatch.add_events()->mutable_presentation_identity_break();
+    identityBreak->set_object_id(firstContributorId);
+    identityBreak->set_zone_change_generation(replacementGeneration);
+    auto *replacementZone = replacementBatch.add_events()->mutable_zone_view();
+    auto replacementActorView =
+        buildPerPlayerView(p1, {sourceId, firstContributorId, secondContributorId}, {false, false, false});
+    replacementActorView.mutable_battlefield_objects(0)->set_zone_change_generation(sourceGeneration);
+    auto *replacementFirstView = replacementActorView.mutable_battlefield_objects(1);
+    replacementFirstView->set_zone_change_generation(replacementGeneration);
+    replacementFirstView->set_face_down(true);
+    auto *replacementSecondView = replacementActorView.mutable_battlefield_objects(2);
+    replacementSecondView->set_zone_change_generation(secondContributorGeneration);
+    replacementSecondView->set_face_down(true);
+    *replacementZone->add_per_player() = replacementActorView;
+    *replacementZone->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    auto &replacementLegal = (*replacementBatch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto &replacementChoices = (*replacementLegal.mutable_cost_choices_by_ability())[engineKey];
+    auto *replacementChoice = replacementChoices.add_choices();
+    replacementChoice->set_cost_index(2u);
+    replacementChoice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS);
+    auto *replacementGroup = replacementChoice->mutable_counter_removal_group();
+    replacementGroup->set_required_count(3u);
+    auto *replacementFirstCandidate = replacementGroup->add_candidates();
+    replacementFirstCandidate->mutable_object()->set_object_id(firstContributorId);
+    replacementFirstCandidate->mutable_object()->set_zone_change_generation(replacementGeneration);
+    auto *replacementCharge = replacementFirstCandidate->add_options();
+    replacementCharge->set_option_id(7u);
+    replacementCharge->set_label("Charge");
+    replacementCharge->set_available_count(2u);
+    auto *replacementNight = replacementFirstCandidate->add_options();
+    replacementNight->set_option_id(13u);
+    replacementNight->set_label("Night");
+    replacementNight->set_available_count(1u);
+    auto *replacementSecondCandidate = replacementGroup->add_candidates();
+    replacementSecondCandidate->mutable_object()->set_object_id(secondContributorId);
+    replacementSecondCandidate->mutable_object()->set_zone_change_generation(secondContributorGeneration);
+    auto *replacementSecondCharge = replacementSecondCandidate->add_options();
+    replacementSecondCharge->set_option_id(7u);
+    replacementSecondCharge->set_label("Charge");
+    replacementSecondCharge->set_available_count(3u);
+
+    ASSERT_TRUE(prepareIdentityBatch(replacementBatch));
+    const auto replacementProjection = redactFor(replacementBatch, p1);
+    const auto replacementZoneEvent = std::find_if(
+        replacementProjection.events().begin(), replacementProjection.events().end(),
+        [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(replacementZoneEvent, replacementProjection.events().end());
+    const ruled::v1::RuledPerPlayerView *replacementProjectedActorView = nullptr;
+    for (const auto &playerView : replacementZoneEvent->zone_view().per_player()) {
+        if (playerView.player_id() == p1->getPlayerId())
+            replacementProjectedActorView = &playerView;
+    }
+    ASSERT_NE(replacementProjectedActorView, nullptr);
+    ASSERT_EQ(replacementProjectedActorView->battlefield_objects_size(), 3);
+    const auto &replacementProjectedSource = replacementProjectedActorView->battlefield_objects(0);
+    const auto &replacementProjectedFirst = replacementProjectedActorView->battlefield_objects(1);
+    const auto &replacementProjectedSecond = replacementProjectedActorView->battlefield_objects(2);
+    EXPECT_FALSE(replacementProjectedSource.face_down());
+    EXPECT_TRUE(replacementProjectedFirst.face_down());
+    EXPECT_TRUE(replacementProjectedSecond.face_down());
+    EXPECT_EQ(replacementProjectedSource.object_id(), projectedSource.object_id());
+    EXPECT_EQ(replacementProjectedSource.zone_change_generation(), projectedSource.zone_change_generation());
+    EXPECT_NE(replacementProjectedFirst.object_id(), projectedFirst->object_id());
+    EXPECT_NE(replacementProjectedFirst.zone_change_generation(), projectedFirst->zone_change_generation());
+    EXPECT_NE(replacementProjectedFirst.object_id(), firstContributorId);
+    EXPECT_NE(replacementProjectedFirst.zone_change_generation(), replacementGeneration);
+    EXPECT_EQ(replacementProjectedSecond.object_id(), projectedSecond->object_id());
+    EXPECT_EQ(replacementProjectedSecond.zone_change_generation(), projectedSecond->zone_change_generation());
+
+    ASSERT_TRUE(replacementProjection.legal_by_player().contains(p1->getPlayerId()));
+    const auto &replacementProjectedLegal = replacementProjection.legal_by_player().at(p1->getPlayerId());
+    ASSERT_TRUE(replacementProjectedLegal.cost_choices_by_ability().contains(presentedKey));
+    const auto &replacementProjectedChoice =
+        replacementProjectedLegal.cost_choices_by_ability().at(presentedKey).choices(0);
+    ASSERT_TRUE(replacementProjectedChoice.has_counter_removal_group());
+    ASSERT_EQ(replacementProjectedChoice.counter_removal_group().candidates_size(), 2);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).object().object_id(),
+              replacementProjectedFirst.object_id());
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).object().zone_change_generation(),
+              replacementProjectedFirst.zone_change_generation());
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).options(0).option_id(), 7u);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).options(0).available_count(), 2u);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).options(1).option_id(), 13u);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(0).options(1).available_count(), 1u);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(1).object().object_id(),
+              replacementProjectedSecond.object_id());
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(1).object().zone_change_generation(),
+              replacementProjectedSecond.zone_change_generation());
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(1).options(0).option_id(), 7u);
+    EXPECT_EQ(replacementProjectedChoice.counter_removal_group().candidates(1).options(0).available_count(), 3u);
+
+    ruled::v1::RuledCommand retiredReceiptCommand = staleReceiptCommand;
+    EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), retiredReceiptCommand));
+    ruled::v1::RuledCommand replacementReceiptCommand =
+        makeBeginCommand(replacementProjectedFirst, replacementProjectedSecond);
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), replacementReceiptCommand));
+    const auto &canonicalReplacement = replacementReceiptCommand.begin_ability_activation();
+    EXPECT_EQ(canonicalReplacement.source_object_id(), sourceId);
+    EXPECT_EQ(canonicalReplacement.expected_zone_change_generation(), sourceGeneration);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(0).object().object_id(),
+              firstContributorId);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0)
+                  .counter_removal_group()
+                  .contributions(0)
+                  .object()
+                  .zone_change_generation(),
+              replacementGeneration);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(0).option_id(), 7u);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(0).count(), 1u);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(1).object().object_id(),
+              firstContributorId);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0)
+                  .counter_removal_group()
+                  .contributions(1)
+                  .object()
+                  .zone_change_generation(),
+              replacementGeneration);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(1).option_id(), 13u);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(1).count(), 1u);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0).counter_removal_group().contributions(2).object().object_id(),
+              secondContributorId);
+    EXPECT_EQ(canonicalReplacement.cost_selections(0)
+                  .counter_removal_group()
+                  .contributions(2)
+                  .object()
+                  .zone_change_generation(),
+              secondContributorGeneration);
+    EXPECT_EQ(canonicalReplacement.flex_payments(0).pip_index(), 1u);
+    EXPECT_TRUE(canonicalReplacement.flex_payments(0).pay_life());
+}
+
+TEST_F(RuledBatchTest, AggregateActivationAnnouncementsStayActorPrivateAcrossBroadcastAndReconnect)
+{
+    constexpr quint64 transactionId = 77u;
+    constexpr quint64 promptId = 43001u;
+    constexpr quint32 sourceId = 700u;
+    constexpr quint64 sourceGeneration = 4u;
+    constexpr quint32 announcedTargetId = 701u;
+    constexpr quint64 announcedTargetGeneration = 5u;
+    constexpr quint32 opponentTargetId = 702u;
+    constexpr quint64 opponentTargetGeneration = 6u;
+
+    seedCardCatalog({"Grizzly Bears", "Island", "Hill Giant"});
+    Server_Card *sourceCard = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    Server_Card *announcedTarget = addCardToTable(p1, QStringLiteral("Island"));
+    Server_Card *opponentTarget = addCardToTable(p2, QStringLiteral("Hill Giant"));
+    ASSERT_NE(sourceCard, nullptr);
+    ASSERT_NE(announcedTarget, nullptr);
+    ASSERT_NE(opponentTarget, nullptr);
+
+    auto *p3 = new Server_Player(game, 3, userA, false, nullptr);
+    insertParticipant(3, p3);
+    setupPlayerZonesAndCounters(p3);
+    auto *spectator = new Server_Player(game, 4, userA, true, nullptr);
+    insertParticipant(4, spectator);
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedZone = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1View = buildPerPlayerView(p1, {sourceId, announcedTargetId}, {false, false});
+    p1View.mutable_battlefield_objects(0)->set_zone_change_generation(sourceGeneration);
+    p1View.mutable_battlefield_objects(1)->set_zone_change_generation(announcedTargetGeneration);
+    auto p2View = buildPerPlayerView(p2, {opponentTargetId}, {false});
+    p2View.mutable_battlefield_objects(0)->set_zone_change_generation(opponentTargetGeneration);
+    *seedZone->add_per_player() = p1View;
+    *seedZone->add_per_player() = p2View;
+    *seedZone->add_per_player() = buildPerPlayerView(p3, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    EXPECT_EQ(findCardByEngineOid(p1, sourceId), sourceCard);
+    EXPECT_EQ(findCardByEngineOid(p1, announcedTargetId), announcedTarget);
+    EXPECT_EQ(findCardByEngineOid(p2, opponentTargetId), opponentTarget);
+
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    CapturingTestUserInterface p3Capture(&server);
+    CapturingTestUserInterface spectatorCapture(&server);
+    p3->setUserInterface(&p3Capture);
+    spectator->setUserInterface(&spectatorCapture);
+    struct DetachExtraParticipantInterfaces
+    {
+        Server_Player *seat = nullptr;
+        Server_Player *spectator = nullptr;
+        ~DetachExtraParticipantInterfaces()
+        {
+            if (seat)
+                seat->setUserInterface(nullptr);
+            if (spectator)
+                spectator->setUserInterface(nullptr);
+        }
+    } detachExtraInterfaces{p3, spectator};
+
+    struct Recipient
+    {
+        Server_Player *player;
+        CapturingTestUserInterface *capture;
+    };
+    const std::array<Recipient, 4> recipients{{
+        {p1, p1Capture.get()}, {p2, p2Capture.get()}, {p3, &p3Capture}, {spectator, &spectatorCapture}}};
+    const std::array<Server_Player *, 3> seats{{p1, p2, p3}};
+
+    const auto clearCaptures = [&] {
+        p1Capture->gameEvents.clear();
+        p2Capture->gameEvents.clear();
+        p3Capture.gameEvents.clear();
+        spectatorCapture.gameEvents.clear();
+    };
+    const auto appendRuledPayloads = [](const GameEventContainer &container,
+                                        QList<ruled::v1::RuledEventBatch> &payloads) {
+        for (const auto &gameEvent : container.event_list()) {
+            if (!gameEvent.HasExtension(Event_RuledPayload::ext))
+                continue;
+            ruled::v1::RuledEventBatch batch;
+            ASSERT_TRUE(batch.ParseFromString(gameEvent.GetExtension(Event_RuledPayload::ext).payload()));
+            payloads.append(std::move(batch));
+        }
+    };
+    const auto decodeCapturedPayloads = [&](const CapturingTestUserInterface &capture) {
+        QList<ruled::v1::RuledEventBatch> payloads;
+        for (const auto &container : capture.gameEvents)
+            appendRuledPayloads(container, payloads);
+        return payloads;
+    };
+    const auto decodeReconnectPayloads = [&](const ResponseContainer &response) {
+        QList<ruled::v1::RuledEventBatch> payloads;
+        for (const auto &queued : response.getPostResponseQueue()) {
+            const auto *container = dynamic_cast<const GameEventContainer *>(queued.second);
+            if (container)
+                appendRuledPayloads(*container, payloads);
+        }
+        return payloads;
+    };
+    const auto expectOnlyRecipientLegalEntry = [](const QList<ruled::v1::RuledEventBatch> &payloads,
+                                                  int recipientId,
+                                                  bool isSpectator) {
+        bool sawRecipientEntry = false;
+        for (const auto &batch : payloads) {
+            if (isSpectator) {
+                EXPECT_TRUE(batch.legal_by_player().empty());
+                continue;
+            }
+            if (batch.legal_by_player().empty())
+                continue;
+            sawRecipientEntry = true;
+            EXPECT_EQ(batch.legal_by_player().size(), 1u);
+            EXPECT_TRUE(batch.legal_by_player().contains(recipientId));
+            for (const auto &entry : batch.legal_by_player())
+                EXPECT_EQ(entry.first, recipientId);
+        }
+        if (!isSpectator)
+            EXPECT_TRUE(sawRecipientEntry) << "the reconnect/live copy should retain this seat's public pending identity";
+    };
+    const auto expectPublicManaMarker = [&](const QList<ruled::v1::RuledEventBatch> &payloads,
+                                            int recipientId,
+                                            const char *route) {
+        ASSERT_FALSE(payloads.isEmpty()) << route << " recipient " << recipientId << " received no decoded ruled payload";
+        bool sawMana = false;
+        for (const auto &payload : payloads) {
+            for (const auto &event : payload.events()) {
+                if (!event.has_mana_pool_updated())
+                    continue;
+                sawMana = true;
+                EXPECT_EQ(event.mana_pool_updated().player_id(), p1->getPlayerId());
+                EXPECT_EQ(event.mana_pool_updated().c(), 3u);
+            }
+        }
+        EXPECT_TRUE(sawMana) << route << " recipient " << recipientId << " should retain the public mana marker";
+    };
+    const auto expectBattlefieldMapSnapshot = [&](const QList<ruled::v1::RuledEventBatch> &payloads,
+                                                  int recipientId) {
+        ASSERT_FALSE(payloads.isEmpty()) << "reconnect recipient " << recipientId << " received no decoded ruled payload";
+        bool sawSnapshot = false;
+        bool sawSource = false;
+        bool sawActorContribution = false;
+        bool sawOpponentContribution = false;
+        for (const auto &payload : payloads) {
+            for (const auto &event : payload.events()) {
+                if (!event.has_battlefield_object_map())
+                    continue;
+                sawSnapshot = true;
+                const auto &entries = event.battlefield_object_map().entries();
+                ASSERT_EQ(entries.size(), 3);
+                for (const auto &entry : entries) {
+                    if (entry.player_id() == p1->getPlayerId() && entry.engine_object_id() == sourceId)
+                        sawSource = true;
+                    if (entry.player_id() == p1->getPlayerId() && entry.engine_object_id() == announcedTargetId) {
+                        sawActorContribution = true;
+                        EXPECT_EQ(entry.ordinal(), 1u);
+                        EXPECT_EQ(entry.server_card_id(), announcedTarget->getId());
+                    }
+                    if (entry.player_id() == p2->getPlayerId() && entry.engine_object_id() == opponentTargetId)
+                        sawOpponentContribution = true;
+                }
+            }
+        }
+        EXPECT_TRUE(sawSnapshot) << "reconnect recipient " << recipientId << " should receive the battlefield snapshot";
+        EXPECT_TRUE(sawSource) << "the public source identity should remain in the reconnect snapshot";
+        EXPECT_TRUE(sawActorContribution) << "the actor contribution identity should remain in the reconnect snapshot";
+        EXPECT_TRUE(sawOpponentContribution) << "the opponent contribution identity should remain in the reconnect snapshot";
+    };
+    const auto pendingForTransaction = [&](const QList<ruled::v1::RuledEventBatch> &payloads) {
+        QList<ruled::v1::PendingAbilityActivation> pendingEntries;
+        for (const auto &batch : payloads) {
+            for (const auto &entry : batch.legal_by_player()) {
+                if (!entry.second.has_pending_ability_activation())
+                    continue;
+                const auto &pending = entry.second.pending_ability_activation();
+                if (pending.transaction_id() == transactionId)
+                    pendingEntries.append(pending);
+            }
+        }
+        return pendingEntries;
+    };
+    const auto expectPublicPendingIdentity = [&](const ruled::v1::PendingAbilityActivation &pending,
+                                                 quint64 revision) {
+        EXPECT_EQ(pending.transaction_id(), transactionId);
+        EXPECT_EQ(pending.revision(), revision);
+        EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+        EXPECT_EQ(pending.source_object_id(), sourceId);
+        EXPECT_EQ(pending.source_zone_change_generation(), sourceGeneration);
+        EXPECT_EQ(pending.actor_player_id(), p1->getPlayerId());
+        EXPECT_EQ(pending.deciding_player_id(), p2->getPlayerId());
+        EXPECT_EQ(pending.chosen_opponent_id(), p2->getPlayerId());
+        EXPECT_EQ(pending.reserved_object_id(), 901u);
+        ASSERT_EQ(pending.announced_targets_size(), 1);
+        EXPECT_EQ(pending.announced_targets(0).object_id(), announcedTargetId);
+        EXPECT_EQ(pending.announced_targets(0).zone_change_generation(), announcedTargetGeneration);
+        EXPECT_EQ(pending.announced_targets(0).group_index(), 0u);
+    };
+    const auto expectActorAnnouncements = [&](const ruled::v1::PendingAbilityActivation &pending) {
+        ASSERT_EQ(pending.cost_selections_size(), 1);
+        const auto &selection = pending.cost_selections(0);
+        EXPECT_EQ(selection.cost_index(), 2u);
+        ASSERT_EQ(selection.selection_case(), ruled::v1::CostSelection::kCounterRemovalGroup);
+        ASSERT_EQ(selection.counter_removal_group().contributions_size(), 3);
+        const auto &charge = selection.counter_removal_group().contributions(0);
+        EXPECT_EQ(charge.object().object_id(), announcedTargetId);
+        EXPECT_EQ(charge.object().zone_change_generation(), announcedTargetGeneration);
+        EXPECT_EQ(charge.option_id(), 7u);
+        EXPECT_EQ(charge.count(), 1u);
+        const auto &night = selection.counter_removal_group().contributions(1);
+        EXPECT_EQ(night.object().object_id(), announcedTargetId);
+        EXPECT_EQ(night.object().zone_change_generation(), announcedTargetGeneration);
+        EXPECT_EQ(night.option_id(), 13u);
+        EXPECT_EQ(night.count(), 1u);
+        const auto &otherCharge = selection.counter_removal_group().contributions(2);
+        EXPECT_EQ(otherCharge.object().object_id(), opponentTargetId);
+        EXPECT_EQ(otherCharge.object().zone_change_generation(), opponentTargetGeneration);
+        EXPECT_EQ(otherCharge.option_id(), 7u);
+        EXPECT_EQ(otherCharge.count(), 1u);
+        ASSERT_EQ(pending.flex_payments_size(), 1);
+        EXPECT_EQ(pending.flex_payments(0).pip_index(), 1u);
+        EXPECT_TRUE(pending.flex_payments(0).pay_life());
+    };
+    const auto expectNoActorAnnouncements = [](const ruled::v1::PendingAbilityActivation &pending) {
+        EXPECT_EQ(pending.cost_selections_size(), 0);
+        EXPECT_EQ(pending.flex_payments_size(), 0);
+    };
+    const auto expectNoOpponentTargetOffers = [](const ruled::v1::PendingAbilityActivation &pending) {
+        EXPECT_FALSE(pending.has_target_group());
+        EXPECT_EQ(pending.target_candidates_size(), 0);
+    };
+    const auto expectOpponentTargetOffers = [&](const ruled::v1::PendingAbilityActivation &pending) {
+        ASSERT_TRUE(pending.has_target_group());
+        EXPECT_TRUE(pending.target_group().chosen_by_opponent());
+        ASSERT_EQ(pending.target_group().valid_permanent_ids_size(), 1);
+        EXPECT_EQ(pending.target_group().valid_permanent_ids(0), opponentTargetId);
+        ASSERT_EQ(pending.target_candidates_size(), 1);
+        EXPECT_EQ(pending.target_candidates(0).object_id(), opponentTargetId);
+        EXPECT_EQ(pending.target_candidates(0).zone_change_generation(), opponentTargetGeneration);
+        EXPECT_EQ(pending.target_candidates(0).group_index(), 1u);
+    };
+    const auto makeActivationResponse = [&](quint64 revision, bool includeAnnouncements, bool includeTargetOffers) {
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *batch = response.mutable_batch();
+        for (Server_Player *seat : seats) {
+            auto *pending = (*batch->mutable_legal_by_player())[seat->getPlayerId()].mutable_pending_ability_activation();
+            pending->set_transaction_id(transactionId);
+            pending->set_revision(revision);
+            pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+            pending->set_source_object_id(sourceId);
+            pending->set_source_zone_change_generation(sourceGeneration);
+            pending->set_actor_player_id(p1->getPlayerId());
+            pending->set_deciding_player_id(p2->getPlayerId());
+            pending->set_chosen_opponent_id(p2->getPlayerId());
+            pending->set_reserved_object_id(901u);
+            auto *announced = pending->add_announced_targets();
+            announced->set_object_id(announcedTargetId);
+            announced->set_zone_change_generation(announcedTargetGeneration);
+            announced->set_group_index(0u);
+
+            if (seat == p1 && includeAnnouncements) {
+                auto *selection = pending->add_cost_selections();
+                selection->set_cost_index(2u);
+                auto *group = selection->mutable_counter_removal_group();
+                const auto addContribution = [&](quint32 objectId, quint64 generation, quint32 optionId) {
+                    auto *contribution = group->add_contributions();
+                    contribution->mutable_object()->set_object_id(objectId);
+                    contribution->mutable_object()->set_zone_change_generation(generation);
+                    contribution->set_option_id(optionId);
+                    contribution->set_count(1u);
+                };
+                addContribution(announcedTargetId, announcedTargetGeneration, 7u);
+                addContribution(announcedTargetId, announcedTargetGeneration, 13u);
+                addContribution(opponentTargetId, opponentTargetGeneration, 7u);
+                auto *flex = pending->add_flex_payments();
+                flex->set_pip_index(1u);
+                flex->set_pay_life(true);
+            }
+            if (seat == p2 && includeTargetOffers) {
+                auto *candidate = pending->add_target_candidates();
+                candidate->set_object_id(opponentTargetId);
+                candidate->set_zone_change_generation(opponentTargetGeneration);
+                candidate->set_group_index(1u);
+                pending->mutable_target_group()->add_valid_permanent_ids(opponentTargetId);
+                pending->mutable_target_group()->set_chosen_by_opponent(true);
+            }
+        }
+        auto *mana = batch->add_events()->mutable_mana_pool_updated();
+        mana->set_player_id(p1->getPlayerId());
+        mana->set_c(3u);
+        return response;
+    };
+    const auto expectOrdinaryRecipient = [&](const QList<ruled::v1::RuledEventBatch> &payloads,
+                                             int recipientId,
+                                             quint64 revision) {
+        expectOnlyRecipientLegalEntry(payloads, recipientId, false);
+        const auto pendingEntries = pendingForTransaction(payloads);
+        ASSERT_EQ(pendingEntries.size(), 1);
+        const auto &pending = pendingEntries.first();
+        expectPublicPendingIdentity(pending, revision);
+        if (recipientId == p1->getPlayerId()) {
+            expectActorAnnouncements(pending);
+            expectNoOpponentTargetOffers(pending);
+        } else if (recipientId == p2->getPlayerId()) {
+            expectNoActorAnnouncements(pending);
+            expectOpponentTargetOffers(pending);
+        } else {
+            ASSERT_EQ(recipientId, p3->getPlayerId());
+            expectNoActorAnnouncements(pending);
+            expectNoOpponentTargetOffers(pending);
+        }
+    };
+    const auto expectOrdinaryRoute = [&](quint64 revision) {
+        for (const auto &recipient : recipients) {
+            const int recipientId = recipient.player->getPlayerId();
+            const auto livePayloads = decodeCapturedPayloads(*recipient.capture);
+            expectPublicManaMarker(livePayloads, recipientId, "live ordinary");
+            if (recipient.player == spectator) {
+                for (const auto &payload : livePayloads)
+                    EXPECT_TRUE(payload.legal_by_player().empty());
+            } else {
+                expectOrdinaryRecipient(livePayloads, recipientId, revision);
+            }
+
+            ResponseContainer reconnect(-1);
+            game->createGameJoinedEvent(recipient.player, reconnect, true);
+            const auto reconnectPayloads = decodeReconnectPayloads(reconnect);
+            expectPublicManaMarker(reconnectPayloads, recipientId, "reconnect ordinary");
+            if (recipient.player == spectator) {
+                for (const auto &payload : reconnectPayloads)
+                    EXPECT_TRUE(payload.legal_by_player().empty());
+            } else {
+                expectOrdinaryRecipient(reconnectPayloads, recipientId, revision);
+            }
+        }
+    };
+
+    ruled::v1::IpcResponse ordinary = makeActivationResponse(2u, true, true);
+    clearCaptures();
+    game->ruled()->broadcastRuledResponse(ordinary, true);
+    expectOrdinaryRoute(2u);
+
+    ruled::v1::IpcResponse nested = makeActivationResponse(3u, false, false);
+    auto *nestedBatch = nested.mutable_batch();
+    auto *prompt = nestedBatch->mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(p2->getPlayerId());
+    prompt->set_resolution_prompt_id(promptId);
+    auto *choice = nestedBatch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p2->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_resolution_prompt_id(promptId);
+    choice->set_prompt_text("Choose a damage prevention effect.");
+    choice->add_candidate_object_ids(opponentTargetId);
+    auto *replacement = choice->add_replacement_options();
+    replacement->set_application_id(opponentTargetId);
+    replacement->set_source_card_name("Hill Giant");
+    replacement->set_effect_summary("Prevent the next damage");
+    replacement->set_source_object_id(opponentTargetId);
+    replacement->set_source_zone_change_generation(opponentTargetGeneration);
+
+    clearCaptures();
+    game->ruled()->broadcastRuledResponse(nested, true);
+    for (const auto &recipient : recipients) {
+        const int recipientId = recipient.player->getPlayerId();
+        const auto checkNestedBoundary = [&](const QList<ruled::v1::RuledEventBatch> &payloads) {
+            ASSERT_FALSE(payloads.isEmpty()) << "recipient " << recipientId << " received no decoded nested payload";
+            if (recipient.player == spectator) {
+                expectOnlyRecipientLegalEntry(payloads, recipientId, true);
+            } else {
+                expectOnlyRecipientLegalEntry(payloads, recipientId, false);
+                const auto pendingEntries = pendingForTransaction(payloads);
+                ASSERT_EQ(pendingEntries.size(), 1);
+                const auto &pending = pendingEntries.first();
+                expectPublicPendingIdentity(pending, 3u);
+                expectNoActorAnnouncements(pending);
+                expectNoOpponentTargetOffers(pending);
+            }
+
+            bool sawPromptState = false;
+            bool sawChoice = false;
+            for (const auto &payload : payloads) {
+                if (payload.has_resolution_prompt_state()) {
+                    sawPromptState = true;
+                    EXPECT_TRUE(payload.resolution_prompt_state().active());
+                    EXPECT_EQ(payload.resolution_prompt_state().deciding_player_id(), p2->getPlayerId());
+                    EXPECT_EQ(payload.resolution_prompt_state().has_resolution_prompt_id(),
+                              recipientId == p2->getPlayerId());
+                    EXPECT_EQ(payload.resolution_prompt_state().resolution_prompt_id(),
+                              recipientId == p2->getPlayerId() ? promptId : 0u);
+                }
+                for (const auto &event : payload.events()) {
+                    if (!event.has_resolution_choice_required())
+                        continue;
+                    sawChoice = true;
+                    const auto &restoredChoice = event.resolution_choice_required();
+                    EXPECT_EQ(restoredChoice.deciding_player_id(), p2->getPlayerId());
+                    EXPECT_EQ(restoredChoice.choice_kind(), ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+                    EXPECT_EQ(restoredChoice.resolution_prompt_id(), recipientId == p2->getPlayerId() ? promptId : 0u);
+                    EXPECT_EQ(restoredChoice.prompt_text(), "Choose a damage prevention effect.");
+                    ASSERT_EQ(restoredChoice.candidate_object_ids_size(), 1);
+                    EXPECT_EQ(restoredChoice.candidate_object_ids(0), opponentTargetId);
+                    ASSERT_EQ(restoredChoice.replacement_options_size(), 1);
+                    EXPECT_EQ(restoredChoice.replacement_options(0).application_id(), opponentTargetId);
+                }
+            }
+            EXPECT_TRUE(sawPromptState) << "the nested resolution prompt remains part of the per-seat projection";
+            EXPECT_TRUE(sawChoice) << "the nested resolution choice boundary remains available to each game seat";
+        };
+
+        const auto livePayloads = decodeCapturedPayloads(*recipient.capture);
+        checkNestedBoundary(livePayloads);
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient.player, reconnect, true);
+        const auto reconnectPayloads = decodeReconnectPayloads(reconnect);
+        checkNestedBoundary(reconnectPayloads);
+    }
+
+    ruled::v1::IpcResponse resumedOrdinary = makeActivationResponse(4u, true, true);
+    clearCaptures();
+    game->ruled()->broadcastRuledResponse(resumedOrdinary, true);
+    expectOrdinaryRoute(4u);
+
+    ruled::v1::IpcResponse cleared;
+    cleared.set_ok(true);
+    auto *clearedBatch = cleared.mutable_batch();
+    auto *clearedPrompt = clearedBatch->mutable_resolution_prompt_state();
+    clearedPrompt->set_active(false);
+    clearedPrompt->set_deciding_player_id(p2->getPlayerId());
+    for (Server_Player *seat : seats)
+        (*clearedBatch->mutable_legal_by_player())[seat->getPlayerId()];
+    auto *clearMana = clearedBatch->add_events()->mutable_mana_pool_updated();
+    clearMana->set_player_id(p1->getPlayerId());
+    clearMana->set_c(3u);
+    clearCaptures();
+    game->ruled()->broadcastRuledResponse(cleared, true);
+    for (const auto &recipient : recipients) {
+        const auto checkCleared = [&](const QList<ruled::v1::RuledEventBatch> &payloads) {
+            ASSERT_FALSE(payloads.isEmpty()) << "recipient " << recipient.player->getPlayerId()
+                                               << " received no decoded cleared payload";
+            if (recipient.player == spectator) {
+                for (const auto &payload : payloads)
+                    EXPECT_TRUE(payload.legal_by_player().empty());
+            }
+            for (const auto &payload : payloads) {
+                if (payload.has_resolution_prompt_state())
+                    EXPECT_FALSE(payload.resolution_prompt_state().active());
+                for (const auto &legalEntry : payload.legal_by_player()) {
+                    EXPECT_FALSE(legalEntry.second.has_pending_ability_activation() &&
+                                 legalEntry.second.pending_ability_activation().transaction_id() == transactionId)
+                        << "the cleared authoritative row must retire the pending activation";
+                    if (legalEntry.second.has_pending_ability_activation()) {
+                        EXPECT_EQ(legalEntry.second.pending_ability_activation().cost_selections_size(), 0);
+                        EXPECT_EQ(legalEntry.second.pending_ability_activation().flex_payments_size(), 0);
+                    }
+                }
+                for (const auto &event : payload.events())
+                    EXPECT_FALSE(event.has_resolution_choice_required());
+            }
+        };
+        const auto liveClearedPayloads = decodeCapturedPayloads(*recipient.capture);
+        expectPublicManaMarker(liveClearedPayloads, recipient.player->getPlayerId(), "live authoritative clear");
+        checkCleared(liveClearedPayloads);
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient.player, reconnect, true);
+        const auto reconnectClearedPayloads = decodeReconnectPayloads(reconnect);
+        expectBattlefieldMapSnapshot(reconnectClearedPayloads, recipient.player->getPlayerId());
+        checkCleared(reconnectClearedPayloads);
     }
 }
 

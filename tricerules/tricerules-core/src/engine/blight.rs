@@ -74,6 +74,7 @@ impl GameEngine {
                 })
                 .collect(),
             candidate_ids,
+            ..Default::default()
         }
     }
 }

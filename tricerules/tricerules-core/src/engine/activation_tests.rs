@@ -510,6 +510,76 @@ fn activated_modal_fixture(seed: u64) -> (GameEngine, ObjectId, ObjectId) {
     (engine, source, target)
 }
 
+const B2_AGGREGATE_COUNTER_COST_FIXTURE: &str = r#"(
+    id: "b2_aggregate_counter_cost_fixture",
+    name: "B2 Aggregate Counter Cost Fixture",
+    face_id: "b2_aggregate_counter_cost_fixture",
+    types: ["Artifact"],
+    activated_abilities: [
+        (ability_id: "aggregate_01", presentation: Fallback,
+            costs: [RemoveCountersFromPermanents(
+                count: 3, counter: None,
+                filter: (kind: AnyPermanent, controller: You,
+                    permanent_types: [Artifact, Creature, Planeswalker],
+                    excluded_objects: [Source]))],
+            effect: [Draw(who: Controller, count: 1)]),
+        (ability_id: "singleton_control_02", presentation: Fallback,
+            costs: [RemoveCounters(counter: Some(Charge), count: 1,
+                payment_source: SelectedPermanent((kind: AnyPermanent,
+                    controller: You,
+                    permanent_types: [Artifact, Creature, Planeswalker],
+                    excluded_objects: [Source])))],
+            effect: [Draw(who: Controller, count: 1)])
+    ]
+)"#;
+
+fn aggregate_counter_cost_fixture(seed: u64) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/ornithopter.ron"),
+            include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            B2_AGGREGATE_COUNTER_COST_FIXTURE,
+        ],
+        &[],
+    )
+    .expect("the local aggregate counter-cost fixture validates");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        seed,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("aggregate counter-cost engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    engine.state.players[0].mana_pool.colorless = 10;
+    let source = place_ready(&mut engine, 10, "B2 Aggregate Counter Cost Fixture");
+    let artifact = place_ready(&mut engine, 10, "Ornithopter");
+    let creature = place_ready(&mut engine, 10, "Grizzly Bears");
+    engine
+        .state
+        .objects
+        .get_mut(&artifact)
+        .expect("artifact contributor")
+        .add_counters(CounterKind::Charge, 2, 0);
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("creature contributor")
+        .add_counters(CounterKind::Night, 1, 0);
+    (engine, source, artifact, creature)
+}
+
 fn self_counter_replacement_fixture(
     seed: u64,
     poison: u32,
@@ -1702,6 +1772,214 @@ fn self_counter_recipient_departure_prunes_paused_placement_and_resumes_each_pla
 }
 
 #[test]
+fn aggregate_counter_schema_is_unoffered_and_direct_activation_is_atomic_illegal() {
+    let (mut engine, source, artifact, creature) = aggregate_counter_cost_fixture(602_420);
+    let effective = engine.effective_activated_abilities(source);
+    assert_eq!(
+        effective.len(),
+        2,
+        "both printed fixture abilities are active"
+    );
+    let aggregate = effective
+        .iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "aggregate_01")
+        .expect("aggregate-cost ability");
+    let singleton = effective
+        .iter()
+        .find(|ability| ability.definition.ability_id.as_str() == "singleton_control_02")
+        .expect("supported singleton control ability");
+    let (aggregate_count, filter) = match &aggregate.definition.costs[0] {
+        AbilityCost::RemoveCountersFromPermanents {
+            count,
+            counter,
+            filter,
+        } => {
+            assert_eq!(*count, 3);
+            assert!(counter.is_none());
+            (*count, filter)
+        }
+        other => panic!("fixture aggregate cost has expected B1 shape: {other:?}"),
+    };
+    assert_eq!(aggregate_count, 3);
+
+    for (object_id, kind, count) in [
+        (artifact, CounterKind::Charge, 2),
+        (creature, CounterKind::Night, 1),
+    ] {
+        let object = &engine.state.objects[&object_id];
+        assert_eq!(object.zone, Zone::Battlefield);
+        assert_eq!(object.controller, 10);
+        assert!(engine.state.players[0].battlefield.contains(&object_id));
+        assert_eq!(object.counter_count(kind), count);
+        assert!(engine.counter_payment_permanent_matches(10, source, object_id, filter));
+    }
+    assert_eq!(
+        engine.state.objects[&artifact].counter_count(CounterKind::Charge)
+            + engine.state.objects[&creature].counter_count(CounterKind::Night),
+        aggregate_count,
+        "distinct eligible counter kinds across two eligible permanents cover the cost"
+    );
+    assert!(
+        !engine.counter_payment_permanent_matches(10, source, source, filter),
+        "the filter excludes the activation source"
+    );
+    assert!(!engine.counter_costs_payable(source, &aggregate.definition.costs));
+    assert!(engine.counter_costs_payable(source, &singleton.definition.costs));
+
+    let aggregate_info = super::legal_actions::activated_ability_info(&engine, source, aggregate);
+    assert!(!aggregate_info.activatable);
+    assert!(aggregate_info.cost_label.contains("unsupported"));
+    let singleton_info = super::legal_actions::activated_ability_info(&engine, source, singleton);
+    assert!(
+        singleton_info.activatable,
+        "the singleton positive control is legal"
+    );
+
+    let mut batch = RuledEventBatch::default();
+    super::legal_actions::fill_legal(&mut batch, &engine);
+    let public_legal = batch
+        .legal_by_player
+        .get(&10)
+        .expect("the active player receives legal action data");
+    let aggregate_key = (u64::from(source) << 32) | u64::from(aggregate.slot);
+    let aggregate_choices = public_legal
+        .cost_choices_by_ability
+        .get(&aggregate_key)
+        .expect("disabled ability may keep its keyed cost data");
+    assert!(!aggregate_choices.non_mana_costs_payable);
+    assert!(aggregate_choices.choices.is_empty());
+    assert!(aggregate_choices.cast_cost_groups.is_empty());
+
+    let singleton_key = (u64::from(source) << 32) | u64::from(singleton.slot);
+    let singleton_choices = public_legal
+        .cost_choices_by_ability
+        .get(&singleton_key)
+        .expect("supported control has its ordinary cost offer");
+    assert!(singleton_choices.non_mana_costs_payable);
+    assert_eq!(singleton_choices.choices.len(), 1);
+    assert!(singleton_choices.choices[0]
+        .candidate_ids
+        .contains(&artifact));
+    let singleton_counter_choice = singleton_choices.choices[0]
+        .counter_removal
+        .as_ref()
+        .expect("legacy singleton counter choice remains available");
+    assert!(singleton_counter_choice.source.is_none());
+    assert_eq!(singleton_counter_choice.count, 1);
+    assert_eq!(
+        singleton_counter_choice.options[0].option_id,
+        crate::engine::counters::counter_option_id(CounterKind::Charge)
+    );
+
+    let source_ref = engine.payment_object_ref(source);
+    let artifact_ref = engine.payment_object_ref(artifact);
+    let singleton_selection = rv1::CostSelection {
+        cost_index: 0,
+        selection: Some(rv1::cost_selection::Selection::CounterRemoval(
+            rv1::CounterRemovalSelection {
+                source: Some(artifact_ref),
+                option_id: crate::engine::counters::counter_option_id(CounterKind::Charge),
+            },
+        )),
+    };
+    let assert_no_pending_activation = |engine: &GameEngine| {
+        assert!(engine.state.pending_ability_activation.is_none());
+        assert!(engine.pending_ability_activation_internal.is_none());
+    };
+
+    for cost_selections in [Vec::new(), vec![singleton_selection.clone()]] {
+        let proposal = rv1::ActivateAbility {
+            source_object_id: source,
+            ability_index: aggregate.slot,
+            expected_zone_change_generation: source_ref.zone_change_generation,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+            cost_selections,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(source_ref),
+                mana: Some(rv1::PaymentMana::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let before_command =
+            serde_json::to_value(&engine.state).expect("serialize state before direct activation");
+        let result = engine.apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(proposal.clone())),
+            },
+        );
+        match result {
+            Err(EngineError::Illegal(_)) => {}
+            Err(error) => panic!("aggregate activation rejects as Illegal: {error:?}"),
+            Ok(_) => panic!("unsupported aggregate activation must not execute"),
+        }
+        assert_eq!(
+            serde_json::to_value(&engine.state).expect("serialize state after direct activation"),
+            before_command,
+            "direct legacy activation rejection is atomic"
+        );
+        assert_no_pending_activation(&engine);
+
+        let before_preview =
+            serde_json::to_value(&engine.state).expect("serialize state before preview");
+        let preview = engine.preview_payment(
+            10,
+            &rv1::PreviewPayment {
+                activate_ability: Some(proposal),
+                ..Default::default()
+            },
+        );
+        assert!(!preview.error.is_empty());
+        assert!(!preview.complete);
+        assert_eq!(
+            serde_json::to_value(&engine.state).expect("serialize state after preview"),
+            before_preview,
+            "failed payment preview is read-only"
+        );
+        assert_no_pending_activation(&engine);
+    }
+
+    let singleton_proposal = rv1::ActivateAbility {
+        source_object_id: source,
+        ability_index: singleton.slot,
+        expected_zone_change_generation: source_ref.zone_change_generation,
+        source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+        cost_selections: vec![singleton_selection],
+        payment: Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source_ref),
+            mana: Some(rv1::PaymentMana::default()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let before_control_preview =
+        serde_json::to_value(&engine.state).expect("serialize state before control preview");
+    let control_preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            activate_ability: Some(singleton_proposal),
+            ..Default::default()
+        },
+    );
+    assert!(
+        control_preview.error.is_empty(),
+        "{}",
+        control_preview.error
+    );
+    assert!(control_preview.complete);
+    assert_eq!(
+        serde_json::to_value(&engine.state).expect("serialize state after control preview"),
+        before_control_preview,
+        "successful preview plans but does not debit the singleton control"
+    );
+    assert_no_pending_activation(&engine);
+}
+
+#[test]
 fn activated_modal_rejects_invalid_mode_and_target_receipts_before_payment() {
     let (mut engine, source, target) = activated_modal_fixture(602_400);
     let generation = engine.payment_object_ref(target).zone_change_generation;
@@ -2226,6 +2504,7 @@ fn authored_battlefield_chosen_opponent_uses_the_staged_target_and_exact_owner()
                     group_index: 0,
                 }),
                 opponent_player_id: Some(20),
+                ..Default::default()
             },
         )),
     };
@@ -2845,6 +3124,7 @@ fn begin_choice(engine: &GameEngine, legacy: &rv1::ActivateAbility) -> RuledComm
                     group_index: 0,
                 }),
                 opponent_player_id: Some(20),
+                ..Default::default()
             },
         )),
     }
@@ -3860,6 +4140,7 @@ fn pending_staged_loyalty_cost_replacement() -> (
                     group_index: 0,
                 }),
                 opponent_player_id: Some(20),
+                ..Default::default()
             },
         )),
     };
@@ -4260,6 +4541,417 @@ fn arena_staged_terminal_game_abandons_announcement() {
     assert!(batch.legal_by_player.is_empty());
     assert!(!engine.state.objects[&legacy.source_object_id].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+}
+
+fn urban_retreat_hand_activation_engine(
+) -> (GameEngine, rv1::BeginAbilityActivation, ObjectId, ObjectId) {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        602_302,
+        &[10, 20],
+        20,
+        Some(vec![
+            vec!["forest".to_string(); 40],
+            vec!["forest".to_string(); 40],
+        ]),
+        true,
+    )
+    .unwrap();
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    engine
+        .apply_dev_command(
+            10,
+            &rv1::DevCommand {
+                target_player_id: 10,
+                dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                    rv1::DevPutCardInZone {
+                        card_name: "Forest".into(),
+                        zone: rv1::DevZone::Hand as i32,
+                        ready: false,
+                    },
+                )),
+            },
+        )
+        .expect("put an actual card object in the actor's hand");
+    let source = engine.state.next_object_id - 1;
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .expect("the hand source object exists")
+        .card_id = "urban_retreat".into();
+    let creature = place_ready(&mut engine, 10, "Grizzly Bears");
+    engine
+        .state
+        .objects
+        .get_mut(&creature)
+        .expect("the payment creature exists")
+        .tapped = true;
+    engine.state.players[0].mana_pool.colorless = 2;
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    engine.reconcile_activated_ability_slots();
+    let command = rv1::BeginAbilityActivation {
+        source_object_id: source,
+        expected_zone_change_generation: engine.payment_object_ref(source).zone_change_generation,
+        ability_index: 1,
+        source_zone: rv1::AbilitySourceZone::Hand as i32,
+        ..Default::default()
+    };
+    (engine, command, source, creature)
+}
+
+#[test]
+fn aggregate_counter_begin_payloads_reject_without_state_or_resource_change() {
+    let (battlefield_engine, legacy) = choice_engine();
+    let battlefield_command = begin_choice(&battlefield_engine, &legacy);
+    let mut battlefield_control = battlefield_engine.clone();
+    battlefield_control
+        .apply_scenario_command(10, &battlefield_command)
+        .expect("empty lists preserve the valid Battlefield route");
+    assert_eq!(
+        battlefield_control
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .stage(),
+        rv1::AbilityActivationStage::OpponentTarget
+    );
+    assert_eq!(battlefield_control.state.players[0].mana_pool.colorless, 3);
+
+    let (hand_engine, hand_begin, source, creature) = urban_retreat_hand_activation_engine();
+    let hand_command = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(hand_begin)),
+    };
+    let mut hand_control = hand_engine.clone();
+    let hand_batch = hand_control
+        .apply_scenario_command(10, &hand_command)
+        .expect("empty lists preserve the valid Urban Retreat hand route");
+    assert_eq!(
+        hand_control
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .stage(),
+        rv1::AbilityActivationStage::Payment
+    );
+    assert_eq!(hand_control.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(hand_control.state.objects[&source].zone, Zone::Hand);
+    assert!(hand_control.state.objects[&creature].tapped);
+    assert!(hand_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .and_then(|pending| pending.payment_preview.as_ref())
+        .is_some_and(|preview| preview.valid));
+
+    let group_cost = rv1::CostSelection {
+        cost_index: 0,
+        selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+            rv1::CounterRemovalGroupSelection::default(),
+        )),
+    };
+    let payloads = [
+        (
+            "cost-only-default-element",
+            vec![rv1::CostSelection::default()],
+            vec![],
+        ),
+        (
+            "flex-only-default-element",
+            vec![],
+            vec![rv1::FlexPipPayment::default()],
+        ),
+        (
+            "both-group-and-flex",
+            vec![group_cost],
+            vec![rv1::FlexPipPayment {
+                pip_index: 1,
+                pay_life: true,
+            }],
+        ),
+    ];
+    let routes = [
+        ("battlefield", battlefield_engine, battlefield_command),
+        ("hand", hand_engine, hand_command),
+    ];
+    let mut failures = Vec::new();
+    for (route, base_engine, base_command) in routes {
+        for (payload, cost_selections, flex_payments) in &payloads {
+            let mut engine = base_engine.clone();
+            let mut command = base_command.clone();
+            let Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)) = command.cmd.as_mut()
+            else {
+                panic!("the fixed {route} command is a BeginAbilityActivation");
+            };
+            begin.cost_selections = cost_selections.clone();
+            begin.flex_payments = flex_payments.clone();
+            let before = serde_json::to_value(&engine.state).unwrap();
+            let result = engine.apply_scenario_command(10, &command);
+            if result.is_ok() {
+                failures.push(format!("{route} {payload} Begin was accepted"));
+            }
+            if serde_json::to_value(&engine.state).unwrap() != before {
+                failures.push(format!(
+                    "{route} {payload} changed engine state or resources"
+                ));
+            }
+            if engine.pending_ability_activation_internal.is_some() {
+                failures.push(format!(
+                    "{route} {payload} allocated pending activation state"
+                ));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "nonempty Begin lists must reject before Battlefield/Hand dispatch without changing full state: {failures:#?}"
+    );
+}
+
+fn synthetic_counter_group_announcements(
+    object: rv1::CostObjectRef,
+) -> (Vec<rv1::CostSelection>, Vec<rv1::FlexPipPayment>) {
+    (
+        vec![rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::CounterRemovalGroup(
+                rv1::CounterRemovalGroupSelection {
+                    contributions: vec![rv1::CounterRemovalContribution {
+                        object: Some(object),
+                        option_id: 7,
+                        count: 1,
+                    }],
+                },
+            )),
+        }],
+        vec![rv1::FlexPipPayment {
+            pip_index: 1,
+            pay_life: true,
+        }],
+    )
+}
+
+fn pending_public_projection_matches(
+    projected: &rv1::PendingAbilityActivation,
+    canonical: &rv1::PendingAbilityActivation,
+) -> bool {
+    projected.transaction_id == canonical.transaction_id
+        && projected.revision == canonical.revision
+        && projected.stage == canonical.stage
+        && projected.actor_player_id == canonical.actor_player_id
+        && projected.deciding_player_id == canonical.deciding_player_id
+        && projected.source_object_id == canonical.source_object_id
+        && projected.source_zone_change_generation == canonical.source_zone_change_generation
+        && projected.ability_index == canonical.ability_index
+        && projected.reserved_object_id == canonical.reserved_object_id
+        && projected.chosen_opponent_id == canonical.chosen_opponent_id
+        && projected.announced_targets == canonical.announced_targets
+        && projected.source_description == canonical.source_description
+        && projected.source_zone == canonical.source_zone
+        && projected.return_tapped_creature_cost_index
+            == canonical.return_tapped_creature_cost_index
+}
+
+#[test]
+fn aggregate_pending_projection_keeps_announcements_actor_private() {
+    let mut failures = Vec::new();
+
+    let (mut engine, legacy) = choice_engine_players(&[10, 20, 30]);
+    let begin = begin_choice(&engine, &legacy);
+    let begin_batch = engine
+        .apply_scenario_command(10, &begin)
+        .expect("the existing Battlefield route reaches its opponent target stage");
+    assert_eq!(
+        begin_batch.legal_by_player[&20]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .stage(),
+        rv1::AbilityActivationStage::OpponentTarget
+    );
+    let own_identity = engine.payment_object_ref(legacy.targets[0].object_id);
+    let (announcements, flex_announcements) = synthetic_counter_group_announcements(own_identity);
+    {
+        let canonical = engine
+            .state
+            .pending_ability_activation
+            .as_mut()
+            .expect("the actual opponent-target activation remains pending");
+        canonical.cost_selections = announcements.clone();
+        canonical.flex_payments = flex_announcements.clone();
+    }
+    let canonical = engine.state.pending_ability_activation.clone().unwrap();
+    let before_projection = serde_json::to_value(&engine.state).unwrap();
+    for (viewer, retains_new_fields) in [(10, true), (20, false), (30, false), (-1, false)] {
+        let projected = engine
+            .pending_ability_activation_for(viewer)
+            .expect("the canonical pending activation has a projection");
+        if !pending_public_projection_matches(&projected, &canonical) {
+            failures.push(format!("viewer {viewer} changed public pending fields"));
+        }
+        if retains_new_fields {
+            if projected.cost_selections != announcements
+                || projected.flex_payments != flex_announcements
+            {
+                failures.push("actor 10 lost its announcements while opponent 20 decides".into());
+            }
+            if !projected.target_candidates.is_empty() || projected.target_group.is_some() {
+                failures.push("actor 10 saw the opponent's target offer".into());
+            }
+        } else if !projected.cost_selections.is_empty() || !projected.flex_payments.is_empty() {
+            failures.push(format!(
+                "nonactor viewer {viewer} received actor-private lists"
+            ));
+        }
+        if viewer == 20
+            && (projected.target_candidates.len() != 1
+                || !projected
+                    .target_group
+                    .as_ref()
+                    .is_some_and(|group| group.chosen_by_opponent))
+        {
+            failures.push("deciding opponent 20 lost the existing target offer".into());
+        }
+    }
+    if serde_json::to_value(&engine.state).unwrap() != before_projection {
+        failures.push("pending projections mutated canonical Battlefield state".into());
+    }
+
+    let (mut nested, legacy) = choice_engine();
+    let mana_source = place_ready(&mut nested, 10, "Pain Payment Land");
+    nested.state.players[0].mana_pool.colorless = 0;
+    nested.state.add_damage_prevention_shield(10, 1);
+    nested.state.add_damage_prevention_shield(10, 1);
+    let commit = announce_both(&mut nested, &legacy);
+    let nested_batch = activate_fixture_mana(&mut nested, mana_source);
+    let choice = nested
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the real shield/order choice parks the outer activation")
+        .presentation
+        .candidates[0];
+    if nested_batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .and_then(|pending| pending.payment_preview.as_ref())
+        .is_some()
+    {
+        failures.push("nested resolution exposed the actor payment preview".into());
+    }
+    let nested_identity = nested.payment_object_ref(legacy.targets[0].object_id);
+    let (nested_announcements, nested_flex) =
+        synthetic_counter_group_announcements(nested_identity);
+    {
+        let canonical = nested
+            .state
+            .pending_ability_activation
+            .as_mut()
+            .expect("the outer activation remains pending under nested resolution");
+        canonical.cost_selections = nested_announcements.clone();
+        canonical.flex_payments = nested_flex.clone();
+    }
+    let canonical = nested.state.pending_ability_activation.clone().unwrap();
+    let nested_before_projection = serde_json::to_value(&nested.state).unwrap();
+    for viewer in [10, 20, -1] {
+        let projected = nested
+            .pending_ability_activation_for(viewer)
+            .expect("the outer pending activation remains projectable");
+        if !projected.cost_selections.is_empty() || !projected.flex_payments.is_empty() {
+            failures.push(format!(
+                "nested resolution exposed actor lists to viewer {viewer}"
+            ));
+        }
+        if projected.payment_preview.is_some() {
+            failures.push(format!(
+                "nested resolution exposed payment preview to viewer {viewer}"
+            ));
+        }
+        if !pending_public_projection_matches(&projected, &canonical) {
+            failures.push(format!(
+                "nested projection changed public fields for viewer {viewer}"
+            ));
+        }
+    }
+    if serde_json::to_value(&nested.state).unwrap() != nested_before_projection {
+        failures.push("nested pending projections mutated canonical state".into());
+    }
+
+    let batch = nested
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![choice],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("answer the actual nested shield choice");
+    if nested.state.pending_resolution.is_some() {
+        failures.push("answering the nested choice did not resume the outer activation".into());
+    }
+    let resumed = nested
+        .state
+        .pending_ability_activation
+        .clone()
+        .expect("the same outer activation resumes after the nested choice");
+    if resumed.transaction_id != commit.transaction_id
+        || resumed.cost_selections != nested_announcements
+        || resumed.flex_payments != nested_flex
+    {
+        failures.push("nested answer changed the canonical announcements or transaction".into());
+    }
+    let actor_batch = batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .expect("resumed response includes the actor pending activation");
+    if actor_batch.transaction_id != commit.transaction_id
+        || actor_batch.cost_selections != nested_announcements
+        || actor_batch.flex_payments != nested_flex
+        || actor_batch.payment_preview.is_none()
+    {
+        failures
+            .push("actor did not regain its lists and payment preview after nested choice".into());
+    }
+    let resumed_before_projection = serde_json::to_value(&nested.state).unwrap();
+    let actor_after = nested
+        .pending_ability_activation_for(10)
+        .expect("actor projection returns when nested resolution clears");
+    if actor_after.cost_selections != nested_announcements
+        || actor_after.flex_payments != nested_flex
+        || actor_after.payment_preview.is_none()
+        || !pending_public_projection_matches(&actor_after, &resumed)
+    {
+        failures.push("direct actor projection did not restore its lists".into());
+    }
+    for viewer in [20, -1] {
+        let projected = nested
+            .pending_ability_activation_for(viewer)
+            .expect("nonactor projection remains available after nested choice");
+        if !projected.cost_selections.is_empty()
+            || !projected.flex_payments.is_empty()
+            || projected.payment_preview.is_some()
+            || !pending_public_projection_matches(&projected, &resumed)
+        {
+            failures.push(format!(
+                "resumed nonactor viewer {viewer} received private data"
+            ));
+        }
+    }
+    if serde_json::to_value(&nested.state).unwrap() != resumed_before_projection {
+        failures.push("resumed projections mutated canonical announcement state".into());
+    }
+
+    assert!(
+        failures.is_empty(),
+        "new pending announcements must be actor-private independently of decider and suppressed during nested resolution: {failures:#?}"
+    );
 }
 
 #[test]

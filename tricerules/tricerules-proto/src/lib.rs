@@ -207,6 +207,29 @@ mod tests {
         }
     }
 
+    fn message_descriptor<'a>(
+        descriptors: &'a prost_types::FileDescriptorSet,
+        name: &str,
+    ) -> &'a prost_types::DescriptorProto {
+        descriptors
+            .file
+            .iter()
+            .flat_map(|file| &file.message_type)
+            .find(|message| message.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("ruled.v1.{name} is present"))
+    }
+
+    fn message_field<'a>(
+        message: &'a prost_types::DescriptorProto,
+        name: &str,
+    ) -> &'a prost_types::FieldDescriptorProto {
+        message
+            .field
+            .iter()
+            .find(|field| field.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("{}.{} is present", message.name.as_deref().unwrap(), name))
+    }
+
     #[test]
     fn private_card_look_round_trips_and_enforces_owner_routing_and_bounds() {
         let valid = private_look_log(Some(0), vec!["Opt".into(), "Island".into()]);
@@ -263,5 +286,402 @@ mod tests {
         ))
         .is_err());
         assert!(validate_private_card_look(&rv1::LogMessage::default()).is_ok());
+    }
+
+    #[test]
+    fn aggregate_counter_group_wire_contract_roundtrips() {
+        // These are literal canonical bytes for the reviewed additive wire shape. They are
+        // intentionally decoded through the existing generated types before those types gain
+        // named group members, so old prost must expose the real unknown-field loss as a RED.
+        let legal = vec![
+            0x08, 0x02, 0x30, 0x09, 0x5a, 0x18, 0x08, 0x03, 0x12, 0x14, 0x0a, 0x04, 0x08, 0x11,
+            0x10, 0x04, 0x12, 0x0c, 0x08, 0x07, 0x12, 0x06, 0x43, 0x68, 0x61, 0x72, 0x67, 0x65,
+            0x18, 0x03,
+        ];
+        let selection = vec![
+            0x08, 0x02, 0x3a, 0x0c, 0x0a, 0x0a, 0x0a, 0x04, 0x08, 0x11, 0x10, 0x04, 0x10, 0x07,
+            0x18, 0x03,
+        ];
+        let begin = vec![
+            0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01, 0x3a, 0x10, 0x08, 0x02, 0x3a, 0x0c,
+            0x0a, 0x0a, 0x0a, 0x04, 0x08, 0x11, 0x10, 0x04, 0x10, 0x07, 0x18, 0x03, 0x42, 0x04,
+            0x08, 0x01, 0x10, 0x01,
+        ];
+        let pending = vec![
+            0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0a, 0x28, 0x14, 0x30, 0x29, 0x38, 0x04,
+            0xb2, 0x01, 0x10, 0x08, 0x02, 0x3a, 0x0c, 0x0a, 0x0a, 0x0a, 0x04, 0x08, 0x11, 0x10,
+            0x04, 0x10, 0x07, 0x18, 0x03, 0xba, 0x01, 0x04, 0x08, 0x01, 0x10, 0x01,
+        ];
+
+        assert_eq!(
+            rv1::LegalCostChoice::decode(legal.as_slice())
+                .expect("grouped legal choice decodes")
+                .encode_to_vec(),
+            legal
+        );
+        assert_eq!(
+            rv1::CostSelection::decode(selection.as_slice())
+                .expect("grouped selection decodes")
+                .encode_to_vec(),
+            selection
+        );
+        assert_eq!(
+            rv1::BeginAbilityActivation::decode(begin.as_slice())
+                .expect("announced Begin payload decodes")
+                .encode_to_vec(),
+            begin
+        );
+        assert_eq!(
+            rv1::PendingAbilityActivation::decode(pending.as_slice())
+                .expect("private pending announcement decodes")
+                .encode_to_vec(),
+            pending
+        );
+
+        let legal = rv1::LegalCostChoice::decode(legal.as_slice()).unwrap();
+        assert_eq!(legal.cost_index, 2);
+        assert_eq!(legal.kind, 9);
+        let group = legal
+            .counter_removal_group
+            .expect("grouped legal choice is typed");
+        assert_eq!(group.required_count, 3);
+        assert_eq!(group.candidates.len(), 1);
+        let candidate = &group.candidates[0];
+        let object = candidate.object.as_ref().expect("candidate has identity");
+        assert_eq!((object.object_id, object.zone_change_generation), (17, 4));
+        assert_eq!(candidate.options.len(), 1);
+        assert_eq!(candidate.options[0].option_id, 7);
+        assert_eq!(candidate.options[0].label, "Charge");
+        assert_eq!(candidate.options[0].available_count, 3);
+
+        let selection = rv1::CostSelection::decode(selection.as_slice()).unwrap();
+        assert_eq!(selection.cost_index, 2);
+        let group = match selection.selection.expect("grouped selection is typed") {
+            rv1::cost_selection::Selection::CounterRemovalGroup(group) => group,
+            other => panic!("expected grouped selection, got {other:?}"),
+        };
+        assert_eq!(group.contributions.len(), 1);
+        let contribution = &group.contributions[0];
+        let object = contribution
+            .object
+            .as_ref()
+            .expect("contribution has identity");
+        assert_eq!((object.object_id, object.zone_change_generation), (17, 4));
+        assert_eq!(contribution.option_id, 7);
+        assert_eq!(contribution.count, 3);
+
+        let begin = rv1::BeginAbilityActivation::decode(begin.as_slice()).unwrap();
+        assert_eq!(begin.cost_selections.len(), 1);
+        assert_eq!(begin.cost_selections[0].cost_index, 2);
+        assert_eq!(begin.flex_payments.len(), 1);
+        assert_eq!(begin.flex_payments[0].pip_index, 1);
+        assert!(begin.flex_payments[0].pay_life);
+
+        let pending = rv1::PendingAbilityActivation::decode(pending.as_slice()).unwrap();
+        assert_eq!(pending.cost_selections.len(), 1);
+        assert_eq!(pending.cost_selections[0].cost_index, 2);
+        assert_eq!(pending.flex_payments.len(), 1);
+        assert_eq!(pending.flex_payments[0].pip_index, 1);
+        assert!(pending.flex_payments[0].pay_life);
+
+        let descriptor_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/ruled-descriptors.bin"));
+        let descriptors = prost_types::FileDescriptorSet::decode(descriptor_bytes.as_slice())
+            .expect("the generated descriptor set decodes");
+        let legal = message_field(
+            message_descriptor(&descriptors, "LegalCostChoice"),
+            "counter_removal_group",
+        );
+        assert_eq!(legal.number, Some(11));
+        assert_eq!(
+            legal.type_name.as_deref(),
+            Some(".ruled.v1.CounterRemovalGroupChoices")
+        );
+
+        let candidate = message_descriptor(&descriptors, "CounterRemovalGroupCandidate");
+        let object = message_field(candidate, "object");
+        assert_eq!(object.number, Some(1));
+        assert_eq!(object.type_name.as_deref(), Some(".ruled.v1.CostObjectRef"));
+        let options = message_field(candidate, "options");
+        assert_eq!(options.number, Some(2));
+        assert_eq!(options.label, Some(3));
+        assert_eq!(
+            options.type_name.as_deref(),
+            Some(".ruled.v1.CounterRemovalOption")
+        );
+
+        let choices = message_descriptor(&descriptors, "CounterRemovalGroupChoices");
+        assert_eq!(message_field(choices, "required_count").number, Some(1));
+        let candidates = message_field(choices, "candidates");
+        assert_eq!(candidates.number, Some(2));
+        assert_eq!(candidates.label, Some(3));
+        assert_eq!(
+            candidates.type_name.as_deref(),
+            Some(".ruled.v1.CounterRemovalGroupCandidate")
+        );
+
+        let contribution = message_descriptor(&descriptors, "CounterRemovalContribution");
+        assert_eq!(message_field(contribution, "object").number, Some(1));
+        assert_eq!(message_field(contribution, "option_id").number, Some(2));
+        assert_eq!(message_field(contribution, "count").number, Some(3));
+
+        let group_selection = message_descriptor(&descriptors, "CounterRemovalGroupSelection");
+        let contributions = message_field(group_selection, "contributions");
+        assert_eq!(contributions.number, Some(1));
+        assert_eq!(contributions.label, Some(3));
+        assert_eq!(
+            contributions.type_name.as_deref(),
+            Some(".ruled.v1.CounterRemovalContribution")
+        );
+
+        let selection_message = message_descriptor(&descriptors, "CostSelection");
+        assert_eq!(
+            selection_message
+                .oneof_decl
+                .first()
+                .and_then(|oneof| oneof.name.as_deref()),
+            Some("selection")
+        );
+        let grouped_selection = message_field(selection_message, "counter_removal_group");
+        assert_eq!(grouped_selection.number, Some(7));
+        assert_eq!(grouped_selection.oneof_index, Some(0));
+        assert_eq!(
+            grouped_selection.type_name.as_deref(),
+            Some(".ruled.v1.CounterRemovalGroupSelection")
+        );
+
+        let begin_message = message_descriptor(&descriptors, "BeginAbilityActivation");
+        for (name, number, type_name) in [
+            ("cost_selections", 7, ".ruled.v1.CostSelection"),
+            ("flex_payments", 8, ".ruled.v1.FlexPipPayment"),
+        ] {
+            let field = message_field(begin_message, name);
+            assert_eq!(field.number, Some(number));
+            assert_eq!(field.label, Some(3));
+            assert_eq!(field.type_name.as_deref(), Some(type_name));
+        }
+
+        let pending_message = message_descriptor(&descriptors, "PendingAbilityActivation");
+        for (name, number, type_name) in [
+            ("cost_selections", 22, ".ruled.v1.CostSelection"),
+            ("flex_payments", 23, ".ruled.v1.FlexPipPayment"),
+        ] {
+            let field = message_field(pending_message, name);
+            assert_eq!(field.number, Some(number));
+            assert_eq!(field.label, Some(3));
+            assert_eq!(field.type_name.as_deref(), Some(type_name));
+        }
+
+        let cost_choice_kind = descriptors
+            .file
+            .iter()
+            .flat_map(|file| &file.enum_type)
+            .find(|enumeration| enumeration.name.as_deref() == Some("CostChoiceKind"))
+            .expect("ruled.v1.CostChoiceKind is present");
+        assert!(cost_choice_kind.value.iter().any(|value| {
+            value.name.as_deref() == Some("COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS")
+                && value.number == Some(9)
+        }));
+    }
+
+    #[test]
+    fn aggregate_counter_group_absence_preserves_old_wire() {
+        let old_legal = [0x08, 0x02, 0x30, 0x06];
+        let old_hand_selection = [0x08, 0x02, 0x10, 0x03];
+        let old_singleton_selection = [
+            0x08, 0x02, 0x32, 0x08, 0x0a, 0x04, 0x08, 0x11, 0x10, 0x04, 0x10, 0x07,
+        ];
+        let old_begin = [0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01];
+        let old_pending = [
+            0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0a, 0x28, 0x14, 0x30, 0x29, 0x38, 0x04,
+        ];
+
+        assert_eq!(
+            rv1::LegalCostChoice::decode(old_legal.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            old_legal
+        );
+        assert_eq!(
+            rv1::CostSelection::decode(old_hand_selection.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            old_hand_selection
+        );
+        assert_eq!(
+            rv1::CostSelection::decode(old_singleton_selection.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            old_singleton_selection
+        );
+        assert_eq!(
+            rv1::BeginAbilityActivation::decode(old_begin.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            old_begin
+        );
+        assert_eq!(
+            rv1::PendingAbilityActivation::decode(old_pending.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            old_pending
+        );
+
+        assert!(rv1::LegalCostChoice::decode(old_legal.as_slice())
+            .unwrap()
+            .counter_removal_group
+            .is_none());
+        assert_eq!(
+            rv1::CostSelection::decode(old_hand_selection.as_slice())
+                .unwrap()
+                .selection,
+            Some(rv1::cost_selection::Selection::HandIndex(3))
+        );
+        assert!(rv1::BeginAbilityActivation::decode(old_begin.as_slice())
+            .unwrap()
+            .cost_selections
+            .is_empty());
+        assert!(rv1::BeginAbilityActivation::decode(old_begin.as_slice())
+            .unwrap()
+            .flex_payments
+            .is_empty());
+        assert!(
+            rv1::PendingAbilityActivation::decode(old_pending.as_slice())
+                .unwrap()
+                .cost_selections
+                .is_empty()
+        );
+        assert!(
+            rv1::PendingAbilityActivation::decode(old_pending.as_slice())
+                .unwrap()
+                .flex_payments
+                .is_empty()
+        );
+
+        let unknown_selection = [0x08, 0x02, 0x9a, 0x06, 0x00];
+        let decoded = rv1::CostSelection::decode(unknown_selection.as_slice()).unwrap();
+        assert_eq!(decoded.cost_index, 2);
+        assert!(decoded.selection.is_none());
+        assert_eq!(decoded.encode_to_vec(), [0x08, 0x02]);
+        assert!(rv1::CostChoiceKind::try_from(10).is_err());
+
+        // An explicitly present empty new message/list remains wire-present after schema
+        // generation; old generated types drop these unknown fields and fail this assertion.
+        let present_legal_group = [0x08, 0x02, 0x30, 0x06, 0x5a, 0x00];
+        assert_eq!(
+            rv1::LegalCostChoice::decode(present_legal_group.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            present_legal_group
+        );
+        let present_group = rv1::LegalCostChoice::decode(present_legal_group.as_slice()).unwrap();
+        assert_eq!(
+            present_group
+                .counter_removal_group
+                .expect("present empty legal group remains present"),
+            rv1::CounterRemovalGroupChoices::default()
+        );
+        let present_selection_group = [0x08, 0x02, 0x3a, 0x00];
+        assert_eq!(
+            rv1::CostSelection::decode(present_selection_group.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            present_selection_group
+        );
+        assert!(matches!(
+            rv1::CostSelection::decode(present_selection_group.as_slice())
+                .unwrap()
+                .selection,
+            Some(rv1::cost_selection::Selection::CounterRemovalGroup(group))
+                if group.contributions.is_empty()
+        ));
+        let begin_with_empty_cost = [0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01, 0x3a, 0x00];
+        assert_eq!(
+            rv1::BeginAbilityActivation::decode(begin_with_empty_cost.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            begin_with_empty_cost
+        );
+        let begin_costs = rv1::BeginAbilityActivation::decode(begin_with_empty_cost.as_slice())
+            .unwrap()
+            .cost_selections;
+        assert_eq!(begin_costs, [rv1::CostSelection::default()]);
+        let begin_with_empty_flex = [0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01, 0x42, 0x00];
+        assert_eq!(
+            rv1::BeginAbilityActivation::decode(begin_with_empty_flex.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            begin_with_empty_flex
+        );
+        let begin_flex = rv1::BeginAbilityActivation::decode(begin_with_empty_flex.as_slice())
+            .unwrap()
+            .flex_payments;
+        assert_eq!(begin_flex, [rv1::FlexPipPayment::default()]);
+        let pending_with_empty_cost = [
+            0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0a, 0x28, 0x14, 0x30, 0x29, 0x38, 0x04,
+            0xb2, 0x01, 0x00,
+        ];
+        assert_eq!(
+            rv1::PendingAbilityActivation::decode(pending_with_empty_cost.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            pending_with_empty_cost
+        );
+        let pending_costs =
+            rv1::PendingAbilityActivation::decode(pending_with_empty_cost.as_slice())
+                .unwrap()
+                .cost_selections;
+        assert_eq!(pending_costs, [rv1::CostSelection::default()]);
+        let pending_with_empty_flex = [
+            0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0a, 0x28, 0x14, 0x30, 0x29, 0x38, 0x04,
+            0xba, 0x01, 0x00,
+        ];
+        assert_eq!(
+            rv1::PendingAbilityActivation::decode(pending_with_empty_flex.as_slice())
+                .unwrap()
+                .encode_to_vec(),
+            pending_with_empty_flex
+        );
+        let pending_flex =
+            rv1::PendingAbilityActivation::decode(pending_with_empty_flex.as_slice())
+                .unwrap()
+                .flex_payments;
+        assert_eq!(pending_flex, [rv1::FlexPipPayment::default()]);
+    }
+
+    #[test]
+    fn aggregate_begin_and_pending_preserve_private_announcements() {
+        let begin = [
+            0x08, 0x29, 0x10, 0x04, 0x18, 0x01, 0x30, 0x01, 0x3a, 0x10, 0x08, 0x02, 0x3a, 0x0c,
+            0x0a, 0x0a, 0x0a, 0x04, 0x08, 0x11, 0x10, 0x04, 0x10, 0x07, 0x18, 0x03, 0x42, 0x04,
+            0x08, 0x01, 0x10, 0x01,
+        ];
+        let pending = [
+            0x08, 0x05, 0x10, 0x01, 0x18, 0x02, 0x20, 0x0a, 0x28, 0x14, 0x30, 0x29, 0x38, 0x04,
+            0xb2, 0x01, 0x10, 0x08, 0x02, 0x3a, 0x0c, 0x0a, 0x0a, 0x0a, 0x04, 0x08, 0x11, 0x10,
+            0x04, 0x10, 0x07, 0x18, 0x03, 0xba, 0x01, 0x04, 0x08, 0x01, 0x10, 0x01,
+        ];
+
+        assert_eq!(
+            rv1::BeginAbilityActivation::decode(begin.as_slice())
+                .expect("Begin private announcement shape decodes")
+                .encode_to_vec(),
+            begin
+        );
+        assert_eq!(
+            rv1::PendingAbilityActivation::decode(pending.as_slice())
+                .expect("pending private announcement shape decodes")
+                .encode_to_vec(),
+            pending
+        );
+        let begin = rv1::BeginAbilityActivation::decode(begin.as_slice()).unwrap();
+        assert_eq!(begin.cost_selections.len(), 1);
+        assert_eq!(begin.flex_payments.len(), 1);
+        assert_eq!(begin.flex_payments[0].pip_index, 1);
+        assert!(begin.flex_payments[0].pay_life);
+        let pending = rv1::PendingAbilityActivation::decode(pending.as_slice()).unwrap();
+        assert_eq!(pending.cost_selections.len(), 1);
+        assert_eq!(pending.flex_payments.len(), 1);
+        assert_eq!(pending.flex_payments[0].pip_index, 1);
+        assert!(pending.flex_payments[0].pay_life);
     }
 }

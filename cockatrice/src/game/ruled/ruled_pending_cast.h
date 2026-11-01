@@ -432,6 +432,31 @@ template <typename PendingPayment>
 [[nodiscard]] inline bool ruledPendingLoyaltyXOfferStillCurrent(const RuledClientState &state,
                                                                 const PendingActivatedAbility &pending);
 
+[[nodiscard]] inline bool ruledPendingAbilityCostChoiceKindSupported(RuledCostChoiceKind kind)
+{
+    switch (kind) {
+        case RuledCostChoiceKind::Discard:
+        case RuledCostChoiceKind::Sacrifice:
+        case RuledCostChoiceKind::Exile:
+        case RuledCostChoiceKind::Tap:
+        case RuledCostChoiceKind::Blight:
+        case RuledCostChoiceKind::RemoveCounters:
+        case RuledCostChoiceKind::ReturnUnblockedAttacker:
+        case RuledCostChoiceKind::ReturnTappedCreature:
+            return true;
+        case RuledCostChoiceKind::Unspecified:
+            return false;
+    }
+    return false;
+}
+
+[[nodiscard]] inline bool ruledPendingAbilityCostChoicesSupported(const QVector<RuledCostChoice> &choices)
+{
+    return std::all_of(choices.cbegin(), choices.cend(), [](const RuledCostChoice &choice) {
+        return ruledPendingAbilityCostChoiceKindSupported(choice.kind);
+    });
+}
+
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
 /// permanent actions deliberately carry no activated-ability index, so they must be matched
 /// against the engine's typed action list instead.
@@ -461,8 +486,31 @@ template <typename PendingPayment>
         state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
         state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex) &&
         (!pending.selectedMode || ruledCurrentActivatedAbilityMode(state, pending));
-    return sourceStillCurrent &&
-           (!pending.loyaltyXChoice || ruledPendingLoyaltyXOfferStillCurrent(state, pending));
+    if (!sourceStillCurrent ||
+        (pending.loyaltyXChoice && !ruledPendingLoyaltyXOfferStillCurrent(state, pending))) {
+        return false;
+    }
+    return ruledPendingAbilityCostChoicesSupported(
+               state.abilityCostChoices(pending.permanentOid, pending.abilityIndex)) &&
+           ruledPendingAbilityCostChoicesSupported(pending.costChoices);
+}
+
+/// Gate a side-effecting activated-cost UI operation at its shared production prefix. The cancel
+/// callback may clear `pending`, so no pending state is read after either callback runs.
+template <typename Cancel, typename Operation>
+inline void ruledDispatchPendingAbilityCostOperation(const RuledClientState &state,
+                                                     PendingActivatedAbility &pending,
+                                                     Cancel cancel,
+                                                     Operation operation)
+{
+    if (!pending.valid) {
+        return;
+    }
+    if (!ruledPendingAbilitySourceStillCurrent(state, pending)) {
+        cancel();
+        return;
+    }
+    operation();
 }
 
 [[nodiscard]] inline bool ruledPendingLoyaltyXOfferStillCurrent(const RuledClientState &state,

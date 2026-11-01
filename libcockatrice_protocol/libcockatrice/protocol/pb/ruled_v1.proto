@@ -948,6 +948,7 @@ enum CostChoiceKind {
   COST_CHOICE_KIND_REMOVE_COUNTERS = 6;
   COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER = 7;
   COST_CHOICE_KIND_RETURN_TAPPED_CREATURE = 8;
+  COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS = 9;
 }
 
 // A public-zone object choice bound to the exact zone-change generation that was published.
@@ -1008,6 +1009,7 @@ message LegalCostChoice {
   uint32 blight_count = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CounterRemovalChoices counter_removal = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   AggregateMinimumConstraint aggregate_minimum = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CounterRemovalGroupChoices counter_removal_group = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Counter-removal costs. IDs denote engine counter kinds, never list positions.
@@ -1029,6 +1031,26 @@ message CounterRemovalSelection {
   // The source-only ability object or the selected candidate permanent, with physical identity.
   CostObjectRef source = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 option_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CounterRemovalGroupCandidate {
+  CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CounterRemovalOption options = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CounterRemovalGroupChoices {
+  uint32 required_count = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CounterRemovalGroupCandidate candidates = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CounterRemovalContribution {
+  CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 option_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 count = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CounterRemovalGroupSelection {
+  repeated CounterRemovalContribution contributions = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCostChoices {
@@ -1257,6 +1279,8 @@ message PendingAbilityActivation {
   repeated CostObjectRef return_tapped_creature_candidates = 20
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   optional uint32 return_tapped_creature_cost_index = 21 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated CostSelection cost_selections = 22 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated FlexPipPayment flex_payments = 23 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message BeginAbilityActivation {
@@ -1266,6 +1290,8 @@ message BeginAbilityActivation {
   AbilityActivationTarget own_target = 4;
   optional int32 opponent_player_id = 5;
   AbilitySourceZone source_zone = 6;
+  repeated CostSelection cost_selections = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated FlexPipPayment flex_payments = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message SubmitAbilityActivationChoice {
@@ -2064,6 +2090,7 @@ message CostSelection {
     CostObjectRefs graveyard_objects = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     CostObjectRefs battlefield_objects = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     CounterRemovalSelection counter_removal = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    CounterRemovalGroupSelection counter_removal_group = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
 }
 

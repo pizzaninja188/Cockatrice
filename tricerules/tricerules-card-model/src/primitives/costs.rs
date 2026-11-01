@@ -107,6 +107,16 @@ pub enum AbilityCost {
         #[serde(default)]
         payment_source: CounterRemovalPaymentSource,
     },
+    /// Remove an exact fixed number of counters from matching battlefield permanents. `None`
+    /// permits different counter kinds and objects to contribute to the total; `Some(kind)`
+    /// requires every unit to be that kind. Tekuthal uses the any-kind form for its three-counter
+    /// activation cost, which cannot be represented by the one-source or one-selected-permanent
+    /// [`Self::RemoveCounters`] payment.
+    RemoveCountersFromPermanents {
+        count: u32,
+        counter: Option<super::CounterKind>,
+        filter: TargetFilter,
+    },
     /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
     Blight { count: u32 },
     /// CR 119.4 / 602.2b: pay a fixed amount of life as part of one atomic activation cost.
@@ -221,6 +231,30 @@ impl AbilityCost {
                     counter.validate()?;
                 }
                 Ok(())
+            }
+            Self::RemoveCountersFromPermanents {
+                count,
+                counter,
+                filter,
+            } => {
+                if *count == 0 {
+                    return Err("aggregate counter cost requires a positive count".into());
+                }
+                if let Some(counter) = counter {
+                    counter.validate()?;
+                }
+                if !counter_payment_filter_is_permanent(filter) {
+                    return Err(
+                        "aggregate counter payment requires Creature or AnyPermanent filters"
+                            .into(),
+                    );
+                }
+                if !counter_payment_filter_has_context_free_controller(filter) {
+                    return Err(
+                        "aggregate counter payment cannot use defending-player context".into(),
+                    );
+                }
+                filter.validate_characteristic_constraints()
             }
             Self::SacrificePermanent { count: 0, .. } => {
                 Err("sacrifice cost requires a positive count".into())
@@ -346,6 +380,129 @@ mod sacrifice_count_tests {
         )
         .unwrap();
         assert!(zero.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod aggregate_counter_cost_tests {
+    use super::AbilityCost;
+    use ron::extensions::Extensions;
+    use ron::Options;
+
+    const OLD_SINGLETON_SOURCE_ENCODING: &str =
+        "RemoveCounters(counter:Some(Charge),count:1,payment_source:Source)";
+    const OLD_SINGLETON_SELECTED_ENCODING: &str = "RemoveCounters(counter:Some(Night),count:3,payment_source:SelectedPermanent((any_of:None,kind:AnyPermanent,tapped:None,combat_role:None,not_color:None,is_color:None,controller:You,owner:Any,excluded_objects:[],permanent_types:[],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)))";
+
+    fn ron_options() -> Options {
+        Options::default().with_default_extension(Extensions::IMPLICIT_SOME)
+    }
+
+    fn assert_valid_round_trip(source: &str) {
+        let options = ron_options();
+        let cost: AbilityCost = options
+            .from_str(source)
+            .expect("the positive aggregate cost fixture parses");
+        cost.validate()
+            .expect("the positive aggregate cost fixture validates");
+        let serialized = ron::ser::to_string(&cost).expect("the cost serializes");
+        let reparsed: AbilityCost = options
+            .from_str(&serialized)
+            .expect("the serialized cost parses again");
+        assert_eq!(reparsed, cost, "the cost round-trips through RON");
+    }
+
+    #[test]
+    fn aggregate_cost_round_trips_any_and_fixed_kinds() {
+        assert_valid_round_trip(
+            "RemoveCountersFromPermanents(count: 3, counter: None, filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact, Creature, Planeswalker], excluded_objects: [Source]))",
+        );
+        assert_valid_round_trip(
+            "RemoveCountersFromPermanents(count: 10, counter: Some(Charge), filter: (kind: AnyPermanent, controller: You))",
+        );
+    }
+
+    fn expect_validation_error(source: &str, case: &str) {
+        let cost: AbilityCost = ron_options()
+            .from_str(source)
+            .unwrap_or_else(|error| panic!("{case} fixture should parse: {error:?}"));
+        assert!(cost.validate().is_err(), "cost validation accepted {case}");
+    }
+
+    fn expect_enum_parse_error(source: &str, case: &str) {
+        let error = ron_options()
+            .from_str::<AbilityCost>(source)
+            .expect_err("unsupported filter kind must fail during RON parsing");
+        assert!(
+            format!("{error:?}").contains("NoSuchEnumVariant"),
+            "{case} is a schema parse error, not a validation error: {error:?}"
+        );
+    }
+
+    #[test]
+    fn aggregate_cost_rejects_zero_invalid_kind_and_contextual_or_nonpermanent_filters() {
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 0, counter: None, filter: (kind: AnyPermanent, controller: You))",
+            "zero count",
+        );
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 1, counter: Some(Keyword(Wither)), filter: (kind: AnyPermanent, controller: You))",
+            "illegal keyword counter",
+        );
+        for kind in ["AnyTarget", "AnyPlayer", "OpponentPlayer"] {
+            expect_validation_error(
+                &format!(
+                    "RemoveCountersFromPermanents(count: 1, counter: None, filter: (kind: {kind}))"
+                ),
+                &format!("nonpermanent filter kind {kind}"),
+            );
+        }
+        expect_enum_parse_error(
+            "RemoveCountersFromPermanents(count: 1, counter: None, filter: (kind: GraveyardCard))",
+            "zone-card filter kind",
+        );
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 1, counter: None, filter: (any_of: [(kind: Creature, controller: You), (kind: AnyPermanent, controller: DefendingPlayer)]))",
+            "nested defending-player controller",
+        );
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 1, counter: None, filter: (any_of: [(kind: Creature), (kind: AnyPermanent)], controller: You))",
+            "impure any_of node",
+        );
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 1, counter: None, filter: (kind: AnyPermanent, is_color: Black, not_color: Black))",
+            "contradictory color constraints",
+        );
+        expect_validation_error(
+            "RemoveCountersFromPermanents(count: 1, counter: None, filter: (kind: AnyPermanent, requires_any_counter: true, required_counter: Some(PlusOnePlusOne)))",
+            "conflicting required-counter constraints",
+        );
+    }
+
+    #[test]
+    fn singleton_counter_cost_encoding_is_unchanged() {
+        let options = ron_options();
+        for (source, expected) in [
+            (
+                "RemoveCounters(counter: Some(Charge), count: 1, payment_source: Source)",
+                OLD_SINGLETON_SOURCE_ENCODING,
+            ),
+            (
+                "RemoveCounters(counter: Some(Night), count: 3, payment_source: SelectedPermanent((kind: AnyPermanent, controller: You)))",
+                OLD_SINGLETON_SELECTED_ENCODING,
+            ),
+        ] {
+            let cost: AbilityCost = options
+                .from_str(source)
+                .expect("the existing singleton counter-cost form parses");
+            cost.validate()
+                .expect("the existing singleton counter-cost form remains valid");
+            let serialized = ron::ser::to_string(&cost).expect("the cost serializes");
+            assert_eq!(serialized, expected, "canonical singleton encoding changed");
+            let reparsed: AbilityCost = options
+                .from_str(&serialized)
+                .expect("the canonical singleton cost parses again");
+            assert_eq!(reparsed, cost, "the singleton cost round-trips");
+        }
     }
 }
 
